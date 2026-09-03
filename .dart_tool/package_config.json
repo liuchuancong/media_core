@@ -575,7 +575,7 @@
       "name": "media_core",
       "rootUri": "../packages/media_core",
       "packageUri": "lib/",
-      "languageVersion": "3.13"
+      "languageVersion": "3.9"
     },
     {
       "name": "media_core_media_kit",
