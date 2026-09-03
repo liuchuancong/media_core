@@ -1,0 +1,12 @@
+name: media_core_workspace
+publish_to: none
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+workspace:
+  - packages/media_core
+  - packages/media_core_media_kit
+  - packages/media_core_video_player
+  - packages/media_core_native
+  - examples/example
