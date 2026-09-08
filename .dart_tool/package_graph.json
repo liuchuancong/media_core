@@ -28,6 +28,7 @@
         "meta",
         "mime",
         "path",
+        "pool",
         "rxdart"
       ],
       "devDependencies": [
@@ -302,6 +303,14 @@
         "web_socket_channel",
         "webkit_inspection_protocol",
         "yaml"
+      ]
+    },
+    {
+      "name": "pool",
+      "version": "1.5.3",
+      "dependencies": [
+        "async",
+        "stack_trace"
       ]
     },
     {
@@ -715,14 +724,6 @@
         "path",
         "stack_trace",
         "stream_channel"
-      ]
-    },
-    {
-      "name": "pool",
-      "version": "1.5.3",
-      "dependencies": [
-        "async",
-        "stack_trace"
       ]
     },
     {

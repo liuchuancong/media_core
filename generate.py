@@ -336,7 +336,22 @@ FILES = [
     "lib/reactive/debounce.dart",
     "lib/reactive/throttle.dart",
     "lib/reactive/distinct.dart",
-    "lib/reactive/disposable_subscription.dart",
+    "lib/reactive/stream_cache.dart",
+    "lib/reactive/stream_cancellation.dart",
+    "lib/reactive/stream_debouncer.dart",
+    "lib/reactive/stream_disposable.dart",
+    "lib/reactive/stream_event.dart",
+    "lib/reactive/stream_gate.dart",
+    "lib/reactive/stream_lifecycle.dart",
+    "lib/reactive/stream_mutex.dart",
+    "lib/reactive/stream_queue.dart",
+    "lib/reactive/stream_result.dart",
+    "lib/reactive/stream_retry.dart",
+    "lib/reactive/stream_safe.dart",
+    "lib/reactive/stream_scheduler.dart",
+    "lib/reactive/stream_state.dart",
+    "lib/reactive/stream_subject.dart",
+    "lib/reactive/stream_transform.dart",
 
     # ========================================================================
     # Error

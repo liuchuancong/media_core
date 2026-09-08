@@ -43,6 +43,7 @@ dependencies:
 
   # Path
   path: ^1.9.1
+  pool: ^1.5.3
 
 dev_dependencies:
   flutter_test:
