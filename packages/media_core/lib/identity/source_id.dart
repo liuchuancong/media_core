@@ -57,6 +57,23 @@ final class SourceId extends Equatable implements Comparable<SourceId> {
     return SourceId._('source_${timestamp}_$counter');
   }
 
+  /// Creates an unknown source identifier.
+  ///
+  /// Used when source identity is not available.
+  ///
+  /// This is different from an empty value.
+  /// Empty identifiers are invalid.
+  ///
+  /// Unknown identifiers are useful for:
+  ///
+  /// - error states
+  /// - diagnostics
+  /// - temporary objects
+  /// - placeholder models
+  factory SourceId.unknown() {
+    return const SourceId._('unknown');
+  }
+
   const SourceId._(this.value);
 
   static int _counter = 0;
@@ -74,6 +91,11 @@ final class SourceId extends Equatable implements Comparable<SourceId> {
 
   /// Returns whether this identifier is not empty.
   bool get isNotEmpty => value.isNotEmpty;
+
+  /// Returns whether this identifier represents unknown source.
+  bool get isUnknown {
+    return value == 'unknown';
+  }
 
   /// Parses an existing source identifier.
   ///

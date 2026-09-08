@@ -16,7 +16,31 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PlayerState {
 
- bool get initialized; bool get opening; bool get ready; bool get playing; bool get paused; bool get buffering; bool get seeking; bool get stopping; bool get stopped; bool get completed; bool get disposing; bool get disposed; bool get hasSource; bool get hasError; bool get muted; bool get audioEnabled; bool get videoEnabled; bool get subtitlesEnabled; bool get fullscreen; bool get pip; bool get floating; bool get recording; bool get recovering; bool get fallingBack;
+/// Whether the player has been initialized.
+ bool get initialized;/// Whether the player is currently opening a source.
+ bool get opening;/// Whether the player is ready for playback.
+ bool get ready;/// Whether the player is currently playing.
+ bool get playing;/// Whether playback is currently paused.
+ bool get paused;/// Whether the player is currently buffering.
+ bool get buffering;/// Whether the player is currently seeking.
+ bool get seeking;/// Whether the player is currently stopping.
+ bool get stopping;/// Whether the player has stopped playback.
+ bool get stopped;/// Whether playback reached the end of the current media.
+ bool get completed;/// Whether the player is being disposed.
+ bool get disposing;/// Whether the player has been disposed.
+ bool get disposed;/// Whether a media source is currently associated with the player.
+ bool get hasSource;/// Whether the player currently contains an error.
+ bool get hasError;/// Whether audio output is muted.
+ bool get muted;/// Whether audio output is enabled.
+ bool get audioEnabled;/// Whether video output is enabled.
+ bool get videoEnabled;/// Whether subtitle output is enabled.
+ bool get subtitlesEnabled;/// Whether the player is currently in fullscreen presentation.
+ bool get fullscreen;/// Whether the player is currently in picture-in-picture mode.
+ bool get pip;/// Whether the player is currently displayed in a floating mode.
+ bool get floating;/// Whether recording is currently active.
+ bool get recording;/// Whether the player is currently recovering from a failure.
+ bool get recovering;/// Whether the player is currently switching through a fallback.
+ bool get fallingBack;
 /// Create a copy of PlayerState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -241,29 +265,53 @@ class _PlayerState extends PlayerState {
   const _PlayerState({this.initialized = false, this.opening = false, this.ready = false, this.playing = false, this.paused = false, this.buffering = false, this.seeking = false, this.stopping = false, this.stopped = false, this.completed = false, this.disposing = false, this.disposed = false, this.hasSource = false, this.hasError = false, this.muted = false, this.audioEnabled = false, this.videoEnabled = false, this.subtitlesEnabled = false, this.fullscreen = false, this.pip = false, this.floating = false, this.recording = false, this.recovering = false, this.fallingBack = false}): super._();
   factory _PlayerState.fromJson(Map<String, dynamic> json) => _$PlayerStateFromJson(json);
 
+/// Whether the player has been initialized.
 @override@JsonKey() final  bool initialized;
+/// Whether the player is currently opening a source.
 @override@JsonKey() final  bool opening;
+/// Whether the player is ready for playback.
 @override@JsonKey() final  bool ready;
+/// Whether the player is currently playing.
 @override@JsonKey() final  bool playing;
+/// Whether playback is currently paused.
 @override@JsonKey() final  bool paused;
+/// Whether the player is currently buffering.
 @override@JsonKey() final  bool buffering;
+/// Whether the player is currently seeking.
 @override@JsonKey() final  bool seeking;
+/// Whether the player is currently stopping.
 @override@JsonKey() final  bool stopping;
+/// Whether the player has stopped playback.
 @override@JsonKey() final  bool stopped;
+/// Whether playback reached the end of the current media.
 @override@JsonKey() final  bool completed;
+/// Whether the player is being disposed.
 @override@JsonKey() final  bool disposing;
+/// Whether the player has been disposed.
 @override@JsonKey() final  bool disposed;
+/// Whether a media source is currently associated with the player.
 @override@JsonKey() final  bool hasSource;
+/// Whether the player currently contains an error.
 @override@JsonKey() final  bool hasError;
+/// Whether audio output is muted.
 @override@JsonKey() final  bool muted;
+/// Whether audio output is enabled.
 @override@JsonKey() final  bool audioEnabled;
+/// Whether video output is enabled.
 @override@JsonKey() final  bool videoEnabled;
+/// Whether subtitle output is enabled.
 @override@JsonKey() final  bool subtitlesEnabled;
+/// Whether the player is currently in fullscreen presentation.
 @override@JsonKey() final  bool fullscreen;
+/// Whether the player is currently in picture-in-picture mode.
 @override@JsonKey() final  bool pip;
+/// Whether the player is currently displayed in a floating mode.
 @override@JsonKey() final  bool floating;
+/// Whether recording is currently active.
 @override@JsonKey() final  bool recording;
+/// Whether the player is currently recovering from a failure.
 @override@JsonKey() final  bool recovering;
+/// Whether the player is currently switching through a fallback.
 @override@JsonKey() final  bool fallingBack;
 
 /// Create a copy of PlayerState
