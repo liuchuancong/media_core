@@ -1,3 +1,5 @@
+import '../presentation/presentation_mode.dart';
+
 /// Defines player presentation policies.
 ///
 /// [PresentationPolicy] controls how the player
@@ -70,7 +72,7 @@ final class PresentationPolicy {
   /// Hide system UI in fullscreen.
   final bool hideSystemUiInFullscreen;
 
-  /// Restore system UI after exiting.
+  /// Restore system UI after exiting fullscreen.
   final bool restoreSystemUiAfterExit;
 
   /// Whether fullscreen is available.
@@ -88,6 +90,36 @@ final class PresentationPolicy {
     return enabled && allowFloatingWindow;
   }
 
+  /// Whether requested presentation mode is allowed.
+  bool canEnter(PresentationMode mode) {
+    switch (mode) {
+      case PresentationMode.normal:
+        return true;
+
+      case PresentationMode.fullscreen:
+        return canFullscreen();
+
+      case PresentationMode.pip:
+        return canPictureInPicture();
+
+      case PresentationMode.floating:
+        return canFloating();
+    }
+  }
+
+  /// Whether transition between two modes is allowed.
+  bool canTransition({required PresentationMode current, required PresentationMode target}) {
+    if (!enabled) {
+      return false;
+    }
+
+    if (current == target) {
+      return true;
+    }
+
+    return canEnter(target);
+  }
+
   /// Whether orientation should lock.
   bool shouldLockOrientation() {
     return enabled && lockOrientationInFullscreen;
@@ -96,6 +128,21 @@ final class PresentationPolicy {
   /// Whether system UI should hide.
   bool shouldHideSystemUi() {
     return enabled && hideSystemUiInFullscreen;
+  }
+
+  /// Whether system UI should restore.
+  bool shouldRestoreSystemUi() {
+    return enabled && restoreSystemUiAfterExit;
+  }
+
+  /// Whether landscape should trigger fullscreen.
+  bool shouldAutoFullscreenOnLandscape() {
+    return enabled && autoFullscreenOnLandscape;
+  }
+
+  /// Whether portrait should exit fullscreen.
+  bool shouldAutoExitFullscreenOnPortrait() {
+    return enabled && autoExitFullscreenOnPortrait;
   }
 
   /// Creates modified policy.
@@ -139,9 +186,87 @@ final class PresentationPolicy {
     );
   }
 
+  /// Mobile default policy.
+  const PresentationPolicy.mobile()
+    : enabled = true,
+      allowFullscreen = true,
+      allowPictureInPicture = true,
+      allowFloatingWindow = false,
+      autoFullscreenOnLandscape = true,
+      autoExitFullscreenOnPortrait = true,
+      lockOrientationInFullscreen = true,
+      hideSystemUiInFullscreen = true,
+      restoreSystemUiAfterExit = true;
+
+  /// Desktop default policy.
+  const PresentationPolicy.desktop()
+    : enabled = true,
+      allowFullscreen = true,
+      allowPictureInPicture = false,
+      allowFloatingWindow = true,
+      autoFullscreenOnLandscape = false,
+      autoExitFullscreenOnPortrait = false,
+      lockOrientationInFullscreen = false,
+      hideSystemUiInFullscreen = false,
+      restoreSystemUiAfterExit = true;
+
+  /// TV default policy.
+  const PresentationPolicy.tv()
+    : enabled = true,
+      allowFullscreen = true,
+      allowPictureInPicture = false,
+      allowFloatingWindow = false,
+      autoFullscreenOnLandscape = false,
+      autoExitFullscreenOnPortrait = false,
+      lockOrientationInFullscreen = false,
+      hideSystemUiInFullscreen = false,
+      restoreSystemUiAfterExit = false;
+
+  /// Allows every presentation mode.
+  const PresentationPolicy.unrestricted()
+    : enabled = true,
+      allowFullscreen = true,
+      allowPictureInPicture = true,
+      allowFloatingWindow = true,
+      autoFullscreenOnLandscape = true,
+      autoExitFullscreenOnPortrait = true,
+      lockOrientationInFullscreen = true,
+      hideSystemUiInFullscreen = true,
+      restoreSystemUiAfterExit = true;
+
+  @override
+  bool operator ==(Object other) {
+    return other is PresentationPolicy &&
+        other.enabled == enabled &&
+        other.allowFullscreen == allowFullscreen &&
+        other.allowPictureInPicture == allowPictureInPicture &&
+        other.allowFloatingWindow == allowFloatingWindow &&
+        other.autoFullscreenOnLandscape == autoFullscreenOnLandscape &&
+        other.autoExitFullscreenOnPortrait == autoExitFullscreenOnPortrait &&
+        other.lockOrientationInFullscreen == lockOrientationInFullscreen &&
+        other.hideSystemUiInFullscreen == hideSystemUiInFullscreen &&
+        other.restoreSystemUiAfterExit == restoreSystemUiAfterExit;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(
+      enabled,
+      allowFullscreen,
+      allowPictureInPicture,
+      allowFloatingWindow,
+      autoFullscreenOnLandscape,
+      autoExitFullscreenOnPortrait,
+      lockOrientationInFullscreen,
+      hideSystemUiInFullscreen,
+      restoreSystemUiAfterExit,
+    );
+  }
+
   @override
   String toString() {
     return 'PresentationPolicy('
+        'enabled=$enabled, '
         'fullscreen=$allowFullscreen, '
         'pip=$allowPictureInPicture, '
         'floating=$allowFloatingWindow'

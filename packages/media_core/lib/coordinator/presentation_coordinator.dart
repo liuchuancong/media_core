@@ -2,105 +2,108 @@ import '../identity/player_id.dart';
 import '../presentation/presentation_request.dart';
 import '../presentation/presentation_controller.dart';
 
-/// Coordinates player presentation.
+/// Coordinates presentation controllers between players.
 ///
-/// [PresentationCoordinator] connects players
-/// with presentation subsystem.
+/// This is a player-level coordinator.
 ///
-/// It does not:
+/// Responsibilities:
 ///
-/// - render widgets
-/// - call platform presentation APIs
+/// - bind player id
+/// - lookup presentation controller
+/// - route presentation requests
+///
+/// Does not:
+///
+/// - call platform APIs
 /// - manage windows
-///
-/// Those belong to:
-///
-/// - PlayerView
-/// - PlatformPip
-/// - PlatformSurface
+/// - handle native events
 final class PresentationCoordinator {
-  /// Creates presentation coordinator.
+  /// Creates coordinator.
   PresentationCoordinator();
 
-  final Map<PlayerId, PresentationController> _controllers = {};
+  final Map<PlayerId, PresentationController> _controllers = <PlayerId, PresentationController>{};
+
+  bool _disposed = false;
 
   /// Registers presentation controller.
   void register({required PlayerId playerId, required PresentationController controller}) {
+    _ensureNotDisposed();
+
     _controllers[playerId] = controller;
   }
 
   /// Removes presentation controller.
   bool unregister(PlayerId playerId) {
+    _ensureNotDisposed();
+
     return _controllers.remove(playerId) != null;
   }
 
-  /// Gets presentation controller.
+  /// Gets controller of player.
   PresentationController? controllerOf(PlayerId playerId) {
+    _ensureNotDisposed();
+
     return _controllers[playerId];
   }
 
-  /// Applies presentation request.
-  Future<void> present({required PlayerId playerId, required PresentationRequest request}) async {
+  /// Sends presentation request.
+  Future<void> request({required PlayerId playerId, required PresentationRequest request}) async {
+    _ensureNotDisposed();
+
     final controller = _controllers[playerId];
 
     if (controller == null) {
-      return;
+      throw StateError('No PresentationController registered for player: $playerId');
     }
 
-    await controller.present(request);
+    await controller.request(request);
   }
 
   /// Enters fullscreen.
-  Future<void> fullscreen(PlayerId playerId) async {
-    final controller = _controllers[playerId];
-
-    if (controller == null) {
-      return;
-    }
-
-    await controller.enterFullscreen();
+  Future<void> fullscreen(PlayerId playerId) {
+    return request(playerId: playerId, request: PresentationRequest.fullscreen());
   }
 
   /// Exits fullscreen.
-  Future<void> exitFullscreen(PlayerId playerId) async {
-    final controller = _controllers[playerId];
-
-    if (controller == null) {
-      return;
-    }
-
-    await controller.exitFullscreen();
+  Future<void> exitFullscreen(PlayerId playerId) {
+    return request(playerId: playerId, request: PresentationRequest.normal());
   }
 
-  /// Enters picture in picture.
-  Future<void> enterPip(PlayerId playerId) async {
-    final controller = _controllers[playerId];
-
-    if (controller == null) {
-      return;
-    }
-
-    await controller.enterPip();
+  /// Enters PiP.
+  Future<void> enterPip(PlayerId playerId) {
+    return request(playerId: playerId, request: PresentationRequest.pip());
   }
 
-  /// Leaves picture in picture.
-  Future<void> exitPip(PlayerId playerId) async {
-    final controller = _controllers[playerId];
-
-    if (controller == null) {
-      return;
-    }
-
-    await controller.exitPip();
+  /// Exits PiP.
+  Future<void> exitPip(PlayerId playerId) {
+    return request(playerId: playerId, request: PresentationRequest.normal());
   }
 
-  /// Clears bindings.
+  /// Clears all bindings.
   void clear() {
+    _ensureNotDisposed();
+
     _controllers.clear();
   }
 
-  /// Disposes coordinator.
+  void _ensureNotDisposed() {
+    if (_disposed) {
+      throw StateError('PresentationCoordinator has already been disposed.');
+    }
+  }
+
+  /// Releases resources.
   Future<void> dispose() async {
-    clear();
+    if (_disposed) {
+      return;
+    }
+
+    _disposed = true;
+
+    for (final controller in _controllers.values) {
+      await controller.dispose();
+    }
+
+    _controllers.clear();
   }
 }

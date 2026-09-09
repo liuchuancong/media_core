@@ -1,13 +1,16 @@
-import 'package:equatable/equatable.dart';
-
-/// Describes how the media presentation is currently displayed.
+/// Defines how media content is presented.
 ///
-/// Presentation mode is deliberately independent from the underlying media
-/// player state. A player can continue playing while its presentation changes
-/// from normal to fullscreen, PiP, or floating mode.
+/// Presentation mode is independent from the media player.
 ///
-/// Platform-specific implementations should translate these abstract modes
-/// into their corresponding native presentation mechanisms.
+/// A player can continue playing while moving between:
+///
+/// - normal view
+/// - fullscreen
+/// - picture-in-picture
+/// - floating window
+///
+/// Platform implementations translate these abstract
+/// modes into native APIs.
 enum PresentationMode {
   /// Normal in-page presentation.
   normal,
@@ -18,63 +21,43 @@ enum PresentationMode {
   /// Picture-in-picture presentation.
   pip,
 
-  /// Floating presentation above the normal application content.
+  /// Floating window presentation.
   floating,
 }
 
-/// Immutable value object describing presentation capabilities.
-///
-/// Capabilities describe what a presentation environment supports; they do
-/// not describe the current mode. This distinction allows the controller to
-/// reject or avoid unsupported presentation requests without coupling the
-/// presentation model to any platform implementation.
-final class PresentationCapabilities extends Equatable {
-  const PresentationCapabilities({this.fullscreen = true, this.pip = false, this.floating = false});
+extension PresentationModeExtension on PresentationMode {
+  /// Whether this mode is normal playback.
+  bool get isNormal => this == PresentationMode.normal;
 
-  /// Whether fullscreen presentation is supported.
-  final bool fullscreen;
+  /// Whether this mode is fullscreen.
+  bool get isFullscreen => this == PresentationMode.fullscreen;
 
-  /// Whether picture-in-picture presentation is supported.
-  final bool pip;
+  /// Whether this mode is PiP.
+  bool get isPip => this == PresentationMode.pip;
 
-  /// Whether floating presentation is supported.
-  final bool floating;
+  /// Whether this mode is floating window.
+  bool get isFloating => this == PresentationMode.floating;
 
-  /// Whether any presentation mode other than normal is supported.
-  bool get supportsAdvancedPresentation => fullscreen || pip || floating;
+  /// Whether this mode requires an external window.
+  bool get requiresExternalWindow => this == PresentationMode.pip || this == PresentationMode.floating;
 
-  /// Returns whether [mode] is supported by these capabilities.
-  bool supports(PresentationMode mode) {
-    switch (mode) {
+  /// Whether this mode changes application layout.
+  bool get changesLayout => this == PresentationMode.fullscreen || this == PresentationMode.floating;
+
+  /// Human readable name.
+  String get name {
+    switch (this) {
       case PresentationMode.normal:
-        return true;
+        return 'normal';
+
       case PresentationMode.fullscreen:
-        return fullscreen;
+        return 'fullscreen';
+
       case PresentationMode.pip:
-        return pip;
+        return 'pip';
+
       case PresentationMode.floating:
-        return floating;
+        return 'floating';
     }
-  }
-
-  /// Creates a copy with selectively replaced capability values.
-  PresentationCapabilities copyWith({bool? fullscreen, bool? pip, bool? floating}) {
-    return PresentationCapabilities(
-      fullscreen: fullscreen ?? this.fullscreen,
-      pip: pip ?? this.pip,
-      floating: floating ?? this.floating,
-    );
-  }
-
-  @override
-  List<Object?> get props => <Object?>[fullscreen, pip, floating];
-
-  @override
-  String toString() {
-    return 'PresentationCapabilities('
-        'fullscreen: $fullscreen, '
-        'pip: $pip, '
-        'floating: $floating'
-        ')';
   }
 }
