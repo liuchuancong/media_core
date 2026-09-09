@@ -562,6 +562,9 @@ FILES = [
     "lib/factory/backend_selector.dart",
     "lib/factory/backend_descriptor.dart",
     "lib/factory/backend_capabilities.dart",
+    "lib/factory/backend_instance.dart",
+    "lib/factory/backend_selection_request.dart",
+    "lib/factory/backend_selection_result.dart",
 
     # ========================================================================
     # Session
