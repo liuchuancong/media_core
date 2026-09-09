@@ -1,50 +1,63 @@
-/// Defines how media content is presented.
+/// Defines how the player presentation is displayed.
 ///
-/// Presentation mode is independent from the media player.
+/// Presentation mode is independent from
+/// the underlying media playback state.
 ///
-/// A player can continue playing while moving between:
-///
-/// - normal view
-/// - fullscreen
-/// - picture-in-picture
-/// - floating window
-///
-/// Platform implementations translate these abstract
-/// modes into native APIs.
+/// A player can continue playing while switching
+/// between different presentation modes.
 enum PresentationMode {
   /// Normal in-page presentation.
+  ///
+  /// The player is displayed inside
+  /// the normal application layout.
   normal,
 
   /// Fullscreen presentation.
+  ///
+  /// The player occupies the fullscreen area.
   fullscreen,
 
   /// Picture-in-picture presentation.
+  ///
+  /// The player is displayed in a native PiP window.
   pip,
 
   /// Floating window presentation.
+  ///
+  /// The player is displayed above
+  /// normal application content.
   floating,
 }
 
+/// Extension helpers for PresentationMode.
 extension PresentationModeExtension on PresentationMode {
-  /// Whether this mode is normal playback.
-  bool get isNormal => this == PresentationMode.normal;
-
   /// Whether this mode is fullscreen.
   bool get isFullscreen => this == PresentationMode.fullscreen;
 
   /// Whether this mode is PiP.
   bool get isPip => this == PresentationMode.pip;
 
-  /// Whether this mode is floating window.
+  /// Whether this mode is floating.
   bool get isFloating => this == PresentationMode.floating;
 
-  /// Whether this mode requires an external window.
-  bool get requiresExternalWindow => this == PresentationMode.pip || this == PresentationMode.floating;
+  /// Whether this mode is normal.
+  bool get isNormal => this == PresentationMode.normal;
 
-  /// Whether this mode changes application layout.
-  bool get changesLayout => this == PresentationMode.fullscreen || this == PresentationMode.floating;
+  /// Whether this mode requires
+  /// a separate presentation surface.
+  bool get requiresExternalSurface {
+    switch (this) {
+      case PresentationMode.normal:
+        return false;
 
-  /// Human readable name.
+      case PresentationMode.fullscreen:
+      case PresentationMode.pip:
+      case PresentationMode.floating:
+        return true;
+    }
+  }
+
+  /// Display name.
   String get name {
     switch (this) {
       case PresentationMode.normal:

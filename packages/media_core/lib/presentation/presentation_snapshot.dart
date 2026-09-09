@@ -6,11 +6,14 @@ part 'presentation_snapshot.freezed.dart';
 
 /// Immutable snapshot of presentation subsystem.
 ///
-/// Snapshot represents a point-in-time view of the
+/// Snapshot represents a point-in-time view of
 /// presentation lifecycle.
 ///
-/// It does not trigger transitions and does not
-/// communicate with platform APIs.
+/// It does not:
+///
+/// - trigger transitions
+/// - call platform APIs
+/// - modify state
 ///
 /// Used by:
 ///
@@ -20,24 +23,42 @@ part 'presentation_snapshot.freezed.dart';
 @freezed
 abstract class PresentationSnapshot with _$PresentationSnapshot {
   const factory PresentationSnapshot({
-    /// Current presentation mode.
+    /// Current active presentation mode.
+    ///
+    /// This is the last successfully completed mode.
     @Default(PresentationMode.normal) PresentationMode mode,
 
-    /// Current presentation capabilities.
+    /// Target presentation mode.
+    ///
+    /// Exists while transition is running.
+    ///
+    /// Example:
+    ///
+    /// mode:
+    /// normal
+    ///
+    /// targetMode:
+    /// fullscreen
+    ///
+    /// transitioning:
+    /// true
+    PresentationMode? targetMode,
+
+    /// Current capabilities.
     @Default(PresentationCapabilities()) PresentationCapabilities capabilities,
 
-    /// Whether a transition is running.
+    /// Whether transition is running.
     @Default(false) bool transitioning,
 
-    /// Whether presentation system is enabled.
+    /// Whether presentation is enabled.
     @Default(true) bool enabled,
 
-    /// Current lifecycle generation.
+    /// Lifecycle generation.
     ///
-    /// Used to reject stale async callbacks.
+    /// Used to ignore stale async callbacks.
     @Default(0) int generation,
 
-    /// Last presentation error.
+    /// Last error.
     String? error,
   }) = _PresentationSnapshot;
 
@@ -47,6 +68,7 @@ abstract class PresentationSnapshot with _$PresentationSnapshot {
   factory PresentationSnapshot.initial() {
     return const PresentationSnapshot(
       mode: PresentationMode.normal,
+      targetMode: null,
       capabilities: PresentationCapabilities(),
       transitioning: false,
       enabled: true,
@@ -54,24 +76,37 @@ abstract class PresentationSnapshot with _$PresentationSnapshot {
     );
   }
 
-  /// Whether fullscreen is active.
+  /// Current mode helpers.
+
   bool get isFullscreen => mode == PresentationMode.fullscreen;
 
-  /// Whether PiP is active.
   bool get isPip => mode == PresentationMode.pip;
 
-  /// Whether floating mode is active.
   bool get isFloating => mode == PresentationMode.floating;
 
-  /// Whether normal presentation is active.
   bool get isNormal => mode == PresentationMode.normal;
 
-  /// Whether snapshot contains an error.
+  /// Transition helpers.
+
+  bool get hasTarget => targetMode != null;
+
+  bool get isTransitioning => transitioning;
+
+  bool get isTransitioningToFullscreen => transitioning && targetMode == PresentationMode.fullscreen;
+
+  bool get isTransitioningToPip => transitioning && targetMode == PresentationMode.pip;
+
+  bool get isTransitioningToFloating => transitioning && targetMode == PresentationMode.floating;
+
+  /// Error helpers.
+
   bool get hasError => error != null;
 
-  /// Whether current mode is supported.
+  /// Capability check.
+
   bool get isSupported => capabilities.supports(mode);
 
-  /// Whether transition can start.
+  /// Whether request can start.
+
   bool get canChange => enabled && !transitioning && !hasError;
 }

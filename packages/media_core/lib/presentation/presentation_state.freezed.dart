@@ -15,17 +15,35 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PresentationState {
 
-/// Current presentation mode.
- PresentationMode get mode;/// Current capabilities.
+/// Current active presentation mode.
+///
+/// This represents the mode that has
+/// successfully completed.
+ PresentationMode get mode;/// Target presentation mode.
+///
+/// When transitioning:
+///
+/// Example:
+///
+/// mode:
+/// fullscreen
+///
+/// targetMode:
+/// pip
+///
+/// transitioning:
+/// true
+///
+ PresentationMode? get targetMode;/// Current capabilities.
  PresentationCapabilities get capabilities;/// Whether presentation transition
-/// is currently running.
+/// is running.
  bool get transitioning;/// Whether presentation subsystem
 /// is enabled.
  bool get enabled;/// Whether presentation is available.
  bool get available;/// Lifecycle generation.
 ///
-/// Used to ignore stale asynchronous
-/// callbacks from platform adapters.
+/// Used to ignore stale async
+/// callbacks from adapters.
  int get generation;/// Last presentation error.
  String? get error;
 /// Create a copy of PresentationState
@@ -39,20 +57,20 @@ $PresentationStateCopyWith<PresentationState> get copyWith => _$PresentationStat
 @override
 bool operator ==(Object other) {
   final _this = this as PresentationState;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PresentationState&&(identical(other.mode, _this.mode) || other.mode == _this.mode)&&(identical(other.capabilities, _this.capabilities) || other.capabilities == _this.capabilities)&&(identical(other.transitioning, _this.transitioning) || other.transitioning == _this.transitioning)&&(identical(other.enabled, _this.enabled) || other.enabled == _this.enabled)&&(identical(other.available, _this.available) || other.available == _this.available)&&(identical(other.generation, _this.generation) || other.generation == _this.generation)&&(identical(other.error, _this.error) || other.error == _this.error));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PresentationState&&(identical(other.mode, _this.mode) || other.mode == _this.mode)&&(identical(other.targetMode, _this.targetMode) || other.targetMode == _this.targetMode)&&(identical(other.capabilities, _this.capabilities) || other.capabilities == _this.capabilities)&&(identical(other.transitioning, _this.transitioning) || other.transitioning == _this.transitioning)&&(identical(other.enabled, _this.enabled) || other.enabled == _this.enabled)&&(identical(other.available, _this.available) || other.available == _this.available)&&(identical(other.generation, _this.generation) || other.generation == _this.generation)&&(identical(other.error, _this.error) || other.error == _this.error));
 }
 
 
 @override
 int get hashCode {
   final _this = this as PresentationState;
-  return Object.hash(runtimeType,_this.mode,_this.capabilities,_this.transitioning,_this.enabled,_this.available,_this.generation,_this.error);
+  return Object.hash(runtimeType,_this.mode,_this.targetMode,_this.capabilities,_this.transitioning,_this.enabled,_this.available,_this.generation,_this.error);
 }
 
 @override
 String toString() {
   final _this = this as PresentationState;
-  return 'PresentationState(mode: ${_this.mode}, capabilities: ${_this.capabilities}, transitioning: ${_this.transitioning}, enabled: ${_this.enabled}, available: ${_this.available}, generation: ${_this.generation}, error: ${_this.error})';
+  return 'PresentationState(mode: ${_this.mode}, targetMode: ${_this.targetMode}, capabilities: ${_this.capabilities}, transitioning: ${_this.transitioning}, enabled: ${_this.enabled}, available: ${_this.available}, generation: ${_this.generation}, error: ${_this.error})';
 }
 
 
@@ -63,7 +81,7 @@ abstract mixin class $PresentationStateCopyWith<$Res>  {
   factory $PresentationStateCopyWith(PresentationState value, $Res Function(PresentationState) _then) = _$PresentationStateCopyWithImpl;
 @useResult
 $Res call({
- PresentationMode mode, PresentationCapabilities capabilities, bool transitioning, bool enabled, bool available, int generation, String? error
+ PresentationMode mode, PresentationMode? targetMode, PresentationCapabilities capabilities, bool transitioning, bool enabled, bool available, int generation, String? error
 });
 
 
@@ -80,10 +98,11 @@ class _$PresentationStateCopyWithImpl<$Res>
 
 /// Create a copy of PresentationState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? mode = null,Object? capabilities = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? mode = null,Object? targetMode = freezed,Object? capabilities = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
   return _then(PresentationState(
 mode: null == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
-as PresentationMode,capabilities: null == capabilities ? _self.capabilities : capabilities // ignore: cast_nullable_to_non_nullable
+as PresentationMode,targetMode: freezed == targetMode ? _self.targetMode : targetMode // ignore: cast_nullable_to_non_nullable
+as PresentationMode?,capabilities: null == capabilities ? _self.capabilities : capabilities // ignore: cast_nullable_to_non_nullable
 as PresentationCapabilities,transitioning: null == transitioning ? _self.transitioning : transitioning // ignore: cast_nullable_to_non_nullable
 as bool,enabled: null == enabled ? _self.enabled : enabled // ignore: cast_nullable_to_non_nullable
 as bool,available: null == available ? _self.available : available // ignore: cast_nullable_to_non_nullable
@@ -183,10 +202,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _PresentationState() when $default != null:
-return $default(_that.mode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
+return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
   return orElse();
 
 }
@@ -204,10 +223,10 @@ return $default(_that.mode,_that.capabilities,_that.transitioning,_that.enabled,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)  $default,) {final _that = this;
 switch (_that) {
 case _PresentationState():
-return $default(_that.mode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
+return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -224,10 +243,10 @@ return $default(_that.mode,_that.capabilities,_that.transitioning,_that.enabled,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PresentationMode mode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,) {final _that = this;
 switch (_that) {
 case _PresentationState() when $default != null:
-return $default(_that.mode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
+return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
   return null;
 
 }
@@ -239,15 +258,34 @@ return $default(_that.mode,_that.capabilities,_that.transitioning,_that.enabled,
 
 
 class _PresentationState extends PresentationState {
-  const _PresentationState({this.mode = PresentationMode.normal, this.capabilities = const PresentationCapabilities(), this.transitioning = false, this.enabled = true, this.available = true, this.generation = 0, this.error}): super._();
+  const _PresentationState({this.mode = PresentationMode.normal, this.targetMode, this.capabilities = const PresentationCapabilities(), this.transitioning = false, this.enabled = true, this.available = true, this.generation = 0, this.error}): super._();
   
 
-/// Current presentation mode.
+/// Current active presentation mode.
+///
+/// This represents the mode that has
+/// successfully completed.
 @override@JsonKey() final  PresentationMode mode;
+/// Target presentation mode.
+///
+/// When transitioning:
+///
+/// Example:
+///
+/// mode:
+/// fullscreen
+///
+/// targetMode:
+/// pip
+///
+/// transitioning:
+/// true
+///
+@override final  PresentationMode? targetMode;
 /// Current capabilities.
 @override@JsonKey() final  PresentationCapabilities capabilities;
 /// Whether presentation transition
-/// is currently running.
+/// is running.
 @override@JsonKey() final  bool transitioning;
 /// Whether presentation subsystem
 /// is enabled.
@@ -256,8 +294,8 @@ class _PresentationState extends PresentationState {
 @override@JsonKey() final  bool available;
 /// Lifecycle generation.
 ///
-/// Used to ignore stale asynchronous
-/// callbacks from platform adapters.
+/// Used to ignore stale async
+/// callbacks from adapters.
 @override@JsonKey() final  int generation;
 /// Last presentation error.
 @override final  String? error;
@@ -272,18 +310,18 @@ _$PresentationStateCopyWith<_PresentationState> get copyWith => __$PresentationS
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PresentationState&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.capabilities, capabilities) || other.capabilities == capabilities)&&(identical(other.transitioning, transitioning) || other.transitioning == transitioning)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.available, available) || other.available == available)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.error, error) || other.error == error));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PresentationState&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.targetMode, targetMode) || other.targetMode == targetMode)&&(identical(other.capabilities, capabilities) || other.capabilities == capabilities)&&(identical(other.transitioning, transitioning) || other.transitioning == transitioning)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.available, available) || other.available == available)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.error, error) || other.error == error));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,mode,capabilities,transitioning,enabled,available,generation,error);
+    return Object.hash(runtimeType,mode,targetMode,capabilities,transitioning,enabled,available,generation,error);
 }
 
 @override
 String toString() {
-    return 'PresentationState(mode: $mode, capabilities: $capabilities, transitioning: $transitioning, enabled: $enabled, available: $available, generation: $generation, error: $error)';
+    return 'PresentationState(mode: $mode, targetMode: $targetMode, capabilities: $capabilities, transitioning: $transitioning, enabled: $enabled, available: $available, generation: $generation, error: $error)';
 }
 
 
@@ -294,7 +332,7 @@ abstract mixin class _$PresentationStateCopyWith<$Res> implements $PresentationS
   factory _$PresentationStateCopyWith(_PresentationState value, $Res Function(_PresentationState) _then) = __$PresentationStateCopyWithImpl;
 @override @useResult
 $Res call({
- PresentationMode mode, PresentationCapabilities capabilities, bool transitioning, bool enabled, bool available, int generation, String? error
+ PresentationMode mode, PresentationMode? targetMode, PresentationCapabilities capabilities, bool transitioning, bool enabled, bool available, int generation, String? error
 });
 
 
@@ -311,10 +349,11 @@ class __$PresentationStateCopyWithImpl<$Res>
 
 /// Create a copy of PresentationState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? mode = null,Object? capabilities = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? mode = null,Object? targetMode = freezed,Object? capabilities = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
   return _then(_PresentationState(
 mode: null == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
-as PresentationMode,capabilities: null == capabilities ? _self.capabilities : capabilities // ignore: cast_nullable_to_non_nullable
+as PresentationMode,targetMode: freezed == targetMode ? _self.targetMode : targetMode // ignore: cast_nullable_to_non_nullable
+as PresentationMode?,capabilities: null == capabilities ? _self.capabilities : capabilities // ignore: cast_nullable_to_non_nullable
 as PresentationCapabilities,transitioning: null == transitioning ? _self.transitioning : transitioning // ignore: cast_nullable_to_non_nullable
 as bool,enabled: null == enabled ? _self.enabled : enabled // ignore: cast_nullable_to_non_nullable
 as bool,available: null == available ? _self.available : available // ignore: cast_nullable_to_non_nullable

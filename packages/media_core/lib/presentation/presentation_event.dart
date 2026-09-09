@@ -5,20 +5,23 @@ part 'presentation_event.freezed.dart';
 
 /// Represents presentation lifecycle events.
 ///
-/// Events describe something that happened or something
-/// that should be processed by the presentation subsystem.
+/// Events describe changes or requests
+/// inside presentation subsystem.
 ///
-/// Events do not execute platform operations.
+/// Events do not:
+///
+/// - execute platform APIs
+/// - modify state directly
 ///
 /// They are consumed by:
 ///
 /// - PresentationController
-/// - platform adapters
-/// - state reducers
+/// - PresentationReducer
+/// - Platform adapters
 @freezed
 abstract class PresentationEvent with _$PresentationEvent {
   const factory PresentationEvent({
-    /// Event type.
+    /// Event category.
     required PresentationEventType type,
 
     /// Related presentation mode.
@@ -26,34 +29,42 @@ abstract class PresentationEvent with _$PresentationEvent {
 
     /// Lifecycle generation.
     ///
-    /// Used to discard stale asynchronous callbacks.
+    /// Used to ignore stale async callbacks.
     @Default(0) int generation,
 
-    /// Optional event source.
+    /// Event source.
+    ///
+    /// Examples:
+    ///
+    /// user
+    /// android
+    /// ios
+    /// windows
+    /// lifecycle
     String? source,
 
-    /// Optional error message.
+    /// Error message.
     String? error,
   }) = _PresentationEvent;
 
   const PresentationEvent._();
 
-  /// Request enter a presentation mode.
+  /// Request presentation change.
   factory PresentationEvent.requested(PresentationMode mode, {int generation = 0, String? source}) {
     return PresentationEvent(type: PresentationEventType.requested, mode: mode, generation: generation, source: source);
   }
 
-  /// Platform transition started.
+  /// Transition started.
   factory PresentationEvent.started(PresentationMode mode, {int generation = 0, String? source}) {
     return PresentationEvent(type: PresentationEventType.started, mode: mode, generation: generation, source: source);
   }
 
-  /// Platform transition completed.
+  /// Transition completed.
   factory PresentationEvent.completed(PresentationMode mode, {int generation = 0, String? source}) {
     return PresentationEvent(type: PresentationEventType.completed, mode: mode, generation: generation, source: source);
   }
 
-  /// Platform transition failed.
+  /// Transition failed.
   factory PresentationEvent.failed(PresentationMode mode, {required String error, int generation = 0, String? source}) {
     return PresentationEvent(
       type: PresentationEventType.failed,
@@ -74,13 +85,14 @@ abstract class PresentationEvent with _$PresentationEvent {
     return PresentationEvent(type: PresentationEventType.disposed, generation: generation);
   }
 
-  /// Whether event contains an error.
   bool get hasError => error != null;
+
+  bool get hasMode => mode != null;
 }
 
 /// Presentation event categories.
 enum PresentationEventType {
-  /// User or system requested a transition.
+  /// User/system requested transition.
   requested,
 
   /// Transition started.
@@ -92,9 +104,9 @@ enum PresentationEventType {
   /// Transition failed.
   failed,
 
-  /// External state update.
+  /// External platform update.
   updated,
 
-  /// Presentation subsystem disposed.
+  /// Presentation disposed.
   disposed,
 }

@@ -5,45 +5,46 @@ part 'presentation_capabilities.freezed.dart';
 
 /// Describes supported presentation capabilities.
 ///
-/// This model describes what the current platform/environment supports.
+/// Capabilities describe what the current
+/// environment supports.
 ///
-/// It does not represent the current presentation state.
+/// They do not represent current presentation mode.
 ///
 /// Responsibilities:
 ///
-/// - fullscreen availability
-/// - picture-in-picture availability
-/// - floating window availability
+/// - fullscreen support
+/// - PiP support
+/// - floating support
 ///
-/// Non responsibilities:
+/// Does not:
 ///
-/// - performing transitions
-/// - controlling platform APIs
-/// - managing UI
+/// - perform transitions
+/// - call platform APIs
+/// - manage lifecycle
 @freezed
 abstract class PresentationCapabilities with _$PresentationCapabilities {
   const factory PresentationCapabilities({
-    /// Whether fullscreen presentation is supported.
+    /// Whether fullscreen is supported.
     @Default(true) bool fullscreen,
 
     /// Whether picture-in-picture is supported.
     @Default(false) bool pip,
 
-    /// Whether floating window presentation is supported.
+    /// Whether floating window is supported.
     @Default(false) bool floating,
   }) = _PresentationCapabilities;
 
   const PresentationCapabilities._();
 
-  /// Creates default capabilities.
+  /// Default capabilities.
   factory PresentationCapabilities.initial() {
     return const PresentationCapabilities(fullscreen: true, pip: false, floating: false);
   }
 
-  /// Whether any advanced presentation mode is available.
+  /// Whether advanced presentation exists.
   bool get supportsAdvancedPresentation => fullscreen || pip || floating;
 
-  /// Returns whether the given presentation mode is supported.
+  /// Checks whether mode is supported.
   bool supports(PresentationMode mode) {
     switch (mode) {
       case PresentationMode.normal:
@@ -60,12 +61,12 @@ abstract class PresentationCapabilities with _$PresentationCapabilities {
     }
   }
 
-  /// Whether fullscreen is available.
+  /// Fullscreen capability.
   bool get canFullscreen => fullscreen;
 
-  /// Whether PiP is available.
+  /// PiP capability.
   bool get canPip => pip;
 
-  /// Whether floating window is available.
+  /// Floating capability.
   bool get canFloating => floating;
 }

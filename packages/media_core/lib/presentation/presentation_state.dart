@@ -7,7 +7,7 @@ part 'presentation_state.freezed.dart';
 /// Represents current presentation lifecycle state.
 ///
 /// This state only describes the logical presentation
-/// status of the media player.
+/// lifecycle of the media player.
 ///
 /// It does not:
 ///
@@ -21,14 +21,34 @@ part 'presentation_state.freezed.dart';
 @freezed
 abstract class PresentationState with _$PresentationState {
   const factory PresentationState({
-    /// Current presentation mode.
+    /// Current active presentation mode.
+    ///
+    /// This represents the mode that has
+    /// successfully completed.
     @Default(PresentationMode.normal) PresentationMode mode,
+
+    /// Target presentation mode.
+    ///
+    /// When transitioning:
+    ///
+    /// Example:
+    ///
+    /// mode:
+    /// fullscreen
+    ///
+    /// targetMode:
+    /// pip
+    ///
+    /// transitioning:
+    /// true
+    ///
+    PresentationMode? targetMode,
 
     /// Current capabilities.
     @Default(PresentationCapabilities()) PresentationCapabilities capabilities,
 
     /// Whether presentation transition
-    /// is currently running.
+    /// is running.
     @Default(false) bool transitioning,
 
     /// Whether presentation subsystem
@@ -40,8 +60,8 @@ abstract class PresentationState with _$PresentationState {
 
     /// Lifecycle generation.
     ///
-    /// Used to ignore stale asynchronous
-    /// callbacks from platform adapters.
+    /// Used to ignore stale async
+    /// callbacks from adapters.
     @Default(0) int generation,
 
     /// Last presentation error.
@@ -50,10 +70,11 @@ abstract class PresentationState with _$PresentationState {
 
   const PresentationState._();
 
-  /// Initial presentation state.
+  /// Initial state.
   factory PresentationState.initial() {
     return const PresentationState(
       mode: PresentationMode.normal,
+      targetMode: null,
       transitioning: false,
       enabled: true,
       available: true,
@@ -67,37 +88,39 @@ abstract class PresentationState with _$PresentationState {
   /// Whether PiP is active.
   bool get isPip => mode == PresentationMode.pip;
 
-  /// Whether floating mode is active.
+  /// Whether floating is active.
   bool get isFloating => mode == PresentationMode.floating;
 
-  /// Whether player is in normal mode.
+  /// Whether normal mode is active.
   bool get isNormal => mode == PresentationMode.normal;
 
-  /// Whether transition is running.
+  /// Whether transition running.
   bool get isTransitioning => transitioning;
 
-  /// Whether state contains an error.
+  /// Whether state has error.
   bool get hasError => error != null;
 
   /// Whether current mode is supported.
   bool get isSupported => capabilities.supports(mode);
 
-  /// Whether a presentation request
-  /// can be accepted.
+  /// Whether target mode exists.
+  bool get hasTarget => targetMode != null;
+
+  /// Whether request can be accepted.
   bool get canRequestChange => enabled && available && !transitioning && !hasError;
 
-  /// Creates a state after successful transition.
-  PresentationState completed(PresentationMode mode) {
-    return copyWith(mode: mode, transitioning: false, error: null);
+  /// Creates transition state.
+  PresentationState transitioningTo(PresentationMode target) {
+    return copyWith(targetMode: target, transitioning: true, error: null);
   }
 
-  /// Creates a transition state.
-  PresentationState withTransition(PresentationMode mode) {
-    return copyWith(mode: mode, transitioning: true, error: null);
+  /// Completes transition.
+  PresentationState completed(PresentationMode newMode) {
+    return copyWith(mode: newMode, targetMode: null, transitioning: false, error: null);
   }
 
-  /// Creates an error state.
+  /// Creates failed state.
   PresentationState failed(String message) {
-    return copyWith(transitioning: false, error: message);
+    return copyWith(targetMode: null, transitioning: false, error: message);
   }
 }

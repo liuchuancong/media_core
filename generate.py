@@ -709,17 +709,16 @@ FILES = [
     # Presentation
     # ========================================================================
 
-    "lib/presentation/presentation_controller.dart",
-    "lib/presentation/presentation_mode.dart",
-    "lib/presentation/presentation_state.dart",
-    "lib/presentation/presentation_request.dart",
-    "lib/presentation/presentation_snapshot.dart",
-    "lib/presentation/pip_controller.dart",
-    "lib/presentation/pip_state.dart",
-    "lib/presentation/fullscreen_controller.dart",
-    "lib/presentation/fullscreen_state.dart",
-    "lib/presentation/floating_controller.dart",
-    "lib/presentation/floating_state.dart",
+     "lib/presentation/presentation.dart",
+     "lib/presentation/presentation_mode.dart",
+     "lib/presentation/presentation_request.dart",
+     "lib/presentation/presentation_event.dart",
+     "lib/presentation/presentation_state.dart",
+     "lib/presentation/presentation_snapshot.dart",
+     "lib/presentation/presentation_capability.dart",
+     "lib/presentation/presentation_controller.dart",
+     "lib/presentation/presentation_reducer.dart",
+     "lib/presentation/presentation_adapter.dart"
 
     # ========================================================================
     # Renderer

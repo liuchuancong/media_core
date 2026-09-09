@@ -4,7 +4,7 @@ import 'floating_controller.dart';
 import 'presentation_request.dart';
 import 'fullscreen_controller.dart';
 
-/// Dispatches presentation requests to specialized controllers.
+/// Dispatches presentation requests.
 ///
 /// Responsibilities:
 ///
@@ -14,62 +14,62 @@ import 'fullscreen_controller.dart';
 ///
 /// Does not:
 ///
-/// - manage presentation state
-/// - call native APIs
-/// - decide policies
+/// - own presentation state
+/// - manage lifecycle
+/// - decide availability
+/// - call native APIs directly
 ///
-/// Lifecycle state is owned by:
+/// Native operations are implemented by:
 ///
-/// - PresentationController
-///
-/// Platform operations are owned by:
-///
-/// - platform adapters
+/// - FullscreenController
+/// - PipController
+/// - FloatingController
 final class PresentationDispatcher {
   const PresentationDispatcher({this.fullscreenController, this.pipController, this.floatingController});
 
-  /// Fullscreen controller.
   final FullscreenController? fullscreenController;
 
-  /// Picture-in-picture controller.
   final PipController? pipController;
 
-  /// Floating window controller.
   final FloatingController? floatingController;
 
-  /// Dispatches a presentation request.
+  /// Dispatch request.
   Future<void> dispatch(PresentationRequest request) async {
     switch (request.mode) {
       case PresentationMode.normal:
         await exit();
+
         break;
 
       case PresentationMode.fullscreen:
         await enterFullscreen();
+
         break;
 
       case PresentationMode.pip:
         await enterPip();
+
         break;
 
       case PresentationMode.floating:
         await enterFloating();
+
         break;
     }
   }
 
-  /// Enters fullscreen.
+  /// Enter fullscreen.
   Future<void> enterFullscreen() async {
     final controller = fullscreenController;
 
     if (controller == null) {
-      throw StateError('Fullscreen controller is not available.');
+      throw StateError('Fullscreen controller unavailable.');
     }
 
     await controller.enter();
   }
 
-  /// Exits fullscreen.
+  /// Exit fullscreen.
   Future<void> exitFullscreen() async {
     final controller = fullscreenController;
 
@@ -80,18 +80,18 @@ final class PresentationDispatcher {
     await controller.exit();
   }
 
-  /// Enters PiP.
+  /// Enter PiP.
   Future<void> enterPip() async {
     final controller = pipController;
 
     if (controller == null) {
-      throw StateError('PiP controller is not available.');
+      throw StateError('PiP controller unavailable.');
     }
 
     await controller.enter();
   }
 
-  /// Exits PiP.
+  /// Exit PiP.
   Future<void> exitPip() async {
     final controller = pipController;
 
@@ -102,18 +102,18 @@ final class PresentationDispatcher {
     await controller.exit();
   }
 
-  /// Enters floating mode.
+  /// Enter floating.
   Future<void> enterFloating() async {
     final controller = floatingController;
 
     if (controller == null) {
-      throw StateError('Floating controller is not available.');
+      throw StateError('Floating controller unavailable.');
     }
 
     await controller.enter();
   }
 
-  /// Exits floating mode.
+  /// Exit floating.
   Future<void> exitFloating() async {
     final controller = floatingController;
 
@@ -124,17 +124,21 @@ final class PresentationDispatcher {
     await controller.exit();
   }
 
-  /// Exits all presentation modes.
+  /// Exit all presentation modes.
+  ///
+  /// Order:
+  ///
+  /// 1. PiP
+  /// 2. Floating
+  /// 3. Fullscreen
+  ///
+  /// Because fullscreen usually owns
+  /// the player surface.
   Future<void> exit() async {
-    await Future.wait([exitFullscreen(), exitPip(), exitFloating()]);
+    await exitPip();
+
+    await exitFloating();
+
+    await exitFullscreen();
   }
-
-  /// Whether fullscreen controller exists.
-  bool get supportsFullscreen => fullscreenController != null;
-
-  /// Whether PiP controller exists.
-  bool get supportsPip => pipController != null;
-
-  /// Whether floating controller exists.
-  bool get supportsFloating => floatingController != null;
 }

@@ -15,13 +15,21 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PresentationEvent {
 
-/// Event type.
+/// Event category.
  PresentationEventType get type;/// Related presentation mode.
  PresentationMode? get mode;/// Lifecycle generation.
 ///
-/// Used to discard stale asynchronous callbacks.
- int get generation;/// Optional event source.
- String? get source;/// Optional error message.
+/// Used to ignore stale async callbacks.
+ int get generation;/// Event source.
+///
+/// Examples:
+///
+/// user
+/// android
+/// ios
+/// windows
+/// lifecycle
+ String? get source;/// Error message.
  String? get error;
 /// Create a copy of PresentationEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -226,17 +234,25 @@ class _PresentationEvent extends PresentationEvent {
   const _PresentationEvent({required this.type, this.mode, this.generation = 0, this.source, this.error}): super._();
   
 
-/// Event type.
+/// Event category.
 @override final  PresentationEventType type;
 /// Related presentation mode.
 @override final  PresentationMode? mode;
 /// Lifecycle generation.
 ///
-/// Used to discard stale asynchronous callbacks.
+/// Used to ignore stale async callbacks.
 @override@JsonKey() final  int generation;
-/// Optional event source.
+/// Event source.
+///
+/// Examples:
+///
+/// user
+/// android
+/// ios
+/// windows
+/// lifecycle
 @override final  String? source;
-/// Optional error message.
+/// Error message.
 @override final  String? error;
 
 /// Create a copy of PresentationEvent

@@ -1,36 +1,39 @@
 import 'dart:async';
+import 'pip_controller.dart';
 import 'presentation_mode.dart';
 import 'presentation_state.dart';
+import 'floating_controller.dart';
 import 'presentation_request.dart';
+import 'fullscreen_controller.dart';
 import 'presentation_snapshot.dart';
 import 'presentation_controller.dart';
-import 'presentation_capabilities.dart';
 
 /// High level presentation manager.
 ///
-/// Public facade for player presentation.
+/// Public entry point for player presentation.
 ///
 /// Responsibilities:
 ///
-/// - expose presentation APIs
+/// - expose presentation API
 /// - provide unified presentation state
 /// - provide snapshot
-/// - simplify presentation operations
+/// - simplify player integration
 ///
 /// Does not:
 ///
-/// - call platform APIs
-/// - create windows
-/// - control fullscreen system UI
-/// - manage native lifecycle
-///
-/// Platform operations are handled by:
-///
-/// - PresentationAdapter
-/// - platform implementations
+/// - call native APIs
+/// - manage windows
+/// - render UI
 final class PresentationManager {
-  /// Creates presentation manager.
-  PresentationManager({required PresentationController controller}) : _controller = controller {
+  PresentationManager({
+    required PresentationController controller,
+    FullscreenController? fullscreenController,
+    PipController? pipController,
+    FloatingController? floatingController,
+  }) : _controller = controller,
+       _fullscreenController = fullscreenController,
+       _pipController = pipController,
+       _floatingController = floatingController {
     _subscription = _controller.state.listen((state) {
       _latestState = state;
     });
@@ -38,24 +41,28 @@ final class PresentationManager {
 
   final PresentationController _controller;
 
+  final FullscreenController? _fullscreenController;
+
+  final PipController? _pipController;
+
+  final FloatingController? _floatingController;
+
   late final StreamSubscription<PresentationState> _subscription;
 
   PresentationState _latestState = PresentationState.initial();
 
   bool _disposed = false;
 
-  /// Current presentation state stream.
+  /// Presentation state stream.
   Stream<PresentationState> get state => _controller.state;
 
-  /// Current presentation state.
-  PresentationState get current => _latestState;
-
-  /// Current presentation snapshot.
+  /// Current snapshot.
   PresentationSnapshot get snapshot {
     final state = _latestState;
 
     return PresentationSnapshot(
       mode: state.mode,
+      targetMode: state.targetMode,
       capabilities: state.capabilities,
       transitioning: state.transitioning,
       enabled: state.enabled,
@@ -64,11 +71,16 @@ final class PresentationManager {
     );
   }
 
-  /// Whether manager is disposed.
   bool get isDisposed => _disposed;
 
-  /// Current presentation mode.
+  /// Current active mode.
   PresentationMode get mode => _latestState.mode;
+
+  /// Target mode during transition.
+  PresentationMode? get targetMode => _latestState.targetMode;
+
+  /// Whether transition is running.
+  bool get isTransitioning => _latestState.transitioning;
 
   /// Whether fullscreen active.
   bool get isFullscreen => mode == PresentationMode.fullscreen;
@@ -82,83 +94,91 @@ final class PresentationManager {
   /// Whether normal mode.
   bool get isNormal => mode == PresentationMode.normal;
 
-  /// Whether presentation is transitioning.
-  bool get isTransitioning => _latestState.transitioning;
+  /// Whether switching to fullscreen.
+  bool get isTransitioningToFullscreen => snapshot.isTransitioningToFullscreen;
 
-  /// Whether presentation has error.
-  bool get hasError => _latestState.hasError;
+  /// Whether switching to PiP.
+  bool get isTransitioningToPip => snapshot.isTransitioningToPip;
 
-  /// Whether presentation is available.
-  bool get available => _latestState.available;
+  /// Whether switching to floating.
+  bool get isTransitioningToFloating => snapshot.isTransitioningToFloating;
 
-  /// Requests presentation mode change.
-  ///
-  /// The real platform operation is executed
-  /// by PresentationAdapter.
+  /// Requests presentation change.
   Future<void> request(PresentationRequest request) {
     _ensureNotDisposed();
 
     return _controller.request(request);
   }
 
-  /// Enters fullscreen.
-  Future<void> enterFullscreen({bool animated = true, String? source}) {
-    return request(PresentationRequest.fullscreen(animated: animated, source: source));
+  /// Enter fullscreen.
+  Future<void> enterFullscreen() {
+    return request(PresentationRequest.fullscreen());
   }
 
-  /// Enters picture-in-picture.
-  Future<void> enterPip({bool animated = true, String? source}) {
-    return request(PresentationRequest.pip(animated: animated, source: source));
+  /// Exit fullscreen.
+  Future<void> exitFullscreen() {
+    if (!isFullscreen) {
+      return Future.value();
+    }
+
+    return exit();
   }
 
-  /// Enters floating window mode.
-  Future<void> enterFloating({bool animated = true, String? source}) {
-    return request(PresentationRequest.floating(animated: animated, source: source));
+  /// Enter PiP.
+  Future<void> enterPip() {
+    return request(PresentationRequest.pip());
   }
 
-  /// Returns to normal presentation.
-  Future<void> exit({bool animated = true, String? source}) {
-    return request(PresentationRequest.normal(animated: animated, source: source));
+  /// Exit PiP.
+  Future<void> exitPip() {
+    if (!isPip) {
+      return Future.value();
+    }
+
+    return exit();
   }
 
-  /// Changes presentation mode.
-  Future<void> setMode(PresentationMode mode, {bool animated = true, String? source}) {
-    return request(PresentationRequest(mode: mode, animated: animated, source: source));
+  /// Enter floating mode.
+  Future<void> enterFloating() {
+    return request(PresentationRequest.floating());
   }
 
-  /// Toggles fullscreen.
-  Future<void> toggleFullscreen({bool animated = true}) {
+  /// Exit current presentation mode.
+  Future<void> exit() {
+    return request(PresentationRequest.normal());
+  }
+
+  /// Change mode.
+  Future<void> setMode(PresentationMode mode) {
+    return request(PresentationRequest(mode: mode));
+  }
+
+  /// Toggle fullscreen.
+  Future<void> toggleFullscreen() {
     if (isFullscreen) {
-      return exit(animated: animated, source: 'toggle_fullscreen');
+      return exitFullscreen();
     }
 
-    return enterFullscreen(animated: animated, source: 'toggle_fullscreen');
+    return enterFullscreen();
   }
 
-  /// Toggles PiP.
-  Future<void> togglePip({bool animated = true}) {
+  /// Toggle PiP.
+  Future<void> togglePip() {
     if (isPip) {
-      return exit(animated: animated, source: 'toggle_pip');
+      return exitPip();
     }
 
-    return enterPip(animated: animated, source: 'toggle_pip');
+    return enterPip();
   }
 
-  /// Updates state from outside.
-  ///
-  /// Usually called by adapters.
-  void update(PresentationState state) {
-    _ensureNotDisposed();
+  /// Native fullscreen controller.
+  FullscreenController? get fullscreenController => _fullscreenController;
 
-    _controller.update(state);
-  }
+  /// Native PiP controller.
+  PipController? get pipController => _pipController;
 
-  /// Updates platform capabilities.
-  void updateCapabilities(PresentationCapabilities capabilities) {
-    _ensureNotDisposed();
-
-    _controller.updateCapabilities(capabilities);
-  }
+  /// Native floating controller.
+  FloatingController? get floatingController => _floatingController;
 
   void _ensureNotDisposed() {
     if (_disposed) {
