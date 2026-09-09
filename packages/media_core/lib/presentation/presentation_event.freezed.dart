@@ -15,7 +15,23 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PresentationEvent {
 
- int get generation; String? get requestId; String? get source;
+/// Request lifecycle generation.
+///
+/// Used to ignore stale callbacks.
+ int get generation;/// Original request id.
+///
+/// Useful when multiple async
+/// operations exist.
+ String? get requestId;/// Event source.
+///
+/// Examples:
+///
+/// - android
+/// - ios
+/// - windows
+/// - user
+/// - lifecycle
+ String? get source;
 /// Create a copy of PresentationEvent
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -235,9 +251,26 @@ class PresentationStarted extends PresentationEvent {
   const PresentationStarted({required this.mode, this.generation = 0, this.requestId, this.source}): super._();
   
 
+/// Target presentation mode.
  final  PresentationMode mode;
+/// Request lifecycle generation.
+///
+/// Used to ignore stale callbacks.
 @override@JsonKey() final  int generation;
+/// Original request id.
+///
+/// Useful when multiple async
+/// operations exist.
 @override final  String? requestId;
+/// Event source.
+///
+/// Examples:
+///
+/// - android
+/// - ios
+/// - windows
+/// - user
+/// - lifecycle
 @override final  String? source;
 
 /// Create a copy of PresentationEvent
@@ -309,9 +342,13 @@ class PresentationCompleted extends PresentationEvent {
   const PresentationCompleted({required this.mode, this.generation = 0, this.requestId, this.source}): super._();
   
 
+/// Actual active presentation mode.
  final  PresentationMode mode;
+/// Request generation.
 @override@JsonKey() final  int generation;
+/// Request identifier.
 @override final  String? requestId;
+/// Event source.
 @override final  String? source;
 
 /// Create a copy of PresentationEvent
@@ -383,10 +420,15 @@ class PresentationFailed extends PresentationEvent {
   const PresentationFailed({this.mode, required this.error, this.generation = 0, this.requestId, this.source}): super._();
   
 
+/// Target mode if known.
  final  PresentationMode? mode;
+/// Error message.
  final  String error;
+/// Request generation.
 @override@JsonKey() final  int generation;
+/// Request identifier.
 @override final  String? requestId;
+/// Event source.
 @override final  String? source;
 
 /// Create a copy of PresentationEvent
@@ -459,9 +501,13 @@ class PresentationChanged extends PresentationEvent {
   const PresentationChanged({required this.mode, this.generation = 0, this.requestId, this.source}): super._();
   
 
+/// Actual mode reported by platform.
  final  PresentationMode mode;
+/// Event generation.
 @override@JsonKey() final  int generation;
+/// Request identifier.
 @override final  String? requestId;
+/// Event source.
 @override final  String? source;
 
 /// Create a copy of PresentationEvent
@@ -533,8 +579,11 @@ class PresentationDisposed extends PresentationEvent {
   const PresentationDisposed({this.generation = 0, this.requestId, this.source}): super._();
   
 
+/// Lifecycle generation.
 @override@JsonKey() final  int generation;
+/// Request identifier.
 @override final  String? requestId;
+/// Event source.
 @override final  String? source;
 
 /// Create a copy of PresentationEvent

@@ -17,11 +17,11 @@ mixin _$PresentationSnapshot {
 
 /// Current active presentation mode.
 ///
-/// This is the mode that has
+/// This represents the mode that has
 /// successfully completed.
  PresentationMode get mode;/// Requested target mode.
 ///
-/// When transition is running:
+/// During transition:
 ///
 /// Example:
 ///
@@ -35,18 +35,17 @@ mixin _$PresentationSnapshot {
 /// true
  PresentationMode? get targetMode;/// Platform capabilities.
 ///
-/// Describes supported features.
- PresentationCapabilities get capabilities;/// Whether a presentation transition
+/// Describes supported presentation features.
+ PresentationCapabilities get capabilities;/// Whether presentation transition
 /// is running.
  bool get transitioning;/// Whether presentation subsystem
 /// is enabled.
- bool get enabled;/// Whether presentation is currently
-/// available.
+ bool get enabled;/// Whether presentation is available.
  bool get available;/// Lifecycle generation.
 ///
 /// Used to identify stale async
 /// callbacks.
- int get generation;/// Last error.
+ int get generation;/// Last presentation error.
  String? get error;
 /// Create a copy of PresentationSnapshot
 /// with the given fields replaced by the non-null parameter values.
@@ -265,12 +264,12 @@ class _PresentationSnapshot extends PresentationSnapshot {
 
 /// Current active presentation mode.
 ///
-/// This is the mode that has
+/// This represents the mode that has
 /// successfully completed.
 @override@JsonKey() final  PresentationMode mode;
 /// Requested target mode.
 ///
-/// When transition is running:
+/// During transition:
 ///
 /// Example:
 ///
@@ -285,23 +284,22 @@ class _PresentationSnapshot extends PresentationSnapshot {
 @override final  PresentationMode? targetMode;
 /// Platform capabilities.
 ///
-/// Describes supported features.
+/// Describes supported presentation features.
 @override@JsonKey() final  PresentationCapabilities capabilities;
-/// Whether a presentation transition
+/// Whether presentation transition
 /// is running.
 @override@JsonKey() final  bool transitioning;
 /// Whether presentation subsystem
 /// is enabled.
 @override@JsonKey() final  bool enabled;
-/// Whether presentation is currently
-/// available.
+/// Whether presentation is available.
 @override@JsonKey() final  bool available;
 /// Lifecycle generation.
 ///
 /// Used to identify stale async
 /// callbacks.
 @override@JsonKey() final  int generation;
-/// Last error.
+/// Last presentation error.
 @override final  String? error;
 
 /// Create a copy of PresentationSnapshot
