@@ -1,5 +1,3 @@
-import 'package:equatable/equatable.dart';
-
 /// Represents thermal condition of the device.
 ///
 /// [ThermalState] describes the current thermal
