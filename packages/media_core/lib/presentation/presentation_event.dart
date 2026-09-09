@@ -3,110 +3,226 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'presentation_event.freezed.dart';
 
-/// Represents presentation lifecycle events.
+/// Represents an event emitted by the presentation subsystem.
 ///
-/// Events describe changes or requests
-/// inside presentation subsystem.
+/// Events are immutable descriptions of something that happened.
 ///
 /// Events do not:
 ///
-/// - execute platform APIs
-/// - modify state directly
+/// - execute native APIs
+/// - modify presentation state
+/// - perform transitions
+/// - manage lifecycle
 ///
 /// They are consumed by:
 ///
 /// - PresentationController
 /// - PresentationReducer
-/// - Platform adapters
+///
+/// Platform adapters create events when:
+///
+/// - a transition starts
+/// - a transition completes
+/// - a transition fails
+/// - the system changes presentation externally
+///
+/// Flow:
+///
+/// ```text
+/// PresentationRequest
+///          │
+///          ▼
+/// PresentationController
+///          │
+///          ▼
+/// PresentationAdapter
+///          │
+///          ▼
+/// PresentationEvent
+///          │
+///          ▼
+/// PresentationReducer
+///          │
+///          ▼
+/// PresentationState
+/// ```
 @freezed
-abstract class PresentationEvent with _$PresentationEvent {
-  const factory PresentationEvent({
-    /// Event category.
-    required PresentationEventType type,
+sealed class PresentationEvent with _$PresentationEvent {
+  /// Platform transition started.
+  ///
+  /// Example:
+  ///
+  /// User requests fullscreen.
+  ///
+  /// Android starts fullscreen animation.
+  ///
+  /// Adapter emits:
+  ///
+  /// PresentationStarted(fullscreen)
+  ///
+  const factory PresentationEvent.started({
+    /// Target presentation mode.
+    required PresentationMode mode,
 
-    /// Related presentation mode.
-    PresentationMode? mode,
-
-    /// Lifecycle generation.
+    /// Request lifecycle generation.
     ///
-    /// Used to ignore stale async callbacks.
+    /// Used to ignore stale callbacks.
     @Default(0) int generation,
+
+    /// Original request id.
+    ///
+    /// Useful when multiple async
+    /// operations exist.
+    String? requestId,
 
     /// Event source.
     ///
     /// Examples:
     ///
-    /// user
-    /// android
-    /// ios
-    /// windows
-    /// lifecycle
+    /// - android
+    /// - ios
+    /// - windows
+    /// - user
+    /// - lifecycle
     String? source,
+  }) = PresentationStarted;
+
+  /// Platform transition completed.
+  ///
+  /// The platform has successfully
+  /// reached the requested mode.
+  const factory PresentationEvent.completed({
+    /// Actual active presentation mode.
+    required PresentationMode mode,
+
+    /// Request generation.
+    @Default(0) int generation,
+
+    /// Request identifier.
+    String? requestId,
+
+    /// Event source.
+    String? source,
+  }) = PresentationCompleted;
+
+  /// Platform transition failed.
+  ///
+  /// Reducer will clear transition state
+  /// and expose error information.
+  const factory PresentationEvent.failed({
+    /// Target mode if known.
+    PresentationMode? mode,
 
     /// Error message.
-    String? error,
-  }) = _PresentationEvent;
+    required String error,
+
+    /// Request generation.
+    @Default(0) int generation,
+
+    /// Request identifier.
+    String? requestId,
+
+    /// Event source.
+    String? source,
+  }) = PresentationFailed;
+
+  /// Platform reported external state change.
+  ///
+  /// Examples:
+  ///
+  /// - Android PiP entered by system
+  /// - Android PiP closed by user
+  /// - desktop window moved externally
+  /// - system fullscreen changed
+  const factory PresentationEvent.changed({
+    /// Actual mode reported by platform.
+    required PresentationMode mode,
+
+    /// Event generation.
+    @Default(0) int generation,
+
+    /// Request identifier.
+    String? requestId,
+
+    /// Event source.
+    String? source,
+  }) = PresentationChanged;
+
+  /// Presentation subsystem disposed.
+  ///
+  /// This is lifecycle event.
+  ///
+  /// It does not represent a mode change.
+  const factory PresentationEvent.disposed({
+    /// Lifecycle generation.
+    @Default(0) int generation,
+
+    /// Request identifier.
+    String? requestId,
+
+    /// Event source.
+    String? source,
+  }) = PresentationDisposed;
 
   const PresentationEvent._();
 
-  /// Request presentation change.
-  factory PresentationEvent.requested(PresentationMode mode, {int generation = 0, String? source}) {
-    return PresentationEvent(type: PresentationEventType.requested, mode: mode, generation: generation, source: source);
-  }
+  /// Whether event contains an error.
+  bool get hasError => maybeMap(failed: (_) => true, orElse: () => false);
 
-  /// Transition started.
-  factory PresentationEvent.started(PresentationMode mode, {int generation = 0, String? source}) {
-    return PresentationEvent(type: PresentationEventType.started, mode: mode, generation: generation, source: source);
-  }
+  /// Error message.
+  ///
+  /// Returns null for non-failed events.
+  String? get error => maybeMap(failed: (event) => event.error, orElse: () => null);
 
-  /// Transition completed.
-  factory PresentationEvent.completed(PresentationMode mode, {int generation = 0, String? source}) {
-    return PresentationEvent(type: PresentationEventType.completed, mode: mode, generation: generation, source: source);
-  }
+  /// Whether event contains a presentation mode.
+  bool get hasMode => maybeMap(
+    started: (_) => true,
+    completed: (_) => true,
+    failed: (event) => event.mode != null,
+    changed: (_) => true,
+    disposed: (_) => false,
+    orElse: () => false,
+  );
 
-  /// Transition failed.
-  factory PresentationEvent.failed(PresentationMode mode, {required String error, int generation = 0, String? source}) {
-    return PresentationEvent(
-      type: PresentationEventType.failed,
-      mode: mode,
-      error: error,
-      generation: generation,
-      source: source,
-    );
-  }
+  /// Presentation mode carried by event.
+  PresentationMode? get mode => maybeMap(
+    started: (event) => event.mode,
+    completed: (event) => event.mode,
+    failed: (event) => event.mode,
+    changed: (event) => event.mode,
+    disposed: (_) => null,
+    orElse: () => null,
+  );
 
-  /// Platform reported external change.
-  factory PresentationEvent.updated(PresentationMode mode, {int generation = 0, String? source}) {
-    return PresentationEvent(type: PresentationEventType.updated, mode: mode, generation: generation, source: source);
-  }
+  /// Event generation.
+  ///
+  /// Used to discard stale async callbacks.
+  @override
+  int get generation => map(
+    started: (event) => event.generation,
+    completed: (event) => event.generation,
+    failed: (event) => event.generation,
+    changed: (event) => event.generation,
+    disposed: (event) => event.generation,
+  );
 
-  /// Presentation disposed.
-  factory PresentationEvent.disposed({int generation = 0}) {
-    return PresentationEvent(type: PresentationEventType.disposed, generation: generation);
-  }
+  /// Optional request identifier.
+  @override
+  String? get requestId => map(
+    started: (event) => event.requestId,
+    completed: (event) => event.requestId,
+    failed: (event) => event.requestId,
+    changed: (event) => event.requestId,
+    disposed: (event) => event.requestId,
+  );
 
-  bool get hasError => error != null;
-
-  bool get hasMode => mode != null;
-}
-
-/// Presentation event categories.
-enum PresentationEventType {
-  /// User/system requested transition.
-  requested,
-
-  /// Transition started.
-  started,
-
-  /// Transition completed.
-  completed,
-
-  /// Transition failed.
-  failed,
-
-  /// External platform update.
-  updated,
-
-  /// Presentation disposed.
-  disposed,
+  /// Event source.
+  @override
+  String? get source => map(
+    started: (event) => event.source,
+    completed: (event) => event.source,
+    failed: (event) => event.source,
+    changed: (event) => event.source,
+    disposed: (event) => event.source,
+  );
 }

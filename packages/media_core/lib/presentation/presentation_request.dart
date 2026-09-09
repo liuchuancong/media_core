@@ -3,86 +3,184 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'presentation_request.freezed.dart';
 
-/// Describes a requested presentation transition.
+/// Describes a presentation transition request.
 ///
-/// A request only represents an intention.
+/// A request represents an intention to change
+/// presentation mode.
 ///
-/// It does not perform any platform operation.
+/// It does not:
 ///
-/// Actual transition is handled by:
+/// - execute platform operations
+/// - change window state
+/// - call native APIs
+///
+/// The request is processed by:
 ///
 /// - PresentationController
-/// - FullscreenController
-/// - PipController
-/// - FloatingController
 ///
-/// Platform adapters are responsible for applying
-/// native presentation behavior.
+/// and executed by:
+///
+/// - PresentationAdapter
 @freezed
 abstract class PresentationRequest with _$PresentationRequest {
   const factory PresentationRequest({
     /// Target presentation mode.
+    ///
+    /// Example:
+    ///
+    /// normal -> fullscreen
+    ///
     @Default(PresentationMode.normal) PresentationMode mode,
 
-    /// Whether transition should be animated.
+    /// Whether transition animation
+    /// should be used.
+    ///
+    /// The platform adapter decides
+    /// whether animation is supported.
     @Default(true) bool animated,
 
-    /// Whether request was triggered automatically.
+    /// Whether this request is generated
+    /// automatically.
     ///
     /// Examples:
     ///
-    /// - orientation changed
-    /// - playback state changed
-    /// - app lifecycle event
+    /// - device rotation
+    /// - app lifecycle
+    /// - playback policy
     @Default(false) bool automatic,
 
-    /// Optional request source.
+    /// Request source.
     ///
     /// Examples:
     ///
     /// - user
-    /// - orientation
-    /// - lifecycle
     /// - system
+    /// - lifecycle
+    /// - orientation
     String? source,
+
+    /// Request generation.
+    ///
+    /// Used to match async
+    /// platform callbacks.
+    @Default(0) int generation,
+
+    /// Unique request identifier.
+    ///
+    /// Useful for debugging
+    /// and tracing lifecycle.
+    String? requestId,
+
+    /// Request creation timestamp.
+    DateTime? createdAt,
   }) = _PresentationRequest;
 
   const PresentationRequest._();
 
   /// Creates normal mode request.
-  factory PresentationRequest.normal({bool animated = true, String? source}) {
-    return PresentationRequest(mode: PresentationMode.normal, animated: animated, source: source);
+  factory PresentationRequest.normal({
+    bool animated = true,
+
+    bool automatic = false,
+
+    String? source,
+
+    int generation = 0,
+  }) {
+    return PresentationRequest(
+      mode: PresentationMode.normal,
+
+      animated: animated,
+
+      automatic: automatic,
+
+      source: source,
+
+      generation: generation,
+
+      createdAt: DateTime.now(),
+    );
   }
 
   /// Creates fullscreen request.
-  factory PresentationRequest.fullscreen({bool animated = true, bool automatic = false, String? source}) {
+  factory PresentationRequest.fullscreen({
+    bool animated = true,
+
+    bool automatic = false,
+
+    String? source,
+
+    int generation = 0,
+  }) {
     return PresentationRequest(
       mode: PresentationMode.fullscreen,
+
       animated: animated,
+
       automatic: automatic,
+
       source: source,
+
+      generation: generation,
+
+      createdAt: DateTime.now(),
     );
   }
 
   /// Creates PiP request.
-  factory PresentationRequest.pip({bool animated = true, String? source}) {
-    return PresentationRequest(mode: PresentationMode.pip, animated: animated, source: source);
+  factory PresentationRequest.pip({bool animated = true, bool automatic = false, String? source, int generation = 0}) {
+    return PresentationRequest(
+      mode: PresentationMode.pip,
+
+      animated: animated,
+
+      automatic: automatic,
+
+      source: source,
+
+      generation: generation,
+
+      createdAt: DateTime.now(),
+    );
   }
 
   /// Creates floating window request.
-  factory PresentationRequest.floating({bool animated = true, String? source}) {
-    return PresentationRequest(mode: PresentationMode.floating, animated: animated, source: source);
+  factory PresentationRequest.floating({
+    bool animated = true,
+
+    bool automatic = false,
+
+    String? source,
+
+    int generation = 0,
+  }) {
+    return PresentationRequest(
+      mode: PresentationMode.floating,
+
+      animated: animated,
+
+      automatic: automatic,
+
+      source: source,
+
+      generation: generation,
+
+      createdAt: DateTime.now(),
+    );
   }
 
-  /// Whether this enters fullscreen.
+  /// Whether request enters fullscreen.
   bool get isFullscreen => mode == PresentationMode.fullscreen;
 
-  /// Whether this enters PiP.
+  /// Whether request enters PiP.
   bool get isPip => mode == PresentationMode.pip;
 
-  /// Whether this enters floating mode.
+  /// Whether request enters floating.
   bool get isFloating => mode == PresentationMode.floating;
 
-  /// Whether this restores normal mode.
+  /// Whether request restores normal mode.
   bool get isNormal => mode == PresentationMode.normal;
+
+  /// Whether request changes presentation.
+  bool get changesPresentation => mode != PresentationMode.normal;
 }

@@ -4,73 +4,115 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'presentation_state.freezed.dart';
 
-/// Represents current presentation lifecycle state.
+/// Represents the current presentation lifecycle state.
 ///
-/// This state only describes the logical presentation
-/// lifecycle of the media player.
+/// This state is the logical source of truth for the
+/// presentation subsystem.
+///
+/// It describes:
+///
+/// - current presentation mode
+/// - target presentation mode
+/// - transition status
+/// - presentation capabilities
+/// - presentation availability
+/// - presentation errors
+/// - lifecycle generation
 ///
 /// It does not:
 ///
 /// - enter fullscreen
-/// - create PiP window
-/// - create floating window
+/// - leave fullscreen
+/// - create a PiP window
+/// - create a floating window
+/// - call platform APIs
 /// - control system UI
 ///
-/// Platform adapters are responsible for applying
-/// native presentation operations.
+/// Platform-specific operations are handled by
+/// [PresentationAdapter].
 @freezed
 abstract class PresentationState with _$PresentationState {
   const factory PresentationState({
     /// Current active presentation mode.
     ///
-    /// This represents the mode that has
-    /// successfully completed.
+    /// This represents the mode that has successfully
+    /// completed.
+    ///
+    /// During a transition, this value remains unchanged
+    /// until the transition is completed.
     @Default(PresentationMode.normal) PresentationMode mode,
 
     /// Target presentation mode.
     ///
-    /// When transitioning:
+    /// This is non-null while a transition is being
+    /// processed.
     ///
     /// Example:
     ///
+    /// ```text
     /// mode:
-    /// fullscreen
+    ///   normal
     ///
     /// targetMode:
-    /// pip
+    ///   fullscreen
     ///
     /// transitioning:
-    /// true
-    ///
+    ///   true
+    /// ```
     PresentationMode? targetMode,
 
-    /// Current capabilities.
+    /// Presentation capabilities reported by the
+    /// current environment.
+    ///
+    /// Capabilities describe what the environment supports.
+    /// They do not describe the current presentation mode.
     @Default(PresentationCapabilities()) PresentationCapabilities capabilities,
 
-    /// Whether presentation transition
-    /// is running.
+    /// Whether a presentation transition is currently
+    /// running.
     @Default(false) bool transitioning,
 
-    /// Whether presentation subsystem
-    /// is enabled.
+    /// Whether the presentation subsystem is enabled.
+    ///
+    /// This represents application-level availability of
+    /// presentation functionality.
     @Default(true) bool enabled,
 
-    /// Whether presentation is available.
+    /// Whether presentation is currently available.
+    ///
+    /// This can become false when the presentation subsystem
+    /// cannot currently perform presentation operations.
+    ///
+    /// Examples:
+    ///
+    /// - player has been disposed
+    /// - required platform resource is unavailable
+    /// - presentation lifecycle has ended
     @Default(true) bool available,
 
     /// Lifecycle generation.
     ///
-    /// Used to ignore stale async
-    /// callbacks from adapters.
+    /// Used to distinguish newer presentation operations
+    /// from stale asynchronous callbacks.
+    ///
+    /// The controller owns generation changes.
+    ///
+    /// The reducer uses generation to prevent an older
+    /// asynchronous event from overwriting newer state.
     @Default(0) int generation,
 
     /// Last presentation error.
+    ///
+    /// A null value means that the current state does not
+    /// contain a presentation error.
     String? error,
   }) = _PresentationState;
 
   const PresentationState._();
 
-  /// Initial state.
+  /// Creates the initial presentation state.
+  ///
+  /// The player starts in normal presentation mode.
   factory PresentationState.initial() {
     return const PresentationState(
       mode: PresentationMode.normal,
@@ -79,47 +121,68 @@ abstract class PresentationState with _$PresentationState {
       enabled: true,
       available: true,
       generation: 0,
+      error: null,
     );
   }
 
-  /// Whether fullscreen is active.
+  /// Whether fullscreen presentation is active.
   bool get isFullscreen => mode == PresentationMode.fullscreen;
 
-  /// Whether PiP is active.
+  /// Whether picture-in-picture presentation is active.
   bool get isPip => mode == PresentationMode.pip;
 
-  /// Whether floating is active.
+  /// Whether floating presentation is active.
   bool get isFloating => mode == PresentationMode.floating;
 
-  /// Whether normal mode is active.
+  /// Whether normal presentation is active.
   bool get isNormal => mode == PresentationMode.normal;
 
-  /// Whether transition running.
+  /// Whether a presentation transition is running.
   bool get isTransitioning => transitioning;
 
-  /// Whether state has error.
+  /// Whether the state contains a presentation error.
   bool get hasError => error != null;
 
-  /// Whether current mode is supported.
-  bool get isSupported => capabilities.supports(mode);
-
-  /// Whether target mode exists.
+  /// Whether a target presentation mode exists.
   bool get hasTarget => targetMode != null;
 
-  /// Whether request can be accepted.
+  /// Whether the current presentation mode is supported
+  /// by the current environment.
+  bool get isSupported => capabilities.supports(mode);
+
+  /// Whether a new presentation request can currently
+  /// be accepted.
+  ///
+  /// A request cannot be accepted when:
+  ///
+  /// - presentation is disabled
+  /// - presentation is unavailable
+  /// - another transition is running
+  /// - the current state contains an error
   bool get canRequestChange => enabled && available && !transitioning && !hasError;
 
-  /// Creates transition state.
+  /// Creates a state representing a pending transition.
+  ///
+  /// The current [mode] is intentionally preserved.
+  ///
+  /// Only [targetMode] and transition status change.
   PresentationState transitioningTo(PresentationMode target) {
     return copyWith(targetMode: target, transitioning: true, error: null);
   }
 
-  /// Completes transition.
+  /// Creates a state representing a successfully
+  /// completed transition.
+  ///
+  /// The new mode becomes the current active mode and
+  /// the pending target is cleared.
   PresentationState completed(PresentationMode newMode) {
     return copyWith(mode: newMode, targetMode: null, transitioning: false, error: null);
   }
 
-  /// Creates failed state.
+  /// Creates a state representing a failed transition.
+  ///
+  /// The current active mode is preserved because the
+  /// requested transition did not complete successfully.
   PresentationState failed(String message) {
     return copyWith(targetMode: null, transitioning: false, error: message);
   }

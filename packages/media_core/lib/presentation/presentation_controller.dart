@@ -2,62 +2,47 @@ import 'dart:async';
 import 'presentation_mode.dart';
 import 'presentation_event.dart';
 import 'presentation_state.dart';
-import 'presentation_request.dart';
 import 'presentation_reducer.dart';
-import 'presentation_snapshot.dart';
+import 'presentation_request.dart';
 import 'package:rxdart/rxdart.dart';
 import 'presentation_capabilities.dart';
-import '../policy/presentation_policy.dart';
 
-/// Controls presentation lifecycle.
+/// Controls presentation lifecycle state.
 ///
-/// PresentationController is the state owner of
-/// the presentation subsystem.
+/// PresentationController is the core state machine
+/// of presentation subsystem.
 ///
 /// Responsibilities:
 ///
-/// - owns presentation state
-/// - validates presentation requests
-/// - generates lifecycle generations
-/// - reduces events into state
-/// - exposes state stream
+/// - own presentation state
+/// - receive requests
+/// - generate lifecycle events
+/// - reduce events into state
+/// - synchronize generations
 ///
 /// Does not:
 ///
 /// - call native APIs
-/// - create windows
-/// - control fullscreen
-/// - enter PiP
-/// - manage UI
+/// - execute platform operations
+/// - manage windows
+/// - know Android/iOS/Desktop APIs
 ///
 /// Platform operations are handled by:
 ///
-/// - PresentationAdapter
+/// PresentationAdapter
 ///
-/// State transitions are handled by:
-///
-/// - PresentationReducer
 final class PresentationController {
-  /// Creates a presentation controller.
   PresentationController({
-    PresentationPolicy policy = const PresentationPolicy(),
-
-    PresentationCapabilities capabilities = const PresentationCapabilities(),
-
     PresentationReducer reducer = const PresentationReducer(),
-  }) : _policy = policy,
-       _capabilities = capabilities,
-       _reducer = reducer;
-
-  PresentationPolicy _policy;
-
-  PresentationCapabilities _capabilities;
+    PresentationCapabilities capabilities = const PresentationCapabilities(),
+  }) : _reducer = reducer,
+       _capabilities = capabilities;
 
   final PresentationReducer _reducer;
 
-  final BehaviorSubject<PresentationState> _stateSubject = BehaviorSubject<PresentationState>.seeded(
-    PresentationState.initial(),
-  );
+  PresentationCapabilities _capabilities;
+
+  final BehaviorSubject<PresentationState> _stateSubject = BehaviorSubject.seeded(PresentationState.initial());
 
   Future<void> _operation = Future<void>.value();
 
@@ -65,68 +50,39 @@ final class PresentationController {
 
   int _generation = 0;
 
+  // ============================================================
+  // State
+  // ============================================================
+
   /// Current presentation state stream.
   ValueStream<PresentationState> get state => _stateSubject.stream;
 
-  /// Current presentation state.
+  /// Current state.
   PresentationState get current => _stateSubject.value;
-
-  /// Current lifecycle generation.
-  ///
-  /// Used to ignore stale async callbacks
-  /// from platform adapters.
-  int get generation => _generation;
-
-  /// Current immutable snapshot.
-  PresentationSnapshot get snapshot {
-    final state = current;
-
-    return PresentationSnapshot(
-      mode: state.mode,
-
-      capabilities: _capabilities,
-
-      transitioning: state.transitioning,
-
-      enabled: state.enabled,
-
-      generation: _generation,
-
-      error: state.error,
-    );
-  }
-
-  /// Whether controller is disposed.
-  bool get isDisposed => _disposed;
 
   /// Current presentation mode.
   PresentationMode get mode => current.mode;
 
-  /// Whether fullscreen is active.
+  /// Current capabilities.
+  PresentationCapabilities get capabilities => _capabilities;
+
+  /// Whether fullscreen active.
   bool get isFullscreen => current.isFullscreen;
 
-  /// Whether PiP is active.
+  /// Whether PiP active.
   bool get isPip => current.isPip;
 
-  /// Whether floating mode is active.
+  /// Whether floating active.
   bool get isFloating => current.isFloating;
 
-  /// Updates presentation policy.
-  ///
-  /// Policy controls whether
-  /// presentation requests are allowed.
-  void updatePolicy(PresentationPolicy policy) {
-    _ensureNotDisposed();
-
-    _policy = policy;
-
-    _stateSubject.add(current.copyWith(enabled: policy.enabled));
-  }
+  // ============================================================
+  // Capability
+  // ============================================================
 
   /// Updates platform capabilities.
   ///
   /// Called by PresentationService
-  /// after adapter capability changes.
+  /// when adapter reports changes.
   void updateCapabilities(PresentationCapabilities capabilities) {
     _ensureNotDisposed();
 
@@ -135,55 +91,38 @@ final class PresentationController {
     _stateSubject.add(current.copyWith(capabilities: capabilities));
   }
 
-  /// Requests a presentation transition.
-  ///
-  /// This only updates logical state.
-  ///
-  /// Real platform transition is executed by:
-  ///
-  /// PresentationAdapter
-  ///
-  /// Completion is reported through:
-  ///
-  /// PresentationEvent.completed
-  Future<void> request(PresentationRequest request) {
-    return _enqueue(() async {
-      _ensureNotDisposed();
+  // ============================================================
+  // Request
+  // ============================================================
 
-      if (!_canRequest(request.mode)) {
-        throw StateError(
-          'Presentation mode '
-          '${request.mode} '
-          'is unavailable.',
-        );
-      }
+  /// Accepts a presentation request.
+  ///
+  /// This only changes logical state.
+  ///
+  /// Actual platform execution is performed
+  /// by PresentationAdapter.
+  Future<void> request(PresentationRequest request) {
+    return _enqueue(() {
+      _ensureNotDisposed();
 
       final generation = ++_generation;
 
-      handleEvent(PresentationEvent.requested(request.mode, generation: generation, source: request.source));
+      handleEvent(PresentationEvent.started(mode: request.mode, generation: generation, source: request.source));
     });
   }
 
-  /// Handles presentation lifecycle events.
-  ///
-  /// Events are produced by:
-  ///
-  /// - PresentationAdapter
-  /// - system lifecycle
-  /// - platform callbacks
+  // ============================================================
+  // Events
+  // ============================================================
+
+  /// Handles lifecycle events.
   void handleEvent(PresentationEvent event) {
     _ensureNotDisposed();
 
-    //
-    // Ignore stale callbacks.
-    //
-    if (event.generation < _generation) {
+    if (event.generation < current.generation) {
       return;
     }
 
-    //
-    // Update generation.
-    //
     if (event.generation > _generation) {
       _generation = event.generation;
     }
@@ -193,9 +132,13 @@ final class PresentationController {
     _stateSubject.add(next);
   }
 
-  /// Force updates current state.
+  /// Force update state.
   ///
-  /// Usually used by adapters.
+  /// Used by:
+  ///
+  /// - restore
+  /// - persistence
+  /// - external lifecycle
   void update(PresentationState state) {
     _ensureNotDisposed();
 
@@ -208,22 +151,16 @@ final class PresentationController {
     _stateSubject.add(state);
   }
 
-  /// Exit current presentation mode.
+  /// Exit presentation.
   Future<void> exit() {
     return request(PresentationRequest.normal(source: 'controller'));
   }
 
-  /// Checks whether request is allowed.
-  bool _canRequest(PresentationMode mode) {
-    if (!_policy.enabled) {
-      return false;
-    }
+  // ============================================================
+  // Internal
+  // ============================================================
 
-    return _capabilities.supports(mode);
-  }
-
-  /// Serializes state mutations.
-  Future<void> _enqueue(Future<void> Function() action) {
+  Future<void> _enqueue(FutureOr<void> Function() action) {
     final next = _operation.then((_) => action());
 
     _operation = next.catchError((_) {});
@@ -237,7 +174,10 @@ final class PresentationController {
     }
   }
 
-  /// Releases controller resources.
+  // ============================================================
+  // Dispose
+  // ============================================================
+
   Future<void> dispose() async {
     if (_disposed) {
       return;
@@ -246,8 +186,6 @@ final class PresentationController {
     _disposed = true;
 
     await _operation;
-
-    handleEvent(PresentationEvent.disposed(generation: _generation));
 
     await _stateSubject.close();
   }

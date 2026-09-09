@@ -15,9 +15,9 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PresentationCapabilities {
 
-/// Whether fullscreen is supported.
- bool get fullscreen;/// Whether picture-in-picture is supported.
- bool get pip;/// Whether floating window is supported.
+/// Fullscreen support.
+ bool get fullscreen;/// Picture-in-picture support.
+ bool get pip;/// Floating window support.
  bool get floating;
 /// Create a copy of PresentationCapabilities
 /// with the given fields replaced by the non-null parameter values.
@@ -220,11 +220,11 @@ class _PresentationCapabilities extends PresentationCapabilities {
   const _PresentationCapabilities({this.fullscreen = true, this.pip = false, this.floating = false}): super._();
   
 
-/// Whether fullscreen is supported.
+/// Fullscreen support.
 @override@JsonKey() final  bool fullscreen;
-/// Whether picture-in-picture is supported.
+/// Picture-in-picture support.
 @override@JsonKey() final  bool pip;
-/// Whether floating window is supported.
+/// Floating window support.
 @override@JsonKey() final  bool floating;
 
 /// Create a copy of PresentationCapabilities

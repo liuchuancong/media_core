@@ -5,10 +5,9 @@ part 'presentation_capabilities.freezed.dart';
 
 /// Describes supported presentation capabilities.
 ///
-/// Capabilities describe what the current
-/// environment supports.
+/// Capability describes what the current platform supports.
 ///
-/// They do not represent current presentation mode.
+/// It does not represent current presentation state.
 ///
 /// Responsibilities:
 ///
@@ -24,25 +23,37 @@ part 'presentation_capabilities.freezed.dart';
 @freezed
 abstract class PresentationCapabilities with _$PresentationCapabilities {
   const factory PresentationCapabilities({
-    /// Whether fullscreen is supported.
+    /// Fullscreen support.
     @Default(true) bool fullscreen,
 
-    /// Whether picture-in-picture is supported.
+    /// Picture-in-picture support.
     @Default(false) bool pip,
 
-    /// Whether floating window is supported.
+    /// Floating window support.
     @Default(false) bool floating,
   }) = _PresentationCapabilities;
 
   const PresentationCapabilities._();
 
-  /// Default capabilities.
+  /// Default capability.
   factory PresentationCapabilities.initial() {
     return const PresentationCapabilities(fullscreen: true, pip: false, floating: false);
   }
 
-  /// Whether advanced presentation exists.
-  bool get supportsAdvancedPresentation => fullscreen || pip || floating;
+  /// Whether any presentation mode is supported.
+  bool get any => fullscreen || pip || floating;
+
+  /// Whether no presentation mode is supported.
+  bool get none => !any;
+
+  /// Whether fullscreen is supported.
+  bool get canFullscreen => fullscreen;
+
+  /// Whether PiP is supported.
+  bool get canPip => pip;
+
+  /// Whether floating is supported.
+  bool get canFloating => floating;
 
   /// Checks whether mode is supported.
   bool supports(PresentationMode mode) {
@@ -61,12 +72,14 @@ abstract class PresentationCapabilities with _$PresentationCapabilities {
     }
   }
 
-  /// Fullscreen capability.
-  bool get canFullscreen => fullscreen;
+  /// Supported modes.
+  List<PresentationMode> get supportedModes {
+    return [
+      if (fullscreen) PresentationMode.fullscreen,
 
-  /// PiP capability.
-  bool get canPip => pip;
+      if (pip) PresentationMode.pip,
 
-  /// Floating capability.
-  bool get canFloating => floating;
+      if (floating) PresentationMode.floating,
+    ];
+  }
 }

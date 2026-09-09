@@ -3,87 +3,94 @@ import 'presentation_state.dart';
 
 /// Reduces presentation events into presentation states.
 ///
-/// This class is a pure state transformer.
+/// PresentationReducer is a pure state transformer.
 ///
 /// Responsibilities:
 ///
 /// - convert events into states
-/// - handle transition lifecycle
+/// - handle presentation lifecycle
 /// - synchronize generation
-/// - manage targetMode
+/// - clear transition state
+/// - handle errors
 ///
 /// Does not:
 ///
 /// - call platform APIs
 /// - perform async operations
 /// - dispatch requests
+/// - manage lifecycle
+///
+/// Flow:
+///
+/// PresentationEvent
+///        │
+///        ▼
+/// PresentationReducer
+///        │
+///        ▼
+/// PresentationState
+///
 final class PresentationReducer {
   const PresentationReducer();
 
-  /// Applies event and returns next state.
+  /// Applies an event and returns next state.
   PresentationState reduce(PresentationState state, PresentationEvent event) {
     //
-    // Ignore stale callbacks.
+    // Ignore stale async callbacks.
     //
     if (event.generation < state.generation) {
       return state;
     }
 
-    final int generation = event.generation > state.generation ? event.generation : state.generation;
+    final generation = event.generation > state.generation ? event.generation : state.generation;
 
-    switch (event.type) {
+    return switch (event) {
       //
-      // Request created.
+      // Transition started.
       //
-      case PresentationEventType.requested:
-        return state.copyWith(targetMode: event.mode, transitioning: true, generation: generation, error: null);
-
-      //
-      // Platform transition started.
-      //
-      case PresentationEventType.started:
-        return state.copyWith(targetMode: event.mode, transitioning: true, generation: generation, error: null);
+      PresentationStarted event => state.copyWith(
+        targetMode: event.mode,
+        transitioning: true,
+        generation: generation,
+        error: null,
+      ),
 
       //
-      // Platform transition completed.
+      // Transition completed.
       //
-      case PresentationEventType.completed:
-        return state.copyWith(
-          mode: event.mode ?? state.mode,
-          targetMode: null,
-          transitioning: false,
-          generation: generation,
-          error: null,
-        );
+      PresentationCompleted event => state.copyWith(
+        mode: event.mode,
+        targetMode: null,
+        transitioning: false,
+        generation: generation,
+        error: null,
+      ),
 
       //
-      // Platform transition failed.
+      // Transition failed.
       //
-      case PresentationEventType.failed:
-        return state.copyWith(
-          targetMode: null,
-          transitioning: false,
-          generation: generation,
-          error: event.error ?? 'Unknown presentation error',
-        );
+      PresentationFailed event => state.copyWith(
+        targetMode: null,
+        transitioning: false,
+        generation: generation,
+        error: event.error,
+      ),
 
       //
-      // External platform state update.
+      // Platform changed state externally.
       //
-      case PresentationEventType.updated:
-        return state.copyWith(
-          mode: event.mode ?? state.mode,
-          targetMode: null,
-          transitioning: false,
-          generation: generation,
-          error: null,
-        );
+      PresentationChanged event => state.copyWith(
+        mode: event.mode,
+        targetMode: null,
+        transitioning: false,
+        generation: generation,
+        error: null,
+      ),
 
       //
       // Controller disposed.
       //
-      case PresentationEventType.disposed:
-        return state.copyWith(targetMode: null, transitioning: false, generation: generation);
-    }
+      PresentationDisposed _ => state.copyWith(targetMode: null, transitioning: false, generation: generation),
+    };
   }
 }

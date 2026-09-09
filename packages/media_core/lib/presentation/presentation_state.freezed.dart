@@ -17,34 +17,62 @@ mixin _$PresentationState {
 
 /// Current active presentation mode.
 ///
-/// This represents the mode that has
-/// successfully completed.
+/// This represents the mode that has successfully
+/// completed.
+///
+/// During a transition, this value remains unchanged
+/// until the transition is completed.
  PresentationMode get mode;/// Target presentation mode.
 ///
-/// When transitioning:
+/// This is non-null while a transition is being
+/// processed.
 ///
 /// Example:
 ///
+/// ```text
 /// mode:
-/// fullscreen
+///   normal
 ///
 /// targetMode:
-/// pip
+///   fullscreen
 ///
 /// transitioning:
-/// true
+///   true
+/// ```
+ PresentationMode? get targetMode;/// Presentation capabilities reported by the
+/// current environment.
 ///
- PresentationMode? get targetMode;/// Current capabilities.
- PresentationCapabilities get capabilities;/// Whether presentation transition
-/// is running.
- bool get transitioning;/// Whether presentation subsystem
-/// is enabled.
- bool get enabled;/// Whether presentation is available.
+/// Capabilities describe what the environment supports.
+/// They do not describe the current presentation mode.
+ PresentationCapabilities get capabilities;/// Whether a presentation transition is currently
+/// running.
+ bool get transitioning;/// Whether the presentation subsystem is enabled.
+///
+/// This represents application-level availability of
+/// presentation functionality.
+ bool get enabled;/// Whether presentation is currently available.
+///
+/// This can become false when the presentation subsystem
+/// cannot currently perform presentation operations.
+///
+/// Examples:
+///
+/// - player has been disposed
+/// - required platform resource is unavailable
+/// - presentation lifecycle has ended
  bool get available;/// Lifecycle generation.
 ///
-/// Used to ignore stale async
-/// callbacks from adapters.
+/// Used to distinguish newer presentation operations
+/// from stale asynchronous callbacks.
+///
+/// The controller owns generation changes.
+///
+/// The reducer uses generation to prevent an older
+/// asynchronous event from overwriting newer state.
  int get generation;/// Last presentation error.
+///
+/// A null value means that the current state does not
+/// contain a presentation error.
  String? get error;
 /// Create a copy of PresentationState
 /// with the given fields replaced by the non-null parameter values.
@@ -263,41 +291,69 @@ class _PresentationState extends PresentationState {
 
 /// Current active presentation mode.
 ///
-/// This represents the mode that has
-/// successfully completed.
+/// This represents the mode that has successfully
+/// completed.
+///
+/// During a transition, this value remains unchanged
+/// until the transition is completed.
 @override@JsonKey() final  PresentationMode mode;
 /// Target presentation mode.
 ///
-/// When transitioning:
+/// This is non-null while a transition is being
+/// processed.
 ///
 /// Example:
 ///
+/// ```text
 /// mode:
-/// fullscreen
+///   normal
 ///
 /// targetMode:
-/// pip
+///   fullscreen
 ///
 /// transitioning:
-/// true
-///
+///   true
+/// ```
 @override final  PresentationMode? targetMode;
-/// Current capabilities.
+/// Presentation capabilities reported by the
+/// current environment.
+///
+/// Capabilities describe what the environment supports.
+/// They do not describe the current presentation mode.
 @override@JsonKey() final  PresentationCapabilities capabilities;
-/// Whether presentation transition
-/// is running.
+/// Whether a presentation transition is currently
+/// running.
 @override@JsonKey() final  bool transitioning;
-/// Whether presentation subsystem
-/// is enabled.
+/// Whether the presentation subsystem is enabled.
+///
+/// This represents application-level availability of
+/// presentation functionality.
 @override@JsonKey() final  bool enabled;
-/// Whether presentation is available.
+/// Whether presentation is currently available.
+///
+/// This can become false when the presentation subsystem
+/// cannot currently perform presentation operations.
+///
+/// Examples:
+///
+/// - player has been disposed
+/// - required platform resource is unavailable
+/// - presentation lifecycle has ended
 @override@JsonKey() final  bool available;
 /// Lifecycle generation.
 ///
-/// Used to ignore stale async
-/// callbacks from adapters.
+/// Used to distinguish newer presentation operations
+/// from stale asynchronous callbacks.
+///
+/// The controller owns generation changes.
+///
+/// The reducer uses generation to prevent an older
+/// asynchronous event from overwriting newer state.
 @override@JsonKey() final  int generation;
 /// Last presentation error.
+///
+/// A null value means that the current state does not
+/// contain a presentation error.
 @override final  String? error;
 
 /// Create a copy of PresentationState

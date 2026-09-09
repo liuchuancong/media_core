@@ -5,27 +5,32 @@ import 'presentation_capabilities.dart';
 
 /// Platform presentation adapter.
 ///
-/// Connects presentation core with native
-/// platform presentation APIs.
+/// Responsible for communicating with
+/// native presentation APIs.
 ///
-/// Responsibilities:
+/// Examples:
 ///
-/// - execute platform operations
-/// - report presentation events
-/// - report capability changes
+/// - Android PiP
+/// - iOS PiP
+/// - Windows fullscreen
+/// - macOS window mode
 ///
-/// Does not:
+/// Adapter does not:
 ///
-/// - own lifecycle state
-/// - store presentation state
+/// - own presentation state
+/// - manage lifecycle
 /// - decide transitions
 abstract interface class PresentationAdapter {
-  /// Current platform capabilities.
+  /// Current platform capability.
   PresentationCapabilities get capabilities;
 
-  /// Capability change stream.
+  /// Emits capability changes.
   ///
-  /// Emits when platform support changes.
+  /// Examples:
+  ///
+  /// - PiP permission changed
+  /// - device capability changed
+  /// - window environment changed
   Stream<PresentationCapabilities> get capabilityChanges;
 
   /// Platform presentation events.
@@ -34,26 +39,15 @@ abstract interface class PresentationAdapter {
   ///
   /// - fullscreen entered
   /// - PiP entered
-  /// - floating window closed
+  /// - floating closed
   Stream<PresentationEvent> get events;
 
-  /// Applies presentation request.
-  ///
-  /// Executes real native operation.
+  /// Executes platform operation.
   Future<void> apply(PresentationRequest request);
 
-  /// Exits current presentation.
-  ///
-  /// Examples:
-  ///
-  /// - exit fullscreen
-  /// - leave PiP
-  /// - close floating window
-  Future<void> exit();
-
-  /// Refreshes platform capabilities.
+  /// Refresh capabilities.
   Future<void> refreshCapabilities();
 
-  /// Releases resources.
+  /// Release resources.
   Future<void> dispose();
 }

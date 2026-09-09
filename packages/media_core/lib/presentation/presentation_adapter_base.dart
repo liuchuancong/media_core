@@ -1,55 +1,36 @@
 import 'dart:async';
 import 'presentation_event.dart';
 import 'presentation_adapter.dart';
-import 'presentation_request.dart';
 import 'presentation_capabilities.dart';
 
-/// Base implementation of [PresentationAdapter].
+/// Base implementation of PresentationAdapter.
 ///
-/// Provides:
+/// Provides common adapter infrastructure:
 ///
-/// - event stream management
+/// - event stream
 /// - capability storage
 /// - lifecycle management
-/// - common adapter behavior
 ///
-/// Subclasses only implement:
+/// Does not:
 ///
-/// - platform operations
-///
-/// Example:
-///
-/// Android:
-/// - enter PiP
-/// - exit PiP
-///
-/// Windows:
-/// - fullscreen window
-/// - floating window
-///
-/// This class does not:
-///
-/// - own presentation state
-/// - reduce events
-/// - decide transitions
+/// - execute transitions
+/// - create events automatically
+/// - manage presentation state
 abstract class PresentationAdapterBase implements PresentationAdapter {
   PresentationAdapterBase({PresentationCapabilities initialCapabilities = const PresentationCapabilities()})
     : _capabilities = initialCapabilities;
 
   PresentationCapabilities _capabilities;
 
-  final StreamController<PresentationEvent> _eventController = StreamController<PresentationEvent>.broadcast();
+  final StreamController<PresentationEvent> _eventController = StreamController.broadcast();
 
-  final StreamController<PresentationCapabilities> _capabilityController =
-      StreamController<PresentationCapabilities>.broadcast();
+  final StreamController<PresentationCapabilities> _capabilityController = StreamController.broadcast();
 
   bool _disposed = false;
 
-  int _generation = 0;
-
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
   // Capability
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
 
   @override
   PresentationCapabilities get capabilities => _capabilities;
@@ -57,32 +38,30 @@ abstract class PresentationAdapterBase implements PresentationAdapter {
   @override
   Stream<PresentationCapabilities> get capabilityChanges => _capabilityController.stream;
 
-  /// Updates platform capability.
-  ///
-  /// Called by subclasses when:
-  ///
-  /// - permission changes
-  /// - window mode changes
-  /// - device configuration changes
-  void updateCapabilities(PresentationCapabilities capabilities) {
+  void updateCapabilities(PresentationCapabilities value) {
     _ensureNotDisposed();
 
-    _capabilities = capabilities;
+    _capabilities = value;
 
-    _capabilityController.add(capabilities);
+    _capabilityController.add(value);
   }
 
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
   // Events
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
 
   @override
   Stream<PresentationEvent> get events => _eventController.stream;
 
-  /// Sends presentation event to controller.
+  /// Emit platform event.
   ///
-  /// Platform implementations should call this
-  /// after native operation result.
+  /// Example:
+  ///
+  /// Android:
+  /// entered PiP
+  ///
+  /// Windows:
+  /// fullscreen changed
   void emit(PresentationEvent event) {
     if (_disposed) {
       return;
@@ -91,71 +70,13 @@ abstract class PresentationAdapterBase implements PresentationAdapter {
     _eventController.add(event);
   }
 
-  /// Creates next lifecycle generation.
-  int nextGeneration() {
-    return ++_generation;
-  }
-
-  int get generation => _generation;
-
-  // ---------------------------------------------------------------------------
-  // Adapter operations
-  // ---------------------------------------------------------------------------
-
-  @override
-  Future<void> apply(PresentationRequest request) async {
-    _ensureNotDisposed();
-
-    final generation = nextGeneration();
-
-    emit(PresentationEvent.started(request.mode, generation: generation, source: 'adapter'));
-
-    try {
-      await onApply(request);
-
-      emit(PresentationEvent.completed(request.mode, generation: generation, source: 'adapter'));
-    } catch (error) {
-      emit(PresentationEvent.failed(request.mode, error: error.toString(), generation: generation, source: 'adapter'));
-
-      rethrow;
-    }
-  }
-
-  /// Platform implementation.
-  ///
-  /// Subclasses override this.
-  Future<void> onApply(PresentationRequest request);
-
-  @override
-  Future<void> refreshCapabilities() async {
-    _ensureNotDisposed();
-
-    await onRefreshCapabilities();
-  }
-
-  /// Platform capability refresh.
-  ///
-  /// Example:
-  ///
-  /// Android:
-  /// check PiP permission
-  ///
-  /// Windows:
-  /// check window support
-  Future<void> onRefreshCapabilities() async {}
-
-  @override
-  Future<void> exit() async {
-    await apply(PresentationRequest.normal(source: 'adapter'));
-  }
-
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
   // Lifecycle
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
 
   void _ensureNotDisposed() {
     if (_disposed) {
-      throw StateError('PresentationAdapter has already been disposed.');
+      throw StateError('PresentationAdapter disposed');
     }
   }
 

@@ -9,32 +9,33 @@ import 'presentation_capabilities.dart';
 
 /// Application level presentation service.
 ///
-/// Connects application layer with
-/// presentation subsystem.
+/// PresentationService is the public API layer
+/// above PresentationController.
 ///
 /// Responsibilities:
 ///
 /// - expose presentation API
 /// - forward requests
-/// - execute platform operations
-/// - synchronize platform events
-/// - synchronize capability changes
+/// - expose presentation state
+/// - expose capabilities
+/// - synchronize adapter events
 ///
 /// Does not:
 ///
 /// - own presentation state
-/// - render UI
-/// - implement native APIs
+/// - execute platform operations
+/// - call native APIs
+/// - manage windows
+///
+/// Platform operations are handled by:
+///
+/// PresentationAdapter
+///
 final class PresentationService {
   PresentationService({required PresentationController controller, required PresentationAdapter adapter})
     : _controller = controller,
       _adapter = adapter {
     _eventSubscription = _adapter.events.listen(_onEvent);
-
-    _capabilitySubscription = _adapter.capabilityChanges.listen(_onCapabilityChanged);
-
-    // initialize current capability
-    _controller.updateCapabilities(_adapter.capabilities);
   }
 
   final PresentationController _controller;
@@ -43,20 +44,26 @@ final class PresentationService {
 
   StreamSubscription<PresentationEvent>? _eventSubscription;
 
-  StreamSubscription<PresentationCapabilities>? _capabilitySubscription;
-
   bool _disposed = false;
 
-  /// Current presentation state.
+  // ============================================================
+  // State
+  // ============================================================
+
+  /// Current presentation state stream.
   ValueStream<PresentationState> get state => _controller.state;
 
-  /// Current state snapshot.
+  /// Current presentation state.
   PresentationState get current => _controller.current;
 
-  /// Current platform capability.
+  /// Current platform capabilities.
   PresentationCapabilities get capabilities => _adapter.capabilities;
 
-  /// Sends presentation request.
+  // ============================================================
+  // Request API
+  // ============================================================
+
+  /// Requests presentation change.
   ///
   /// Flow:
   ///
@@ -72,14 +79,6 @@ final class PresentationService {
     _ensureNotDisposed();
 
     await _controller.request(request);
-
-    try {
-      await _adapter.apply(request);
-    } catch (error) {
-      _controller.handleEvent(PresentationEvent.failed(request.mode, error: error.toString(), source: 'adapter'));
-
-      rethrow;
-    }
   }
 
   /// Enter fullscreen.
@@ -92,12 +91,12 @@ final class PresentationService {
     return request(PresentationRequest.normal());
   }
 
-  /// Enter PiP.
+  /// Enter picture-in-picture.
   Future<void> enterPip() {
     return request(PresentationRequest.pip());
   }
 
-  /// Exit PiP.
+  /// Exit picture-in-picture.
   Future<void> exitPip() {
     return request(PresentationRequest.normal());
   }
@@ -107,16 +106,31 @@ final class PresentationService {
     return request(PresentationRequest.floating());
   }
 
+  /// Exit current presentation mode.
+  Future<void> exit() {
+    return request(PresentationRequest.normal(source: 'service'));
+  }
+
+  // ============================================================
+  // Capability
+  // ============================================================
+
   /// Refresh platform capability.
+  ///
+  /// Adapter updates its own capability state.
+  ///
+  /// Controller reads capability when needed.
   Future<void> refreshCapabilities() async {
     _ensureNotDisposed();
 
     await _adapter.refreshCapabilities();
-
-    _controller.updateCapabilities(_adapter.capabilities);
   }
 
-  /// Receives platform lifecycle events.
+  // ============================================================
+  // Events
+  // ============================================================
+
+  /// Receives platform events.
   void _onEvent(PresentationEvent event) {
     if (_disposed) {
       return;
@@ -125,14 +139,9 @@ final class PresentationService {
     _controller.handleEvent(event);
   }
 
-  /// Receives capability changes.
-  void _onCapabilityChanged(PresentationCapabilities capabilities) {
-    if (_disposed) {
-      return;
-    }
-
-    _controller.updateCapabilities(capabilities);
-  }
+  // ============================================================
+  // Lifecycle
+  // ============================================================
 
   void _ensureNotDisposed() {
     if (_disposed) {
@@ -149,8 +158,6 @@ final class PresentationService {
     _disposed = true;
 
     await _eventSubscription?.cancel();
-
-    await _capabilitySubscription?.cancel();
 
     await _adapter.dispose();
 
