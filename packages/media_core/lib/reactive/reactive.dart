@@ -156,12 +156,6 @@ typedef ReactiveStream<T> = Stream<T>;
 /// Type alias for a stream subscription.
 typedef ReactiveSubscription<T> = StreamSubscription<T>;
 
-/// Type alias for a publish subject.
-typedef ReactiveSubject<T> = PublishSubject<T>;
-
-/// Type alias for a behavior subject.
-typedef ReactiveBehavior<T> = BehaviorSubject<T>;
-
 /// Type alias for a replay subject.
 typedef ReactiveReplay<T> = ReplaySubject<T>;
 

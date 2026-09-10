@@ -1,5 +1,5 @@
 import 'memory_monitor.dart';
-import 'network_monitor.dart';
+import 'network_diagnostics.dart';
 import 'performance_monitor.dart';
 import 'player_debug_snapshot.dart';
 
@@ -28,15 +28,15 @@ import 'player_debug_snapshot.dart';
 ///
 /// - PerformanceMonitor
 /// - MemoryMonitor
-/// - NetworkMonitor
+/// - NetworkDiagnostics
 /// - PlayerLogger
 /// - DiagnosticsConfig
 final class DiagnosticsManager {
   /// Creates a diagnostics manager.
-  DiagnosticsManager({PerformanceMonitor? performance, MemoryMonitor? memory, NetworkMonitor? network})
+  DiagnosticsManager({PerformanceMonitor? performance, MemoryMonitor? memory, NetworkDiagnostics? network})
     : performance = performance ?? PerformanceMonitor(),
       memory = memory ?? MemoryMonitor(),
-      network = network ?? NetworkMonitor();
+      network = network ?? NetworkDiagnostics();
 
   /// Performance diagnostics monitor.
   final PerformanceMonitor performance;
@@ -45,7 +45,7 @@ final class DiagnosticsManager {
   final MemoryMonitor memory;
 
   /// Network diagnostics monitor.
-  final NetworkMonitor network;
+  final NetworkDiagnostics network;
 
   /// Whether this manager has been disposed.
   bool _disposed = false;

@@ -1,84 +1,26 @@
-import 'dart:async';
-import 'dart:collection';
-
-/// Defines a concurrency limit.
+/// Identifies a logical resource used for concurrency coordination.
 ///
-/// A concurrency limit controls how many operations can run
-/// at the same time.
-///
-/// This is useful for protecting limited resources such as:
-/// - network connections
-/// - IO operations
-/// - background workers
-class ConcurrencyLimit {
-  ConcurrencyLimit(this.maxConcurrent) : assert(maxConcurrent > 0);
+/// The key is intentionally domain-agnostic. Higher-level modules decide
+/// which scopes and resource identifiers they need.
+final class ConcurrencyKey {
+  const ConcurrencyKey({required this.scope, required this.name});
 
-  /// Maximum number of concurrent operations.
-  final int maxConcurrent;
+  final String scope;
 
-  int _active = 0;
+  final String name;
 
-  final Queue<Completer<void>> _queue = Queue<Completer<void>>();
+  String get value => '$scope:$name';
 
-  /// Current running operation count.
-  int get activeCount => _active;
+  bool hasScope(String scope) => this.scope == scope;
 
-  /// Waiting operation count.
-  int get pendingCount => _queue.length;
-
-  /// Remaining available slots.
-  int get availableCount => maxConcurrent - _active;
-
-  /// Acquires one execution slot.
-  Future<void> acquire() async {
-    if (_active < maxConcurrent) {
-      _active++;
-      return;
-    }
-
-    final completer = Completer<void>();
-
-    _queue.add(completer);
-
-    await completer.future;
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) || other is ConcurrencyKey && other.scope == scope && other.name == name;
   }
 
-  /// Releases one execution slot.
-  void release() {
-    if (_queue.isNotEmpty) {
-      final completer = _queue.removeFirst();
+  @override
+  int get hashCode => Object.hash(scope, name);
 
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-
-      return;
-    }
-
-    if (_active > 0) {
-      _active--;
-    }
-  }
-
-  /// Runs [action] within the concurrency limit.
-  Future<T> execute<T>(Future<T> Function() action) async {
-    await acquire();
-
-    try {
-      return await action();
-    } finally {
-      release();
-    }
-  }
-
-  /// Clears all waiting operations.
-  void clear() {
-    while (_queue.isNotEmpty) {
-      final completer = _queue.removeFirst();
-
-      if (!completer.isCompleted) {
-        completer.completeError(StateError('Concurrency limit cleared'));
-      }
-    }
-  }
+  @override
+  String toString() => 'ConcurrencyKey($value)';
 }

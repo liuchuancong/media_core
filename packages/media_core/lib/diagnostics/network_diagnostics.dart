@@ -1,11 +1,11 @@
 import 'network_snapshot.dart';
 import 'package:clock/clock.dart';
 
-/// Monitors network activity for the media core.
+/// Collects aggregate network diagnostics for the media core.
 ///
-/// A [NetworkMonitor] maintains the latest aggregate network diagnostics.
-/// It does not own the underlying network implementation and receives
-/// measurements from the network layer or a platform integration.
+/// [NetworkDiagnostics] maintains the latest network diagnostic snapshot.
+/// It receives measurements from the network layer or platform integration
+/// and does not own the underlying network implementation.
 ///
 /// Responsibilities:
 ///
@@ -26,23 +26,21 @@ import 'package:clock/clock.dart';
 ///
 /// Those responsibilities belong to:
 ///
-/// - network/source modules
+/// - network modules
 /// - platform-specific network integrations
-/// - DiagnosticsManager
-final class NetworkMonitor {
-  /// Creates a network monitor.
-  NetworkMonitor() : _snapshot = NetworkSnapshot(timestamp: clock.now());
+/// - diagnostics managers
+final class NetworkDiagnostics {
+  /// Creates network diagnostics.
+  NetworkDiagnostics() : _snapshot = NetworkSnapshot(timestamp: clock.now());
 
   /// Latest network snapshot.
   NetworkSnapshot _snapshot;
 
-  /// Whether this monitor has been disposed.
+  /// Whether these diagnostics have been disposed.
   bool _disposed = false;
 
   /// Current network snapshot.
-  NetworkSnapshot get snapshot {
-    return _snapshot;
-  }
+  NetworkSnapshot get snapshot => _snapshot;
 
   /// Updates the current connection state.
   void setConnected(bool connected) {
@@ -108,7 +106,7 @@ final class NetworkMonitor {
     _snapshot = NetworkSnapshot(timestamp: clock.now(), connected: _snapshot.connected);
   }
 
-  /// Disposes the network monitor.
+  /// Disposes the diagnostics.
   void dispose() {
     if (_disposed) {
       return;
@@ -117,10 +115,9 @@ final class NetworkMonitor {
     _disposed = true;
   }
 
-  /// Ensures the monitor has not been disposed.
   void _ensureNotDisposed() {
     if (_disposed) {
-      throw StateError('NetworkMonitor has been disposed.');
+      throw StateError('NetworkDiagnostics has been disposed.');
     }
   }
 }

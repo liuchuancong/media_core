@@ -1,9 +1,9 @@
 import 'page_coordinator.dart';
-import 'audio_coordinator.dart';
 import 'preload_coordinator.dart';
 import 'playback_coordinator.dart';
 import 'resource_coordinator.dart';
 import 'lifecycle_coordinator.dart';
+import 'player_audio_coordinator.dart';
 import 'presentation_coordinator.dart';
 
 /// Global coordinator for player runtime.
@@ -30,14 +30,14 @@ final class GlobalPlayerCoordinator {
   GlobalPlayerCoordinator({
     PlaybackCoordinator? playback,
     PageCoordinator? page,
-    AudioCoordinator? audio,
+    PlayerAudioCoordinator? audio,
     ResourceCoordinator? resource,
     PreloadCoordinator? preload,
     LifecycleCoordinator? lifecycle,
     PresentationCoordinator? presentation,
   }) : playback = playback ?? PlaybackCoordinator(),
        page = page ?? PageCoordinator(),
-       audio = audio ?? AudioCoordinator(),
+       audio = audio ?? PlayerAudioCoordinator(),
        resource = resource ?? ResourceCoordinator(),
        preload = preload ?? PreloadCoordinator(),
        lifecycle = lifecycle ?? LifecycleCoordinator(),
@@ -50,7 +50,7 @@ final class GlobalPlayerCoordinator {
   final PageCoordinator page;
 
   /// Audio coordination.
-  final AudioCoordinator audio;
+  final PlayerAudioCoordinator audio;
 
   /// Resource coordination.
   final ResourceCoordinator resource;

@@ -5,7 +5,7 @@ import '../audio/audio_manager.dart';
 
 /// Coordinates audio operations across multiple players.
 ///
-/// [AudioCoordinator] connects players with audio management and provides
+/// [PlayerAudioCoordinator] connects players with audio management and provides
 /// volume control for each player independently.
 ///
 /// Responsibilities:
@@ -26,9 +26,9 @@ import '../audio/audio_manager.dart';
 /// - AudioManager
 /// - PlatformAudio
 /// - PlaybackController
-final class AudioCoordinator {
+final class PlayerAudioCoordinator {
   /// Creates audio coordinator.
-  AudioCoordinator();
+  PlayerAudioCoordinator();
 
   final Map<PlayerId, AudioManager> _managers = {};
   final Map<PlayerId, AudioVolume> _volumes = {};
@@ -258,7 +258,7 @@ final class AudioCoordinator {
   /// Throws when a public operation is attempted after disposal.
   void _ensureNotDisposed() {
     if (_disposed) {
-      throw StateError('AudioCoordinator has already been disposed.');
+      throw StateError('PlayerAudioCoordinator has already been disposed.');
     }
   }
 
