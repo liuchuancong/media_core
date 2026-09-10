@@ -90,7 +90,7 @@ abstract class SourceDescriptor with _$SourceDescriptor {
 /// Extensions for [SourceDescriptor].
 extension SourceDescriptorExtension on SourceDescriptor {
   /// Whether source is valid enough for playback.
-  bool get playable {
+  bool get isValid {
     return location.isValid;
   }
 
@@ -105,8 +105,8 @@ extension SourceDescriptorExtension on SourceDescriptor {
   }
 
   /// Whether source uses network access.
-  bool get networkRequired {
-    return protocol.requiresNetwork;
+  bool get isNetwork {
+    return protocol.isNetwork;
   }
 
   /// Creates descriptor with updated priority.

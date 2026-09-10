@@ -69,7 +69,7 @@ $Res call({
 });
 
 
-$SourceLocationCopyWith<$Res> get location;$SourceHeadersCopyWith<$Res>? get headers;$SourceMetadataCopyWith<$Res>? get metadata;
+$SourceLocationCopyWith<$Res> get location;$SourceMetadataCopyWith<$Res>? get metadata;
 
 }
 /// @nodoc
@@ -107,18 +107,6 @@ $SourceLocationCopyWith<$Res> get location {
   
   return $SourceLocationCopyWith<$Res>(_self.location, (value) {
     return _then(_self.copyWith(location: value));
-  });
-}/// Create a copy of SourceDescriptor
-/// with the given fields replaced by the non-null parameter values.
-@override
-@pragma('vm:prefer-inline')
-$SourceHeadersCopyWith<$Res>? get headers {
-    if (_self.headers == null) {
-    return null;
-  }
-
-  return $SourceHeadersCopyWith<$Res>(_self.headers!, (value) {
-    return _then(_self.copyWith(headers: value));
   });
 }/// Create a copy of SourceDescriptor
 /// with the given fields replaced by the non-null parameter values.
@@ -343,7 +331,7 @@ $Res call({
 });
 
 
-@override $SourceLocationCopyWith<$Res> get location;@override $SourceHeadersCopyWith<$Res>? get headers;@override $SourceMetadataCopyWith<$Res>? get metadata;
+@override $SourceLocationCopyWith<$Res> get location;@override $SourceMetadataCopyWith<$Res>? get metadata;
 
 }
 /// @nodoc
@@ -382,18 +370,6 @@ $SourceLocationCopyWith<$Res> get location {
   
   return $SourceLocationCopyWith<$Res>(_self.location, (value) {
     return _then(_self.copyWith(location: value));
-  });
-}/// Create a copy of SourceDescriptor
-/// with the given fields replaced by the non-null parameter values.
-@override
-@pragma('vm:prefer-inline')
-$SourceHeadersCopyWith<$Res>? get headers {
-    if (_self.headers == null) {
-    return null;
-  }
-
-  return $SourceHeadersCopyWith<$Res>(_self.headers!, (value) {
-    return _then(_self.copyWith(headers: value));
   });
 }/// Create a copy of SourceDescriptor
 /// with the given fields replaced by the non-null parameter values.

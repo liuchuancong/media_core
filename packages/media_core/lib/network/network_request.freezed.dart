@@ -67,7 +67,7 @@ $Res call({
 });
 
 
-$SourceHeadersCopyWith<$Res>? get headers;
+
 
 }
 /// @nodoc
@@ -93,19 +93,7 @@ as bool,metadata: freezed == metadata ? _self.metadata : metadata // ignore: cas
 as Map<String, Object?>?,
   ));
 }
-/// Create a copy of NetworkRequest
-/// with the given fields replaced by the non-null parameter values.
-@override
-@pragma('vm:prefer-inline')
-$SourceHeadersCopyWith<$Res>? get headers {
-    if (_self.headers == null) {
-    return null;
-  }
 
-  return $SourceHeadersCopyWith<$Res>(_self.headers!, (value) {
-    return _then(_self.copyWith(headers: value));
-  });
-}
 }
 
 
@@ -313,7 +301,7 @@ $Res call({
 });
 
 
-@override $SourceHeadersCopyWith<$Res>? get headers;
+
 
 }
 /// @nodoc
@@ -340,19 +328,7 @@ as Map<String, Object?>?,
   ));
 }
 
-/// Create a copy of NetworkRequest
-/// with the given fields replaced by the non-null parameter values.
-@override
-@pragma('vm:prefer-inline')
-$SourceHeadersCopyWith<$Res>? get headers {
-    if (_self.headers == null) {
-    return null;
-  }
 
-  return $SourceHeadersCopyWith<$Res>(_self.headers!, (value) {
-    return _then(_self.copyWith(headers: value));
-  });
-}
 }
 
 // dart format on

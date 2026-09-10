@@ -1,126 +1,82 @@
-/// Represents the type of media content.
+/// Describes the general media content type of a source.
 ///
-/// A [SourceMediaType] describes the primary content
-/// contained in a media source.
+/// [SourceMediaType] describes what kind of media content a source
+/// represents. It is intentionally independent from:
 ///
-/// It does not:
+/// - [SourceType], which describes the source category.
+/// - [SourceProtocol], which describes how the source is accessed.
+/// - [SourceFormat], which describes the container or file format.
 ///
-/// - inspect media streams
-/// - detect codecs
-/// - parse containers
-///
-/// Those belong to:
-///
-/// - [SourceInspector]
-/// - player adapters
+/// Detailed stream information such as codecs, bitrate, resolution, and
+/// track information belongs to media inspection and [PlayerInfo].
 enum SourceMediaType {
-  /// Unknown media type.
+  /// Unknown or not yet determined.
   unknown,
 
   /// Video content.
   video,
 
-  /// Audio-only content.
+  /// Audio content.
   audio,
-
-  /// Image content.
-  image,
 
   /// Subtitle or caption content.
   subtitle,
 
-  /// Mixed media content.
-  ///
-  /// Example:
-  /// - video + audio
+  /// Still image content.
+  image,
+
+  /// A media playlist or collection.
+  playlist,
+
+  /// A source containing multiple media types.
   mixed,
-
-  /// Metadata-only content.
-  metadata,
-
-  /// Custom media type.
-  custom,
 }
 
 /// Extensions for [SourceMediaType].
-extension SourceMediaTypeExtension on SourceMediaType {
-  /// Whether this type contains video.
-  bool get hasVideo {
-    switch (this) {
-      case SourceMediaType.video:
-      case SourceMediaType.mixed:
-        return true;
+extension SourceMediaTypeX on SourceMediaType {
+  /// Whether the media type is unknown.
+  bool get isUnknown => this == SourceMediaType.unknown;
 
-      case SourceMediaType.unknown:
-      case SourceMediaType.audio:
-      case SourceMediaType.image:
-      case SourceMediaType.subtitle:
-      case SourceMediaType.metadata:
-      case SourceMediaType.custom:
-        return false;
-    }
+  /// Whether the media type is known.
+  bool get isKnown => this != SourceMediaType.unknown;
+
+  /// Whether this source contains video content.
+  bool get isVideo => this == SourceMediaType.video;
+
+  /// Whether this source contains audio content.
+  bool get isAudio => this == SourceMediaType.audio;
+
+  /// Whether this source contains subtitle content.
+  bool get isSubtitle => this == SourceMediaType.subtitle;
+
+  /// Whether this source contains image content.
+  bool get isImage => this == SourceMediaType.image;
+
+  /// Whether this source represents a playlist.
+  bool get isPlaylist => this == SourceMediaType.playlist;
+
+  /// Whether this source may contain multiple media types.
+  bool get isMixed => this == SourceMediaType.mixed;
+
+  /// Whether this is a playable media type.
+  ///
+  /// Playlists are source descriptions rather than directly playable media.
+  bool get isPlayable {
+    return this == SourceMediaType.video || this == SourceMediaType.audio || this == SourceMediaType.image;
   }
 
-  /// Whether this type contains audio.
-  bool get hasAudio {
-    switch (this) {
-      case SourceMediaType.audio:
-      case SourceMediaType.video:
-      case SourceMediaType.mixed:
-        return true;
-
-      case SourceMediaType.unknown:
-      case SourceMediaType.image:
-      case SourceMediaType.subtitle:
-      case SourceMediaType.metadata:
-      case SourceMediaType.custom:
-        return false;
-    }
+  /// Whether this type represents time-based media.
+  ///
+  /// Video and audio normally have a playback timeline.
+  bool get isTimeBased {
+    return this == SourceMediaType.video || this == SourceMediaType.audio;
   }
 
-  /// Whether this type can be played by a media player.
-  bool get playable {
-    switch (this) {
-      case SourceMediaType.video:
-      case SourceMediaType.audio:
-      case SourceMediaType.mixed:
-        return true;
-
-      case SourceMediaType.unknown:
-      case SourceMediaType.image:
-      case SourceMediaType.subtitle:
-      case SourceMediaType.metadata:
-      case SourceMediaType.custom:
-        return false;
-    }
+  /// Whether this type is auxiliary content.
+  bool get isAuxiliary {
+    return this == SourceMediaType.subtitle || this == SourceMediaType.image;
   }
 
-  /// Returns readable media type name.
-  String get displayName {
-    switch (this) {
-      case SourceMediaType.unknown:
-        return 'unknown';
-
-      case SourceMediaType.video:
-        return 'video';
-
-      case SourceMediaType.audio:
-        return 'audio';
-
-      case SourceMediaType.image:
-        return 'image';
-
-      case SourceMediaType.subtitle:
-        return 'subtitle';
-
-      case SourceMediaType.mixed:
-        return 'mixed';
-
-      case SourceMediaType.metadata:
-        return 'metadata';
-
-      case SourceMediaType.custom:
-        return 'custom';
-    }
-  }
+  /// Returns the stable string representation of this media type.
+  String get value => name;
 }

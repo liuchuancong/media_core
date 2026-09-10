@@ -1,143 +1,52 @@
-import 'source_format.dart';
-import 'source_descriptor.dart';
-import 'source_media_type.dart';
+import 'source_resolved.dart';
+import '../core/player_info.dart';
+import 'source_inspect_context.dart';
 
-/// Inspects media sources.
+/// Inspects a resolved media source and extracts media information.
 ///
-/// [SourceInspector] analyzes a source and extracts
-/// additional media information.
+/// A [SourceInspector] is responsible for discovering information about
+/// the media represented by a [ResolvedSource].
 ///
-/// Responsibilities:
+/// Implementations may inspect:
 ///
-/// - detect media type
-/// - detect format
-/// - detect duration
-/// - detect stream information
+/// - media type
+/// - container format
+/// - duration
+/// - video dimensions
+/// - frame rate
+/// - bitrate
+/// - codecs
+/// - audio information
+/// - subtitle information
+/// - source metadata
 ///
-/// It does not:
+/// Inspection is separate from source resolution:
 ///
-/// - open playback sessions
-/// - create players
-/// - manage network retry
+/// [SourceResolver] determines how a source can be accessed, while
+/// [SourceInspector] determines what media the source contains.
 ///
-/// Those belong to:
+/// Implementations must not:
 ///
-/// - PlayerSession
-/// - PlayerAdapter
-/// - RecoveryManager
-final class SourceInspector {
+/// - create player instances
+/// - control playback
+/// - manage player lifecycle
+/// - perform recovery
+/// - perform backend fallback
+abstract interface class SourceInspector {
   /// Creates a source inspector.
   const SourceInspector();
 
-  /// Inspects a source descriptor.
+  /// Whether this inspector can inspect [source].
   ///
-  /// Default implementation only performs
-  /// lightweight inspection based on known data.
+  /// This method should be lightweight and must not open the source or
+  /// perform network I/O.
+  bool supports(ResolvedSource source);
+
+  /// Inspects [source] and returns descriptive media information.
   ///
-  /// Platform adapters can extend this behavior.
-  Future<SourceInspectionResult> inspect(SourceDescriptor descriptor) async {
-    return SourceInspectionResult(
-      format: descriptor.format,
-      mediaType: descriptor.mediaType,
-      live: descriptor.live,
-      seekable: descriptor.seekable,
-    );
-  }
-}
-
-/// Result of source inspection.
-///
-/// Contains detected media information.
-///
-/// This object is separate from [SourceDescriptor]
-/// because inspection is an operation result,
-/// not source identity.
-final class SourceInspectionResult {
-  /// Creates inspection result.
-  const SourceInspectionResult({
-    required this.format,
-    required this.mediaType,
-    required this.live,
-    required this.seekable,
-    this.duration,
-    this.videoWidth,
-    this.videoHeight,
-    this.videoCodec,
-    this.audioCodec,
-  });
-
-  /// Detected container format.
-  final SourceFormat format;
-
-  /// Detected media type.
-  final SourceMediaType mediaType;
-
-  /// Whether source is live.
-  final bool live;
-
-  /// Whether seeking is supported.
-  final bool seekable;
-
-  /// Media duration.
-  final Duration? duration;
-
-  /// Video width.
-  final int? videoWidth;
-
-  /// Video height.
-  final int? videoHeight;
-
-  /// Video codec name.
+  /// [context] contains request-scoped information for this inspection.
   ///
-  /// Example:
-  /// - h264
-  /// - hevc
-  final String? videoCodec;
-
-  /// Audio codec name.
-  ///
-  /// Example:
-  /// - aac
-  /// - opus
-  final String? audioCodec;
-
-  /// Whether video information exists.
-  bool get hasVideoInfo {
-    return videoWidth != null && videoHeight != null;
-  }
-
-  /// Whether codec information exists.
-  bool get hasCodecInfo {
-    return videoCodec != null || audioCodec != null;
-  }
-
-  /// Whether duration is known.
-  bool get hasDuration {
-    return duration != null;
-  }
-
-  /// Creates a copy with updated information.
-  SourceInspectionResult copyWith({
-    SourceFormat? format,
-    SourceMediaType? mediaType,
-    bool? live,
-    bool? seekable,
-    Duration? duration,
-    int? videoWidth,
-    int? videoHeight,
-    String? videoCodec,
-    String? audioCodec,
-  }) {
-    return SourceInspectionResult(
-      format: format ?? this.format,
-      mediaType: mediaType ?? this.mediaType,
-      live: live ?? this.live,
-      seekable: seekable ?? this.seekable,
-      duration: duration ?? this.duration,
-      videoWidth: videoWidth ?? this.videoWidth,
-      videoHeight: videoHeight ?? this.videoHeight,
-      videoCodec: videoCodec ?? this.videoCodec,
-      audioCodec: audioCodec ?? this.audioCodec,
-    );
-  }
+  /// Implementations may access the source when necessary to obtain
+  /// complete media information.
+  Future<PlayerInfo> inspect(ResolvedSource source, {SourceInspectContext context = SourceInspectContext.empty});
 }

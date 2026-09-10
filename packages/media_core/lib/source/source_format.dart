@@ -1,274 +1,215 @@
-/// Represents the media container format.
+/// Describes the container or media file format of a source.
 ///
-/// A [SourceFormat] describes the format/container
-/// used by a media source.
-///
-/// It does not:
-///
-/// - inspect media streams
-/// - detect codecs
-/// - parse containers
-///
-/// Those belong to:
-///
-/// - [SourceInspector]
-/// - player adapters
+/// [SourceFormat] describes the format of the media resource itself.
+/// Transport protocols such as HTTP, HLS, RTSP, and DASH belong to
+/// [SourceProtocol] instead.
 enum SourceFormat {
-  /// Unknown format.
+  /// Unknown or not yet determined.
   unknown,
 
-  /// MPEG transport stream.
-  ///
-  /// Common extension:
-  /// - .ts
-  ts,
-
   /// MPEG-4 container.
-  ///
-  /// Common extension:
-  /// - .mp4
   mp4,
 
-  /// Flash Video container.
-  ///
-  /// Common extension:
-  /// - .flv
-  flv,
+  /// MPEG-TS container.
+  mpegTs,
 
   /// Matroska container.
-  ///
-  /// Common extension:
-  /// - .mkv
   mkv,
 
   /// WebM container.
-  ///
-  /// Common extension:
-  /// - .webm
   webm,
 
   /// AVI container.
-  ///
-  /// Common extension:
-  /// - .avi
   avi,
 
-  /// MPEG program stream.
-  ///
-  /// Common extension:
-  /// - .mpeg
-  /// - .mpg
-  mpeg,
+  /// QuickTime / MOV container.
+  mov,
 
-  /// HTTP Live Streaming playlist.
-  ///
-  /// Common extension:
-  /// - .m3u8
-  hls,
-
-  /// Dynamic Adaptive Streaming playlist.
-  ///
-  /// Common extension:
-  /// - .mpd
-  dash,
+  /// Flash Video container.
+  flv,
 
   /// Ogg container.
-  ///
-  /// Common extension:
-  /// - .ogg
   ogg,
 
-  /// WAV audio container.
-  ///
-  /// Common extension:
-  /// - .wav
-  wav,
+  /// WebVTT subtitle format.
+  webVtt,
 
-  /// MP3 audio format.
-  ///
-  /// Common extension:
-  /// - .mp3
+  /// SubRip subtitle format.
+  srt,
+
+  /// Advanced SubStation Alpha subtitle format.
+  ass,
+
+  /// MPEG-DASH manifest.
+  mpd,
+
+  /// HTTP Live Streaming manifest.
+  m3u8,
+
+  /// Audio-only MPEG format.
   mp3,
 
   /// AAC audio format.
-  ///
-  /// Common extension:
-  /// - .aac
   aac,
 
-  /// Custom format.
+  /// FLAC audio format.
+  flac,
+
+  /// WAV audio format.
+  wav,
+
+  /// Opus audio format.
+  opus,
+
+  /// Application-defined custom format.
   custom,
 }
 
 /// Extensions for [SourceFormat].
-extension SourceFormatExtension on SourceFormat {
-  /// Whether this format represents a streaming playlist.
-  bool get isStreaming {
-    switch (this) {
-      case SourceFormat.hls:
-      case SourceFormat.dash:
-        return true;
+extension SourceFormatX on SourceFormat {
+  /// Whether this format is unknown.
+  bool get isUnknown => this == SourceFormat.unknown;
 
-      case SourceFormat.unknown:
-      case SourceFormat.ts:
+  /// Whether this format is known.
+  bool get isKnown => this != SourceFormat.unknown;
+
+  /// Whether this is a video container format.
+  bool get isVideo {
+    switch (this) {
       case SourceFormat.mp4:
-      case SourceFormat.flv:
+      case SourceFormat.mpegTs:
       case SourceFormat.mkv:
       case SourceFormat.webm:
       case SourceFormat.avi:
-      case SourceFormat.mpeg:
-      case SourceFormat.ogg:
-      case SourceFormat.wav:
-      case SourceFormat.mp3:
-      case SourceFormat.aac:
-      case SourceFormat.custom:
-        return false;
-    }
-  }
-
-  /// Whether this format usually contains video.
-  bool get hasVideo {
-    switch (this) {
-      case SourceFormat.ts:
-      case SourceFormat.mp4:
+      case SourceFormat.mov:
       case SourceFormat.flv:
-      case SourceFormat.mkv:
-      case SourceFormat.webm:
-      case SourceFormat.avi:
-      case SourceFormat.mpeg:
-      case SourceFormat.hls:
-      case SourceFormat.dash:
         return true;
 
       case SourceFormat.unknown:
-      case SourceFormat.ogg:
-      case SourceFormat.wav:
+      case SourceFormat.webVtt:
+      case SourceFormat.srt:
+      case SourceFormat.ass:
+      case SourceFormat.mpd:
+      case SourceFormat.m3u8:
       case SourceFormat.mp3:
       case SourceFormat.aac:
-      case SourceFormat.custom:
-        return false;
-    }
-  }
-
-  /// Whether this format is audio-only.
-  bool get audioOnly {
-    switch (this) {
+      case SourceFormat.flac:
       case SourceFormat.wav:
-      case SourceFormat.mp3:
-      case SourceFormat.aac:
-        return true;
-
-      case SourceFormat.unknown:
-      case SourceFormat.ts:
-      case SourceFormat.mp4:
-      case SourceFormat.flv:
-      case SourceFormat.mkv:
-      case SourceFormat.webm:
-      case SourceFormat.avi:
-      case SourceFormat.mpeg:
-      case SourceFormat.hls:
-      case SourceFormat.dash:
+      case SourceFormat.opus:
       case SourceFormat.ogg:
       case SourceFormat.custom:
         return false;
     }
   }
 
-  /// Returns common file extension.
+  /// Whether this is an audio format.
+  bool get isAudio {
+    switch (this) {
+      case SourceFormat.mp3:
+      case SourceFormat.aac:
+      case SourceFormat.flac:
+      case SourceFormat.wav:
+      case SourceFormat.opus:
+      case SourceFormat.ogg:
+        return true;
+
+      case SourceFormat.unknown:
+      case SourceFormat.mp4:
+      case SourceFormat.mpegTs:
+      case SourceFormat.mkv:
+      case SourceFormat.webm:
+      case SourceFormat.avi:
+      case SourceFormat.mov:
+      case SourceFormat.flv:
+      case SourceFormat.webVtt:
+      case SourceFormat.srt:
+      case SourceFormat.ass:
+      case SourceFormat.mpd:
+      case SourceFormat.m3u8:
+      case SourceFormat.custom:
+        return false;
+    }
+  }
+
+  /// Whether this is a subtitle format.
+  bool get isSubtitle {
+    switch (this) {
+      case SourceFormat.webVtt:
+      case SourceFormat.srt:
+      case SourceFormat.ass:
+        return true;
+
+      case SourceFormat.unknown:
+      case SourceFormat.mp4:
+      case SourceFormat.mpegTs:
+      case SourceFormat.mkv:
+      case SourceFormat.webm:
+      case SourceFormat.avi:
+      case SourceFormat.mov:
+      case SourceFormat.flv:
+      case SourceFormat.mpd:
+      case SourceFormat.m3u8:
+      case SourceFormat.mp3:
+      case SourceFormat.aac:
+      case SourceFormat.flac:
+      case SourceFormat.wav:
+      case SourceFormat.opus:
+      case SourceFormat.ogg:
+      case SourceFormat.custom:
+        return false;
+    }
+  }
+
+  /// Whether this is a streaming manifest format.
+  bool get isManifest {
+    return this == SourceFormat.m3u8 || this == SourceFormat.mpd;
+  }
+
+  /// Returns the conventional file extension without the leading dot.
   String? get extension {
     switch (this) {
-      case SourceFormat.ts:
-        return 'ts';
-
       case SourceFormat.mp4:
         return 'mp4';
-
-      case SourceFormat.flv:
-        return 'flv';
-
+      case SourceFormat.mpegTs:
+        return 'ts';
       case SourceFormat.mkv:
         return 'mkv';
-
       case SourceFormat.webm:
         return 'webm';
-
       case SourceFormat.avi:
         return 'avi';
-
-      case SourceFormat.mpeg:
-        return 'mpeg';
-
-      case SourceFormat.hls:
-        return 'm3u8';
-
-      case SourceFormat.dash:
-        return 'mpd';
-
+      case SourceFormat.mov:
+        return 'mov';
+      case SourceFormat.flv:
+        return 'flv';
       case SourceFormat.ogg:
         return 'ogg';
-
-      case SourceFormat.wav:
-        return 'wav';
-
+      case SourceFormat.webVtt:
+        return 'vtt';
+      case SourceFormat.srt:
+        return 'srt';
+      case SourceFormat.ass:
+        return 'ass';
+      case SourceFormat.mpd:
+        return 'mpd';
+      case SourceFormat.m3u8:
+        return 'm3u8';
       case SourceFormat.mp3:
         return 'mp3';
-
       case SourceFormat.aac:
         return 'aac';
-
+      case SourceFormat.flac:
+        return 'flac';
+      case SourceFormat.wav:
+        return 'wav';
+      case SourceFormat.opus:
+        return 'opus';
       case SourceFormat.unknown:
       case SourceFormat.custom:
         return null;
     }
   }
 
-  /// Returns readable format name.
-  String get displayName {
-    switch (this) {
-      case SourceFormat.unknown:
-        return 'unknown';
-
-      case SourceFormat.ts:
-        return 'ts';
-
-      case SourceFormat.mp4:
-        return 'mp4';
-
-      case SourceFormat.flv:
-        return 'flv';
-
-      case SourceFormat.mkv:
-        return 'mkv';
-
-      case SourceFormat.webm:
-        return 'webm';
-
-      case SourceFormat.avi:
-        return 'avi';
-
-      case SourceFormat.mpeg:
-        return 'mpeg';
-
-      case SourceFormat.hls:
-        return 'hls';
-
-      case SourceFormat.dash:
-        return 'dash';
-
-      case SourceFormat.ogg:
-        return 'ogg';
-
-      case SourceFormat.wav:
-        return 'wav';
-
-      case SourceFormat.mp3:
-        return 'mp3';
-
-      case SourceFormat.aac:
-        return 'aac';
-
-      case SourceFormat.custom:
-        return 'custom';
-    }
-  }
+  /// Returns the stable string representation of this format.
+  String get value => name;
 }

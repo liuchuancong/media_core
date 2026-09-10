@@ -1,124 +1,71 @@
-/// Represents the category of a media source.
+/// Describes the general category of a media source.
 ///
-/// A [SourceType] describes where a media source
-/// originates from.
-///
-/// It does not:
-///
-/// - resolve source URLs
-/// - inspect media content
-/// - create playback sessions
-///
-/// Those belong to:
-///
-/// - [SourceResolver]
-/// - [SourceInspector]
+/// [SourceType] identifies where or how a source is conceptually provided.
+/// It does not describe the backend used to play the source.
 enum SourceType {
-  /// Unknown source type.
+  /// Unknown or not yet determined.
   unknown,
 
-  /// Local file source.
-  ///
-  /// Example:
-  /// - mp4 file
-  /// - local recording
+  /// A local file.
   file,
 
-  /// Network stream source.
-  ///
-  /// Example:
-  /// - HLS
-  /// - DASH
-  /// - RTMP
-  network,
-
-  /// Live streaming source.
-  ///
-  /// Example:
-  /// - live channel
-  /// - realtime stream
-  live,
-
-  /// Recorded media source.
-  recorded,
-
-  /// Asset bundled with application.
+  /// An application or bundled asset.
   asset,
 
-  /// Memory based source.
-  memory,
+  /// A remote media resource.
+  remote,
 
-  /// Custom source type.
+  /// A live media source.
+  live,
+
+  /// A stream-oriented media source.
+  stream,
+
+  /// A custom source handled by an application-defined resolver.
   custom,
 }
 
 /// Extensions for [SourceType].
-extension SourceTypeExtension on SourceType {
-  /// Whether this source requires network access.
-  bool get requiresNetwork {
-    switch (this) {
-      case SourceType.network:
-      case SourceType.live:
-        return true;
+extension SourceTypeX on SourceType {
+  /// Whether this type is unknown.
+  bool get isUnknown => this == SourceType.unknown;
 
-      case SourceType.unknown:
-      case SourceType.file:
-      case SourceType.recorded:
-      case SourceType.asset:
-      case SourceType.memory:
-      case SourceType.custom:
-        return false;
-    }
-  }
-
-  /// Whether this source represents live playback.
-  bool get isLive {
-    return this == SourceType.live;
-  }
-
-  /// Whether this source is local.
+  /// Whether this is a local source.
   bool get isLocal {
-    switch (this) {
-      case SourceType.file:
-      case SourceType.recorded:
-      case SourceType.asset:
-      case SourceType.memory:
-        return true;
-
-      case SourceType.unknown:
-      case SourceType.network:
-      case SourceType.live:
-      case SourceType.custom:
-        return false;
-    }
+    return this == SourceType.file || this == SourceType.asset;
   }
 
-  /// Returns readable name.
-  String get displayName {
-    switch (this) {
-      case SourceType.unknown:
-        return 'unknown';
-
-      case SourceType.file:
-        return 'file';
-
-      case SourceType.network:
-        return 'network';
-
-      case SourceType.live:
-        return 'live';
-
-      case SourceType.recorded:
-        return 'recorded';
-
-      case SourceType.asset:
-        return 'asset';
-
-      case SourceType.memory:
-        return 'memory';
-
-      case SourceType.custom:
-        return 'custom';
-    }
+  /// Whether this is a remote source.
+  bool get isRemote {
+    return this == SourceType.remote || this == SourceType.live || this == SourceType.stream;
   }
+
+  /// Whether this represents a live source.
+  bool get isLive => this == SourceType.live;
+
+  /// Whether this represents a stream source.
+  bool get isStream => this == SourceType.stream;
+
+  /// Whether this is a file source.
+  bool get isFile => this == SourceType.file;
+
+  /// Whether this is an application asset.
+  bool get isAsset => this == SourceType.asset;
+
+  /// Whether this is a custom source.
+  bool get isCustom => this == SourceType.custom;
+
+  /// Whether this source type represents a playable source category.
+  bool get isKnown => this != SourceType.unknown;
+
+  /// Whether this source type represents a network-oriented source.
+  ///
+  /// This is only a classification of the source type. It does not imply
+  /// that the source can actually be reached over a network.
+  bool get isNetwork {
+    return this == SourceType.remote || this == SourceType.live || this == SourceType.stream;
+  }
+
+  /// Returns the stable string representation of this source type.
+  String get value => name;
 }
