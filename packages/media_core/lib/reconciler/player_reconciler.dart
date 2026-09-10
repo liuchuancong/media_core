@@ -5,8 +5,10 @@ import 'reconcile_context.dart';
 import '../core/player_state.dart';
 import '../core/player_status.dart';
 
-/// Reconciles desired player state
-/// with current player state.
+/// Reconciles desired player state with current player state.
+///
+/// The reconciler compares semantic core state and produces a plan of
+/// semantic actions. It does not execute player operations.
 final class PlayerReconciler {
   const PlayerReconciler();
 
@@ -18,7 +20,6 @@ final class PlayerReconciler {
     }
 
     final currentStatus = _resolveStatus(current);
-
     final desiredStatus = _resolveStatus(desired);
 
     if (currentStatus != desiredStatus) {
@@ -49,28 +50,16 @@ final class PlayerReconciler {
       return PlayerStatus.disposing;
     }
 
-    if (state.hasError) {
-      return PlayerStatus.error;
-    }
-
-    if (state.fallingBack) {
-      return PlayerStatus.buffering;
-    }
-
-    if (state.recovering) {
-      return PlayerStatus.buffering;
-    }
-
     if (state.opening) {
       return PlayerStatus.opening;
     }
 
-    if (state.seeking) {
-      return PlayerStatus.seeking;
-    }
-
     if (state.buffering) {
       return PlayerStatus.buffering;
+    }
+
+    if (state.seeking) {
+      return PlayerStatus.seeking;
     }
 
     if (state.playing) {
@@ -81,6 +70,10 @@ final class PlayerReconciler {
       return PlayerStatus.paused;
     }
 
+    if (state.stopping) {
+      return PlayerStatus.stopping;
+    }
+
     if (state.completed) {
       return PlayerStatus.completed;
     }
@@ -89,12 +82,12 @@ final class PlayerReconciler {
       return PlayerStatus.stopped;
     }
 
-    if (state.ready) {
-      return PlayerStatus.ready;
+    if (state.playback == PlayerPlaybackState.error) {
+      return PlayerStatus.error;
     }
 
-    if (state.initialized) {
-      return PlayerStatus.initializing;
+    if (state.ready) {
+      return PlayerStatus.ready;
     }
 
     return PlayerStatus.idle;

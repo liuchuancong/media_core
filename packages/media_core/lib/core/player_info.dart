@@ -1,543 +1,238 @@
-import 'media_type.dart';
-import 'media_capabilities.dart';
-import '../identity/player_id.dart';
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
-import '../identity/session_id.dart';
-import '../identity/generation_id.dart';
-import 'package:equatable/equatable.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-/// Describes immutable information about a player instance.
+part 'player_info.freezed.dart';
+part 'player_info.g.dart';
+
+/// Descriptive information about the current player and media.
 ///
-/// [PlayerInfo] contains identity, source, media, and descriptive
-/// information that is useful for inspecting a player without exposing
-/// mutable runtime state.
-final class PlayerInfo extends Equatable {
-  /// Creates immutable player information.
-  const PlayerInfo({
-    required this.playerId,
-    this.sessionId,
-    this.requestId,
-    this.generationId,
-    this.sourceId,
-    this.mediaType,
-    this.mediaCapabilities,
-    this.name,
-    this.title,
-    this.description,
-    this.uri,
-    this.createdAt,
-    this.updatedAt,
-    this.metadata = const <String, Object?>{},
-  });
+/// [PlayerInfo] contains relatively stable descriptive data. Runtime state
+/// belongs to [PlayerState], while the complete observable state belongs to
+/// [PlayerSnapshot].
+@freezed
+abstract class PlayerInfo with _$PlayerInfo {
+  /// Creates player information.
+  const factory PlayerInfo({
+    /// Optional title of the current media.
+    String? title,
 
-  /// Unique identifier of the player.
-  final PlayerId playerId;
+    /// Optional description of the current media.
+    String? description,
 
-  /// Session associated with the player.
-  final SessionId? sessionId;
+    /// Optional author, creator, or channel name.
+    String? author,
 
-  /// Request associated with the current player operation.
-  final RequestId? requestId;
+    /// Optional album name.
+    String? album,
 
-  /// Generation associated with the current player lifecycle.
-  ///
-  /// Generation identifiers allow stale asynchronous results to be
-  /// distinguished from the current player generation.
-  final GenerationId? generationId;
+    /// Optional artist name.
+    String? artist,
 
-  /// Source associated with the player.
-  final SourceId? sourceId;
+    /// Optional artwork URL.
+    String? artworkUrl,
 
-  /// Media type currently associated with the player.
-  final MediaType? mediaType;
+    /// Optional thumbnail URL.
+    String? thumbnailUrl,
 
-  /// Capabilities of the media currently associated with the player.
-  final MediaCapabilities? mediaCapabilities;
+    /// Optional media duration in milliseconds.
+    int? durationMs,
 
-  /// Optional player name.
-  final String? name;
+    /// Optional width of the video.
+    int? width,
 
-  /// Optional media title.
-  final String? title;
+    /// Optional height of the video.
+    int? height,
 
-  /// Optional media description.
-  final String? description;
+    /// Optional video frame rate.
+    double? frameRate,
 
-  /// Optional source URI.
-  final Uri? uri;
+    /// Optional video bitrate in bits per second.
+    int? videoBitrate,
 
-  /// Time when this information was created.
-  final DateTime? createdAt;
+    /// Optional audio bitrate in bits per second.
+    int? audioBitrate,
 
-  /// Time when this information was last updated.
-  final DateTime? updatedAt;
+    /// Optional container or stream format.
+    String? format,
 
-  /// Additional descriptive metadata.
-  final Map<String, Object?> metadata;
+    /// Optional video codec.
+    String? videoCodec,
 
-  /// Returns whether a session is associated with the player.
-  bool get hasSession => sessionId != null;
+    /// Optional audio codec.
+    String? audioCodec,
 
-  /// Returns whether a request is associated with the player.
-  bool get hasRequest => requestId != null;
+    /// Optional subtitle codec.
+    String? subtitleCodec,
 
-  /// Returns whether a generation is associated with the player.
-  bool get hasGeneration => generationId != null;
+    /// Optional language of the primary audio stream.
+    String? audioLanguage,
 
-  /// Returns whether a source is associated with the player.
-  bool get hasSource => sourceId != null;
+    /// Optional language of the primary subtitle stream.
+    String? subtitleLanguage,
 
-  /// Returns whether a media type is available.
-  bool get hasMediaType => mediaType != null;
+    /// Optional container metadata.
+    @Default(<String, String>{}) Map<String, String> metadata,
+  }) = _PlayerInfo;
 
-  /// Returns whether media capabilities are available.
-  bool get hasMediaCapabilities => mediaCapabilities != null;
+  const PlayerInfo._();
 
-  /// Returns whether a non-empty player name is available.
-  bool get hasName => name != null && name!.trim().isNotEmpty;
+  /// Empty player information.
+  static const PlayerInfo empty = PlayerInfo();
 
-  /// Returns whether a non-empty title is available.
-  bool get hasTitle => title != null && title!.trim().isNotEmpty;
+  /// Whether a title is available.
+  bool get hasTitle => _hasText(title);
 
-  /// Returns whether a description is available.
-  bool get hasDescription => description != null && description!.trim().isNotEmpty;
+  /// Whether a description is available.
+  bool get hasDescription => _hasText(description);
 
-  /// Returns whether a source URI is available.
-  bool get hasUri => uri != null;
+  /// Whether an author is available.
+  bool get hasAuthor => _hasText(author);
 
-  /// Returns whether creation time is available.
-  bool get hasCreatedAt => createdAt != null;
+  /// Whether artwork is available.
+  bool get hasArtwork => _hasText(artworkUrl);
 
-  /// Returns whether update time is available.
-  bool get hasUpdatedAt => updatedAt != null;
+  /// Whether a thumbnail is available.
+  bool get hasThumbnail => _hasText(thumbnailUrl);
 
-  /// Returns whether metadata is available.
+  /// Whether duration information is available.
+  bool get hasDuration => durationMs != null && durationMs! >= 0;
+
+  /// Whether video dimensions are available.
+  bool get hasVideoSize {
+    return width != null && height != null && width! > 0 && height! > 0;
+  }
+
+  /// Whether video frame-rate information is available.
+  bool get hasFrameRate {
+    return frameRate != null && frameRate! > 0;
+  }
+
+  /// Whether bitrate information is available.
+  bool get hasBitrate {
+    return videoBitrate != null || audioBitrate != null;
+  }
+
+  /// Whether video codec information is available.
+  bool get hasVideoCodec => _hasText(videoCodec);
+
+  /// Whether audio codec information is available.
+  bool get hasAudioCodec => _hasText(audioCodec);
+
+  /// Whether subtitle codec information is available.
+  bool get hasSubtitleCodec => _hasText(subtitleCodec);
+
+  /// Whether any metadata is available.
   bool get hasMetadata => metadata.isNotEmpty;
 
-  /// Returns whether the player has audio.
-  bool get hasAudio {
-    if (mediaType != null) {
-      return mediaType!.hasAudio;
+  /// Returns the media duration as a [Duration].
+  Duration? get duration {
+    final value = durationMs;
+    if (value == null || value < 0) {
+      return null;
     }
 
-    if (mediaCapabilities != null) {
-      return mediaCapabilities!.hasAudio;
-    }
-
-    return false;
+    return Duration(milliseconds: value);
   }
 
-  /// Returns whether the player has video.
-  bool get hasVideo {
-    if (mediaType != null) {
-      return mediaType!.hasVideo;
+  /// Returns the video aspect ratio.
+  double? get aspectRatio {
+    final videoWidth = width;
+    final videoHeight = height;
+
+    if (videoWidth == null || videoHeight == null || videoWidth <= 0 || videoHeight <= 0) {
+      return null;
     }
 
-    if (mediaCapabilities != null) {
-      return mediaCapabilities!.hasVideo;
-    }
-
-    return false;
+    return videoWidth / videoHeight;
   }
 
-  /// Returns whether the player represents audio-only media.
-  bool get isAudioOnly {
-    if (mediaType != null) {
-      return mediaType!.isAudioOnly;
-    }
-
-    if (mediaCapabilities != null) {
-      return mediaCapabilities!.isAudioOnly;
-    }
-
-    return hasAudio && !hasVideo;
+  /// Whether the video is portrait-oriented.
+  bool get isPortrait {
+    final ratio = aspectRatio;
+    return ratio != null && ratio < 1;
   }
 
-  /// Returns whether the player represents video-only media.
-  bool get isVideoOnly {
-    if (mediaType != null) {
-      return mediaType!.isVideoOnly;
-    }
-
-    if (mediaCapabilities != null) {
-      return mediaCapabilities!.isVideoOnly;
-    }
-
-    return hasVideo && !hasAudio;
+  /// Whether the video is landscape-oriented.
+  bool get isLandscape {
+    final ratio = aspectRatio;
+    return ratio != null && ratio > 1;
   }
 
-  /// Returns whether the player represents combined audio and video media.
-  bool get isAudioVideo {
-    if (mediaType != null) {
-      return mediaType!.isAudioVideo;
-    }
-
-    if (mediaCapabilities != null) {
-      return mediaCapabilities!.isAudioVideo;
-    }
-
-    return hasAudio && hasVideo;
+  /// Whether the video is square.
+  bool get isSquare {
+    final ratio = aspectRatio;
+    return ratio != null && ratio == 1;
   }
 
-  /// Returns whether the player requires a video renderer.
-  bool get requiresVideoRenderer {
-    if (mediaType != null) {
-      return mediaType!.requiresVideoRenderer;
-    }
+  /// Returns the effective display name.
+  ///
+  /// The title has priority, followed by author and album.
+  String? get displayName {
+    final candidates = <String?>[title, author, album];
 
-    if (mediaCapabilities != null) {
-      return mediaCapabilities!.requiresVideoRenderer;
-    }
-
-    return hasVideo;
-  }
-
-  /// Returns whether any media capability is known.
-  bool get hasAnyMedia {
-    return hasAudio || hasVideo || (mediaCapabilities?.hasSubtitles ?? false);
-  }
-
-  /// Returns a metadata value by key.
-  Object? metadataValue(String key) {
-    return metadata[key];
-  }
-
-  /// Returns a typed metadata value.
-  T? metadataAs<T>(String key) {
-    final value = metadata[key];
-
-    if (value is T) {
-      return value;
+    for (final candidate in candidates) {
+      if (_hasText(candidate)) {
+        return candidate!.trim();
+      }
     }
 
     return null;
   }
 
-  /// Returns whether metadata contains [key].
-  bool containsMetadata(String key) {
+  /// Returns a metadata value.
+  String? metadataValue(String key) {
+    return metadata[key];
+  }
+
+  /// Whether the metadata contains [key].
+  bool hasMetadataKey(String key) {
     return metadata.containsKey(key);
   }
 
-  /// Creates a copy with updated values.
-  ///
-  /// Null values retain their existing values.
-  PlayerInfo copyWith({
-    PlayerId? playerId,
-    SessionId? sessionId,
-    RequestId? requestId,
-    GenerationId? generationId,
-    SourceId? sourceId,
-    MediaType? mediaType,
-    MediaCapabilities? mediaCapabilities,
-    String? name,
-    String? title,
-    String? description,
-    Uri? uri,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    Map<String, Object?>? metadata,
-  }) {
-    return PlayerInfo(
-      playerId: playerId ?? this.playerId,
-      sessionId: sessionId ?? this.sessionId,
-      requestId: requestId ?? this.requestId,
-      generationId: generationId ?? this.generationId,
-      sourceId: sourceId ?? this.sourceId,
-      mediaType: mediaType ?? this.mediaType,
-      mediaCapabilities: mediaCapabilities ?? this.mediaCapabilities,
-      name: name ?? this.name,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      uri: uri ?? this.uri,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      metadata: metadata ?? this.metadata,
-    );
+  /// Returns a copy with [key] added or replaced in metadata.
+  PlayerInfo withMetadata(String key, String value) {
+    return copyWith(metadata: <String, String>{...metadata, key: value});
   }
 
-  /// Creates a copy associated with [value] as the session.
-  PlayerInfo withSession(SessionId value) {
-    return copyWith(sessionId: value);
-  }
-
-  /// Creates a copy associated with [value] as the request.
-  PlayerInfo withRequest(RequestId value) {
-    return copyWith(requestId: value);
-  }
-
-  /// Creates a copy associated with [value] as the generation.
-  PlayerInfo withGeneration(GenerationId value) {
-    return copyWith(generationId: value);
-  }
-
-  /// Creates a copy associated with [value] as the source.
-  PlayerInfo withSource(SourceId value) {
-    return copyWith(sourceId: value);
-  }
-
-  /// Creates a copy with a different media type.
-  PlayerInfo withMediaType(MediaType value) {
-    return copyWith(mediaType: value);
-  }
-
-  /// Creates a copy with different media capabilities.
-  PlayerInfo withMediaCapabilities(MediaCapabilities value) {
-    return copyWith(mediaCapabilities: value);
-  }
-
-  /// Creates a copy with a different name.
-  PlayerInfo withName(String value) {
-    return copyWith(name: value);
-  }
-
-  /// Creates a copy with a different title.
-  PlayerInfo withTitle(String value) {
-    return copyWith(title: value);
-  }
-
-  /// Creates a copy with a different description.
-  PlayerInfo withDescription(String value) {
-    return copyWith(description: value);
-  }
-
-  /// Creates a copy with a different source URI.
-  PlayerInfo withUri(Uri value) {
-    return copyWith(uri: value);
-  }
-
-  /// Creates a copy with a different creation time.
-  PlayerInfo withCreatedAt(DateTime value) {
-    return copyWith(createdAt: value);
-  }
-
-  /// Creates a copy with a different update time.
-  PlayerInfo withUpdatedAt(DateTime value) {
-    return copyWith(updatedAt: value);
-  }
-
-  /// Creates a copy with one metadata entry added or replaced.
-  PlayerInfo withMetadata(String key, Object? value) {
-    return copyWith(metadata: <String, Object?>{...metadata, key: value});
-  }
-
-  /// Creates a copy with multiple metadata entries added or replaced.
-  PlayerInfo withMetadataMap(Map<String, Object?> values) {
-    if (values.isEmpty) {
-      return this;
-    }
-
-    return copyWith(metadata: <String, Object?>{...metadata, ...values});
-  }
-
-  /// Creates a copy without the session association.
-  PlayerInfo withoutSession() {
-    return PlayerInfo(
-      playerId: playerId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      name: name,
-      title: title,
-      description: description,
-      uri: uri,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without the request association.
-  PlayerInfo withoutRequest() {
-    return PlayerInfo(
-      playerId: playerId,
-      sessionId: sessionId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      name: name,
-      title: title,
-      description: description,
-      uri: uri,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without the generation association.
-  PlayerInfo withoutGeneration() {
-    return PlayerInfo(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      name: name,
-      title: title,
-      description: description,
-      uri: uri,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without the source association.
-  PlayerInfo withoutSource() {
-    return PlayerInfo(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      name: name,
-      title: title,
-      description: description,
-      uri: uri,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without the media type.
-  PlayerInfo withoutMediaType() {
-    return PlayerInfo(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaCapabilities: mediaCapabilities,
-      name: name,
-      title: title,
-      description: description,
-      uri: uri,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without media capabilities.
-  PlayerInfo withoutMediaCapabilities() {
-    return PlayerInfo(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      name: name,
-      title: title,
-      description: description,
-      uri: uri,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without the source URI.
-  PlayerInfo withoutUri() {
-    return PlayerInfo(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      name: name,
-      title: title,
-      description: description,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      metadata: metadata,
-    );
-  }
-
-  /// Creates a copy without one metadata entry.
+  /// Returns a copy without [key] from metadata.
   PlayerInfo withoutMetadata(String key) {
     if (!metadata.containsKey(key)) {
       return this;
     }
 
-    final updated = <String, Object?>{...metadata}..remove(key);
+    final nextMetadata = <String, String>{...metadata}..remove(key);
 
-    return copyWith(metadata: updated);
+    return copyWith(metadata: nextMetadata);
   }
 
-  /// Creates a copy without any metadata.
+  /// Returns a copy without all metadata.
   PlayerInfo clearMetadata() {
-    if (metadata.isEmpty) {
-      return this;
-    }
-
-    return copyWith(metadata: const <String, Object?>{});
+    return copyWith(metadata: <String, String>{});
   }
 
-  /// Returns whether two instances refer to the same player.
-  bool isSamePlayer(PlayerInfo other) {
-    return playerId == other.playerId;
+  /// Returns whether this info contains useful descriptive data.
+  bool get isEmpty {
+    return !hasTitle &&
+        !hasDescription &&
+        !hasAuthor &&
+        !hasArtwork &&
+        !hasThumbnail &&
+        !hasDuration &&
+        !hasVideoSize &&
+        !hasFrameRate &&
+        !hasBitrate &&
+        !hasVideoCodec &&
+        !hasAudioCodec &&
+        !hasSubtitleCodec &&
+        !hasMetadata;
   }
 
-  /// Returns whether two instances refer to the same session.
-  bool isSameSession(PlayerInfo other) {
-    return sessionId != null && other.sessionId != null && sessionId == other.sessionId;
+  /// Returns whether this info contains at least one field.
+  bool get isNotEmpty => !isEmpty;
+
+  static bool _hasText(String? value) {
+    return value != null && value.trim().isNotEmpty;
   }
 
-  /// Returns whether two instances refer to the same source.
-  bool isSameSource(PlayerInfo other) {
-    return sourceId != null && other.sourceId != null && sourceId == other.sourceId;
-  }
-
-  /// Returns whether two instances refer to the same generation.
-  bool isSameGeneration(PlayerInfo other) {
-    return generationId != null && other.generationId != null && generationId == other.generationId;
-  }
-
-  @override
-  List<Object?> get props => <Object?>[
-    playerId,
-    sessionId,
-    requestId,
-    generationId,
-    sourceId,
-    mediaType,
-    mediaCapabilities,
-    name,
-    title,
-    description,
-    uri,
-    createdAt,
-    updatedAt,
-    metadata,
-  ];
-
-  @override
-  String toString() {
-    return 'PlayerInfo('
-        'playerId: $playerId, '
-        'sessionId: $sessionId, '
-        'requestId: $requestId, '
-        'generationId: $generationId, '
-        'sourceId: $sourceId, '
-        'mediaType: $mediaType, '
-        'mediaCapabilities: $mediaCapabilities, '
-        'name: $name, '
-        'title: $title, '
-        'description: $description, '
-        'uri: $uri, '
-        'createdAt: $createdAt, '
-        'updatedAt: $updatedAt, '
-        'metadata: $metadata'
-        ')';
-  }
+  /// Creates player information from JSON.
+  factory PlayerInfo.fromJson(Map<String, Object?> json) => _$PlayerInfoFromJson(json);
 }

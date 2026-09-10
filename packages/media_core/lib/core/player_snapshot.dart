@@ -4,6 +4,7 @@ import 'player_status.dart';
 import 'player_metrics.dart';
 import 'player_options.dart';
 import 'media_capabilities.dart';
+import 'package:clock/clock.dart';
 import 'player_capabilities.dart';
 import '../identity/player_id.dart';
 import '../identity/source_id.dart';
@@ -12,14 +13,18 @@ import '../identity/session_id.dart';
 import '../identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
-/// Represents an immutable point-in-time snapshot of a player.
+/// Represents the complete immutable observable state of a player at a
+/// specific point in time.
 ///
-/// [PlayerSnapshot] combines player identity, media information, runtime
-/// state, status, configuration, capabilities, and metrics into one object.
+/// [PlayerSnapshot] is the single aggregate state exposed by the core.
+/// Runtime state, source associations, session associations, capabilities,
+/// options, and metrics are observed through this object.
 ///
-/// Snapshots are intended for observation, diagnostics, synchronization,
-/// reconciliation, and state publication. They do not own player resources
-/// and must not directly control a backend.
+/// Descriptive media information belongs to [PlayerInfo] and should not be
+/// duplicated here.
+///
+/// A snapshot never owns player resources and never executes backend
+/// operations.
 final class PlayerSnapshot extends Equatable {
   /// Creates an immutable player snapshot.
   const PlayerSnapshot({
@@ -30,24 +35,29 @@ final class PlayerSnapshot extends Equatable {
     this.sourceId,
     this.mediaType,
     this.mediaCapabilities,
-    this.state,
-    this.status,
+    this.state = PlayerState.idle,
     this.options = PlayerOptions.defaults,
     this.capabilities = PlayerCapabilities.basic,
     this.metrics,
     this.timestamp,
   });
 
-  /// Unique identifier of the player represented by this snapshot.
+  /// Unique stable identifier of the player.
   final PlayerId playerId;
 
-  /// Identifier of the active player session.
+  /// Identifier of the active session.
+  ///
+  /// This is a runtime association and does not participate in player
+  /// identity.
   final SessionId? sessionId;
 
-  /// Identifier of the request associated with the current operation.
+  /// Identifier of the operation request associated with this snapshot.
   final RequestId? requestId;
 
   /// Identifier of the current player generation.
+  ///
+  /// Generations distinguish different lifetimes of backend resources within
+  /// the same player identity.
   final GenerationId? generationId;
 
   /// Identifier of the current media source.
@@ -56,257 +66,276 @@ final class PlayerSnapshot extends Equatable {
   /// Media type of the current source.
   final MediaType? mediaType;
 
-  /// Media-level capabilities detected for the current source.
+  /// Capabilities detected for the current media source.
+  ///
+  /// These describe the media itself and are distinct from
+  /// [PlayerCapabilities], which describe what the player implementation can
+  /// do.
   final MediaCapabilities? mediaCapabilities;
 
-  /// Detailed immutable player runtime state.
-  final PlayerState? state;
-
-  /// High-level player status.
-  final PlayerStatusSnapshot? status;
+  /// Complete semantic runtime state of the player.
+  final PlayerState state;
 
   /// Current player options.
   final PlayerOptions options;
 
   /// Capabilities exposed by the player implementation.
+  ///
+  /// This describes player operations, not properties of the current media.
   final PlayerCapabilities capabilities;
 
-  /// Optional runtime metrics associated with the snapshot.
+  /// Optional runtime metrics.
   final PlayerMetrics? metrics;
 
-  /// Time at which this snapshot was created.
+  /// Time at which this snapshot was produced.
   final DateTime? timestamp;
 
-  /// Returns whether a session is associated with this snapshot.
+  /// Whether a session is associated with this snapshot.
   bool get hasSession => sessionId != null;
 
-  /// Returns whether a request is associated with this snapshot.
+  /// Whether a request is associated with this snapshot.
   bool get hasRequest => requestId != null;
 
-  /// Returns whether a generation is associated with this snapshot.
+  /// Whether a generation is associated with this snapshot.
   bool get hasGeneration => generationId != null;
 
-  /// Returns whether a source is associated with this snapshot.
+  /// Whether a source is associated with this snapshot.
   bool get hasSource => sourceId != null;
 
-  /// Returns whether media type information is available.
+  /// Whether media type information is available.
   bool get hasMediaType => mediaType != null;
 
-  /// Returns whether media capability information is available.
+  /// Whether media capability information is available.
   bool get hasMediaCapabilities => mediaCapabilities != null;
 
-  /// Returns whether detailed runtime state is available.
-  bool get hasState => state != null;
-
-  /// Returns whether high-level status information is available.
-  bool get hasStatus => status != null;
-
-  /// Returns whether runtime metrics are available.
+  /// Whether runtime metrics are available.
   bool get hasMetrics => metrics != null;
 
-  /// Returns the current player status.
+  /// Current semantic player status.
+  ///
+  /// This is derived from [state]. It is intentionally not stored as a
+  /// second independent state model.
   PlayerStatus get playerStatus {
-    return status?.status ?? PlayerStatus.idle;
-  }
-
-  /// Returns whether the player is initialized.
-  bool get isInitialized {
-    return state?.initialized ?? status?.isInitialized ?? false;
-  }
-
-  /// Returns whether the player is ready.
-  bool get isReady {
-    return state?.ready ?? status?.isReady ?? false;
-  }
-
-  /// Returns whether the player is currently opening a source.
-  bool get isOpening {
-    return state?.opening ?? status?.isOpening ?? false;
-  }
-
-  /// Returns whether the player is currently playing.
-  bool get isPlaying {
-    return state?.playing ?? status?.isPlaying ?? false;
-  }
-
-  /// Returns whether the player is currently paused.
-  bool get isPaused {
-    return state?.paused ?? status?.isPaused ?? false;
-  }
-
-  /// Returns whether the player is buffering.
-  bool get isBuffering {
-    return state?.buffering ?? status?.isBuffering ?? false;
-  }
-
-  /// Returns whether the player is seeking.
-  bool get isSeeking {
-    return state?.seeking ?? status?.isSeeking ?? false;
-  }
-
-  /// Returns whether the player is stopping.
-  bool get isStopping {
-    return state?.stopping ?? status?.isStopping ?? false;
-  }
-
-  /// Returns whether playback has completed.
-  bool get isCompleted {
-    return state?.completed ?? status?.isCompleted ?? false;
-  }
-
-  /// Returns whether the player has an error.
-  bool get hasError {
-    return state?.hasError ?? status?.hasError ?? false;
-  }
-
-  /// Returns whether the player is being disposed.
-  bool get isDisposing {
-    return state?.disposing ?? status?.isDisposing ?? false;
-  }
-
-  /// Returns whether the player has been disposed.
-  bool get isDisposed {
-    return state?.disposed ?? status?.isDisposed ?? false;
-  }
-
-  /// Returns whether audio output is enabled.
-  bool get hasAudio {
-    return mediaCapabilities?.hasAudio ?? mediaType?.hasAudio ?? state?.audioEnabled ?? options.enableAudio;
-  }
-
-  /// Returns whether video output is enabled.
-  bool get hasVideo {
-    return mediaCapabilities?.hasVideo ?? mediaType?.hasVideo ?? state?.videoEnabled ?? options.enableVideo;
-  }
-
-  /// Returns whether the player is muted.
-  bool get isMuted {
-    return state?.muted ?? status?.isMuted ?? options.muted;
-  }
-
-  /// Returns whether the current media is audio-only.
-  bool get isAudioOnly {
-    final capabilities = mediaCapabilities;
-    if (capabilities != null) {
-      return capabilities.isAudioOnly;
+    if (isDisposed) {
+      return PlayerStatus.disposed;
     }
 
-    final type = mediaType;
-    if (type != null) {
-      return type.isAudioOnly;
+    if (isDisposing) {
+      return PlayerStatus.disposing;
+    }
+
+    if (isOpening) {
+      return PlayerStatus.opening;
+    }
+
+    if (isBuffering) {
+      return PlayerStatus.buffering;
+    }
+
+    if (isSeeking) {
+      return PlayerStatus.seeking;
+    }
+
+    if (isPlaying) {
+      return PlayerStatus.playing;
+    }
+
+    if (isPaused) {
+      return PlayerStatus.paused;
+    }
+
+    if (isStopping) {
+      return PlayerStatus.stopping;
+    }
+
+    if (isCompleted) {
+      return PlayerStatus.completed;
+    }
+
+    if (isStopped) {
+      return PlayerStatus.stopped;
+    }
+
+    if (hasError) {
+      return PlayerStatus.error;
+    }
+
+    if (isReady) {
+      return PlayerStatus.ready;
+    }
+
+    return PlayerStatus.idle;
+  }
+
+  /// Whether the player has been initialized.
+  bool get isInitialized => state.initialized;
+
+  /// Whether the player is ready for normal control.
+  bool get isReady => state.ready;
+
+  /// Whether the player is opening a source.
+  bool get isOpening => state.opening;
+
+  /// Whether the player is currently playing.
+  bool get isPlaying => state.playing;
+
+  /// Whether playback is paused.
+  bool get isPaused => state.paused;
+
+  /// Whether the player is buffering.
+  bool get isBuffering => state.buffering;
+
+  /// Whether the player is seeking.
+  bool get isSeeking => state.seeking;
+
+  /// Whether the player is stopping.
+  bool get isStopping => state.stopping;
+
+  /// Whether playback has stopped.
+  bool get isStopped => state.stopped;
+
+  /// Whether playback has completed.
+  bool get isCompleted => state.completed;
+
+  /// Whether the player is disposing.
+  bool get isDisposing => state.disposing;
+
+  /// Whether the player has been disposed.
+  bool get isDisposed => state.disposed;
+
+  /// Whether the player currently has an error.
+  bool get hasError {
+    return state.playback == PlayerPlaybackState.error;
+  }
+
+  /// Whether audio output is available.
+  ///
+  /// Media capabilities take precedence over media type, while runtime state
+  /// is used as the final fallback.
+  bool get hasAudio {
+    return mediaCapabilities?.hasAudio ?? mediaType?.hasAudio ?? state.audioEnabled;
+  }
+
+  /// Whether video output is available.
+  ///
+  /// Media capabilities take precedence over media type, while runtime state
+  /// is used as the final fallback.
+  bool get hasVideo {
+    return mediaCapabilities?.hasVideo ?? mediaType?.hasVideo ?? state.videoEnabled;
+  }
+
+  /// Whether the player is muted.
+  bool get isMuted => state.muted;
+
+  /// Whether the current media is audio-only.
+  bool get isAudioOnly {
+    final currentCapabilities = mediaCapabilities;
+    if (currentCapabilities != null) {
+      return currentCapabilities.isAudioOnly;
+    }
+
+    final currentType = mediaType;
+    if (currentType != null) {
+      return currentType.isAudioOnly;
     }
 
     return hasAudio && !hasVideo;
   }
 
-  /// Returns whether the current media is video-only.
+  /// Whether the current media is video-only.
   bool get isVideoOnly {
-    final capabilities = mediaCapabilities;
-    if (capabilities != null) {
-      return capabilities.isVideoOnly;
+    final currentCapabilities = mediaCapabilities;
+    if (currentCapabilities != null) {
+      return currentCapabilities.isVideoOnly;
     }
 
-    final type = mediaType;
-    if (type != null) {
-      return type.isVideoOnly;
+    final currentType = mediaType;
+    if (currentType != null) {
+      return currentType.isVideoOnly;
     }
 
     return hasVideo && !hasAudio;
   }
 
-  /// Returns whether the current media contains audio and video.
+  /// Whether the current media contains both audio and video.
   bool get isAudioVideo {
-    final capabilities = mediaCapabilities;
-    if (capabilities != null) {
-      return capabilities.isAudioVideo;
+    final currentCapabilities = mediaCapabilities;
+    if (currentCapabilities != null) {
+      return currentCapabilities.isAudioVideo;
     }
 
-    final type = mediaType;
-    if (type != null) {
-      return type.isAudioVideo;
+    final currentType = mediaType;
+    if (currentType != null) {
+      return currentType.isAudioVideo;
     }
 
     return hasAudio && hasVideo;
   }
 
-  /// Returns whether the current media requires a video renderer.
+  /// Whether a video renderer is required.
   bool get requiresVideoRenderer {
     return mediaCapabilities?.requiresVideoRenderer ?? mediaType?.requiresVideoRenderer ?? hasVideo;
   }
 
-  /// Returns whether any media information is available.
-  bool get hasAnyMedia {
-    return hasAudio || hasVideo;
-  }
+  /// Whether any media output is available.
+  bool get hasAnyMedia => hasAudio || hasVideo;
 
-  /// Returns whether the player currently has a presentation mode active.
-  bool get hasPresentation {
-    return state?.hasPresentation ?? false;
-  }
+  /// Whether any presentation mode is active.
+  bool get hasPresentation => state.hasPresentation;
 
-  /// Returns whether the player is in fullscreen mode.
-  bool get isFullscreen {
-    return state?.fullscreen ?? false;
-  }
+  /// Whether fullscreen presentation is active.
+  bool get isFullscreen => state.fullscreen;
 
-  /// Returns whether the player is in picture-in-picture mode.
-  bool get isPip {
-    return state?.pip ?? false;
-  }
+  /// Whether picture-in-picture is active.
+  bool get isPip => state.pip;
 
-  /// Returns whether the player is in floating mode.
-  bool get isFloating {
-    return state?.floating ?? false;
-  }
+  /// Whether floating presentation is active.
+  bool get isFloating => state.floating;
 
-  /// Returns whether recording is currently active.
-  bool get isRecording {
-    return state?.recording ?? false;
-  }
+  /// Whether recording is active.
+  bool get isRecording => state.recording;
 
-  /// Returns whether recovery is currently active.
-  bool get isRecovering {
-    return state?.recovering ?? false;
-  }
+  /// Whether recovery is active.
+  bool get isRecovering => state.recovering;
 
-  /// Returns whether fallback is currently active.
-  bool get isFallingBack {
-    return state?.fallingBack ?? false;
-  }
+  /// Whether fallback is active.
+  bool get isFallingBack => state.fallingBack;
 
-  /// Returns whether the player can currently be controlled.
-  bool get canControl {
-    return status?.canControl ?? state?.canControl ?? false;
-  }
+  /// Whether normal player controls are currently allowed.
+  bool get canControl => state.canControl;
 
-  /// Returns whether playback can currently be started.
-  bool get canPlay {
-    return status != null ? status!.canControl && hasSource && !isPlaying && !isBuffering : state?.canPlay ?? false;
-  }
-
-  /// Returns whether playback can currently be paused.
-  bool get canPause {
-    return state?.canPause ?? (status?.canControl == true && isPlaying);
-  }
-
-  /// Returns whether seeking is currently supported.
-  bool get canSeek {
-    return capabilities.canSeek && (mediaCapabilities?.supportsSeeking ?? true);
-  }
-
-  /// Returns whether the player supports recovery.
-  bool get canRecover {
-    return capabilities.canRecover && options.canRecover;
-  }
-
-  /// Returns whether the player supports fallback.
-  bool get canFallback {
-    return capabilities.canFallback && options.canFallback;
-  }
-
-  /// Returns a copy with selectively replaced values.
+  /// Whether playback can currently be started.
   ///
-  /// Null values retain the existing values.
+  /// Both runtime state and the presence of a source are required.
+  bool get canPlay => state.canPlay && hasSource;
+
+  /// Whether playback can currently be paused.
+  bool get canPause => state.canPause;
+
+  /// Whether seeking is currently supported.
+  ///
+  /// The player implementation must support seeking and the current media
+  /// must not explicitly report seeking as unsupported.
+  bool get canSeek {
+    return capabilities.seek && (mediaCapabilities?.supportsSeeking ?? true);
+  }
+
+  /// Whether recovery is currently allowed.
+  ///
+  /// Recovery execution belongs to the recovery layer. At the core snapshot
+  /// level this only reflects the configured policy.
+  bool get canRecover => options.canRecover;
+
+  /// Whether fallback is currently allowed.
+  ///
+  /// Fallback execution belongs to the fallback layer. At the core snapshot
+  /// level this only reflects the configured policy.
+  bool get canFallback => options.canFallback;
+
+  /// Returns a copy with the supplied values.
+  ///
+  /// Nullable fields use explicit `clear*` methods when they need to be
+  /// removed. A null passed to [copyWith] retains the existing value.
   PlayerSnapshot copyWith({
     PlayerId? playerId,
     SessionId? sessionId,
@@ -316,7 +345,6 @@ final class PlayerSnapshot extends Equatable {
     MediaType? mediaType,
     MediaCapabilities? mediaCapabilities,
     PlayerState? state,
-    PlayerStatusSnapshot? status,
     PlayerOptions? options,
     PlayerCapabilities? capabilities,
     PlayerMetrics? metrics,
@@ -331,7 +359,6 @@ final class PlayerSnapshot extends Equatable {
       mediaType: mediaType ?? this.mediaType,
       mediaCapabilities: mediaCapabilities ?? this.mediaCapabilities,
       state: state ?? this.state,
-      status: status ?? this.status,
       options: options ?? this.options,
       capabilities: capabilities ?? this.capabilities,
       metrics: metrics ?? this.metrics,
@@ -339,24 +366,96 @@ final class PlayerSnapshot extends Equatable {
     );
   }
 
-  /// Returns a snapshot associated with the supplied session.
+  /// Returns a snapshot with a new session association.
   PlayerSnapshot withSession(SessionId value) {
     return copyWith(sessionId: value);
   }
 
-  /// Returns a snapshot associated with the supplied request.
+  /// Returns a snapshot without a session association.
+  PlayerSnapshot withoutSession() {
+    return PlayerSnapshot(
+      playerId: playerId,
+      requestId: requestId,
+      generationId: generationId,
+      sourceId: sourceId,
+      mediaType: mediaType,
+      mediaCapabilities: mediaCapabilities,
+      state: state,
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
+    );
+  }
+
+  /// Returns a snapshot with a new request association.
   PlayerSnapshot withRequest(RequestId value) {
     return copyWith(requestId: value);
   }
 
-  /// Returns a snapshot associated with the supplied generation.
+  /// Returns a snapshot without a request association.
+  PlayerSnapshot withoutRequest() {
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      generationId: generationId,
+      sourceId: sourceId,
+      mediaType: mediaType,
+      mediaCapabilities: mediaCapabilities,
+      state: state,
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
+    );
+  }
+
+  /// Returns a snapshot with a new generation association.
   PlayerSnapshot withGeneration(GenerationId value) {
     return copyWith(generationId: value);
   }
 
-  /// Returns a snapshot associated with the supplied source.
+  /// Returns a snapshot without a generation association.
+  PlayerSnapshot withoutGeneration() {
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      requestId: requestId,
+      sourceId: sourceId,
+      mediaType: mediaType,
+      mediaCapabilities: mediaCapabilities,
+      state: state,
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
+    );
+  }
+
+  /// Returns a snapshot with a new source association.
   PlayerSnapshot withSource(SourceId value) {
     return copyWith(sourceId: value);
+  }
+
+  /// Returns a snapshot without a source association.
+  ///
+  /// Source-dependent media information is cleared together with the source
+  /// association.
+  PlayerSnapshot withoutSource() {
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      requestId: requestId,
+      generationId: generationId,
+      sourceId: null,
+      mediaType: null,
+      mediaCapabilities: null,
+      state: state.withSource(false),
+      options: options.withoutSource(),
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
+    );
   }
 
   /// Returns a snapshot with the supplied media type.
@@ -364,19 +463,48 @@ final class PlayerSnapshot extends Equatable {
     return copyWith(mediaType: value);
   }
 
+  /// Returns a snapshot without media type information.
+  PlayerSnapshot withoutMediaType() {
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      requestId: requestId,
+      generationId: generationId,
+      sourceId: sourceId,
+      mediaCapabilities: mediaCapabilities,
+      state: state,
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
+    );
+  }
+
   /// Returns a snapshot with the supplied media capabilities.
   PlayerSnapshot withMediaCapabilities(MediaCapabilities value) {
     return copyWith(mediaCapabilities: value);
   }
 
+  /// Returns a snapshot without media capability information.
+  PlayerSnapshot withoutMediaCapabilities() {
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      requestId: requestId,
+      generationId: generationId,
+      sourceId: sourceId,
+      mediaType: mediaType,
+      state: state,
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
+    );
+  }
+
   /// Returns a snapshot with the supplied player state.
   PlayerSnapshot withState(PlayerState value) {
     return copyWith(state: value);
-  }
-
-  /// Returns a snapshot with the supplied player status.
-  PlayerSnapshot withStatus(PlayerStatusSnapshot value) {
-    return copyWith(status: value);
   }
 
   /// Returns a snapshot with the supplied player options.
@@ -394,93 +522,6 @@ final class PlayerSnapshot extends Equatable {
     return copyWith(metrics: value);
   }
 
-  /// Returns a snapshot with the supplied timestamp.
-  PlayerSnapshot withTimestamp(DateTime value) {
-    return copyWith(timestamp: value);
-  }
-
-  /// Returns a snapshot without a session association.
-  PlayerSnapshot withoutSession() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      status: status,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
-  }
-
-  /// Returns a snapshot without a request association.
-  PlayerSnapshot withoutRequest() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      status: status,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
-  }
-
-  /// Returns a snapshot without a generation association.
-  PlayerSnapshot withoutGeneration() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      status: status,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
-  }
-
-  /// Returns a snapshot without a source association.
-  PlayerSnapshot withoutSource() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      status: status,
-      options: options.withoutSource(),
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
-  }
-
-  /// Returns a snapshot without media type information.
-  PlayerSnapshot withoutMediaType() {
-    return copyWith(mediaType: MediaType.unknown);
-  }
-
-  /// Returns a snapshot without media capability information.
-  PlayerSnapshot withoutMediaCapabilities() {
-    return copyWith(mediaCapabilities: MediaCapabilities.unknown);
-  }
-
   /// Returns a snapshot without runtime metrics.
   PlayerSnapshot withoutMetrics() {
     return PlayerSnapshot(
@@ -492,117 +533,136 @@ final class PlayerSnapshot extends Equatable {
       mediaType: mediaType,
       mediaCapabilities: mediaCapabilities,
       state: state,
-      status: status,
       options: options,
       capabilities: capabilities,
       timestamp: timestamp,
     );
   }
 
-  /// Returns this snapshot as an idle snapshot while preserving identity.
-  PlayerSnapshot asIdle() {
-    return copyWith(state: PlayerState.idle, status: PlayerStatusSnapshot.idle);
+  /// Returns a snapshot with a new timestamp.
+  PlayerSnapshot withTimestamp(DateTime value) {
+    return copyWith(timestamp: value);
   }
 
-  /// Returns this snapshot as a disposed snapshot.
+  /// Returns an idle snapshot while preserving player identity and
+  /// configuration.
+  PlayerSnapshot asIdle() {
+    return copyWith(state: PlayerState.idle);
+  }
+
+  /// Returns a disposed snapshot.
   ///
-  /// The player identity is intentionally preserved so consumers can
-  /// associate the terminal snapshot with the original player instance.
+  /// Player identity is preserved so observers can associate the terminal
+  /// state with the original player.
   PlayerSnapshot asDisposed() {
-    return copyWith(
-      state: (state ?? PlayerState.idle).copyWith(
-        initialized: false,
-        opening: false,
-        ready: false,
-        playing: false,
-        paused: false,
-        buffering: false,
-        seeking: false,
-        stopping: false,
-        stopped: true,
-        completed: false,
-        disposing: false,
-        disposed: true,
-        hasSource: false,
-        hasError: false,
-        fullscreen: false,
-        pip: false,
-        floating: false,
-        recording: false,
-        recovering: false,
-        fallingBack: false,
-      ),
-      status: (status ?? PlayerStatusSnapshot.idle).markDisposed(),
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      requestId: requestId,
+      generationId: generationId,
+      sourceId: null,
+      mediaType: null,
+      mediaCapabilities: null,
+      state: state.disposedState(),
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp,
     );
   }
 
-  /// Returns whether this snapshot belongs to the same player.
+  /// Returns whether both snapshots belong to the same player.
   bool isSamePlayer(PlayerSnapshot other) {
     return playerId == other.playerId;
   }
 
-  /// Returns whether this snapshot belongs to the same session.
+  /// Returns whether both snapshots belong to the same session.
   bool isSameSession(PlayerSnapshot other) {
     return sessionId != null && other.sessionId != null && sessionId == other.sessionId;
   }
 
-  /// Returns whether this snapshot belongs to the same source.
+  /// Returns whether both snapshots belong to the same source.
   bool isSameSource(PlayerSnapshot other) {
     return sourceId != null && other.sourceId != null && sourceId == other.sourceId;
   }
 
-  /// Returns whether this snapshot belongs to the same generation.
+  /// Returns whether both snapshots belong to the same generation.
   bool isSameGeneration(PlayerSnapshot other) {
     return generationId != null && other.generationId != null && generationId == other.generationId;
   }
 
-  /// Returns whether the snapshots represent the same playback state.
+  /// Returns whether both snapshots have the same semantic playback state.
   bool isSamePlaybackState(PlayerSnapshot other) {
-    return isPlaying == other.isPlaying &&
-        isPaused == other.isPaused &&
-        isBuffering == other.isBuffering &&
-        isSeeking == other.isSeeking &&
-        isCompleted == other.isCompleted;
+    return state.playback == other.state.playback;
   }
 
-  /// Returns whether the snapshots represent the same media.
+  /// Returns whether both snapshots describe the same media capabilities.
   bool isSameMedia(PlayerSnapshot other) {
     return mediaType == other.mediaType && mediaCapabilities == other.mediaCapabilities;
   }
 
   /// Returns whether this snapshot is newer than [other].
   ///
-  /// Snapshots without timestamps are considered incomparable and return
-  /// `false`.
+  /// Snapshots without timestamps are considered incomparable.
   bool isNewerThan(PlayerSnapshot other) {
-    final currentTimestamp = timestamp;
-    final otherTimestamp = other.timestamp;
+    final current = timestamp;
+    final previous = other.timestamp;
 
-    if (currentTimestamp == null || otherTimestamp == null) {
+    if (current == null || previous == null) {
       return false;
     }
 
-    return currentTimestamp.isAfter(otherTimestamp);
+    return current.isAfter(previous);
   }
 
   /// Returns whether this snapshot is older than [other].
   ///
-  /// Snapshots without timestamps are considered incomparable and return
-  /// `false`.
+  /// Snapshots without timestamps are considered incomparable.
   bool isOlderThan(PlayerSnapshot other) {
-    final currentTimestamp = timestamp;
-    final otherTimestamp = other.timestamp;
+    final current = timestamp;
+    final previous = other.timestamp;
 
-    if (currentTimestamp == null || otherTimestamp == null) {
+    if (current == null || previous == null) {
       return false;
     }
 
-    return currentTimestamp.isBefore(otherTimestamp);
+    return current.isBefore(previous);
   }
 
   /// Creates an empty snapshot for [playerId].
   static PlayerSnapshot empty(PlayerId playerId) {
-    return PlayerSnapshot(playerId: playerId);
+    return PlayerSnapshot(playerId: playerId, timestamp: clock.now());
+  }
+
+  /// Creates a snapshot for [playerId] using the supplied state.
+  static PlayerSnapshot fromState({
+    required PlayerId playerId,
+    required PlayerState state,
+    SessionId? sessionId,
+    RequestId? requestId,
+    GenerationId? generationId,
+    SourceId? sourceId,
+    MediaType? mediaType,
+    MediaCapabilities? mediaCapabilities,
+    PlayerOptions options = PlayerOptions.defaults,
+    PlayerCapabilities capabilities = PlayerCapabilities.basic,
+    PlayerMetrics? metrics,
+    DateTime? timestamp,
+  }) {
+    return PlayerSnapshot(
+      playerId: playerId,
+      sessionId: sessionId,
+      requestId: requestId,
+      generationId: generationId,
+      sourceId: sourceId,
+      mediaType: mediaType,
+      mediaCapabilities: mediaCapabilities,
+      state: state,
+      options: options,
+      capabilities: capabilities,
+      metrics: metrics,
+      timestamp: timestamp ?? clock.now(),
+    );
   }
 
   @override
@@ -615,7 +675,6 @@ final class PlayerSnapshot extends Equatable {
     mediaType,
     mediaCapabilities,
     state,
-    status,
     options,
     capabilities,
     metrics,
@@ -630,11 +689,8 @@ final class PlayerSnapshot extends Equatable {
         'requestId: $requestId, '
         'generationId: $generationId, '
         'sourceId: $sourceId, '
-        'mediaType: $mediaType, '
-        'mediaCapabilities: $mediaCapabilities, '
-        'status: $playerStatus, '
-        'isPlaying: $isPlaying, '
-        'isBuffering: $isBuffering, '
+        'playback: ${state.playback}, '
+        'lifecycle: ${state.lifecycle}, '
         'hasError: $hasError, '
         'isDisposed: $isDisposed'
         ')';
