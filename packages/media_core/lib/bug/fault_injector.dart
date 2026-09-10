@@ -3,7 +3,9 @@ import 'bug_hooks.dart';
 import 'fault_type.dart';
 import 'fault_event.dart';
 import 'fault_config.dart';
+import 'package:clock/clock.dart';
 import 'bug_mode_controller.dart';
+
 
 /// Coordinates fault injection between bug mode configuration and hooks.
 ///
@@ -234,7 +236,7 @@ final class FaultInjector {
   }
 
   String _createFaultId(FaultConfig config) {
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final timestamp = clock.now().microsecondsSinceEpoch;
     final counter = _faultCounter++;
 
     return 'fault_${config.type.value}_'

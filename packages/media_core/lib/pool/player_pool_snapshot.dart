@@ -1,6 +1,8 @@
 import 'player_pool_state.dart';
+import 'package:clock/clock.dart';
 import 'player_pool_metrics.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+
 
 part 'player_pool_snapshot.freezed.dart';
 
@@ -46,7 +48,7 @@ abstract class PlayerPoolSnapshot with _$PlayerPoolSnapshot {
     return PlayerPoolSnapshot(
       state: const PlayerPoolState(),
       metrics: PlayerPoolMetrics.empty(),
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 }

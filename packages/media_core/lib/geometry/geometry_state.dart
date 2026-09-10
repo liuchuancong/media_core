@@ -1,7 +1,9 @@
 import 'video_geometry.dart';
 import 'geometry_event.dart';
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 import 'package:media_core/geometry/video_orientation.dart';
+
 
 /// Current geometry state.
 ///
@@ -77,7 +79,7 @@ final class GeometryState extends Equatable {
       geometry: value,
       generation: generation ?? this.generation,
       initialized: true,
-      updatedAt: DateTime.now(),
+      updatedAt: clock.now(),
     );
   }
 
@@ -87,7 +89,7 @@ final class GeometryState extends Equatable {
       geometry: const VideoGeometry.empty(),
       generation: generation ?? this.generation,
       initialized: false,
-      updatedAt: DateTime.now(),
+      updatedAt: clock.now(),
     );
   }
 

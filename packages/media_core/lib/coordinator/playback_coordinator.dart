@@ -1,6 +1,6 @@
 import '../identity/player_id.dart';
-import '../identity/session_id.dart';
 import '../playback/playback_command.dart';
+import '../playback/playback_request.dart';
 import '../playback/playback_controller.dart';
 
 /// Coordinates playback operations.
@@ -8,15 +8,23 @@ import '../playback/playback_controller.dart';
 /// [PlaybackCoordinator] bridges high-level
 /// playback requests and playback controllers.
 ///
+/// Responsibilities:
+///
+/// - locate the playback controller for a player
+/// - forward playback requests
+/// - manage controller bindings
+///
 /// It does not:
 ///
-/// - execute media commands
+/// - execute media commands itself
+/// - manage playback sessions
 /// - manage backend
 /// - store playback state
 ///
-/// Those belong to:
+/// Those responsibilities belong to:
 ///
 /// - PlaybackController
+/// - PlayerSession
 /// - PlayerAdapter
 /// - PlaybackState
 final class PlaybackCoordinator {
@@ -26,21 +34,31 @@ final class PlaybackCoordinator {
   final Map<PlayerId, PlaybackController> _controllers = {};
 
   /// Registers playback controller.
+  ///
+  /// An existing controller registered for the same player is replaced.
   void register({required PlayerId playerId, required PlaybackController controller}) {
     _controllers[playerId] = controller;
   }
 
   /// Removes playback controller.
+  ///
+  /// Returns `true` when a controller was removed.
   bool unregister(PlayerId playerId) {
     return _controllers.remove(playerId) != null;
   }
 
-  /// Gets controller.
+  /// Gets playback controller.
+  ///
+  /// Returns `null` when no controller is registered.
   PlaybackController? controllerOf(PlayerId playerId) {
     return _controllers[playerId];
   }
 
-  /// Executes playback command.
+  /// Executes a playback command.
+  ///
+  /// The command is converted into a [PlaybackRequest] and forwarded to
+  /// [PlaybackController], which remains responsible for serializing and
+  /// applying playback operations.
   Future<void> execute({required PlayerId playerId, required PlaybackCommand command}) async {
     final controller = _controllers[playerId];
 
@@ -48,26 +66,21 @@ final class PlaybackCoordinator {
       return;
     }
 
-    await controller.execute(command);
+    await controller.request(PlaybackRequest(command: command));
   }
 
-  /// Opens player playback session.
-  Future<void> open({required PlayerId playerId, required SessionId sessionId}) async {
-    final controller = _controllers[playerId];
-
-    if (controller == null) {
-      return;
-    }
-
-    await controller.open(sessionId);
-  }
-
-  /// Releases controller.
+  /// Releases all controller bindings.
+  ///
+  /// This does not dispose the registered controllers because the coordinator
+  /// does not own their lifecycle.
   void clear() {
     _controllers.clear();
   }
 
   /// Disposes coordinator.
+  ///
+  /// Registered controllers are not disposed here because they are owned by
+  /// their respective player lifecycle.
   Future<void> dispose() async {
     clear();
   }

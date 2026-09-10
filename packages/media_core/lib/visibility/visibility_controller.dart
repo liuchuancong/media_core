@@ -2,9 +2,11 @@ import 'dart:async';
 import 'visibility_event.dart';
 import 'visibility_state.dart';
 import 'visibility_metrics.dart';
+import 'package:clock/clock.dart';
 import 'visibility_observer.dart';
 import 'visibility_snapshot.dart';
 import 'package:rxdart/rxdart.dart';
+
 
 /// Controls player visibility state.
 final class VisibilityController {
@@ -78,7 +80,7 @@ final class VisibilityController {
   }
 
   void _updateMetrics(bool visible) {
-    final now = DateTime.now();
+    final now = clock.now();
 
     if (visible) {
       _visibleStarted ??= now;
@@ -94,7 +96,7 @@ final class VisibilityController {
   }
 
   void _publish(VisibilityEventType type) {
-    final snapshot = VisibilitySnapshot(state: _state, updatedAt: DateTime.now());
+    final snapshot = VisibilitySnapshot(state: _state, updatedAt: clock.now());
 
     final event = VisibilityEvent.now(type, _state.visibility);
 

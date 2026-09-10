@@ -6,42 +6,63 @@ import 'package:rxdart/rxdart.dart';
 
 /// Schedules reconciliation plans.
 ///
-/// ReconcileScheduler only manages execution order.
-/// It does not execute actions.
+/// [ReconcileScheduler] only manages execution order.
+/// It does not execute reconciliation actions.
 ///
-/// Execution belongs to:
+/// Responsibilities:
+///
+/// - queue reconciliation plans
+/// - provide plans in execution order
+/// - track scheduler state
+/// - track pending plan count
+/// - report reconciliation progress
+///
+/// It does not:
+///
+/// - execute reconciliation actions
+/// - modify player state
+/// - manage sessions
+/// - coordinate platform resources
+///
+/// Those responsibilities belong to:
 ///
 /// - Coordinator
 /// - Controller
 /// - SessionManager
 final class ReconcileScheduler {
+  /// Creates a reconcile scheduler.
   ReconcileScheduler();
 
   final ReconcileQueue _queue = ReconcileQueue();
 
-  final BehaviorSubject<ReconcileState> _stateSubject = BehaviorSubject.seeded(const ReconcileState());
+  final BehaviorSubject<ReconcileState> _stateSubject = BehaviorSubject<ReconcileState>.seeded(const ReconcileState());
 
-  /// Current scheduler state.
+  /// Current scheduler state stream.
+  ///
+  /// This is a hot, replaying stream whose latest value is available to
+  /// subscribers.
   Stream<ReconcileState> get state {
     return _stateSubject.stream;
   }
 
-  /// Current state value.
+  /// Current scheduler state.
   ReconcileState get currentState {
     return _stateSubject.value;
   }
 
-  /// Number of queued plans.
+  /// Number of queued reconciliation plans.
   int get length {
     return _queue.length;
   }
 
-  /// Whether scheduler has pending work.
+  /// Whether the scheduler has pending plans.
   bool get hasPending {
     return _queue.isNotEmpty;
   }
 
-  /// Adds a reconcile plan.
+  /// Adds a reconciliation plan to the queue.
+  ///
+  /// Empty plans are ignored because they contain no work to schedule.
   void schedule(ReconcilePlan plan) {
     if (plan.isEmpty) {
       return;
@@ -52,7 +73,9 @@ final class ReconcileScheduler {
     _update(currentState.copyWith(pendingActions: _queue.length));
   }
 
-  /// Takes next plan.
+  /// Takes the next reconciliation plan from the queue.
+  ///
+  /// Returns `null` when there are no pending plans.
   ReconcilePlan? next() {
     final plan = _queue.poll();
 
@@ -61,51 +84,43 @@ final class ReconcileScheduler {
     return plan;
   }
 
-  /// Marks reconciliation started.
+  /// Marks reconciliation as started.
+  ///
+  /// [plan] provides the number of actions being processed.
   void start(ReconcilePlan plan) {
     _update(currentState.start(plan.length));
   }
 
-  /// Marks reconciliation completed.
+  /// Marks the current reconciliation as completed.
   void complete() {
     _update(currentState.finish());
   }
 
-  /// Marks reconciliation failed.
+  /// Marks the current reconciliation as failed.
   void fail() {
     _update(currentState.fail());
   }
 
-  /// Clears pending plans.
+  /// Clears all pending reconciliation plans.
   void clear() {
     _queue.clear();
 
     _update(const ReconcileState());
   }
 
-  int _pendingActionCount() {
-    var count = 0;
-
-    while (true) {
-      final plan = _queue.poll();
-
-      if (plan == null) {
-        break;
-      }
-
-      count += plan.length;
-    }
-
-    return count;
-  }
-
+  /// Updates the scheduler state.
   void _update(ReconcileState value) {
-    if (!_stateSubject.isClosed) {
-      _stateSubject.add(value);
+    if (_stateSubject.isClosed) {
+      return;
     }
+
+    _stateSubject.add(value);
   }
 
-  /// Releases resources.
+  /// Releases scheduler resources.
+  ///
+  /// The scheduler owns the reconciliation queue and its state stream, so
+  /// those resources are released during disposal.
   Future<void> dispose() async {
     _queue.clear();
 

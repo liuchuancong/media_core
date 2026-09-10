@@ -14,6 +14,13 @@ final class AudioVolume extends Equatable {
   /// The value must be between `0.0` and `1.0`, inclusive.
   const AudioVolume(this.value) : assert(value >= 0.0 && value <= 1.0);
 
+  /// Predefined volume levels as static constants.
+  static const AudioVolume muted = AudioVolume(0.0);
+  static const AudioVolume quiet = AudioVolume(0.25);
+  static const AudioVolume medium = AudioVolume(0.5);
+  static const AudioVolume loud = AudioVolume(0.75);
+  static const AudioVolume full = AudioVolume(1.0);
+
   /// Creates a muted volume value.
   const AudioVolume.zero() : value = 0.0;
 
@@ -37,7 +44,7 @@ final class AudioVolume extends Equatable {
   bool get isZero => value == 0.0;
 
   /// Whether the volume is at maximum.
-  bool get isMax => value == 1.0;
+  bool get isFull => value == 1.0;
 
   /// Whether the volume is audible.
   bool get isAudible => value > 0.0;

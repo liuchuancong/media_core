@@ -1,8 +1,10 @@
 import 'player_slot_status.dart';
+import 'package:clock/clock.dart';
 import '../identity/slot_id.dart';
 import '../identity/player_id.dart';
 import '../identity/session_id.dart';
 import 'package:equatable/equatable.dart';
+
 
 /// Immutable snapshot of a player slot.
 ///
@@ -73,7 +75,7 @@ final class PlayerSlotSnapshot extends Equatable {
       status: status,
       playerId: playerId,
       sessionId: sessionId,
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 

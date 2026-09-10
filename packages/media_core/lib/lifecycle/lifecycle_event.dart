@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 
 /// Lifecycle events.
@@ -12,7 +13,7 @@ final class LifecycleEvent extends Equatable {
   final DateTime? timestamp;
 
   factory LifecycleEvent.now(LifecycleEventType type) {
-    return LifecycleEvent(type: type, timestamp: DateTime.now());
+    return LifecycleEvent(type: type, timestamp: clock.now());
   }
 
   @override

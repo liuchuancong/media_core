@@ -4,7 +4,9 @@ import 'lifecycle_state.dart';
 import 'player_lifecycle.dart';
 import 'lifecycle_observer.dart';
 import 'lifecycle_snapshot.dart';
+import 'package:clock/clock.dart';
 import 'package:rxdart/rxdart.dart';
+
 
 /// Controls player lifecycle.
 final class LifecycleController implements PlayerLifecycle {
@@ -90,7 +92,7 @@ final class LifecycleController implements PlayerLifecycle {
 
     final event = LifecycleEvent.now(type);
 
-    final snapshot = LifecycleSnapshot(state: state, updatedAt: DateTime.now());
+    final snapshot = LifecycleSnapshot(state: state, updatedAt: clock.now());
 
     _snapshotSubject.add(snapshot);
 

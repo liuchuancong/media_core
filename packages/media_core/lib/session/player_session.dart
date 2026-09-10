@@ -2,8 +2,10 @@ import 'session_state.dart';
 import 'session_context.dart';
 import 'session_snapshot.dart';
 import 'session_generation.dart';
+import 'package:clock/clock.dart';
 import 'package:rxdart/rxdart.dart';
 import '../identity/generation_id.dart';
+
 
 /// Represents one playback lifecycle session.
 ///
@@ -108,7 +110,7 @@ final class PlayerSession {
 
       state: _state,
 
-      timestamp: DateTime.now(),
+      timestamp: clock.now(),
     );
   }
 

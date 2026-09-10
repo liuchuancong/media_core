@@ -1,5 +1,7 @@
 import 'presentation_mode.dart';
+import 'package:clock/clock.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+
 
 part 'presentation_request.freezed.dart';
 
@@ -98,7 +100,7 @@ abstract class PresentationRequest with _$PresentationRequest {
 
       generation: generation,
 
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 
@@ -123,7 +125,7 @@ abstract class PresentationRequest with _$PresentationRequest {
 
       generation: generation,
 
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 
@@ -140,7 +142,7 @@ abstract class PresentationRequest with _$PresentationRequest {
 
       generation: generation,
 
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 
@@ -165,7 +167,7 @@ abstract class PresentationRequest with _$PresentationRequest {
 
       generation: generation,
 
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 

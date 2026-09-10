@@ -1,5 +1,7 @@
 import 'playback_command.dart';
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
+
 
 /// Current playback runtime state.
 ///
@@ -118,37 +120,37 @@ final class PlaybackState extends Equatable {
   PlaybackState reduce(PlaybackCommand command) {
     switch (command) {
       case PlaybackCommandPlay():
-        return copyWith(command: command, initialized: true, updatedAt: DateTime.now());
+        return copyWith(command: command, initialized: true, updatedAt: clock.now());
 
       case PlaybackCommandPause():
-        return copyWith(command: command, updatedAt: DateTime.now());
+        return copyWith(command: command, updatedAt: clock.now());
 
       case PlaybackCommandStop():
-        return copyWith(command: command, position: Duration.zero, updatedAt: DateTime.now());
+        return copyWith(command: command, position: Duration.zero, updatedAt: clock.now());
 
       case PlaybackCommandBuffering():
-        return copyWith(command: command, updatedAt: DateTime.now());
+        return copyWith(command: command, updatedAt: clock.now());
 
       case PlaybackCommandLoading():
-        return copyWith(command: command, updatedAt: DateTime.now());
+        return copyWith(command: command, updatedAt: clock.now());
 
       case PlaybackCommandSeek():
-        return copyWith(position: command.position, updatedAt: DateTime.now());
+        return copyWith(position: command.position, updatedAt: clock.now());
 
       case PlaybackCommandPosition():
-        return copyWith(position: command.position, updatedAt: DateTime.now());
+        return copyWith(position: command.position, updatedAt: clock.now());
 
       case PlaybackCommandDuration():
-        return copyWith(duration: command.duration, updatedAt: DateTime.now());
+        return copyWith(duration: command.duration, updatedAt: clock.now());
 
       case PlaybackCommandVolume():
-        return copyWith(volume: command.volume, updatedAt: DateTime.now());
+        return copyWith(volume: command.volume, updatedAt: clock.now());
 
       case PlaybackCommandRate():
-        return copyWith(rate: command.rate, updatedAt: DateTime.now());
+        return copyWith(rate: command.rate, updatedAt: clock.now());
 
       case PlaybackCommandIdle():
-        return copyWith(command: command, updatedAt: DateTime.now());
+        return copyWith(command: command, updatedAt: clock.now());
     }
   }
 

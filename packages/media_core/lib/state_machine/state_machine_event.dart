@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 
 /// Base abstraction for state machine events.
@@ -72,7 +73,7 @@ abstract class StateMachineEvent extends Equatable {
   /// Event creation timestamp.
   ///
   /// Override in tests to provide deterministic time.
-  DateTime get timestamp => DateTime.now();
+  DateTime get timestamp => clock.now();
 
   /// Diagnostic event name.
   String get diagnosticName => runtimeType.toString();

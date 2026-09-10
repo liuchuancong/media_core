@@ -1,8 +1,10 @@
 import 'state.dart';
 import 'state_transition.dart';
+import 'package:clock/clock.dart';
 import 'state_machine_event.dart';
 import 'state_machine_context.dart';
 import 'state_transition_result.dart';
+
 
 /// Generic asynchronous state machine execution engine.
 ///
@@ -102,14 +104,14 @@ final class StateMachine<S extends StateMachineState> {
   /// 5. update state
   /// 6. return execution result
   Future<StateTransitionResult<S>> dispatch(StateMachineEvent event) async {
-    final start = DateTime.now();
+    final start = clock.now();
 
     if (isTerminal) {
       return StateTransitionResult.rejected(
         state: _state,
         event: event,
         reason: 'State is terminal',
-        duration: DateTime.now().difference(start),
+        duration: clock.now().difference(start),
       );
     }
 
@@ -120,7 +122,7 @@ final class StateMachine<S extends StateMachineState> {
         state: _state,
         event: event,
         reason: 'No transition matches event',
-        duration: DateTime.now().difference(start),
+        duration: clock.now().difference(start),
       );
     }
 
@@ -142,7 +144,7 @@ final class StateMachine<S extends StateMachineState> {
           previous: previous,
           current: _state,
           event: event,
-          duration: DateTime.now().difference(start),
+          duration: clock.now().difference(start),
         );
       } catch (error, stackTrace) {
         return StateTransitionResult.failed(
@@ -150,7 +152,7 @@ final class StateMachine<S extends StateMachineState> {
           event: event,
           error: error,
           stackTrace: stackTrace,
-          duration: DateTime.now().difference(start),
+          duration: clock.now().difference(start),
         );
       }
     }
@@ -159,7 +161,7 @@ final class StateMachine<S extends StateMachineState> {
       state: _state,
       event: event,
       reason: 'All transition guards rejected',
-      duration: DateTime.now().difference(start),
+      duration: clock.now().difference(start),
     );
   }
 

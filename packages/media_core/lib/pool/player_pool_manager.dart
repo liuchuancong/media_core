@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'player_pool_state.dart';
 import 'player_pool_config.dart';
+import 'package:clock/clock.dart';
 import 'player_pool_metrics.dart';
 import 'player_pool_recycler.dart';
 import 'player_pool_snapshot.dart';
@@ -8,6 +9,7 @@ import 'package:rxdart/rxdart.dart';
 import '../identity/player_id.dart';
 import 'player_pool_allocator.dart';
 import '../identity/session_id.dart';
+
 
 /// Manages player pool runtime.
 ///
@@ -63,7 +65,7 @@ final class PlayerPoolManager {
 
   /// Current snapshot.
   PlayerPoolSnapshot get snapshot {
-    return PlayerPoolSnapshot(state: state, metrics: _metrics, createdAt: DateTime.now());
+    return PlayerPoolSnapshot(state: state, metrics: _metrics, createdAt: clock.now());
   }
 
   /// Adds player into pool.

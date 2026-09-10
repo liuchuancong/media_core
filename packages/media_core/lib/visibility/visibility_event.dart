@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 
 /// Visibility event types.
@@ -15,7 +16,7 @@ final class VisibilityEvent extends Equatable {
   final DateTime? timestamp;
 
   factory VisibilityEvent.now(VisibilityEventType type, double visibility) {
-    return VisibilityEvent(type: type, visibility: visibility, timestamp: DateTime.now());
+    return VisibilityEvent(type: type, visibility: visibility, timestamp: clock.now());
   }
 
   @override

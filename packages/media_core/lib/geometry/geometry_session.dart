@@ -1,6 +1,8 @@
 import 'geometry_snapshot.dart';
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 import 'package:media_core/geometry/video_geometry.dart';
+
 
 /// Geometry lifecycle session.
 ///
@@ -54,7 +56,7 @@ final class GeometrySession extends Equatable {
 
   /// Creates new session.
   factory GeometrySession.create({required int id, GeometrySnapshot snapshot = const GeometrySnapshot.empty()}) {
-    return GeometrySession(id: id, generation: snapshot.generation, snapshot: snapshot, createdAt: DateTime.now());
+    return GeometrySession(id: id, generation: snapshot.generation, snapshot: snapshot, createdAt: clock.now());
   }
 
   /// Updates snapshot.

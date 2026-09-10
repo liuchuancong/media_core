@@ -1,7 +1,9 @@
 import 'session_state.dart';
+import 'package:clock/clock.dart';
 import '../identity/source_id.dart';
 import '../identity/session_id.dart';
 import 'package:equatable/equatable.dart';
+
 
 /// Represents an event emitted by a player session.
 ///
@@ -55,7 +57,7 @@ final class SessionEvent extends Equatable {
 
   /// Creates session created event.
   factory SessionEvent.created(SessionId sessionId) {
-    return SessionEvent(sessionId: sessionId, type: SessionEventType.created, timestamp: DateTime.now());
+    return SessionEvent(sessionId: sessionId, type: SessionEventType.created, timestamp: clock.now());
   }
 
   /// Creates state changed event.
@@ -64,7 +66,7 @@ final class SessionEvent extends Equatable {
       sessionId: sessionId,
       type: SessionEventType.stateChanged,
       state: state,
-      timestamp: DateTime.now(),
+      timestamp: clock.now(),
     );
   }
 
@@ -74,23 +76,18 @@ final class SessionEvent extends Equatable {
       sessionId: sessionId,
       type: SessionEventType.sourceChanged,
       sourceId: sourceId,
-      timestamp: DateTime.now(),
+      timestamp: clock.now(),
     );
   }
 
   /// Creates error event.
   factory SessionEvent.error(SessionId sessionId, String message) {
-    return SessionEvent(
-      sessionId: sessionId,
-      type: SessionEventType.error,
-      message: message,
-      timestamp: DateTime.now(),
-    );
+    return SessionEvent(sessionId: sessionId, type: SessionEventType.error, message: message, timestamp: clock.now());
   }
 
   /// Creates disposed event.
   factory SessionEvent.disposed(SessionId sessionId) {
-    return SessionEvent(sessionId: sessionId, type: SessionEventType.disposed, timestamp: DateTime.now());
+    return SessionEvent(sessionId: sessionId, type: SessionEventType.disposed, timestamp: clock.now());
   }
 
   @override

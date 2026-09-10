@@ -1,7 +1,9 @@
 import 'resource_state.dart';
 import 'resource_metrics.dart';
 import 'resource_pressure.dart';
+import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
+
 
 /// Immutable snapshot of resource runtime state.
 ///
@@ -100,7 +102,7 @@ final class ResourceSnapshot extends Equatable {
 
   /// Creates snapshot from state.
   factory ResourceSnapshot.fromState(ResourceState state) {
-    return ResourceSnapshot(state: state, createdAt: DateTime.now());
+    return ResourceSnapshot(state: state, createdAt: clock.now());
   }
 
   /// Creates an empty snapshot.

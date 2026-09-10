@@ -1,8 +1,10 @@
 import 'player_slot_owner.dart';
+import 'package:clock/clock.dart';
 import '../identity/slot_id.dart';
 import '../identity/player_id.dart';
 import '../identity/session_id.dart';
 import 'package:equatable/equatable.dart';
+
 
 /// Represents a player slot assignment.
 ///
@@ -77,7 +79,7 @@ final class PlayerSlotAssignment extends Equatable {
       owner: owner,
       playerId: playerId,
       sessionId: sessionId,
-      createdAt: DateTime.now(),
+      createdAt: clock.now(),
     );
   }
 

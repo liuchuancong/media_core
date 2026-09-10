@@ -7,7 +7,9 @@ import 'resource_metrics.dart';
 import 'resource_snapshot.dart';
 import 'resource_pressure.dart';
 import 'bandwidth_manager.dart';
+import 'package:clock/clock.dart';
 import 'package:media_core/policy/resource_policy.dart';
+
 
 /// Coordinates runtime resource management.
 ///
@@ -158,7 +160,7 @@ final class ResourceManager {
 
       degraded: pressure.shouldReduceQuality,
 
-      timestamp: DateTime.now(),
+      timestamp: clock.now(),
     );
 
     _publish();
@@ -177,7 +179,7 @@ final class ResourceManager {
 
       thermalState: thermalManager.state.label,
 
-      timestamp: DateTime.now(),
+      timestamp: clock.now(),
     );
   }
 

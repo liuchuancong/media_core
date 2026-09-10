@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'player_adapter_metrics.freezed.dart';
@@ -99,6 +100,6 @@ extension PlayerAdapterMetricsExtension on PlayerAdapterMetrics {
 
   /// Creates metrics with new timestamp.
   PlayerAdapterMetrics touch() {
-    return copyWith(timestamp: DateTime.now());
+    return copyWith(timestamp: clock.now());
   }
 }

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:clock/clock.dart';
+
 
 /// A lightweight in-memory cache with optional TTL.
 ///
@@ -108,7 +110,7 @@ class StreamCache<T> {
 
     _entries[key] = _CacheEntry<T>(
       value: value,
-      expiresAt: effectiveTtl == null ? null : DateTime.now().add(effectiveTtl),
+      expiresAt: effectiveTtl == null ? null : clock.now().add(effectiveTtl),
     );
   }
 
@@ -183,6 +185,6 @@ class _CacheEntry<T> {
       return false;
     }
 
-    return DateTime.now().isAfter(expiration);
+    return clock.now().isAfter(expiration);
   }
 }

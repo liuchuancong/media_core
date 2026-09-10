@@ -249,7 +249,7 @@ final class AudioManager {
     }
 
     if (firstError != null) {
-      Error.throwWithStackTrace(firstError!, firstStackTrace!);
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
   }
 
@@ -294,7 +294,7 @@ final class AudioManager {
     await _focusedSubject.close();
 
     if (firstError != null) {
-      Error.throwWithStackTrace(firstError!, firstStackTrace!);
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
   }
 }
