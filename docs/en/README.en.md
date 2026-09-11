@@ -35,42 +35,42 @@ Media Core is not a single player plugin, but a set of **clearly-scoped, strictl
 
 | Module | Description |
 | --- | --- |
-| [`adapter`](docs/en/adapter.md) | Backend-agnostic player adapter abstraction: unified playback engine contract, factory, registry, and capability selection |
-| [`audio`](docs/en/audio.md) | Platform-agnostic audio subsystem: audio focus, session, output routing, volume, and mute |
-| [`bug`](docs/en/bug.md) | Debugging & fault injection: bug modes, fault configs, hooks, injectors, schedulers, and scenarios |
-| [`cache`](docs/en/cache.md) | Generic two-level cache: memory + pluggable storage, eviction policies, expiration, metrics, and state |
-| [`concurrency`](docs/en/concurrency.md) | Async concurrency primitives: locks, mutexes, semaphores, concurrency limits, and serial executors |
-| [`coordinator`](docs/en/coordinator.md) | Cross-module coordination layer: binds by PlayerId and forwards requests; executes nothing itself |
-| [`core`](docs/en/core.md) | Public core of the player domain model: identity, state, config, options, capabilities, info, metrics, errors, and snapshots |
-| [`error`](docs/en/error.md) | Error system: codes/categories, classifier, formatter, retry/fallback policy decisions, and failure objects |
-| [`event`](docs/en/event.md) | Player event definition, bus, and dispatch: transport only |
-| [`factory`](docs/en/factory.md) | Player/backend factories: backend registry, capability-based backend selection, player creation entry point |
-| [`fallback`](docs/en/fallback.md) | Fallback mechanism: degradation/retry lifecycle across backend, playback line URL, and quality tier |
-| [`geometry`](docs/en/geometry.md) | Video geometry: video/display size, aspect ratio, rotation, orientation, pixel density, and geometry state controller |
-| [`identity`](docs/en/identity.md) | Strongly-typed immutable identifier value objects shared across modules |
-| [`lifecycle`](docs/en/lifecycle.md) | Player, page, and app lifecycle: small state machine, events, snapshots, and observers |
-| [`network`](docs/en/network.md) | Network abstraction: connectivity state/condition/type/quality, performance metrics, and request/response execution |
-| [`operation`](docs/en/operation.md) | High-level async/business operations: immutable lifecycle records, registry, tracker, cancellation tokens, and timeout policy |
-| [`platform`](docs/en/platform.md) | Platform capabilities and platform-specific abstractions: purely descriptive value types |
-| [`playback`](docs/en/playback.md) | Playback control: commands, state, position, duration, and options |
-| [`policy`](docs/en/policy.md) | Centralized cross-module player policy: single source of truth for cross-module behavior rules |
-| [`pool`](docs/en/pool.md) | Player instance pool: instance allocation, idle recycling, metrics, and state streams |
-| [`preload`](docs/en/preload.md) | Media preload: priority-based preload task scheduling, warmup, and lifecycle management |
-| [`presentation`](docs/en/presentation.md) | Presentation modes: Redux-style state machine for fullscreen, picture-in-picture, and floating window |
-| [`reactive`](docs/en/reactive.md) | Reactive abstractions and stream utilities: shared rxdart-based toolbox |
-| [`reconciler`](docs/en/reconciler.md) | Reconciliation of desired vs. actual state: produces declarative convergence action plans |
-| [`recording`](docs/en/recording.md) | Recording abstraction: recording sessions, formats, and backends |
-| [`recovery`](docs/en/recovery.md) | Playback recovery: decides and schedules recovery actions after failure |
-| [`renderer`](docs/en/renderer.md) | Rendering abstraction at the Flutter widget layer: surfaces, views, overlays, and renderer state |
-| [`resource`](docs/en/resource.md) | Resource management: budgets, per-domain managers, and pressure computation for decoder, memory, bandwidth, and thermal |
-| [`result`](docs/en/result.md) | Unified, immutable, value-based result types: synchronous Result, async AsyncResult, and operation-level OperationResult |
-| [`session`](docs/en/session.md) | Playback session: lifecycle, context, state, events, and operations |
-| [`slot`](docs/en/slot.md) | Logical player slots: slot ownership, assignment, and state |
-| [`source`](docs/en/source.md) | Media source abstraction: declaration, resolution, inspection, validation, and resolved metadata |
-| [`state_machine`](docs/en/state_machine.md) | Generic domain-agnostic state machine infrastructure: states, events, transitions, and orchestration |
-| [`task`](docs/en/task.md) | Schedulable task execution: task value objects, priority queue, scheduler, and lifecycle manager |
-| [`util`](docs/en/util.md) | General-purpose reusable static utilities: no domain logic, no cross-module dependencies |
-| [`visibility`](docs/en/visibility.md) | Player visibility observation and management: tracks visibility and emits events |
+| [`adapter`](./adapter.md) | Backend-agnostic player adapter abstraction: unified playback engine contract, factory, registry, and capability selection |
+| [`audio`](./audio.md) | Platform-agnostic audio subsystem: audio focus, session, output routing, volume, and mute |
+| [`bug`](./bug.md) | Debugging & fault injection: bug modes, fault configs, hooks, injectors, schedulers, and scenarios |
+| [`cache`](./cache.md) | Generic two-level cache: memory + pluggable storage, eviction policies, expiration, metrics, and state |
+| [`concurrency`](./concurrency.md) | Async concurrency primitives: locks, mutexes, semaphores, concurrency limits, and serial executors |
+| [`coordinator`](./coordinator.md) | Cross-module coordination layer: binds by PlayerId and forwards requests; executes nothing itself |
+| [`core`](./core.md) | Public core of the player domain model: identity, state, config, options, capabilities, info, metrics, errors, and snapshots |
+| [`error`](./error.md) | Error system: codes/categories, classifier, formatter, retry/fallback policy decisions, and failure objects |
+| [`event`](./event.md) | Player event definition, bus, and dispatch: transport only |
+| [`factory`](./factory.md) | Player/backend factories: backend registry, capability-based backend selection, player creation entry point |
+| [`fallback`](./fallback.md) | Fallback mechanism: degradation/retry lifecycle across backend, playback line URL, and quality tier |
+| [`geometry`](./geometry.md) | Video geometry: video/display size, aspect ratio, rotation, orientation, pixel density, and geometry state controller |
+| [`identity`](./identity.md) | Strongly-typed immutable identifier value objects shared across modules |
+| [`lifecycle`](./lifecycle.md) | Player, page, and app lifecycle: small state machine, events, snapshots, and observers |
+| [`network`](./network.md) | Network abstraction: connectivity state/condition/type/quality, performance metrics, and request/response execution |
+| [`operation`](./operation.md) | High-level async/business operations: immutable lifecycle records, registry, tracker, cancellation tokens, and timeout policy |
+| [`platform`](./platform.md) | Platform capabilities and platform-specific abstractions: purely descriptive value types |
+| [`playback`](./playback.md) | Playback control: commands, state, position, duration, and options |
+| [`policy`](./policy.md) | Centralized cross-module player policy: single source of truth for cross-module behavior rules |
+| [`pool`](./pool.md) | Player instance pool: instance allocation, idle recycling, metrics, and state streams |
+| [`preload`](./preload.md) | Media preload: priority-based preload task scheduling, warmup, and lifecycle management |
+| [`presentation`](./presentation.md) | Presentation modes: Redux-style state machine for fullscreen, picture-in-picture, and floating window |
+| [`reactive`](./reactive.md) | Reactive abstractions and stream utilities: shared rxdart-based toolbox |
+| [`reconciler`](./reconciler.md) | Reconciliation of desired vs. actual state: produces declarative convergence action plans |
+| [`recording`](./recording.md) | Recording abstraction: recording sessions, formats, and backends |
+| [`recovery`](./recovery.md) | Playback recovery: decides and schedules recovery actions after failure |
+| [`renderer`](./renderer.md) | Rendering abstraction at the Flutter widget layer: surfaces, views, overlays, and renderer state |
+| [`resource`](./resource.md) | Resource management: budgets, per-domain managers, and pressure computation for decoder, memory, bandwidth, and thermal |
+| [`result`](./result.md) | Unified, immutable, value-based result types: synchronous Result, async AsyncResult, and operation-level OperationResult |
+| [`session`](./session.md) | Playback session: lifecycle, context, state, events, and operations |
+| [`slot`](./slot.md) | Logical player slots: slot ownership, assignment, and state |
+| [`source`](./source.md) | Media source abstraction: declaration, resolution, inspection, validation, and resolved metadata |
+| [`state_machine`](./state_machine.md) | Generic domain-agnostic state machine infrastructure: states, events, transitions, and orchestration |
+| [`task`](./task.md) | Schedulable task execution: task value objects, priority queue, scheduler, and lifecycle manager |
+| [`util`](./util.md) | General-purpose reusable static utilities: no domain logic, no cross-module dependencies |
+| [`visibility`](./visibility.md) | Player visibility observation and management: tracks visibility and emits events |
 
 ### Getting Started
 

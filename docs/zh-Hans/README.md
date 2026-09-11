@@ -35,42 +35,42 @@ Media Core 不是一个单一的播放器插件，而是一组**职责清晰、�
 
 | 模块 | 说明 |
 | --- | --- |
-| [`adapter`](docs/zh-Hans/adapter.md) | 后端无关的播放器适配器抽象：统一播放引擎合约、工厂、注册表与能力选择 |
-| [`audio`](docs/zh-Hans/audio.md) | 平台无关音频子系统：音频焦点、会话、输出路由、音量与静音 |
-| [`bug`](docs/zh-Hans/bug.md) | 调试与故障注入：Bug 模式、故障配置、Hook、注入器、调度器与场景 |
-| [`cache`](docs/zh-Hans/cache.md) | 通用二级缓存：内存 + 可插拔存储、驱逐策略、过期、指标与状态 |
-| [`concurrency`](docs/zh-Hans/concurrency.md) | 异步并发原语：锁、互斥量、信号量、并发上限与串行执行器 |
-| [`coordinator`](docs/zh-Hans/coordinator.md) | 跨模块协调层：按 PlayerId 绑定并转发请求，自身不执行操作 |
-| [`core`](docs/zh-Hans/core.md) | 播放器领域模型公共核心：身份、状态、配置、选项、能力、信息、指标、错误与快照 |
-| [`error`](docs/zh-Hans/error.md) | 错误体系：错误码/分类、分类器、格式化器、重试/降级策略决策与失败对象 |
-| [`event`](docs/zh-Hans/event.md) | 播放器事件定义、总线与分发：只负责事件传输 |
-| [`factory`](docs/zh-Hans/factory.md) | 播放器/后端工厂：后端注册表、基于能力的后端选择、播放器创建入口 |
-| [`fallback`](docs/zh-Hans/fallback.md) | 降级机制：后端实现、播放线路 URL、清晰度档位三个维度的退化/重试生命周期 |
-| [`geometry`](docs/zh-Hans/geometry.md) | 视频几何：视频/显示尺寸、宽高比、旋转、方向、像素密度与几何状态控制器 |
-| [`identity`](docs/zh-Hans/identity.md) | 跨模块共享的强类型不可变标识值对象 |
-| [`lifecycle`](docs/zh-Hans/lifecycle.md) | 播放器、页面与应用生命周期：小型状态机、事件、快照与观察者 |
-| [`network`](docs/zh-Hans/network.md) | 网络抽象：连通性状态/条件/类型/质量、性能指标与请求/响应执行 |
-| [`operation`](docs/zh-Hans/operation.md) | 高层异步/业务操作：不可变生命周期记录、注册表、追踪器、取消令牌与超时策略 |
-| [`platform`](docs/zh-Hans/platform.md) | 平台能力与平台特定抽象：纯描述性值类型 |
-| [`playback`](docs/zh-Hans/playback.md) | 播放控制：播放命令、状态、进度、时长与选项 |
-| [`policy`](docs/zh-Hans/policy.md) | 集中式跨模块播放器策略：跨模块行为规则的唯一事实来源 |
-| [`pool`](docs/zh-Hans/pool.md) | 播放器实例池：实例分配、闲置回收、指标与状态流 |
-| [`preload`](docs/zh-Hans/preload.md) | 媒体预载：基于优先级的预载任务调度、预热与生命周期管理 |
-| [`presentation`](docs/zh-Hans/presentation.md) | 呈现模式：全屏、画中画与悬浮窗的 Redux 风格状态机 |
-| [`reactive`](docs/zh-Hans/reactive.md) | 响应式抽象与流工具：基于 rxdart 的共享工具箱 |
-| [`reconciler`](docs/zh-Hans/reconciler.md) | 期望状态与实际状态调和：产生宣告式收敛动作计划 |
-| [`recording`](docs/zh-Hans/recording.md) | 录制抽象：录制会话、格式与后端 |
-| [`recovery`](docs/zh-Hans/recovery.md) | 播放恢复：失败后决定并调度恢复动作 |
-| [`renderer`](docs/zh-Hans/renderer.md) | Flutter widget 层渲染抽象：surface、视图、覆盖层与渲染器状态 |
-| [`resource`](docs/zh-Hans/resource.md) | 资源管理：解码器、内存、带宽与温度资源的预算、分域管理器与压力计算 |
-| [`result`](docs/zh-Hans/result.md) | 统一、不可变、基于值的结果类型：同步 Result、异步 AsyncResult 与操作级 OperationResult |
-| [`session`](docs/zh-Hans/session.md) | 播放会话：生命周期、上下文、状态、事件与操作 |
-| [`slot`](docs/zh-Hans/slot.md) | 逻辑播放器槽位：槽位所有权、分配与状态 |
-| [`source`](docs/zh-Hans/source.md) | 媒体源抽象：描述、解析、探测、校验与已解析元数据 |
-| [`state_machine`](docs/zh-Hans/state_machine.md) | 通用领域无关状态机基础设施：状态、事件、转换与编排 |
-| [`task`](docs/zh-Hans/task.md) | 可调度任务执行：任务值对象、优先级队列、调度器与生命周期管理器 |
-| [`util`](docs/zh-Hans/util.md) | 通用可复用静态工具集：无领域逻辑、无跨模块依赖 |
-| [`visibility`](docs/zh-Hans/visibility.md) | 播放器可见性观察与管理：跟踪可见性并发出事件 |
+| [`adapter`](./adapter.md) | 后端无关的播放器适配器抽象：统一播放引擎合约、工厂、注册表与能力选择 |
+| [`audio`](./audio.md) | 平台无关音频子系统：音频焦点、会话、输出路由、音量与静音 |
+| [`bug`](./bug.md) | 调试与故障注入：Bug 模式、故障配置、Hook、注入器、调度器与场景 |
+| [`cache`](./cache.md) | 通用二级缓存：内存 + 可插拔存储、驱逐策略、过期、指标与状态 |
+| [`concurrency`](./concurrency.md) | 异步并发原语：锁、互斥量、信号量、并发上限与串行执行器 |
+| [`coordinator`](./coordinator.md) | 跨模块协调层：按 PlayerId 绑定并转发请求，自身不执行操作 |
+| [`core`](./core.md) | 播放器领域模型公共核心：身份、状态、配置、选项、能力、信息、指标、错误与快照 |
+| [`error`](./error.md) | 错误体系：错误码/分类、分类器、格式化器、重试/降级策略决策与失败对象 |
+| [`event`](./event.md) | 播放器事件定义、总线与分发：只负责事件传输 |
+| [`factory`](./factory.md) | 播放器/后端工厂：后端注册表、基于能力的后端选择、播放器创建入口 |
+| [`fallback`](./fallback.md) | 降级机制：后端实现、播放线路 URL、清晰度档位三个维度的退化/重试生命周期 |
+| [`geometry`](./geometry.md) | 视频几何：视频/显示尺寸、宽高比、旋转、方向、像素密度与几何状态控制器 |
+| [`identity`](./identity.md) | 跨模块共享的强类型不可变标识值对象 |
+| [`lifecycle`](./lifecycle.md) | 播放器、页面与应用生命周期：小型状态机、事件、快照与观察者 |
+| [`network`](./network.md) | 网络抽象：连通性状态/条件/类型/质量、性能指标与请求/响应执行 |
+| [`operation`](./operation.md) | 高层异步/业务操作：不可变生命周期记录、注册表、追踪器、取消令牌与超时策略 |
+| [`platform`](./platform.md) | 平台能力与平台特定抽象：纯描述性值类型 |
+| [`playback`](./playback.md) | 播放控制：播放命令、状态、进度、时长与选项 |
+| [`policy`](./policy.md) | 集中式跨模块播放器策略：跨模块行为规则的唯一事实来源 |
+| [`pool`](./pool.md) | 播放器实例池：实例分配、闲置回收、指标与状态流 |
+| [`preload`](./preload.md) | 媒体预载：基于优先级的预载任务调度、预热与生命周期管理 |
+| [`presentation`](./presentation.md) | 呈现模式：全屏、画中画与悬浮窗的 Redux 风格状态机 |
+| [`reactive`](./reactive.md) | 响应式抽象与流工具：基于 rxdart 的共享工具箱 |
+| [`reconciler`](./reconciler.md) | 期望状态与实际状态调和：产生宣告式收敛动作计划 |
+| [`recording`](./recording.md) | 录制抽象：录制会话、格式与后端 |
+| [`recovery`](./recovery.md) | 播放恢复：失败后决定并调度恢复动作 |
+| [`renderer`](./renderer.md) | Flutter widget 层渲染抽象：surface、视图、覆盖层与渲染器状态 |
+| [`resource`](./resource.md) | 资源管理：解码器、内存、带宽与温度资源的预算、分域管理器与压力计算 |
+| [`result`](./result.md) | 统一、不可变、基于值的结果类型：同步 Result、异步 AsyncResult 与操作级 OperationResult |
+| [`session`](./session.md) | 播放会话：生命周期、上下文、状态、事件与操作 |
+| [`slot`](./slot.md) | 逻辑播放器槽位：槽位所有权、分配与状态 |
+| [`source`](./source.md) | 媒体源抽象：描述、解析、探测、校验与已解析元数据 |
+| [`state_machine`](./state_machine.md) | 通用领域无关状态机基础设施：状态、事件、转换与编排 |
+| [`task`](./task.md) | 可调度任务执行：任务值对象、优先级队列、调度器与生命周期管理器 |
+| [`util`](./util.md) | 通用可复用静态工具集：无领域逻辑、无跨模块依赖 |
+| [`visibility`](./visibility.md) | 播放器可见性观察与管理：跟踪可见性并发出事件 |
 
 ### 快速开始
 
