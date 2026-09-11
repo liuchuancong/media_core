@@ -13,6 +13,8 @@
 - 仓库 / Repository: https://github.com/liuchuancong/media_core
 - 许可证 / License: MIT
 
+> 其他语言版本 · Other languages: [English](README.en.md) · [繁體中文](README.zh-Hant.md)
+
 ---
 
 ## 简体中文
@@ -21,7 +23,7 @@
 
 Media Core 不是一个单一的播放器插件，而是一组**职责清晰、边界严格、可组合**的模块。它把播放器能力拆分为核心领域模型、适配器、工厂、会话、播放控制、音频、缓存、并发、网络、资源、策略、降级、恢复、呈现、渲染、事件、操作、任务、状态机等子系统，并通过协调层把它们组合起来。
 
-设计目标：
+**设计目标：**
 
 - **后端无关**：media_kit、native、video_player、ExoPlayer、VLC 等都可以通过适配器接入。
 - **单一职责**：Adapter 执行、Factory 创建、Registry 存储、Selector 决策、Coordinator 只转发。
@@ -72,8 +74,13 @@ Media Core 不是一个单一的播放器插件，而是一组**职责清晰、�
 
 ### 快速开始
 
+在 `pubspec.yaml` 中添加以下依赖，然后运行 `flutter pub get`：
+
 ```yaml
 dependencies:
   media_core:
     git:
       url: https://github.com/liuchuancong/media_core.git
+```
+
+
