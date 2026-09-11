@@ -1,39 +1,25 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# media_core_video_player
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+> 基於 Flutter 官方 [video_player](https://pub.dev/packages/video_player) 插件的 media_core 播放後端適配器。
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## 定位
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+本包為 [media_core](../media_core) 提供以 Flutter 官方 `video_player` 為引擎的輕量後端實現,目標是實現主包 `adapter` 模塊定義的合約:
 
-## Features
+- `PlayerAdapter` —— 統一的播放後端合約(打開/播放/暫停/seek/音量/速率/關閉,狀態與事件流)
+- `PlayerAdapterFactory` —— 適配器創建工廠,註冊後參與後端選擇與降級候選排序
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+適用場景:只需基礎播放能力、希望減少原生依賴體積的應用;可與 `media_core_media_kit` 並存,由 `BackendSelector` 按能力與優先級選用。
 
-## Getting started
+## 平台支持
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+跟隨 video_player:Android、iOS、Web(Windows/macOS 需平台視圖支持)。
 
-## Usage
+## 當前狀態
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+⚠️ **尚未實現**:目前僅為腳手架模板,依賴已聲明 `video_player` 與 `media_core`(path 依賴),適配器尚未編寫。
 
-```dart
-const like = 'sample';
-```
+## 相關文檔
 
-## Additional information
-
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+- 適配器合約:`packages/media_core/lib/adapter/README.md`
+- 後端註冊與選擇:`packages/media_core/lib/factory/README.md`

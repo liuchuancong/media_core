@@ -1,39 +1,33 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# media_core_media_kit
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+> 基於 [media_kit](https://pub.dev/packages/media_kit) 的 media_core 播放後端適配器。
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## 定位
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+本包為 [media_core](../media_core) 提供以 media_kit(libmpv)為引擎的播放後端實現,目標是實現主包 `adapter` 模塊定義的合約:
 
-## Features
+- `PlayerAdapter` —— 統一的播放後端合約(`open/play/pause/stop/seek/setVolume/setRate/close/dispose`、狀態與事件流)
+- `PlayerAdapterFactory` —— 適配器創建工廠,註冊到 `PlayerAdapterRegistry` / `BackendRegistry` 後即可參與 `PlayerAdapterSelector` 的能力選擇與降級候選
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+## 平台支持
 
-## Getting started
+跟隨 media_kit:Android、iOS、macOS、Windows、Linux、Web。
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+## 當前狀態
 
-## Usage
+⚠️ **尚未實現**:目前僅為腳手架模板(`lib/` 內只有佔位代碼),適配器尚未編寫。依賴已聲明 `media_kit`、`media_kit_video` 與 `media_core`(path 依賴)。
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+## 規劃用法(實現後)
 
 ```dart
-const like = 'sample';
+// 註冊後端工廠(示意)
+registry.register(MediaKitAdapterRegistration());
+
+// 創建播放器時由 Selector 依能力自動選擇 media_kit 後端
+final player = await playerFactory.create();
 ```
 
-## Additional information
+## 相關文檔
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+- 主包架構:`packages/media_core/media_core_architecture_guide.md`
+- 適配器合約:`packages/media_core/lib/adapter/README.md`
