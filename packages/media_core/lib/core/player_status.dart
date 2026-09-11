@@ -1,6 +1,7 @@
 /// Semantic status of a player.
 ///
 /// [PlayerStatus] is a derived, high-level view of [PlayerState].
+///
 /// It does not own or duplicate runtime state.
 enum PlayerStatus {
   /// The player has not been initialized.
@@ -32,12 +33,6 @@ enum PlayerStatus {
 
   /// Playback reached the end of the media.
   completed,
-
-  /// The player is recovering from a failure.
-  recovering,
-
-  /// The player is switching to a fallback source or backend.
-  fallingBack,
 
   /// The player is being disposed.
   disposing,
@@ -90,21 +85,13 @@ extension PlayerStatusX on PlayerStatus {
   /// Whether the player is in an error state.
   bool get isError => this == PlayerStatus.error;
 
-  /// Whether the player is currently recovering.
-  bool get isRecovering => this == PlayerStatus.recovering;
-
-  /// Whether the player is currently falling back.
-  bool get isFallingBack => this == PlayerStatus.fallingBack;
-
   /// Whether the player is actively processing playback or a transition.
   bool get isActive {
     return this == PlayerStatus.opening ||
         this == PlayerStatus.playing ||
         this == PlayerStatus.buffering ||
         this == PlayerStatus.seeking ||
-        this == PlayerStatus.stopping ||
-        this == PlayerStatus.recovering ||
-        this == PlayerStatus.fallingBack;
+        this == PlayerStatus.stopping;
   }
 
   /// Whether the player is performing a transition.
@@ -112,12 +99,14 @@ extension PlayerStatusX on PlayerStatus {
     return this == PlayerStatus.opening ||
         this == PlayerStatus.seeking ||
         this == PlayerStatus.stopping ||
-        this == PlayerStatus.disposing ||
-        this == PlayerStatus.recovering ||
-        this == PlayerStatus.fallingBack;
+        this == PlayerStatus.disposing;
   }
 
   /// Whether the player can normally accept playback commands.
+  ///
+  /// This describes the semantic status only. Whether a specific command is
+  /// actually valid also depends on the current source and player
+  /// capabilities.
   bool get canControl {
     return this == PlayerStatus.ready ||
         this == PlayerStatus.playing ||
@@ -129,14 +118,10 @@ extension PlayerStatusX on PlayerStatus {
   }
 
   /// Whether this status represents a terminal player state.
-  bool get isTerminal {
-    return this == PlayerStatus.disposed;
-  }
+  bool get isTerminal => this == PlayerStatus.disposed;
 
   /// Whether this status represents a failure.
-  bool get isFailure {
-    return this == PlayerStatus.error;
-  }
+  bool get isFailure => this == PlayerStatus.error;
 
   /// Returns a stable string representation of the status.
   String get value => name;

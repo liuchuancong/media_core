@@ -2,9 +2,14 @@ import 'package:equatable/equatable.dart';
 
 /// Represents immutable runtime metrics collected from a player.
 ///
-/// [PlayerMetrics] contains lightweight playback, buffering, rendering,
-/// and resource-related measurements. It is intended for diagnostics,
-/// monitoring, and performance analysis rather than player state control.
+/// [PlayerMetrics] contains backend-agnostic playback, buffering, rendering,
+/// and resource measurements.
+///
+/// It is intended for observation, diagnostics, monitoring, and performance
+/// analysis rather than player state control.
+///
+/// Module-specific runtime state such as recovery and fallback execution is
+/// intentionally kept outside this class.
 final class PlayerMetrics extends Equatable {
   /// Creates immutable player metrics.
   const PlayerMetrics({
@@ -21,8 +26,6 @@ final class PlayerMetrics extends Equatable {
     this.decodedFrames = 0,
     this.bufferCount = 0,
     this.errorCount = 0,
-    this.recoveryCount = 0,
-    this.fallbackCount = 0,
     this.networkBytesReceived = 0,
     this.networkBytesSent = 0,
     this.createdAt,
@@ -35,8 +38,6 @@ final class PlayerMetrics extends Equatable {
        assert(decodedFrames >= 0),
        assert(bufferCount >= 0),
        assert(errorCount >= 0),
-       assert(recoveryCount >= 0),
-       assert(fallbackCount >= 0),
        assert(networkBytesReceived >= 0),
        assert(networkBytesSent >= 0);
 
@@ -83,12 +84,6 @@ final class PlayerMetrics extends Equatable {
   /// Number of errors observed by the player.
   final int errorCount;
 
-  /// Number of recovery attempts or executions.
-  final int recoveryCount;
-
-  /// Number of fallback attempts or executions.
-  final int fallbackCount;
-
   /// Total number of bytes received by the player.
   final int networkBytesReceived;
 
@@ -104,32 +99,35 @@ final class PlayerMetrics extends Equatable {
   /// Additional metric metadata.
   final Map<String, Object?> metadata;
 
-  /// Returns whether a playback position is available.
+  /// Whether a playback position is available.
   bool get hasPosition => position != null;
 
-  /// Returns whether a duration is available.
+  /// Whether a duration is available.
   bool get hasDuration => duration != null;
 
-  /// Returns whether buffered position is available.
+  /// Whether buffered position is available.
   bool get hasBufferedPosition => bufferedPosition != null;
 
-  /// Returns whether buffering duration is available.
+  /// Whether buffering duration is available.
   bool get hasBufferingDuration => bufferingDuration != null;
 
-  /// Returns whether video dimensions are available.
-  bool get hasVideoDimensions => videoWidth != null && videoHeight != null;
+  /// Whether video dimensions are available.
+  bool get hasVideoDimensions {
+    return videoWidth != null && videoHeight != null;
+  }
 
-  /// Returns whether the media has finite duration information.
+  /// Whether the media has a finite positive duration.
   bool get hasFiniteDuration {
     return duration != null && duration! > Duration.zero;
   }
 
-  /// Returns whether the media appears to be live.
-  bool get isLive {
-    return duration == null;
-  }
+  /// Whether the media appears to be live.
+  ///
+  /// This is only a heuristic because some non-live media can also have
+  /// unknown duration.
+  bool get isLive => duration == null;
 
-  /// Returns whether playback is behind the buffered position.
+  /// Whether playback is currently ahead of the buffered position.
   bool get isBufferedAhead {
     if (position == null || bufferedPosition == null) {
       return false;
@@ -138,7 +136,7 @@ final class PlayerMetrics extends Equatable {
     return bufferedPosition! > position!;
   }
 
-  /// Returns the amount of media currently buffered ahead.
+  /// Amount of media currently buffered ahead of the playback position.
   Duration? get bufferAhead {
     if (position == null || bufferedPosition == null) {
       return null;
@@ -153,58 +151,57 @@ final class PlayerMetrics extends Equatable {
     return difference;
   }
 
-  /// Returns the video aspect ratio when dimensions are available.
+  /// Current video aspect ratio.
   double? get videoAspectRatio {
     if (!hasVideoDimensions) {
       return null;
     }
 
-    if (videoHeight == 0) {
+    final width = videoWidth!;
+    final height = videoHeight!;
+
+    if (width <= 0 || height <= 0) {
       return null;
     }
 
-    return videoWidth! / videoHeight!;
+    return width / height;
   }
 
-  /// Returns whether frames have been dropped.
+  /// Whether frames have been dropped.
   bool get hasDroppedFrames => droppedFrames > 0;
 
-  /// Returns whether playback has rendered frames.
+  /// Whether playback has rendered frames.
   bool get hasRenderedFrames => renderedFrames > 0;
 
-  /// Returns whether decoding has produced frames.
+  /// Whether decoding has produced frames.
   bool get hasDecodedFrames => decodedFrames > 0;
 
-  /// Returns whether buffering has occurred.
+  /// Whether buffering has occurred.
   bool get hasBuffered => bufferCount > 0;
 
-  /// Returns whether errors have been observed.
+  /// Whether errors have been observed.
   bool get hasErrors => errorCount > 0;
 
-  /// Returns whether recovery has been attempted.
-  bool get hasRecovered => recoveryCount > 0;
-
-  /// Returns whether fallback has been attempted.
-  bool get hasFallback => fallbackCount > 0;
-
-  /// Returns whether network traffic has been observed.
+  /// Whether network traffic has been observed.
   bool get hasNetworkTraffic {
     return networkBytesReceived > 0 || networkBytesSent > 0;
   }
 
-  /// Returns the total number of network bytes transferred.
+  /// Total number of network bytes transferred.
   int get totalNetworkBytes {
     return networkBytesReceived + networkBytesSent;
   }
 
-  /// Returns the number of frames that were not dropped.
+  /// Number of frames that were not dropped.
   int get retainedFrames {
     final value = renderedFrames - droppedFrames;
 
     return value < 0 ? 0 : value;
   }
 
-  /// Returns the dropped-frame ratio.
+  /// Dropped-frame ratio.
+  ///
+  /// Returns a value between 0.0 and 1.0.
   double get droppedFrameRatio {
     final total = renderedFrames + droppedFrames;
 
@@ -212,38 +209,38 @@ final class PlayerMetrics extends Equatable {
       return 0.0;
     }
 
-    return droppedFrames / total;
+    return (droppedFrames / total).clamp(0.0, 1.0);
   }
 
-  /// Returns the approximate rendered frame ratio.
+  /// Approximate rendering efficiency.
+  ///
+  /// The value is normalized to the range 0.0 to 1.0.
   double get renderEfficiency {
-    final total = decodedFrames;
-
-    if (total <= 0) {
+    if (decodedFrames <= 0) {
       return 0.0;
     }
 
-    return renderedFrames / total;
+    return (renderedFrames / decodedFrames).clamp(0.0, 1.0);
   }
 
-  /// Returns whether the current metrics indicate frame loss.
+  /// Whether any frame loss has been observed.
   bool get hasFrameLoss => droppedFrameRatio > 0.0;
 
-  /// Returns whether the current video dimensions are portrait.
+  /// Whether the current video dimensions are portrait.
   bool get isPortrait {
     final ratio = videoAspectRatio;
 
     return ratio != null && ratio < 1.0;
   }
 
-  /// Returns whether the current video dimensions are landscape.
+  /// Whether the current video dimensions are landscape.
   bool get isLandscape {
     final ratio = videoAspectRatio;
 
     return ratio != null && ratio > 1.0;
   }
 
-  /// Returns whether the current video dimensions are square.
+  /// Whether the current video dimensions are square.
   bool get isSquare {
     final ratio = videoAspectRatio;
 
@@ -266,7 +263,7 @@ final class PlayerMetrics extends Equatable {
     return null;
   }
 
-  /// Returns whether metadata contains [key].
+  /// Whether metadata contains [key].
   bool containsMetadata(String key) {
     return metadata.containsKey(key);
   }
@@ -288,8 +285,6 @@ final class PlayerMetrics extends Equatable {
     int? decodedFrames,
     int? bufferCount,
     int? errorCount,
-    int? recoveryCount,
-    int? fallbackCount,
     int? networkBytesReceived,
     int? networkBytesSent,
     DateTime? createdAt,
@@ -310,8 +305,6 @@ final class PlayerMetrics extends Equatable {
       decodedFrames: decodedFrames ?? this.decodedFrames,
       bufferCount: bufferCount ?? this.bufferCount,
       errorCount: errorCount ?? this.errorCount,
-      recoveryCount: recoveryCount ?? this.recoveryCount,
-      fallbackCount: fallbackCount ?? this.fallbackCount,
       networkBytesReceived: networkBytesReceived ?? this.networkBytesReceived,
       networkBytesSent: networkBytesSent ?? this.networkBytesSent,
       createdAt: createdAt ?? this.createdAt,
@@ -396,16 +389,6 @@ final class PlayerMetrics extends Equatable {
     return copyWith(errorCount: _nonNegative(value));
   }
 
-  /// Creates a copy with an updated recovery count.
-  PlayerMetrics withRecoveryCount(int value) {
-    return copyWith(recoveryCount: _nonNegative(value));
-  }
-
-  /// Creates a copy with an updated fallback count.
-  PlayerMetrics withFallbackCount(int value) {
-    return copyWith(fallbackCount: _nonNegative(value));
-  }
-
   /// Creates a copy with an updated received-byte count.
   PlayerMetrics withNetworkBytesReceived(int value) {
     return copyWith(networkBytesReceived: _nonNegative(value));
@@ -444,8 +427,6 @@ final class PlayerMetrics extends Equatable {
       decodedFrames: decodedFrames,
       bufferCount: bufferCount,
       errorCount: errorCount,
-      recoveryCount: recoveryCount,
-      fallbackCount: fallbackCount,
       networkBytesReceived: networkBytesReceived,
       networkBytesSent: networkBytesSent,
       createdAt: createdAt,
@@ -469,8 +450,6 @@ final class PlayerMetrics extends Equatable {
       decodedFrames: decodedFrames,
       bufferCount: bufferCount,
       errorCount: errorCount,
-      recoveryCount: recoveryCount,
-      fallbackCount: fallbackCount,
       networkBytesReceived: networkBytesReceived,
       networkBytesSent: networkBytesSent,
       createdAt: createdAt,
@@ -494,8 +473,6 @@ final class PlayerMetrics extends Equatable {
       decodedFrames: decodedFrames,
       bufferCount: bufferCount,
       errorCount: errorCount,
-      recoveryCount: recoveryCount,
-      fallbackCount: fallbackCount,
       networkBytesReceived: networkBytesReceived,
       networkBytesSent: networkBytesSent,
       createdAt: createdAt,
@@ -513,10 +490,10 @@ final class PlayerMetrics extends Equatable {
     return copyWith(metadata: const <String, Object?>{});
   }
 
-  /// Returns an empty metrics snapshot.
+  /// Empty metrics snapshot.
   static const PlayerMetrics empty = PlayerMetrics();
 
-  /// Returns a metrics snapshot with no accumulated counters.
+  /// Initial metrics snapshot.
   static const PlayerMetrics initial = PlayerMetrics(playbackRate: 1.0, volume: 1.0);
 
   static int _nonNegative(int value) {
@@ -538,8 +515,6 @@ final class PlayerMetrics extends Equatable {
     decodedFrames,
     bufferCount,
     errorCount,
-    recoveryCount,
-    fallbackCount,
     networkBytesReceived,
     networkBytesSent,
     createdAt,
@@ -563,8 +538,6 @@ final class PlayerMetrics extends Equatable {
         'decodedFrames: $decodedFrames, '
         'bufferCount: $bufferCount, '
         'errorCount: $errorCount, '
-        'recoveryCount: $recoveryCount, '
-        'fallbackCount: $fallbackCount, '
         'networkBytesReceived: $networkBytesReceived, '
         'networkBytesSent: $networkBytesSent, '
         'createdAt: $createdAt, '

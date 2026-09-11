@@ -6,12 +6,12 @@ import 'package:equatable/equatable.dart';
 ///
 /// [Player] contains only information that belongs to the lifetime of the
 /// player identity itself. Runtime associations such as session, request,
-/// and generation are intentionally kept outside this object.
+/// operation, and generation are intentionally kept outside this object.
 ///
 /// Player equality is determined exclusively by [id].
 final class Player extends Equatable {
   /// Creates a player from an existing [PlayerId].
-  const Player({required this.id, this.createdAt});
+  const Player({required this.id, required this.createdAt});
 
   /// Creates a new player with a generated unique identifier.
   factory Player.create({DateTime? createdAt}) {
@@ -25,10 +25,7 @@ final class Player extends Equatable {
   ///
   /// This value is informational and does not participate in identity
   /// equality.
-  final DateTime? createdAt;
-
-  /// Whether a creation timestamp is available.
-  bool get hasCreatedAt => createdAt != null;
+  final DateTime createdAt;
 
   /// Returns whether [other] represents the same player identity.
   ///
@@ -42,36 +39,8 @@ final class Player extends Equatable {
     return id != other.id;
   }
 
-  /// Returns whether this player was created before [other].
-  ///
-  /// Returns `false` when either player does not have a creation timestamp.
-  bool isOlderThan(Player other) {
-    final current = createdAt;
-    final target = other.createdAt;
-
-    if (current == null || target == null) {
-      return false;
-    }
-
-    return current.isBefore(target);
-  }
-
-  /// Returns whether this player was created after [other].
-  ///
-  /// Returns `false` when either player does not have a creation timestamp.
-  bool isNewerThan(Player other) {
-    final current = createdAt;
-    final target = other.createdAt;
-
-    if (current == null || target == null) {
-      return false;
-    }
-
-    return current.isAfter(target);
-  }
-
   @override
-  List<Object?> get props => <Object?>[id];
+  List<Object> get props => <Object>[id];
 
   @override
   String toString() {

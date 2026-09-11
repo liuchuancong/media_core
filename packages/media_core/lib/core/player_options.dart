@@ -1,11 +1,18 @@
 import 'player_constants.dart';
+import '../identity/source_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Defines immutable runtime options used to configure a player.
 ///
-/// [PlayerOptions] contains playback preferences and feature switches.
-/// It describes how a player should operate, while [PlayerCapabilities]
-/// describes what the player is capable of doing.
+/// [PlayerOptions] describes how a player should operate.
+///
+/// It contains playback preferences, media output preferences, and feature
+/// switches. [PlayerCapabilities] describes what the player implementation
+/// is capable of doing.
+///
+/// Recovery, fallback, metrics, and diagnostics options are retained here for
+/// compatibility with the current core API. Their execution and runtime state
+/// belong to their respective modules.
 final class PlayerOptions extends Equatable {
   /// Creates immutable player options.
   const PlayerOptions({
@@ -92,8 +99,8 @@ final class PlayerOptions extends Equatable {
   /// Whether verbose diagnostics are enabled.
   final bool enableDiagnostics;
 
-  /// Optional source identifier to associate with the options.
-  final Object? sourceId;
+  /// Optional source identifier associated with these options.
+  final SourceId? sourceId;
 
   /// Maximum number of recovery attempts allowed for an operation.
   final int maxRecoveryAttempts;
@@ -101,55 +108,55 @@ final class PlayerOptions extends Equatable {
   /// Maximum number of fallback attempts allowed for an operation.
   final int maxFallbackAttempts;
 
-  /// Returns whether a source identifier has been configured.
+  /// Whether a source identifier has been configured.
   bool get hasSource => sourceId != null;
 
-  /// Returns whether audio output is enabled.
+  /// Whether audio output is enabled.
   bool get hasAudioOutput => enableAudio;
 
-  /// Returns whether video output is enabled.
+  /// Whether video output is enabled.
   bool get hasVideoOutput => enableVideo;
 
-  /// Returns whether the options allow automatic recovery.
+  /// Whether the options allow automatic recovery.
+  ///
+  /// This only describes configuration. Recovery execution belongs to the
+  /// recovery module.
   bool get canRecover {
     return enableRecovery && maxRecoveryAttempts > 0;
   }
 
-  /// Returns whether the options allow fallback.
+  /// Whether the options allow fallback.
+  ///
+  /// This only describes configuration. Fallback execution belongs to the
+  /// fallback module.
   bool get canFallback {
     return enableFallback && maxFallbackAttempts > 0;
   }
 
-  /// Returns whether diagnostics are enabled.
+  /// Whether diagnostics are enabled.
   bool get hasDiagnostics => enableDiagnostics;
 
-  /// Returns whether the playback rate is normal.
+  /// Whether the playback rate is normal.
   bool get isNormalPlaybackRate {
     return playbackRate == PlayerConstants.defaultPlaybackRate;
   }
 
-  /// Returns whether playback is faster than normal.
+  /// Whether playback is faster than normal.
   bool get isFastPlayback {
     return playbackRate > PlayerConstants.defaultPlaybackRate;
   }
 
-  /// Returns whether playback is slower than normal.
+  /// Whether playback is slower than normal.
   bool get isSlowPlayback {
     return playbackRate < PlayerConstants.defaultPlaybackRate;
   }
 
-  /// Returns whether the configured volume is muted.
+  /// Whether the configured volume is muted.
   bool get isMuted => muted;
 
-  /// Returns whether this configuration represents a minimal setup.
+  /// Whether this represents the minimal preset.
   bool get isMinimal {
-    return !autoPlay &&
-        !loop &&
-        !preload &&
-        !enableSubtitles &&
-        !enableRecovery &&
-        !enableFallback &&
-        !enableDiagnostics;
+    return this == PlayerOptions.minimal;
   }
 
   /// Creates a copy with selectively replaced values.
@@ -173,7 +180,7 @@ final class PlayerOptions extends Equatable {
     bool? enableFallback,
     bool? enableMetrics,
     bool? enableDiagnostics,
-    Object? sourceId,
+    SourceId? sourceId,
     int? maxRecoveryAttempts,
     int? maxFallbackAttempts,
   }) {
@@ -201,7 +208,7 @@ final class PlayerOptions extends Equatable {
     );
   }
 
-  /// Returns options with automatic playback enabled.
+  /// Returns options with automatic playback enabled or disabled.
   PlayerOptions withAutoPlay(bool value) {
     return copyWith(autoPlay: value);
   }
@@ -287,7 +294,7 @@ final class PlayerOptions extends Equatable {
   }
 
   /// Returns options associated with the supplied source identifier.
-  PlayerOptions withSource(Object value) {
+  PlayerOptions withSource(SourceId value) {
     return copyWith(sourceId: value);
   }
 
@@ -316,25 +323,25 @@ final class PlayerOptions extends Equatable {
     );
   }
 
-  /// Returns an audio-only configuration.
+  /// Returns options for audio-only playback.
   PlayerOptions asAudioOnly() {
     return copyWith(enableAudio: true, enableVideo: false, enableSubtitles: false);
   }
 
-  /// Returns a video-only configuration.
+  /// Returns options for video-only playback.
   PlayerOptions asVideoOnly() {
     return copyWith(enableAudio: false, enableVideo: true);
   }
 
-  /// Returns an audio-video configuration.
+  /// Returns options for combined audio-video playback.
   PlayerOptions asAudioVideo() {
     return copyWith(enableAudio: true, enableVideo: true);
   }
 
-  /// Returns the default player options.
+  /// Default player options.
   static const PlayerOptions defaults = PlayerOptions();
 
-  /// Returns a minimal player configuration.
+  /// Minimal player options.
   static const PlayerOptions minimal = PlayerOptions(
     autoPlay: false,
     autoInitialize: true,
@@ -357,23 +364,23 @@ final class PlayerOptions extends Equatable {
     maxFallbackAttempts: 0,
   );
 
-  /// Returns options optimized for audio-only playback.
+  /// Options optimized for audio-only playback.
   static const PlayerOptions audioOnly = PlayerOptions(enableAudio: true, enableVideo: false, enableSubtitles: false);
 
-  /// Returns options optimized for video-only playback.
+  /// Options optimized for video-only playback.
   static const PlayerOptions videoOnly = PlayerOptions(enableAudio: false, enableVideo: true, enableSubtitles: true);
 
-  /// Returns options optimized for combined audio-video playback.
+  /// Options optimized for combined audio-video playback.
   static const PlayerOptions audioVideo = PlayerOptions(enableAudio: true, enableVideo: true, enableSubtitles: true);
 
-  /// Returns whether two option sets configure the same media outputs.
+  /// Whether two option sets configure the same media outputs.
   bool isSameMedia(PlayerOptions other) {
     return enableAudio == other.enableAudio &&
         enableVideo == other.enableVideo &&
         enableSubtitles == other.enableSubtitles;
   }
 
-  /// Returns whether two option sets reference the same source.
+  /// Whether two option sets reference the same source.
   bool isSameSource(PlayerOptions other) {
     return sourceId == other.sourceId;
   }
@@ -413,8 +420,7 @@ final class PlayerOptions extends Equatable {
         'playbackRate: $playbackRate, '
         'preload: $preload, '
         'keepAlive: $keepAlive, '
-        'preferHardwareDecoding: '
-        '$preferHardwareDecoding, '
+        'preferHardwareDecoding: $preferHardwareDecoding, '
         'enableAudio: $enableAudio, '
         'enableVideo: $enableVideo, '
         'enableSubtitles: $enableSubtitles, '
@@ -424,10 +430,8 @@ final class PlayerOptions extends Equatable {
         'enableMetrics: $enableMetrics, '
         'enableDiagnostics: $enableDiagnostics, '
         'sourceId: $sourceId, '
-        'maxRecoveryAttempts: '
-        '$maxRecoveryAttempts, '
-        'maxFallbackAttempts: '
-        '$maxFallbackAttempts'
+        'maxRecoveryAttempts: $maxRecoveryAttempts, '
+        'maxFallbackAttempts: $maxFallbackAttempts'
         ')';
   }
 }

@@ -18,12 +18,6 @@ _PlayerState _$PlayerStateFromJson(Map<String, dynamic> json) => _PlayerState(
   videoEnabled: json['videoEnabled'] as bool? ?? false,
   subtitlesEnabled: json['subtitlesEnabled'] as bool? ?? false,
   muted: json['muted'] as bool? ?? false,
-  fullscreen: json['fullscreen'] as bool? ?? false,
-  pip: json['pip'] as bool? ?? false,
-  floating: json['floating'] as bool? ?? false,
-  recording: json['recording'] as bool? ?? false,
-  recovering: json['recovering'] as bool? ?? false,
-  fallingBack: json['fallingBack'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$PlayerStateToJson(_PlayerState instance) =>
@@ -35,12 +29,6 @@ Map<String, dynamic> _$PlayerStateToJson(_PlayerState instance) =>
       'videoEnabled': instance.videoEnabled,
       'subtitlesEnabled': instance.subtitlesEnabled,
       'muted': instance.muted,
-      'fullscreen': instance.fullscreen,
-      'pip': instance.pip,
-      'floating': instance.floating,
-      'recording': instance.recording,
-      'recovering': instance.recovering,
-      'fallingBack': instance.fallingBack,
     };
 
 const _$PlayerLifecycleStateEnumMap = {

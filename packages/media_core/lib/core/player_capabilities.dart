@@ -2,9 +2,12 @@ import 'package:equatable/equatable.dart';
 
 /// Describes the operations supported by a player implementation.
 ///
-/// This represents what the player can do, not what the currently loaded
-/// media contains.
-class PlayerCapabilities extends Equatable {
+/// [PlayerCapabilities] represents what a player implementation can do,
+/// rather than the capabilities of the currently loaded media.
+///
+/// This is a static capability description and must not contain runtime
+/// playback state.
+final class PlayerCapabilities extends Equatable {
   const PlayerCapabilities({
     this.play = true,
     this.pause = true,
@@ -61,6 +64,18 @@ class PlayerCapabilities extends Equatable {
   /// Whether the player can capture a video frame.
   final bool snapshot;
 
+  /// A capability set with no supported operations.
+  static const PlayerCapabilities none = PlayerCapabilities(
+    play: false,
+    pause: false,
+    stop: false,
+    seek: false,
+    setVolume: false,
+    setPlaybackSpeed: false,
+    setLooping: false,
+    setMuted: false,
+  );
+
   /// A capability set with all player operations enabled.
   static const PlayerCapabilities full = PlayerCapabilities(
     fullscreen: true,
@@ -70,12 +85,44 @@ class PlayerCapabilities extends Equatable {
     snapshot: true,
   );
 
-  /// A minimal capability set for a player that only supports basic
-  /// playback control.
+  /// A minimal capability set for basic playback control.
   static const PlayerCapabilities basic = PlayerCapabilities();
 
-  /// Returns whether this player supports every operation required by
-  /// [other].
+  /// Creates a copy with the specified capabilities replaced.
+  PlayerCapabilities copyWith({
+    bool? play,
+    bool? pause,
+    bool? stop,
+    bool? seek,
+    bool? setVolume,
+    bool? setPlaybackSpeed,
+    bool? setLooping,
+    bool? setMuted,
+    bool? fullscreen,
+    bool? pictureInPicture,
+    bool? backgroundPlayback,
+    bool? frameStep,
+    bool? snapshot,
+  }) {
+    return PlayerCapabilities(
+      play: play ?? this.play,
+      pause: pause ?? this.pause,
+      stop: stop ?? this.stop,
+      seek: seek ?? this.seek,
+      setVolume: setVolume ?? this.setVolume,
+      setPlaybackSpeed: setPlaybackSpeed ?? this.setPlaybackSpeed,
+      setLooping: setLooping ?? this.setLooping,
+      setMuted: setMuted ?? this.setMuted,
+      fullscreen: fullscreen ?? this.fullscreen,
+      pictureInPicture: pictureInPicture ?? this.pictureInPicture,
+      backgroundPlayback: backgroundPlayback ?? this.backgroundPlayback,
+      frameStep: frameStep ?? this.frameStep,
+      snapshot: snapshot ?? this.snapshot,
+    );
+  }
+
+  /// Returns whether this capability set supports every operation required
+  /// by [other].
   bool supports(PlayerCapabilities other) {
     return (!other.play || play) &&
         (!other.pause || pause) &&

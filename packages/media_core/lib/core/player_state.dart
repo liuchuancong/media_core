@@ -16,13 +16,16 @@ enum PlayerPlaybackState { idle, opening, playing, paused, buffering, seeking, s
 
 /// Represents the immutable semantic runtime state of a player.
 ///
-/// [PlayerState] is owned by the core and must not contain backend-specific
-/// state. Backend implementations should expose their own adapter state and
-/// events, which are translated into this model by the core.
+/// [PlayerState] belongs to the core and describes only the fundamental
+/// lifecycle, source, output, and playback state of a player.
+///
+/// Backend-specific state belongs to the adapter layer.
+/// Presentation state belongs to the presentation layer.
+/// Recording state belongs to the recording layer.
+/// Recovery and fallback state belong to their respective layers.
 ///
 /// Lifecycle and playback are represented by mutually exclusive enums rather
-/// than collections of independent boolean flags. This prevents impossible
-/// combinations such as `playing == true` and `paused == true`.
+/// than collections of independent boolean flags.
 @freezed
 abstract class PlayerState with _$PlayerState {
   /// Creates an immutable player state.
@@ -47,24 +50,6 @@ abstract class PlayerState with _$PlayerState {
 
     /// Whether audio output is muted.
     @Default(false) bool muted,
-
-    /// Whether the player is currently in fullscreen presentation.
-    @Default(false) bool fullscreen,
-
-    /// Whether the player is currently in picture-in-picture mode.
-    @Default(false) bool pip,
-
-    /// Whether the player is currently displayed in floating mode.
-    @Default(false) bool floating,
-
-    /// Whether recording is currently active.
-    @Default(false) bool recording,
-
-    /// Whether the player is currently recovering from a failure.
-    @Default(false) bool recovering,
-
-    /// Whether the player is currently switching through a fallback.
-    @Default(false) bool fallingBack,
   }) = _PlayerState;
 
   const PlayerState._();
@@ -118,24 +103,18 @@ abstract class PlayerState with _$PlayerState {
   }
 
   /// Whether the player is currently in an error state.
-  ///
-  /// Recovery and fallback are represented separately by [recovering] and
-  /// [fallingBack].
   bool get hasError {
     return playback == PlayerPlaybackState.error;
   }
 
   /// Whether the player is ready for normal playback operations.
   ///
-  /// A player that is recovering, falling back, opening, stopping, or in an
-  /// error state is not considered ready.
+  /// Opening, stopping, and error states are not considered ready.
   bool get ready {
     return lifecycle == PlayerLifecycleState.ready &&
         playback != PlayerPlaybackState.opening &&
         playback != PlayerPlaybackState.stopping &&
-        playback != PlayerPlaybackState.error &&
-        !recovering &&
-        !fallingBack;
+        playback != PlayerPlaybackState.error;
   }
 
   /// Whether the player is being disposed.
@@ -150,16 +129,12 @@ abstract class PlayerState with _$PlayerState {
 
   /// Whether the player is completely idle.
   bool get isIdle {
-    return lifecycle == PlayerLifecycleState.idle &&
-        playback == PlayerPlaybackState.idle &&
-        !hasSource &&
-        !recovering &&
-        !fallingBack;
+    return lifecycle == PlayerLifecycleState.idle && playback == PlayerPlaybackState.idle && !hasSource;
   }
 
   /// Whether the player is actively processing playback or a transition.
   bool get isActive {
-    return opening || playing || buffering || seeking || stopping || recovering || fallingBack;
+    return opening || playing || buffering || seeking || stopping;
   }
 
   /// Whether playback is currently active.
@@ -172,7 +147,7 @@ abstract class PlayerState with _$PlayerState {
 
   /// Whether the player is currently transitioning.
   bool get isTransitioning {
-    return opening || seeking || stopping || disposing || recovering || fallingBack;
+    return opening || seeking || stopping || disposing;
   }
 
   /// Whether the player has reached a terminal lifecycle state.
@@ -182,7 +157,7 @@ abstract class PlayerState with _$PlayerState {
 
   /// Whether the player can accept normal control commands.
   bool get canControl {
-    return lifecycle == PlayerLifecycleState.ready && !opening && !stopping && !recovering && !fallingBack && !hasError;
+    return lifecycle == PlayerLifecycleState.ready && !opening && !stopping && !hasError;
   }
 
   /// Whether playback can currently be started.
@@ -215,11 +190,6 @@ abstract class PlayerState with _$PlayerState {
     return videoEnabled;
   }
 
-  /// Whether the player currently has a presentation mode.
-  bool get hasPresentation {
-    return fullscreen || pip || floating;
-  }
-
   /// Whether the current configuration represents audio-only playback.
   bool get isAudioOnly {
     return audioEnabled && !videoEnabled;
@@ -235,142 +205,71 @@ abstract class PlayerState with _$PlayerState {
     return audioEnabled && videoEnabled;
   }
 
-  /// Whether the state contains no active error or recovery operation.
+  /// Whether the state contains no active error.
   bool get isClean {
-    return !hasError && !recovering && !fallingBack && !disposed;
+    return !hasError && !disposed;
   }
 
   /// Marks the player as initializing.
   PlayerState initializingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.initializing,
-      playback: PlayerPlaybackState.idle,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.initializing, playback: PlayerPlaybackState.idle);
   }
 
   /// Marks the player as opening a source.
   ///
   /// The player must already be initialized before opening a source.
   PlayerState openingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.opening,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.opening);
   }
 
   /// Marks the player as ready without starting playback.
   PlayerState readyState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.idle,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.idle);
   }
 
   /// Marks the player as playing.
   PlayerState playingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.playing,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.playing);
   }
 
   /// Marks the player as paused.
   PlayerState pausedState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.paused,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.paused);
   }
 
   /// Marks the player as buffering.
   PlayerState bufferingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.buffering,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.buffering);
   }
 
   /// Marks the player as seeking.
   PlayerState seekingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.seeking,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.seeking);
   }
 
   /// Marks the player as stopping.
   PlayerState stoppingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.stopping,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.stopping);
   }
 
   /// Marks the player as stopped.
   PlayerState stoppedState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.stopped,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.stopped);
   }
 
   /// Marks playback as completed.
   PlayerState completedState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: PlayerPlaybackState.completed,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.ready, playback: PlayerPlaybackState.completed);
   }
 
   /// Marks the player as having an error.
   PlayerState errorState() {
-    return copyWith(playback: PlayerPlaybackState.error, recovering: false, fallingBack: false);
-  }
-
-  /// Marks the player as recovering from an error.
-  ///
-  /// The underlying playback state remains [PlayerPlaybackState.error] while
-  /// the recovery operation is in progress.
-  PlayerState recoveringState() {
-    return copyWith(playback: PlayerPlaybackState.error, recovering: true, fallingBack: false);
-  }
-
-  /// Marks the player as performing a fallback.
-  ///
-  /// The underlying playback state remains [PlayerPlaybackState.error] while
-  /// the fallback operation is in progress.
-  PlayerState fallbackState() {
-    return copyWith(playback: PlayerPlaybackState.error, recovering: false, fallingBack: true);
+    return copyWith(playback: PlayerPlaybackState.error);
   }
 
   /// Marks the player as disposing.
   PlayerState disposingState() {
-    return copyWith(
-      lifecycle: PlayerLifecycleState.disposing,
-      playback: PlayerPlaybackState.stopped,
-      recovering: false,
-      fallingBack: false,
-    );
+    return copyWith(lifecycle: PlayerLifecycleState.disposing, playback: PlayerPlaybackState.stopped);
   }
 
   /// Marks the player as disposed.
@@ -379,23 +278,20 @@ abstract class PlayerState with _$PlayerState {
       lifecycle: PlayerLifecycleState.disposed,
       playback: PlayerPlaybackState.stopped,
       hasSource: false,
+      audioEnabled: false,
+      videoEnabled: false,
+      subtitlesEnabled: false,
       muted: false,
-      fullscreen: false,
-      pip: false,
-      floating: false,
-      recording: false,
-      recovering: false,
-      fallingBack: false,
     );
   }
 
-  /// Associates a media source with the player.
+  /// Associates or removes a media source.
   PlayerState withSource(bool value) {
     if (value) {
       return copyWith(hasSource: true);
     }
 
-    return copyWith(hasSource: false, playback: PlayerPlaybackState.idle, recovering: false, fallingBack: false);
+    return copyWith(hasSource: false, playback: PlayerPlaybackState.idle);
   }
 
   /// Returns a state with the requested mute state.
@@ -418,51 +314,24 @@ abstract class PlayerState with _$PlayerState {
     return copyWith(subtitlesEnabled: value);
   }
 
-  /// Returns a state with fullscreen enabled or disabled.
-  PlayerState withFullscreen(bool value) {
-    return copyWith(fullscreen: value);
-  }
-
-  /// Returns a state with picture-in-picture enabled or disabled.
-  PlayerState withPip(bool value) {
-    return copyWith(pip: value);
-  }
-
-  /// Returns a state with floating presentation enabled or disabled.
-  PlayerState withFloating(bool value) {
-    return copyWith(floating: value);
-  }
-
-  /// Returns a state with recording enabled or disabled.
-  PlayerState withRecording(bool value) {
-    return copyWith(recording: value);
-  }
-
-  /// Clears the current error and recovery state.
-  PlayerState clearError() {
-    return copyWith(playback: hasError ? PlayerPlaybackState.idle : playback, recovering: false, fallingBack: false);
-  }
-
-  /// Resets playback state while preserving lifecycle and other configuration.
+  /// Resets playback state while preserving lifecycle and other state.
   PlayerState resetPlayback() {
-    return copyWith(playback: PlayerPlaybackState.idle, recovering: false, fallingBack: false);
+    return copyWith(playback: PlayerPlaybackState.idle);
   }
 
-  /// Resets presentation-related state.
-  PlayerState resetPresentation() {
-    return copyWith(fullscreen: false, pip: false, floating: false);
+  /// Clears the current error state.
+  PlayerState clearError() {
+    return copyWith(playback: hasError ? PlayerPlaybackState.idle : playback);
   }
 
-  /// Returns a clean state while preserving source, output, presentation,
-  /// and recording configuration.
+  /// Returns a clean state while preserving source and output state.
   PlayerState reset() {
     return copyWith(
       lifecycle: lifecycle == PlayerLifecycleState.disposed ? PlayerLifecycleState.idle : lifecycle,
       playback: PlayerPlaybackState.idle,
-      recovering: false,
-      fallingBack: false,
     );
   }
 
+  /// Creates a player state from JSON.
   factory PlayerState.fromJson(Map<String, Object?> json) => _$PlayerStateFromJson(json);
 }

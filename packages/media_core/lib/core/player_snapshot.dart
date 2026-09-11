@@ -16,12 +16,19 @@ import 'package:equatable/equatable.dart';
 /// Represents the complete immutable observable state of a player at a
 /// specific point in time.
 ///
-/// [PlayerSnapshot] is the single aggregate state exposed by the core.
-/// Runtime state, source associations, session associations, capabilities,
-/// options, and metrics are observed through this object.
+/// [PlayerSnapshot] is the aggregate state exposed by the core.
 ///
-/// Descriptive media information belongs to [PlayerInfo] and should not be
-/// duplicated here.
+/// It contains:
+/// - stable player identity;
+/// - runtime session associations;
+/// - current source association;
+/// - current media information;
+/// - semantic player state;
+/// - player options and capabilities;
+/// - optional runtime metrics.
+///
+/// Presentation, recording, recovery, and fallback execution state belongs
+/// to their respective modules and is intentionally not duplicated here.
 ///
 /// A snapshot never owns player resources and never executes backend
 /// operations.
@@ -45,7 +52,7 @@ final class PlayerSnapshot extends Equatable {
   /// Unique stable identifier of the player.
   final PlayerId playerId;
 
-  /// Identifier of the active session.
+  /// Identifier of the active runtime session.
   ///
   /// This is a runtime association and does not participate in player
   /// identity.
@@ -113,8 +120,8 @@ final class PlayerSnapshot extends Equatable {
 
   /// Current semantic player status.
   ///
-  /// This is derived from [state]. It is intentionally not stored as a
-  /// second independent state model.
+  /// The status is derived from [state] and is intentionally not stored as
+  /// a second independent state model.
   PlayerStatus get playerStatus {
     if (isDisposed) {
       return PlayerStatus.disposed;
@@ -204,9 +211,7 @@ final class PlayerSnapshot extends Equatable {
   bool get isDisposed => state.disposed;
 
   /// Whether the player currently has an error.
-  bool get hasError {
-    return state.playback == PlayerPlaybackState.error;
-  }
+  bool get hasError => state.hasError;
 
   /// Whether audio output is available.
   ///
@@ -280,27 +285,6 @@ final class PlayerSnapshot extends Equatable {
   /// Whether any media output is available.
   bool get hasAnyMedia => hasAudio || hasVideo;
 
-  /// Whether any presentation mode is active.
-  bool get hasPresentation => state.hasPresentation;
-
-  /// Whether fullscreen presentation is active.
-  bool get isFullscreen => state.fullscreen;
-
-  /// Whether picture-in-picture is active.
-  bool get isPip => state.pip;
-
-  /// Whether floating presentation is active.
-  bool get isFloating => state.floating;
-
-  /// Whether recording is active.
-  bool get isRecording => state.recording;
-
-  /// Whether recovery is active.
-  bool get isRecovering => state.recovering;
-
-  /// Whether fallback is active.
-  bool get isFallingBack => state.fallingBack;
-
   /// Whether normal player controls are currently allowed.
   bool get canControl => state.canControl;
 
@@ -320,22 +304,24 @@ final class PlayerSnapshot extends Equatable {
     return capabilities.seek && (mediaCapabilities?.supportsSeeking ?? true);
   }
 
-  /// Whether recovery is currently allowed.
+  /// Whether recovery is currently allowed by configuration.
   ///
-  /// Recovery execution belongs to the recovery layer. At the core snapshot
-  /// level this only reflects the configured policy.
+  /// Recovery execution belongs to the recovery layer.
   bool get canRecover => options.canRecover;
 
-  /// Whether fallback is currently allowed.
+  /// Whether fallback is currently allowed by configuration.
   ///
-  /// Fallback execution belongs to the fallback layer. At the core snapshot
-  /// level this only reflects the configured policy.
+  /// Fallback execution belongs to the fallback layer.
   bool get canFallback => options.canFallback;
 
   /// Returns a copy with the supplied values.
   ///
-  /// Nullable fields use explicit `clear*` methods when they need to be
-  /// removed. A null passed to [copyWith] retains the existing value.
+  /// Nullable fields use explicit [withoutSession], [withoutRequest],
+  /// [withoutGeneration], [withoutSource], [withoutMediaType],
+  /// [withoutMediaCapabilities], and [withoutMetrics] methods when they need
+  /// to be removed.
+  ///
+  /// A null passed to [copyWith] retains the existing value.
   PlayerSnapshot copyWith({
     PlayerId? playerId,
     SessionId? sessionId,
@@ -552,8 +538,8 @@ final class PlayerSnapshot extends Equatable {
 
   /// Returns a disposed snapshot.
   ///
-  /// Player identity is preserved so observers can associate the terminal
-  /// state with the original player.
+  /// Player identity and runtime associations are preserved so observers can
+  /// associate the terminal state with the original player generation.
   PlayerSnapshot asDisposed() {
     return PlayerSnapshot(
       playerId: playerId,

@@ -6,12 +6,15 @@ import 'package:equatable/equatable.dart';
 
 /// Defines the immutable configuration of a player.
 ///
-/// [PlayerConfig] combines media information, source association, playback
-/// defaults, and feature switches into a single configuration object.
+/// [PlayerConfig] describes how a player should be created and its initial
+/// operating preferences.
 ///
-/// Configuration describes how a player should be created or operated.
-/// Runtime state belongs to [PlayerState], while implementation capabilities
-/// belong to [PlayerCapabilities].
+/// Runtime state belongs to [PlayerState].
+/// Implementation capabilities belong to [PlayerCapabilities].
+/// Runtime policy and orchestration belong to their respective modules.
+///
+/// [PlayerConfig] intentionally contains no runtime session, adapter,
+/// operation, or playback-controller references.
 final class PlayerConfig extends Equatable {
   /// Creates an immutable player configuration.
   const PlayerConfig({
@@ -52,10 +55,10 @@ final class PlayerConfig extends Equatable {
   /// Optional human-readable player name.
   final String? name;
 
-  /// Declared media type of the current player.
+  /// Declared media type.
   final MediaType? mediaType;
 
-  /// Detailed media capabilities of the current media.
+  /// Detailed media capabilities.
   final MediaCapabilities? mediaCapabilities;
 
   /// Optional source identifier associated with this configuration.
@@ -97,13 +100,17 @@ final class PlayerConfig extends Equatable {
   /// Whether subtitle processing is enabled.
   final bool enableSubtitles;
 
-  /// Whether buffering is enabled.
+  /// Whether buffering support is enabled.
   final bool enableBuffering;
 
   /// Whether automatic recovery is enabled.
+  ///
+  /// Recovery orchestration itself does not belong to [PlayerConfig].
   final bool enableRecovery;
 
-  /// Whether fallback handling is enabled.
+  /// Whether backend/source fallback is enabled.
+  ///
+  /// Fallback orchestration itself does not belong to [PlayerConfig].
   final bool enableFallback;
 
   /// Whether runtime metrics collection is enabled.
@@ -118,31 +125,23 @@ final class PlayerConfig extends Equatable {
   /// Maximum number of fallback attempts.
   final int maxFallbackAttempts;
 
-  /// Returns whether a name has been configured.
-  bool get hasName {
-    return name != null && name!.trim().isNotEmpty;
-  }
+  /// Whether a non-empty name has been configured.
+  bool get hasName => name != null && name!.trim().isNotEmpty;
 
-  /// Returns whether a media type is available.
+  /// Whether a media type has been configured.
   bool get hasMediaType => mediaType != null;
 
-  /// Returns whether media capabilities are available.
-  bool get hasMediaCapabilities {
-    return mediaCapabilities != null;
-  }
+  /// Whether media capabilities have been configured.
+  bool get hasMediaCapabilities => mediaCapabilities != null;
 
-  /// Returns whether a source has been associated.
+  /// Whether a source has been associated.
   bool get hasSource => sourceId != null;
 
-  /// Returns whether audio output is enabled.
-  bool get hasAudio {
-    return enableAudio;
-  }
+  /// Whether audio output is enabled.
+  bool get hasAudio => enableAudio;
 
-  /// Returns whether video output is enabled.
-  bool get hasVideo {
-    return enableVideo;
-  }
+  /// Whether video output is enabled.
+  bool get hasVideo => enableVideo;
 
   /// Returns whether this configuration represents audio-only playback.
   bool get isAudioOnly {
@@ -189,7 +188,7 @@ final class PlayerConfig extends Equatable {
     return enableAudio && enableVideo;
   }
 
-  /// Returns whether a video renderer is required.
+  /// Whether a video renderer is required.
   bool get requiresVideoRenderer {
     final capabilities = mediaCapabilities;
     if (capabilities != null) {
@@ -204,44 +203,44 @@ final class PlayerConfig extends Equatable {
     return enableVideo;
   }
 
-  /// Returns whether audio output is available.
+  /// Whether audio output is available.
   bool get hasAudioOutput => enableAudio;
 
-  /// Returns whether video output is available.
+  /// Whether video output is available.
   bool get hasVideoOutput => enableVideo;
 
-  /// Returns whether automatic recovery can be attempted.
+  /// Whether automatic recovery is configured and allowed.
   bool get canRecover {
     return enableRecovery && maxRecoveryAttempts > 0;
   }
 
-  /// Returns whether fallback can be attempted.
+  /// Whether fallback is configured and allowed.
   bool get canFallback {
     return enableFallback && maxFallbackAttempts > 0;
   }
 
-  /// Returns whether diagnostics are enabled.
+  /// Whether diagnostics are enabled.
   bool get hasDiagnostics => enableDiagnostics;
 
-  /// Returns whether playback uses the normal playback rate.
+  /// Whether playback uses the normal playback rate.
   bool get isNormalPlaybackRate {
     return playbackRate == PlayerConstants.defaultPlaybackRate;
   }
 
-  /// Returns whether playback is faster than normal.
+  /// Whether playback is faster than normal.
   bool get isFastPlayback {
     return playbackRate > PlayerConstants.defaultPlaybackRate;
   }
 
-  /// Returns whether playback is slower than normal.
+  /// Whether playback is slower than normal.
   bool get isSlowPlayback {
     return playbackRate < PlayerConstants.defaultPlaybackRate;
   }
 
-  /// Returns whether the initial state is muted.
+  /// Whether the initial state is muted.
   bool get isMuted => muted;
 
-  /// Returns whether this configuration is intentionally minimal.
+  /// Whether this configuration uses the minimal feature set.
   bool get isMinimal {
     return !autoPlay &&
         !loop &&
@@ -334,6 +333,7 @@ final class PlayerConfig extends Equatable {
       name: name,
       mediaType: mediaType,
       mediaCapabilities: mediaCapabilities,
+      sourceId: null,
       autoInitialize: autoInitialize,
       autoPlay: autoPlay,
       loop: loop,
@@ -411,7 +411,7 @@ final class PlayerConfig extends Equatable {
     return copyWith(enableVideo: value);
   }
 
-  /// Returns a configuration with subtitles changed.
+  /// Returns a configuration with subtitle processing changed.
   PlayerConfig withSubtitles(bool value) {
     return copyWith(enableSubtitles: value);
   }
@@ -472,10 +472,10 @@ final class PlayerConfig extends Equatable {
     );
   }
 
-  /// Returns the default player configuration.
+  /// Default player configuration.
   static const PlayerConfig defaults = PlayerConfig();
 
-  /// Returns a minimal player configuration.
+  /// Minimal player configuration.
   static const PlayerConfig minimal = PlayerConfig(
     autoInitialize: true,
     autoPlay: false,
@@ -498,7 +498,7 @@ final class PlayerConfig extends Equatable {
     maxFallbackAttempts: 0,
   );
 
-  /// Returns an audio-only configuration.
+  /// Audio-only player configuration.
   static const PlayerConfig audioOnly = PlayerConfig(
     mediaType: MediaType.audio,
     mediaCapabilities: MediaCapabilities.audioOnly,
@@ -507,7 +507,7 @@ final class PlayerConfig extends Equatable {
     enableSubtitles: false,
   );
 
-  /// Returns a video-only configuration.
+  /// Video-only player configuration.
   static const PlayerConfig videoOnly = PlayerConfig(
     mediaType: MediaType.video,
     mediaCapabilities: MediaCapabilities.videoOnly,
@@ -515,7 +515,7 @@ final class PlayerConfig extends Equatable {
     enableVideo: true,
   );
 
-  /// Returns an audio-video configuration.
+  /// Audio-video player configuration.
   static const PlayerConfig audioVideo = PlayerConfig(
     mediaType: MediaType.audioVideo,
     mediaCapabilities: MediaCapabilities.audioVideo,
@@ -578,8 +578,7 @@ final class PlayerConfig extends Equatable {
         'playbackRate: $playbackRate, '
         'preload: $preload, '
         'keepAlive: $keepAlive, '
-        'preferHardwareDecoding: '
-        '$preferHardwareDecoding, '
+        'preferHardwareDecoding: $preferHardwareDecoding, '
         'enableAudio: $enableAudio, '
         'enableVideo: $enableVideo, '
         'enableSubtitles: $enableSubtitles, '
@@ -588,10 +587,8 @@ final class PlayerConfig extends Equatable {
         'enableFallback: $enableFallback, '
         'enableMetrics: $enableMetrics, '
         'enableDiagnostics: $enableDiagnostics, '
-        'maxRecoveryAttempts: '
-        '$maxRecoveryAttempts, '
-        'maxFallbackAttempts: '
-        '$maxFallbackAttempts'
+        'maxRecoveryAttempts: $maxRecoveryAttempts, '
+        'maxFallbackAttempts: $maxFallbackAttempts'
         ')';
   }
 }
