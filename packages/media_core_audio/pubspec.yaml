@@ -1,0 +1,30 @@
+name: media_core_audio
+description: Background audio and audio session capability for media_core (audio_service / audio_session / audio_service_win).
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  media_core:
+    path: ../media_core
+
+  # Background audio + media notification (lock screen / notification controls)
+  audio_service: ^0.18.19
+
+  # Windows implementation of audio_service
+  audio_service_win: ^0.0.3
+
+  # Linux implementation of audio_service (MPRIS / D-Bus)
+  audio_service_mpris: ^0.2.1
+
+  # Audio focus / interruption / becoming-noisy events
+  audio_session: ^0.2.3
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

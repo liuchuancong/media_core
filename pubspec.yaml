@@ -10,4 +10,5 @@ workspace:
   - packages/media_core_video_player
   - packages/media_core_native
   - packages/media_core_ijk_player
+  - packages/media_core_audio
   - examples/example

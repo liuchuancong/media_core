@@ -22,6 +22,7 @@ import '../session/player_session.dart';
 import '../source/player_source.dart';
 import '../source/source_service.dart';
 import 'adapter_selector.dart';
+import 'kernel_audio_driver.dart';
 import 'kernel_options.dart';
 import 'player_handle.dart';
 
@@ -102,7 +103,9 @@ final class PlayerKernel {
        _eventBus = eventBus ?? PlayerEventBus(),
        _pool = pool ?? PlayerPool(),
        _preloadManager = preloadManager ?? PreloadManager(),
-       _coordinator = coordinator ?? GlobalPlayerCoordinator();
+       _coordinator = coordinator ?? GlobalPlayerCoordinator() {
+    _trackActivePlayer();
+  }
 
   /// Registry of available backends.
   final PlayerAdapterRegistry registry;
@@ -119,6 +122,10 @@ final class PlayerKernel {
 
   final Map<PlayerId, PlayerHandle> _handles = {};
 
+  KernelAudioDriver? _audioDriver;
+  StreamSubscription<PlayerEvent>? _activeTrackingSub;
+  PlayerHandle? _activeHandle;
+
   /// Lazy selector bound to [registry].
   PlayerAdapterSelector get selector => _selector ?? PlayerAdapterSelector(registry);
 
@@ -133,6 +140,12 @@ final class PlayerKernel {
 
   /// Cross-player coordination layer.
   GlobalPlayerCoordinator get coordinator => _coordinator;
+
+  /// The currently active player, if any.
+  ///
+  /// The active player is the one most recently playing. Pausing
+  /// keeps a player active; stopping or releasing clears this.
+  PlayerHandle? get activeHandle => _activeHandle;
 
   // ---------------------------------------------------------------------------
   // Backend registration
@@ -267,6 +280,11 @@ final class PlayerKernel {
       return;
     }
 
+    if (_activeHandle?.id == playerId) {
+      _activeHandle = null;
+      _audioDriver?.onPlayerDeactivated();
+    }
+
     _coordinator.player.detachSession(playerId);
     _coordinator.player.unregister(playerId);
     _coordinator.playback.unregister(playerId);
@@ -311,6 +329,70 @@ final class PlayerKernel {
     EventPriority? minimumPriority,
   }) {
     return _eventBus.subscribe(listener, minimumPriority: minimumPriority);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audio capability
+  // ---------------------------------------------------------------------------
+
+  /// Attaches an audio capability driver.
+  ///
+  /// The driver receives active-player notifications; see
+  /// [KernelAudioDriver] for the exact semantics. Requires the
+  /// event bus, which is enabled by default.
+  ///
+  /// ```dart
+  /// final audio = MediaCoreAudio();
+  /// await audio.initialize();
+  /// kernel.attachAudio(audio);
+  /// ```
+  void attachAudio(KernelAudioDriver driver) {
+    _audioDriver = driver;
+    final active = _activeHandle;
+    if (active != null) {
+      driver.onPlayerActivated(active);
+    }
+  }
+
+  /// Detaches the audio capability driver.
+  void detachAudio() {
+    final driver = _audioDriver;
+    _audioDriver = null;
+    if (driver != null && _activeHandle != null) {
+      driver.onPlayerDeactivated();
+    }
+  }
+
+  void _trackActivePlayer() {
+    _activeTrackingSub = _eventBus.stream.listen((event) {
+      if (event is! GenericPlayerEvent) {
+        return;
+      }
+      if (event.type != PlayerEventType.playback) {
+        return;
+      }
+
+      final playerId = event.context?.playerId;
+      if (playerId == null) {
+        return;
+      }
+
+      switch (event.data['action']) {
+        case 'play':
+          final handle = _handles[playerId];
+          if (handle != null && !identical(handle, _activeHandle)) {
+            _activeHandle = handle;
+            _audioDriver?.onPlayerActivated(handle);
+          }
+        case 'stop':
+          if (_activeHandle?.id == playerId) {
+            _activeHandle = null;
+            _audioDriver?.onPlayerDeactivated();
+          }
+        default:
+          break;
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -430,6 +512,10 @@ final class PlayerKernel {
     for (final id in ids) {
       await release(id);
     }
+
+    await _activeTrackingSub?.cancel();
+    _activeTrackingSub = null;
+    _audioDriver = null;
 
     await _preloadManager.dispose();
     await _coordinator.dispose();
