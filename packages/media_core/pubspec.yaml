@@ -33,7 +33,7 @@ dependencies:
   meta: ^1.19.0
 
   # MIME
-  mime: ^2.1.0
+  mime: ^1.0.6
 
   # Async primitives
   async: ^2.13.1
