@@ -68,6 +68,9 @@ export 'identity/library.dart';
 /// Player kernel: orchestration root wiring source, adapter, session, playback, recovery, fallback, pool and events..
 export 'kernel/library.dart';
 
+/// Live-stream orchestration: stall watchdogs, line and engine fallback, backoff retry..
+export 'live/library.dart';
+
 /// Player, page and application lifecycle management..
 export 'lifecycle/library.dart';
 
