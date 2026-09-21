@@ -1,27 +1,42 @@
 import 'dart:async';
-import 'ijk_player_adapter.dart';
-import 'package:flutter/material.dart';
+
+import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
+import 'package:niuma_player/niuma_player.dart' as niuma;
+
+import 'ijk_player_adapter.dart';
 
 /// A widget that renders video from an [IjkPlayerAdapter].
 ///
-/// This is a placeholder view that would normally wrap the
-/// actual IJK player widget. For this example, it shows
-/// a simple container that responds to adapter events.
+/// Builds a niuma_player [NiumaPlayerView] once the adapter has
+/// opened a source (niuma constructs its controller together
+/// with the source, so there is nothing to render before that).
+///
+/// ```dart
+/// IjkPlayerView(adapter: myAdapter)
+/// ```
 class IjkPlayerView extends StatefulWidget {
   /// Creates the view.
-  const IjkPlayerView({super.key, required this.adapter, this.fit = BoxFit.contain, this.color, this.cover});
+  const IjkPlayerView({
+    super.key,
+    required this.adapter,
+    this.aspectRatio,
+    this.filterQuality,
+    this.cover,
+  });
 
-  /// The adapter whose underlying player is rendered.
+  /// The adapter whose controller drives the video output.
   final IjkPlayerAdapter adapter;
 
-  /// How the video frames are inscribed into the allocated space.
-  final BoxFit fit;
+  /// Optional fixed aspect ratio; defaults to the video's own.
+  final double? aspectRatio;
 
-  /// Background color behind the video texture.
-  final Color? color;
+  /// Texture scaling filter quality (Android native texture path).
+  ///
+  /// Null uses the niuma default.
+  final FilterQuality? filterQuality;
 
-  /// Placeholder widget shown before the first frame is decoded.
+  /// Placeholder shown before a source is opened.
   final Widget? cover;
 
   @override
@@ -60,12 +75,20 @@ class _IjkPlayerViewState extends State<IjkPlayerView> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.adapter.initialized) {
+    if (!widget.adapter.hasController) {
       return widget.cover ?? const SizedBox.expand();
     }
 
-    return Center(
-      child: Container(color: widget.color ?? Colors.black, child: widget.cover ?? const SizedBox.expand()),
-    );
+    final filterQuality = widget.filterQuality;
+
+    if (filterQuality != null) {
+      return niuma.NiumaPlayerView(
+        widget.adapter.controller,
+        aspectRatio: widget.aspectRatio,
+        filterQuality: filterQuality,
+      );
+    }
+
+    return niuma.NiumaPlayerView(widget.adapter.controller, aspectRatio: widget.aspectRatio);
   }
 }
