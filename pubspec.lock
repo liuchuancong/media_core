@@ -472,6 +472,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
+  niuma_player:
+    dependency: transitive
+    description:
+      name: niuma_player
+      sha256: "60b5292799b873df37092c36ad66168a9ecfadcdef1231379771343efac4ec2d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.2"
   node_preamble:
     dependency: transitive
     description:

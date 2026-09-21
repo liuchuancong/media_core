@@ -24,5 +24,6 @@ export 'backend_registry.dart';
 export 'backend_selection_request.dart';
 export 'backend_selection_result.dart';
 export 'backend_selector.dart';
+export 'default_player_factory.dart';
 export 'player_factory.dart';
 export 'player_factory_config.dart';

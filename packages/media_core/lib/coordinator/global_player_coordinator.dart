@@ -3,6 +3,7 @@ import 'preload_coordinator.dart';
 import 'playback_coordinator.dart';
 import 'resource_coordinator.dart';
 import 'lifecycle_coordinator.dart';
+import 'player_coordinator.dart';
 import 'player_audio_coordinator.dart';
 import 'presentation_coordinator.dart';
 
@@ -28,6 +29,7 @@ import 'presentation_coordinator.dart';
 final class GlobalPlayerCoordinator {
   /// Creates global coordinator.
   GlobalPlayerCoordinator({
+    PlayerCoordinator? player,
     PlaybackCoordinator? playback,
     PageCoordinator? page,
     PlayerAudioCoordinator? audio,
@@ -35,13 +37,17 @@ final class GlobalPlayerCoordinator {
     PreloadCoordinator? preload,
     LifecycleCoordinator? lifecycle,
     PresentationCoordinator? presentation,
-  }) : playback = playback ?? PlaybackCoordinator(),
+  }) : player = player ?? PlayerCoordinator(),
+       playback = playback ?? PlaybackCoordinator(),
        page = page ?? PageCoordinator(),
        audio = audio ?? PlayerAudioCoordinator(),
        resource = resource ?? ResourceCoordinator(),
        preload = preload ?? PreloadCoordinator(),
        lifecycle = lifecycle ?? LifecycleCoordinator(),
        presentation = presentation ?? PresentationCoordinator();
+
+  /// Player identity and session coordination.
+  final PlayerCoordinator player;
 
   /// Playback coordination.
   final PlaybackCoordinator playback;
@@ -69,6 +75,8 @@ final class GlobalPlayerCoordinator {
 
   /// Clears all runtime bindings.
   void clear() {
+    player.clear();
+
     playback.clear();
 
     page.clear();
@@ -86,6 +94,8 @@ final class GlobalPlayerCoordinator {
 
   /// Disposes all coordinators.
   Future<void> dispose() async {
+    await player.dispose();
+
     await playback.dispose();
 
     await page.dispose();
