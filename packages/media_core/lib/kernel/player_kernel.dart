@@ -18,12 +18,14 @@ import '../pool/player_pool.dart';
 import '../preload/preload_manager.dart';
 import '../preload/preload_priority.dart';
 import '../preload/preload_request.dart';
+import '../presentation/presentation_request.dart';
 import '../session/player_session.dart';
 import '../source/player_source.dart';
 import '../source/source_service.dart';
 import 'adapter_selector.dart';
 import 'kernel_audio_driver.dart';
 import 'kernel_options.dart';
+import 'kernel_presentation_driver.dart';
 import 'player_handle.dart';
 
 /// The orchestration root of the media core.
@@ -123,6 +125,7 @@ final class PlayerKernel {
   final Map<PlayerId, PlayerHandle> _handles = {};
 
   KernelAudioDriver? _audioDriver;
+  KernelPresentationDriver? _presentationDriver;
   StreamSubscription<PlayerEvent>? _activeTrackingSub;
   PlayerHandle? _activeHandle;
 
@@ -361,6 +364,77 @@ final class PlayerKernel {
     if (driver != null && _activeHandle != null) {
       driver.onPlayerDeactivated();
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Presentation capability
+  // ---------------------------------------------------------------------------
+
+  /// The attached presentation driver, if any.
+  KernelPresentationDriver? get presentationDriver => _presentationDriver;
+
+  /// Attaches a presentation capability driver.
+  ///
+  /// After attaching, presentation requests flow to the driver:
+  ///
+  /// ```dart
+  /// final presentation = MediaCorePresentation();
+  /// await presentation.initialize();          // window_manager init
+  /// kernel.attachPresentation(presentation);
+  ///
+  /// await kernel.enterFullscreen(playerId);   // → driver
+  /// ```
+  void attachPresentation(KernelPresentationDriver driver) {
+    _presentationDriver = driver;
+  }
+
+  /// Detaches the presentation driver.
+  void detachPresentation() {
+    _presentationDriver = null;
+  }
+
+  /// Requests fullscreen for [playerId].
+  ///
+  /// Throws [StateError] when no presentation driver is attached
+  /// or the player is unknown.
+  Future<void> enterFullscreen(PlayerId playerId) {
+    return _requestPresentation(playerId, PresentationRequest.fullscreen());
+  }
+
+  /// Leaves fullscreen for [playerId].
+  Future<void> exitFullscreen(PlayerId playerId) {
+    return _requestPresentation(playerId, PresentationRequest.normal());
+  }
+
+  /// Requests picture-in-picture for [playerId].
+  Future<void> enterPip(PlayerId playerId) {
+    return _requestPresentation(playerId, PresentationRequest.pip());
+  }
+
+  /// Leaves picture-in-picture for [playerId].
+  Future<void> exitPip(PlayerId playerId) {
+    return _requestPresentation(playerId, PresentationRequest.normal());
+  }
+
+  /// Requests a floating always-on-top window for [playerId].
+  Future<void> enterFloating(PlayerId playerId) {
+    return _requestPresentation(playerId, PresentationRequest.floating());
+  }
+
+  /// Leaves the floating window for [playerId].
+  Future<void> exitFloating(PlayerId playerId) {
+    return _requestPresentation(playerId, PresentationRequest.normal());
+  }
+
+  Future<void> _requestPresentation(PlayerId playerId, PresentationRequest request) async {
+    final driver = _presentationDriver;
+    if (driver == null) {
+      throw StateError('No presentation driver attached. Call attachPresentation first.');
+    }
+    if (!_handles.containsKey(playerId)) {
+      throw StateError('Unknown player: $playerId');
+    }
+    await driver.apply(playerId, request);
   }
 
   void _trackActivePlayer() {
