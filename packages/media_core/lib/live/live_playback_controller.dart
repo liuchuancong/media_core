@@ -29,14 +29,9 @@ import '../adapter/player_adapter_event.dart';
 import '../operation/operation_registry.dart';
 import '../operation/operation_cancel_token.dart';
 
-
 /// A live playback request: primary URL plus fallback lines.
 final class LiveSourceRequest {
-  const LiveSourceRequest({
-    required this.urls,
-    this.headers = const <String, String>{},
-    this.title,
-  });
+  const LiveSourceRequest({required this.urls, this.headers = const <String, String>{}, this.title});
 
   /// Candidate URLs, best first. [urls].first is opened first.
   final List<String> urls;
@@ -71,17 +66,14 @@ final class LivePlaybackController {
     this.kernel, {
     LiveWatchdogs? watchdogs,
     ErrorPolicy? policy,
-    this.backoffDelays = const <Duration>[
-      Duration(milliseconds: 750),
-      Duration(seconds: 2),
-    ],
+    this.backoffDelays = const <Duration>[Duration(milliseconds: 750), Duration(seconds: 2)],
     this.maxSameEngineRecoveryAttempts = 1,
-  })  : watchdogs = watchdogs ?? LiveWatchdogs(),
-        policy = policy ?? ErrorPolicy.defaults(),
-        _playerId = PlayerId.generate(),
-        _sessionManager = SessionManager(),
-        _operationRegistry = OperationRegistry(),
-        _operationTracker = OperationTracker() {
+  }) : watchdogs = watchdogs ?? LiveWatchdogs(),
+       policy = policy ?? ErrorPolicy.defaults(),
+       _playerId = PlayerId.generate(),
+       _sessionManager = SessionManager(),
+       _operationRegistry = OperationRegistry(),
+       _operationTracker = OperationTracker() {
     _wireWatchdogs();
   }
 
@@ -330,11 +322,7 @@ final class LivePlaybackController {
     if (session == null) return;
 
     session.updateContext(
-      session.context.copyWith(
-        sourceId: source.id,
-        source: source,
-        generationId: session.generation.id,
-      ),
+      session.context.copyWith(sourceId: source.id, source: source, generationId: session.generation.id),
     );
 
     session.nextGeneration();
@@ -348,10 +336,7 @@ final class LivePlaybackController {
   void _beginOperation(OperationType type) {
     _cancelCurrentOperation();
 
-    final created = Operation.created(
-      id: OperationId.generate(),
-      type: type,
-    );
+    final created = Operation.created(id: OperationId.generate(), type: type);
 
     _operationRegistry.register(created);
     _operationTracker.track(created);
@@ -480,9 +465,7 @@ final class LivePlaybackController {
       backend: backendId,
       lineId: lineIndex.toString(),
       state: state.playback.name,
-      metadata: <String, Object?>{
-        'generation': _generation,
-      },
+      metadata: <String, Object?>{'generation': _generation},
     );
   }
 
@@ -493,10 +476,7 @@ final class LivePlaybackController {
   void _bindHandle(PlayerHandle handle) {
     _handle = handle;
     _eventSub?.cancel();
-    _eventSub = handle.adapter.events.listen(
-      _onAdapterEvent,
-      onError: _onAdapterEventError,
-    );
+    _eventSub = handle.adapter.events.listen(_onAdapterEvent, onError: _onAdapterEventError);
   }
 
   void _onAdapterEvent(PlayerAdapterEvent adapterEvent) {
@@ -516,19 +496,13 @@ final class LivePlaybackController {
           _setState(_liveState(PlayerPlaybackState.paused));
         }
       case PlayerAdapterBuffering(buffering: final buffering):
-        _setState(_liveState(
-          buffering ? PlayerPlaybackState.buffering : PlayerPlaybackState.playing,
-        ));
+        _setState(_liveState(buffering ? PlayerPlaybackState.buffering : PlayerPlaybackState.playing));
         watchdogs.onBufferingChanged(buffering);
-      case PlayerAdapterVideoSizeChanged():
+      case PlayerAdapterPositionChanged():
         watchdogs.onFrameProgress();
       case PlayerAdapterErrorEvent(message: final message):
         _scheduleRecovery(
-          PlayerFailure(
-            code: PlayerErrorCode.playbackFailed,
-            message: message,
-            context: _contextFor(_currentUrl),
-          ),
+          PlayerFailure(code: PlayerErrorCode.playbackFailed, message: message, context: _contextFor(_currentUrl)),
           generation,
         );
       default:
@@ -706,11 +680,7 @@ final class LivePlaybackController {
   bool _isCurrent(int generation) => generation == _generation && _request != null;
 
   PlayerState _liveState(PlayerPlaybackState playback) {
-    return PlayerState(
-      lifecycle: PlayerLifecycleState.ready,
-      playback: playback,
-      hasSource: true,
-    );
+    return PlayerState(lifecycle: PlayerLifecycleState.ready, playback: playback, hasSource: true);
   }
 
   void _setState(PlayerState next) {
