@@ -24,7 +24,7 @@ import 'player_adapter.dart';
 ///
 /// Those belong to:
 ///
-/// - PlayerAdapterSelector
+/// - BackendSelector
 /// - PlayerAdapterRegistry
 /// - PlayerAdapterCapabilities
 abstract interface class PlayerAdapterFactory {

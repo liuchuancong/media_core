@@ -17,11 +17,13 @@ library;
 // ============================================================================
 
 export 'player_adapter.dart';
+export 'player_adapter_base.dart';
 export 'player_adapter_capabilities.dart';
 export 'player_adapter_config.dart';
 export 'player_adapter_context.dart';
 export 'player_adapter_error.dart';
 export 'player_adapter_event.dart';
+export 'player_adapter_exception.dart';
 export 'player_adapter_factory.dart';
 export 'player_adapter_metrics.dart';
 export 'player_adapter_registry.dart';

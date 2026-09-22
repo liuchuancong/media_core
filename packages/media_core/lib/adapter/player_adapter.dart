@@ -32,7 +32,7 @@ import 'player_adapter_capabilities.dart';
 /// Those belong to:
 ///
 /// - PlayerAdapterFactory
-/// - PlayerAdapterSelector
+/// - BackendSelector
 /// - FallbackManager
 abstract interface class PlayerAdapter {
   /// Adapter identifier.

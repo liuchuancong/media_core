@@ -21,7 +21,7 @@ import 'player_adapter_capabilities.dart';
 /// Those belong to:
 ///
 /// - PlayerAdapterFactory
-/// - PlayerAdapterSelector
+/// - BackendSelector
 /// - PlayerAdapter
 final class PlayerAdapterRegistry {
   /// Creates registry.

@@ -24,7 +24,7 @@ part 'player_adapter_config.freezed.dart';
 /// Those belong to:
 ///
 /// - PlayerAdapterState
-/// - PlayerAdapterSelector
+/// - BackendSelector
 /// - PlayerAdapterFactory
 @freezed
 abstract class PlayerAdapterConfig with _$PlayerAdapterConfig {
