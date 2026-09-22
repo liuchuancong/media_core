@@ -1,23 +1,37 @@
 import 'dart:async';
-
 import 'live_playback_models.dart';
+import 'package:rxdart/rxdart.dart';
 
 /// Watchdog-driven orchestration for live (non-seekable) streams.
 ///
-/// [LiveWatchdogs] observes one player's adapter events and the
-/// kernel event bus, and infers stalls the backend never reports:
+/// RxDart is used for watchdog scheduling while the actual live playback
+/// semantics remain owned by this class.
 ///
-/// - [sourceReadyTimeout]: opened but produced no playing state
-/// - [unexpectedPauseGrace] / [unexpectedPauseFailureGrace]:
-///   playing went false without user intent
-/// - [bufferingStallTimeout]: buffering never ended
-/// - [videoFrameStallTimeout]: playing but no new video frame
-///   event arrived (decoder wedged)
+/// A stall is an inference, not a backend report: the watchdog observed
+/// a missing expectation rather than an explicit player error.
 ///
-/// Inferred stalls are reported through [onStall] with a
-/// [LiveStallKind]; the [LivePlaybackController] turns them into
-/// line / engine recovery. Everything is revision-guarded so a
-/// stall observed on a retired source generation is dropped.
+/// The watchdogs are:
+///
+/// - [LiveStallKind.sourceReadyTimeout]
+///   Opened but produced no playing state in time.
+///
+/// - [LiveStallKind.unexpectedPauseResumed]
+///   Reserved for continuity recovery when an unexpected pause recovers.
+///
+/// - [LiveStallKind.unexpectedPauseResumeFailed]
+///   Reasserted playback did not recover.
+///
+/// - [LiveStallKind.unexpectedPauseTimeout]
+///   Playback remained paused after the continuity retry.
+///
+/// - [LiveStallKind.bufferingStallTimeout]
+///   Buffering never ended within the deadline.
+///
+/// - [LiveStallKind.videoFrameStallTimeout]
+///   Playing state remained true but no new video frame arrived.
+///
+/// All watchdogs are source-local. The owner should call [cancelAll] when
+/// the current source/generation is retired.
 final class LiveWatchdogs {
   /// Creates the watchdog bundle.
   LiveWatchdogs({
@@ -27,84 +41,126 @@ final class LiveWatchdogs {
     this.bufferingStallTimeout = const Duration(seconds: 12),
     this.videoFrameStallTimeout = const Duration(seconds: 10),
     this.enabled = true,
-  }) : _clock = Stopwatch();
+  });
 
-  /// Opened-but-not-playing deadline. Zero disables.
+  /// Opened-but-not-playing deadline.
+  ///
+  /// Zero disables this watchdog.
   final Duration sourceReadyTimeout;
 
   /// Grace before an unexpected `playing=false` triggers a resume.
   final Duration unexpectedPauseGrace;
 
-  /// Grace for the resumed playback to actually start playing.
+  /// Grace for resumed playback to actually start playing.
   final Duration unexpectedPauseFailureGrace;
 
   /// Deadline for a single uninterrupted buffering episode.
   final Duration bufferingStallTimeout;
 
-  /// Deadline without any new video frame event while playing.
+  /// Deadline without any new video frame while playing.
   final Duration videoFrameStallTimeout;
 
-  /// Master switch; disabled watchdogs never arm.
+  /// Master switch.
+  ///
+  /// Disabled watchdogs never arm.
   final bool enabled;
 
-  final Stopwatch _clock;
+  // ---------------------------------------------------------------------------
+  // RxDart event sources
+  // ---------------------------------------------------------------------------
 
-  Timer? _sourceReadyTimer;
-  Timer? _continuityTimer;
-  Timer? _bufferingStallTimer;
-  Timer? _videoFrameStallTimer;
-  Duration? _videoFrameDeadline;
+  /// Emits whenever a new video frame/progress observation is received.
+  ///
+  /// The frame watchdog uses switchMap so every new frame cancels the
+  /// previous timeout and starts a fresh timeout window.
+  final PublishSubject<void> _frameProgress = PublishSubject<void>();
+
+  // ---------------------------------------------------------------------------
+  // Active watchdog subscriptions
+  // ---------------------------------------------------------------------------
+
+  StreamSubscription<void>? _sourceReadySubscription;
+  StreamSubscription<void>? _continuitySubscription;
+  StreamSubscription<void>? _bufferingSubscription;
+  StreamSubscription<void>? _videoFrameSubscription;
+
+  // ---------------------------------------------------------------------------
+  // Current playback observations
+  // ---------------------------------------------------------------------------
 
   bool _playing = false;
   bool _buffering = false;
   bool _presentationVisible = true;
+  bool _disposed = false;
 
   /// Called when a stall is inferred.
   ///
-  /// May be invoked from a timer callback; the owner decides how
-  /// to schedule the recovery.
+  /// May be invoked from an RxDart timer callback. The owner decides
+  /// how recovery should be scheduled.
   void Function(LiveStallKind kind)? onStall;
 
-  /// Called when an unexpected pause was detected and a direct
-  /// `play()` reassert is wanted before escalation.
+  /// Called when an unexpected pause should be reasserted.
   ///
-  /// Return false to let the watchdog escalate immediately.
+  /// Return `true` when the direct `play()` reassertion succeeded.
+  /// Returning `false` allows the watchdog to escalate.
   Future<bool> Function()? onReassertPlay;
+
+  // ---------------------------------------------------------------------------
+  // Source ready
+  // ---------------------------------------------------------------------------
 
   /// Arms the source-ready deadline after a successful open.
   void armSourceReady() {
     _cancelSourceReady();
-    if (!enabled || sourceReadyTimeout <= Duration.zero || _playing) return;
-    _sourceReadyTimer = Timer(sourceReadyTimeout, () {
-      _sourceReadyTimer = null;
-      if (!_playing) onStall?.call(LiveStallKind.sourceReadyTimeout);
+
+    if (!_canWatch || sourceReadyTimeout <= Duration.zero || _playing) {
+      return;
+    }
+
+    _sourceReadySubscription = TimerStream<void>(null, sourceReadyTimeout).listen((_) {
+      if (_disposed) return;
+
+      if (!_playing) {
+        onStall?.call(LiveStallKind.sourceReadyTimeout);
+      }
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Playing state
+  // ---------------------------------------------------------------------------
+
   /// Feeds the playing state from adapter events.
   ///
-  /// [fromUserIntent] distinguishes a user pause from a transport
-  /// hiccup; only the latter arms the continuity watchdog.
+  /// [fromUserIntent] distinguishes a user pause from a transport hiccup.
+  /// Only an unexpected pause starts the continuity watchdog.
   void onPlayingChanged(bool playing, {required bool fromUserIntent}) {
+    if (_disposed) return;
+
     _playing = playing;
+
     _cancelSourceReady();
 
     if (playing) {
       _cancelContinuity();
+
       if (_buffering) {
         _armBufferingStall();
       } else {
         _armVideoFrameStall();
       }
+
       return;
     }
 
     _cancelVideoFrameStall();
+
     if (fromUserIntent) {
       _cancelContinuity();
       _cancelBufferingStall();
       return;
     }
+
     if (_buffering) {
       _armBufferingStall();
     } else {
@@ -112,37 +168,59 @@ final class LiveWatchdogs {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Buffering state
+  // ---------------------------------------------------------------------------
+
   /// Feeds the buffering state from adapter events.
   void onBufferingChanged(bool buffering) {
+    if (_disposed) return;
+
     _buffering = buffering;
+
     if (buffering) {
       _cancelVideoFrameStall();
       _cancelContinuity();
       _armBufferingStall();
+      return;
+    }
+
+    _cancelBufferingStall();
+
+    if (_playing) {
+      _armVideoFrameStall();
     } else {
-      _cancelBufferingStall();
-      if (_playing) {
-        _armVideoFrameStall();
-      } else {
-        _armContinuity();
-      }
+      _armContinuity();
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Video frame progress
+  // ---------------------------------------------------------------------------
 
   /// Feeds a video-size / frame-progress observation.
   ///
-  /// Any geometry or frame event proves the decoder is alive.
+  /// Every frame restarts the video-frame timeout.
   void onFrameProgress() {
-    if (_videoFrameStallTimer != null || _videoFrameDeadline != null) {
-      _clock.start();
-      _videoFrameDeadline = _clock.elapsed + videoFrameStallTimeout;
+    if (_disposed || !_playing || !_presentationVisible) {
+      return;
     }
+
+    _frameProgress.add(null);
   }
 
-  /// Marks whether a route currently owns the mounted video
-  /// presentation. Hidden presentations stop frame watchdogs.
+  // ---------------------------------------------------------------------------
+  // Presentation
+  // ---------------------------------------------------------------------------
+
+  /// Marks whether a route currently owns the mounted video presentation.
+  ///
+  /// Hidden presentations do not run the frame watchdog.
   void setPresentationVisible(bool visible) {
+    if (_disposed) return;
+
     _presentationVisible = visible;
+
     if (!visible) {
       _cancelVideoFrameStall();
     } else if (_playing) {
@@ -154,113 +232,147 @@ final class LiveWatchdogs {
   bool get isPlaying => _playing;
 
   // ---------------------------------------------------------------------------
-  // Arming internals
+  // Continuity watchdog
   // ---------------------------------------------------------------------------
 
   void _armContinuity() {
-    if (!enabled || unexpectedPauseGrace <= Duration.zero) return;
     _cancelContinuity();
-    _continuityTimer = Timer(unexpectedPauseGrace, () {
-      _continuityTimer = null;
+
+    if (!_canWatch || unexpectedPauseGrace <= Duration.zero) {
+      return;
+    }
+
+    _continuitySubscription = TimerStream<void>(null, unexpectedPauseGrace).listen((_) {
+      if (_disposed) return;
+
       _reassertPlay();
     });
   }
 
   Future<void> _reassertPlay() async {
     final reassert = onReassertPlay;
+
     if (reassert == null) {
       onStall?.call(LiveStallKind.unexpectedPauseTimeout);
       return;
     }
-    final resumed = await reassert();
-    if (resumed && (_playing || _buffering)) return;
 
-    // Give the resumed playback one more bounded chance.
-    if (!enabled || unexpectedPauseFailureGrace <= Duration.zero) {
+    final resumed = await reassert();
+
+    if (_disposed) return;
+
+    if (resumed && (_playing || _buffering)) {
+      return;
+    }
+
+    if (!_canWatch || unexpectedPauseFailureGrace <= Duration.zero) {
       onStall?.call(LiveStallKind.unexpectedPauseResumeFailed);
       return;
     }
-    _continuityTimer = Timer(unexpectedPauseFailureGrace, () {
-      _continuityTimer = null;
+
+    _cancelContinuity();
+
+    _continuitySubscription = TimerStream<void>(null, unexpectedPauseFailureGrace).listen((_) {
+      if (_disposed) return;
+
       if (!_playing) {
         onStall?.call(LiveStallKind.unexpectedPauseTimeout);
       }
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Buffering watchdog
+  // ---------------------------------------------------------------------------
+
   void _armBufferingStall() {
-    if (!enabled || bufferingStallTimeout <= Duration.zero || !_buffering) return;
     _cancelBufferingStall();
-    _bufferingStallTimer = Timer(bufferingStallTimeout, () {
-      _bufferingStallTimer = null;
+
+    if (!_canWatch || bufferingStallTimeout <= Duration.zero || !_buffering) {
+      return;
+    }
+
+    _bufferingSubscription = TimerStream<void>(null, bufferingStallTimeout).listen((_) {
+      if (_disposed) return;
+
       if (_buffering) {
         onStall?.call(LiveStallKind.bufferingStallTimeout);
       }
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Video frame watchdog
+  // ---------------------------------------------------------------------------
+
   void _armVideoFrameStall() {
-    if (!enabled ||
-        videoFrameStallTimeout <= Duration.zero ||
-        !_presentationVisible ||
-        !_playing) {
-      _cancelVideoFrameStall();
+    _cancelVideoFrameStall();
+
+    if (!_canWatch || videoFrameStallTimeout <= Duration.zero || !_presentationVisible || !_playing) {
       return;
     }
-    _clock.start();
-    _videoFrameDeadline = _clock.elapsed + videoFrameStallTimeout;
-    if (_videoFrameStallTimer != null) return;
 
-    void check() {
-      _videoFrameStallTimer = null;
-      if (!_presentationVisible || !_playing) {
-        _cancelVideoFrameStall();
-        return;
-      }
-      final deadline = _videoFrameDeadline;
-      if (deadline == null) return;
-      final remaining = deadline - _clock.elapsed;
-      if (remaining > Duration.zero) {
-        _videoFrameStallTimer = Timer(remaining, check);
-        return;
-      }
-      _cancelVideoFrameStall();
-      onStall?.call(LiveStallKind.videoFrameStallTimeout);
-    }
+    // Start a fresh watchdog immediately.
+    //
+    // Every subsequent frame emits into [_frameProgress]. switchMap cancels
+    // the previous TimerStream and creates a new timeout window.
+    _videoFrameSubscription = _frameProgress
+        .startWith(null)
+        .switchMap<void>((_) => TimerStream<void>(null, videoFrameStallTimeout))
+        .listen((_) {
+          if (_disposed) return;
 
-    _videoFrameStallTimer = Timer(videoFrameStallTimeout, check);
+          if (!_presentationVisible || !_playing) {
+            return;
+          }
+
+          // One stall is enough. The controller decides whether to recover
+          // using the same source, another line, another engine, etc.
+          _cancelVideoFrameStall();
+
+          onStall?.call(LiveStallKind.videoFrameStallTimeout);
+        });
   }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  bool get _canWatch => enabled && !_disposed;
 
   // ---------------------------------------------------------------------------
   // Cancellation
   // ---------------------------------------------------------------------------
 
   void _cancelSourceReady() {
-    _sourceReadyTimer?.cancel();
-    _sourceReadyTimer = null;
+    _sourceReadySubscription?.cancel();
+    _sourceReadySubscription = null;
   }
 
   void _cancelContinuity() {
-    _continuityTimer?.cancel();
-    _continuityTimer = null;
+    _continuitySubscription?.cancel();
+    _continuitySubscription = null;
   }
 
   void _cancelBufferingStall() {
-    _bufferingStallTimer?.cancel();
-    _bufferingStallTimer = null;
+    _bufferingSubscription?.cancel();
+    _bufferingSubscription = null;
   }
 
   void _cancelVideoFrameStall() {
-    _videoFrameStallTimer?.cancel();
-    _videoFrameStallTimer = null;
-    _videoFrameDeadline = null;
-    _clock
-      ..stop()
-      ..reset();
+    _videoFrameSubscription?.cancel();
+    _videoFrameSubscription = null;
   }
 
-  /// Cancels every watchdog. Called on source change, user pause
-  /// and disposal.
+  /// Cancels every watchdog.
+  ///
+  /// Call this when:
+  ///
+  /// - the source changes
+  /// - the playback generation changes
+  /// - the user pauses
+  /// - recovery takes ownership
+  /// - the controller closes the current source
   void cancelAll() {
     _cancelSourceReady();
     _cancelContinuity();
@@ -270,8 +382,15 @@ final class LiveWatchdogs {
 
   /// Releases the watchdog bundle.
   void dispose() {
+    if (_disposed) return;
+
+    _disposed = true;
+
     cancelAll();
+
     onStall = null;
     onReassertPlay = null;
+
+    _frameProgress.close();
   }
 }
