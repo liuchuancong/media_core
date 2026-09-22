@@ -199,7 +199,9 @@ final class LivePlaybackController {
   /// Switches to line [index] of the current request.
   Future<void> switchLine(int index) {
     final urls = lines;
-    if (index < 0 || index >= urls.length) return Future<void>.value();
+    if (index < 0 || index >= urls.length) {
+      return Future<void>.value();
+    }
 
     final generation = _generation;
     _beginOperation(OperationType.load);
@@ -210,7 +212,9 @@ final class LivePlaybackController {
   /// Replays the current source from scratch.
   Future<void> retry() {
     final url = _currentUrl;
-    if (url == null || _request == null) return Future<void>.value();
+    if (url == null || _request == null) {
+      return Future<void>.value();
+    }
 
     _playbackRequested = true;
     _sameEngineAttempts = 0;
@@ -420,6 +424,7 @@ final class LivePlaybackController {
 
       if (handle == null || handle.disposed) {
         handle = await kernel.create();
+        if (!_isCurrent(generation)) return;
         _bindHandle(handle);
       }
 
@@ -430,13 +435,18 @@ final class LivePlaybackController {
       _advanceSession(source);
 
       await handle.open(source);
+
+      if (!_isCurrent(generation)) return;
+
       watchdogs.armSourceReady();
       _setState(_liveState(PlayerPlaybackState.buffering));
 
       _completeCurrentOperation();
     } catch (error) {
       if (!_isCurrent(generation)) return;
+
       _failCurrentOperation();
+
       await _recover(
         PlayerFailure(
           code: PlayerErrorCode.backendOpenFailed,
@@ -451,6 +461,7 @@ final class LivePlaybackController {
 
   PlayerSource _toSource(String url, LiveSourceRequest request) {
     final headers = request.headers;
+
     return PlayerSource(
       id: SourceId('live_${_generation}_$lineIndex'),
       uri: Uri.parse(url),
@@ -475,36 +486,66 @@ final class LivePlaybackController {
 
   void _bindHandle(PlayerHandle handle) {
     _handle = handle;
+
     _eventSub?.cancel();
+
     _eventSub = handle.adapter.events.listen(_onAdapterEvent, onError: _onAdapterEventError);
   }
 
   void _onAdapterEvent(PlayerAdapterEvent adapterEvent) {
     final generation = _generation;
+
     switch (adapterEvent) {
       case PlayerAdapterPlaying():
         _setState(_liveState(PlayerPlaybackState.playing));
+
         watchdogs.onPlayingChanged(true, fromUserIntent: false);
+
+        // Playback is successfully running again.
+        // Reset recovery counters so a previous failure
+        // streak does not affect future recovery attempts.
         _sameEngineAttempts = 0;
         _backoffAttempt = 0;
+
         _cancelBackoff();
         _lineFallback.complete();
         _completeCurrentOperation();
+
       case PlayerAdapterPaused():
         watchdogs.onPlayingChanged(false, fromUserIntent: !_playbackRequested);
+
         if (!_playbackRequested) {
           _setState(_liveState(PlayerPlaybackState.paused));
         }
+
       case PlayerAdapterBuffering(buffering: final buffering):
         _setState(_liveState(buffering ? PlayerPlaybackState.buffering : PlayerPlaybackState.playing));
+
         watchdogs.onBufferingChanged(buffering);
-      case PlayerAdapterPositionChanged():
+
+      case PlayerAdapterVideoFrameProgress():
+        // Only a real decoded-frame heartbeat feeds the
+        // video-frame stall watchdog.
         watchdogs.onFrameProgress();
+
+      case PlayerAdapterVideoSizeChanged():
+        // Video geometry is not decoded-frame progress.
+        //
+        // A size change only tells us that the video dimensions
+        // changed. It does not prove that a new frame was decoded.
+        break;
+
+      case PlayerAdapterPositionChanged():
+        // Position changes are playback progress only.
+        // They are not proof that a video frame was decoded.
+        break;
+
       case PlayerAdapterErrorEvent(message: final message):
         _scheduleRecovery(
           PlayerFailure(code: PlayerErrorCode.playbackFailed, message: message, context: _contextFor(_currentUrl)),
           generation,
         );
+
       default:
         break;
     }
@@ -534,6 +575,7 @@ final class LivePlaybackController {
     if (!_isCurrent(generation) || !_playbackRequested) return;
 
     watchdogs.cancelAll();
+
     _setState(_liveState(PlayerPlaybackState.buffering));
 
     final action = policy.decide(failure, retryCount: _sameEngineAttempts);
@@ -568,11 +610,15 @@ final class LivePlaybackController {
         action == ErrorPolicyAction.retry ||
         action == ErrorPolicyAction.recover) {
       final urls = lines;
+
       if (urls.length > 1 && _currentUrl != null) {
         final nextIndex = (lineIndex + 1) % urls.length;
+
         if (urls[nextIndex] != _currentUrl) {
           _sameEngineAttempts = 0;
+
           await _open(generation, urls[nextIndex]);
+
           return;
         }
       }
@@ -583,6 +629,7 @@ final class LivePlaybackController {
         action == ErrorPolicyAction.retry ||
         action == ErrorPolicyAction.recover) {
       final switched = await _trySwitchEngine(generation);
+
       if (switched) {
         _sameEngineAttempts = 0;
         return;
@@ -592,18 +639,28 @@ final class LivePlaybackController {
     // 4. Backoff retry.
     if (_backoffAttempt < backoffDelays.length) {
       final delay = backoffDelays[_backoffAttempt++];
+
       _setState(_liveState(PlayerPlaybackState.buffering));
+
       _cancelBackoff();
+
       _backoffTimer = Timer(delay, () {
         _backoffTimer = null;
-        if (!_isCurrent(generation) || !_playbackRequested) return;
+
+        if (!_isCurrent(generation) || !_playbackRequested) {
+          return;
+        }
+
         _sameEngineAttempts = 0;
         _backoffAttempt = 0;
+
         final url = _currentUrl;
+
         if (url != null) {
           unawaited(_open(generation, url));
         }
       });
+
       return;
     }
 
@@ -616,10 +673,13 @@ final class LivePlaybackController {
     switch (action) {
       case ErrorPolicyAction.retry:
         return OperationType.retry;
+
       case ErrorPolicyAction.recover:
         return OperationType.recover;
+
       case ErrorPolicyAction.fallback:
         return OperationType.fallback;
+
       case ErrorPolicyAction.fail:
       case ErrorPolicyAction.cancel:
       case ErrorPolicyAction.ignore:
@@ -629,8 +689,11 @@ final class LivePlaybackController {
 
   Future<void> _terminate(PlayerFailure failure) async {
     _playbackRequested = false;
+
     _setState(_liveState(PlayerPlaybackState.error));
+
     _session?.updateState(const SessionState.error());
+
     if (!_failureController.isClosed) {
       _failureController.add(failure);
     }
@@ -641,31 +704,44 @@ final class LivePlaybackController {
         .where((registration) => registration.enabled && registration.id != backendId)
         .map((registration) => registration.id)
         .toList();
+
     if (candidates.isEmpty) return false;
 
     _engineFallback.start(candidates, currentBackend: backendId);
+
     final next = _engineFallback.next();
+
     if (next == null) return false;
 
     final handle = _handle;
+
     if (handle == null) return false;
 
     try {
       final registration = kernel.registry.get(next);
+
       if (registration == null) return false;
 
       await handle.attachAdapter(registration);
 
+      if (!_isCurrent(generation)) return false;
+
       final url = _currentUrl;
       final request = _request;
+
       if (url == null || request == null) return false;
 
       final source = _toSource(url, request);
+
       _advanceSession(source);
 
       await handle.open(source);
+
+      if (!_isCurrent(generation)) return false;
+
       watchdogs.armSourceReady();
       _completeCurrentOperation();
+
       return true;
     } catch (_) {
       _engineFallback.markFailed();
@@ -685,6 +761,7 @@ final class LivePlaybackController {
 
   void _setState(PlayerState next) {
     if (state == next) return;
+
     state = next;
 
     // Mirror into the session so the session's SessionSnapshot stream
@@ -700,21 +777,29 @@ final class LivePlaybackController {
     switch (playerState.playback) {
       case PlayerPlaybackState.idle:
         return const SessionState.idle();
+
       case PlayerPlaybackState.opening:
         return const SessionState.opening();
+
       case PlayerPlaybackState.playing:
         return const SessionState.playing();
+
       case PlayerPlaybackState.paused:
         return const SessionState.paused();
+
       case PlayerPlaybackState.buffering:
         return const SessionState.buffering();
+
       case PlayerPlaybackState.stopped:
       case PlayerPlaybackState.stopping:
         return const SessionState.stopped();
+
       case PlayerPlaybackState.completed:
         return const SessionState.completed();
+
       case PlayerPlaybackState.error:
         return const SessionState.error();
+
       case PlayerPlaybackState.seeking:
         // Live streams do not seek; treat as an in-flight transition.
         return const SessionState.buffering();
@@ -733,11 +818,15 @@ final class LivePlaybackController {
   void _wireWatchdogs() {
     watchdogs.onStall = (kind) {
       if (!_playbackRequested) return;
+
       _scheduleRecovery(_failureForStall(kind), _generation);
     };
+
     watchdogs.onReassertPlay = () async {
       final handle = _handle;
+
       if (handle == null) return false;
+
       try {
         await handle.play();
         return true;

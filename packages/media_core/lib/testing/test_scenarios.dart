@@ -1,8 +1,8 @@
 import 'fake_player_adapter.dart';
+import 'test_source_factory.dart';
+import '../source/player_source.dart';
 import '../adapter/player_adapter.dart';
 import '../adapter/player_adapter_event.dart';
-import '../source/player_source.dart';
-import 'test_source_factory.dart';
 
 /// Reusable playback scenarios executed against a [PlayerAdapter].
 ///
@@ -47,11 +47,7 @@ final class TestScenarios {
   }
 
   /// Opens [source] and verifies volume and rate round trips.
-  static Future<void> volumeAndRate(
-    PlayerAdapter adapter, {
-    double volume = 0.5,
-    double rate = 1.5,
-  }) async {
+  static Future<void> volumeAndRate(PlayerAdapter adapter, {double volume = 0.5, double rate = 1.5}) async {
     await adapter.open(TestSourceFactory.httpMp4());
     await adapter.setVolume(volume);
     await adapter.setRate(rate);
@@ -98,6 +94,7 @@ final class TestScenarios {
       positionChanged: (_) => 'positionChanged',
       durationChanged: (_) => 'durationChanged',
       videoSizeChanged: (_) => 'videoSizeChanged',
+      videoFrameProgress: (_) => 'videoFrameProgress',
       volumeChanged: (_) => 'volumeChanged',
       rateChanged: (_) => 'rateChanged',
       error: (_) => 'error',

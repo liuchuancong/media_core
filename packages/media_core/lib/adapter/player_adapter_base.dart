@@ -1,17 +1,15 @@
 import 'dart:async';
-
-import 'package:flutter/foundation.dart' show protected;
-
+import 'player_adapter.dart';
 import '../core/player_error.dart';
 import '../core/player_state.dart';
-import '../error/player_error_code.dart';
-import '../source/player_source.dart';
-import 'player_adapter.dart';
-import 'player_adapter_capabilities.dart';
-import 'player_adapter_context.dart';
 import 'player_adapter_event.dart';
-import 'player_adapter_exception.dart';
+import 'player_adapter_context.dart';
 import 'player_adapter_metrics.dart';
+import '../source/player_source.dart';
+import 'player_adapter_exception.dart';
+import '../error/player_error_code.dart';
+import 'player_adapter_capabilities.dart';
+import 'package:flutter/foundation.dart' show protected;
 
 /// Template-method base for [PlayerAdapter] implementations.
 ///
@@ -53,8 +51,8 @@ import 'player_adapter_metrics.dart';
 abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// Creates the adapter.
   PlayerAdapterBase({String? id, PlayerAdapterCapabilities? capabilities})
-      : _id = id ?? 'adapter',
-        _capabilities = capabilities ?? const PlayerAdapterCapabilities();
+    : _id = id ?? 'adapter',
+      _capabilities = capabilities ?? const PlayerAdapterCapabilities();
 
   final String _id;
   final PlayerAdapterCapabilities _capabilities;
@@ -75,8 +73,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   int? _lastReportedWidth;
   int? _lastReportedHeight;
 
-  final StreamController<PlayerAdapterEvent> _eventController =
-      StreamController<PlayerAdapterEvent>.broadcast();
+  final StreamController<PlayerAdapterEvent> _eventController = StreamController<PlayerAdapterEvent>.broadcast();
 
   @override
   String get id => _id;
@@ -179,12 +176,14 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       _sourceOpening = false;
       _acceptSourceEvents = false;
       if (error is! PlayerAdapterOpenException) {
-        _fail(PlayerError(
-          code: PlayerErrorCode.backendOpenFailed,
-          message: '$id open failed: $error',
-          cause: error,
-          stackTrace: stackTrace,
-        ));
+        _fail(
+          PlayerError(
+            code: PlayerErrorCode.backendOpenFailed,
+            message: '$id open failed: $error',
+            cause: error,
+            stackTrace: stackTrace,
+          ),
+        );
       }
       rethrow;
     }
@@ -380,6 +379,17 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     emitVideoSizeChanged(width, height);
   }
 
+  /// Reports that a decoded video frame has progressed.
+  ///
+  /// This is a heartbeat for the video-frame watchdog. It is intentionally
+  /// separate from [emitVideoSizeChanged], because video dimensions describe
+  /// geometry and do not prove that frames are still being decoded.
+  @protected
+  void emitVideoFrameProgress() {
+    if (!acceptsEngineEvents) return;
+    _addEvent(const PlayerAdapterEvent.videoFrameProgress());
+  }
+
   /// Reports the playback position.
   @protected
   void emitPositionChanged(Duration position) {
@@ -416,12 +426,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     if (_disposed) return;
     if (gatesSourceEvents && !_acceptSourceEvents) return;
 
-    final error = PlayerError(
-      code: code,
-      message: message,
-      cause: cause,
-      stackTrace: stackTrace,
-    );
+    final error = PlayerError(code: code, message: message, cause: cause, stackTrace: stackTrace);
     if (_sourceOpening && gatesSourceEvents) {
       _deferredEngineError = error;
       return;

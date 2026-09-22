@@ -62,6 +62,13 @@ abstract class PlayerAdapterEvent with _$PlayerAdapterEvent {
   const factory PlayerAdapterEvent.videoSizeChanged({required int width, required int height}) =
       PlayerAdapterVideoSizeChanged;
 
+  /// Decoded video frame progressed.
+  ///
+  /// This event is a heartbeat indicating that the backend has
+  /// decoded another video frame. It is separate from
+  /// [videoSizeChanged], which only describes video geometry.
+  const factory PlayerAdapterEvent.videoFrameProgress() = PlayerAdapterVideoFrameProgress;
+
   /// Volume changed.
   const factory PlayerAdapterEvent.volumeChanged({required double volume}) = PlayerAdapterVolumeChanged;
 

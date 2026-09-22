@@ -56,7 +56,7 @@ extension PlayerAdapterEventPatterns on PlayerAdapterEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlayerAdapterOpened value)?  opened,TResult Function( PlayerAdapterPlaying value)?  playing,TResult Function( PlayerAdapterPaused value)?  paused,TResult Function( PlayerAdapterStopped value)?  stopped,TResult Function( PlayerAdapterBuffering value)?  buffering,TResult Function( PlayerAdapterCompleted value)?  completed,TResult Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult Function( PlayerAdapterRateChanged value)?  rateChanged,TResult Function( PlayerAdapterErrorEvent value)?  error,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlayerAdapterOpened value)?  opened,TResult Function( PlayerAdapterPlaying value)?  playing,TResult Function( PlayerAdapterPaused value)?  paused,TResult Function( PlayerAdapterStopped value)?  stopped,TResult Function( PlayerAdapterBuffering value)?  buffering,TResult Function( PlayerAdapterCompleted value)?  completed,TResult Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult Function( PlayerAdapterRateChanged value)?  rateChanged,TResult Function( PlayerAdapterErrorEvent value)?  error,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
@@ -68,7 +68,8 @@ return buffering(_that);case PlayerAdapterCompleted() when completed != null:
 return completed(_that);case PlayerAdapterPositionChanged() when positionChanged != null:
 return positionChanged(_that);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
-return videoSizeChanged(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoSizeChanged(_that);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
+return videoFrameProgress(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that);case PlayerAdapterErrorEvent() when error != null:
 return error(_that);case _:
@@ -89,7 +90,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlayerAdapterOpened value)  opened,required TResult Function( PlayerAdapterPlaying value)  playing,required TResult Function( PlayerAdapterPaused value)  paused,required TResult Function( PlayerAdapterStopped value)  stopped,required TResult Function( PlayerAdapterBuffering value)  buffering,required TResult Function( PlayerAdapterCompleted value)  completed,required TResult Function( PlayerAdapterPositionChanged value)  positionChanged,required TResult Function( PlayerAdapterDurationChanged value)  durationChanged,required TResult Function( PlayerAdapterVideoSizeChanged value)  videoSizeChanged,required TResult Function( PlayerAdapterVolumeChanged value)  volumeChanged,required TResult Function( PlayerAdapterRateChanged value)  rateChanged,required TResult Function( PlayerAdapterErrorEvent value)  error,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlayerAdapterOpened value)  opened,required TResult Function( PlayerAdapterPlaying value)  playing,required TResult Function( PlayerAdapterPaused value)  paused,required TResult Function( PlayerAdapterStopped value)  stopped,required TResult Function( PlayerAdapterBuffering value)  buffering,required TResult Function( PlayerAdapterCompleted value)  completed,required TResult Function( PlayerAdapterPositionChanged value)  positionChanged,required TResult Function( PlayerAdapterDurationChanged value)  durationChanged,required TResult Function( PlayerAdapterVideoSizeChanged value)  videoSizeChanged,required TResult Function( PlayerAdapterVideoFrameProgress value)  videoFrameProgress,required TResult Function( PlayerAdapterVolumeChanged value)  volumeChanged,required TResult Function( PlayerAdapterRateChanged value)  rateChanged,required TResult Function( PlayerAdapterErrorEvent value)  error,}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened():
@@ -101,7 +102,8 @@ return buffering(_that);case PlayerAdapterCompleted():
 return completed(_that);case PlayerAdapterPositionChanged():
 return positionChanged(_that);case PlayerAdapterDurationChanged():
 return durationChanged(_that);case PlayerAdapterVideoSizeChanged():
-return videoSizeChanged(_that);case PlayerAdapterVolumeChanged():
+return videoSizeChanged(_that);case PlayerAdapterVideoFrameProgress():
+return videoFrameProgress(_that);case PlayerAdapterVolumeChanged():
 return volumeChanged(_that);case PlayerAdapterRateChanged():
 return rateChanged(_that);case PlayerAdapterErrorEvent():
 return error(_that);case _:
@@ -121,7 +123,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlayerAdapterOpened value)?  opened,TResult? Function( PlayerAdapterPlaying value)?  playing,TResult? Function( PlayerAdapterPaused value)?  paused,TResult? Function( PlayerAdapterStopped value)?  stopped,TResult? Function( PlayerAdapterBuffering value)?  buffering,TResult? Function( PlayerAdapterCompleted value)?  completed,TResult? Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult? Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult? Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult? Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult? Function( PlayerAdapterRateChanged value)?  rateChanged,TResult? Function( PlayerAdapterErrorEvent value)?  error,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlayerAdapterOpened value)?  opened,TResult? Function( PlayerAdapterPlaying value)?  playing,TResult? Function( PlayerAdapterPaused value)?  paused,TResult? Function( PlayerAdapterStopped value)?  stopped,TResult? Function( PlayerAdapterBuffering value)?  buffering,TResult? Function( PlayerAdapterCompleted value)?  completed,TResult? Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult? Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult? Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult? Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult? Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult? Function( PlayerAdapterRateChanged value)?  rateChanged,TResult? Function( PlayerAdapterErrorEvent value)?  error,}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
@@ -133,7 +135,8 @@ return buffering(_that);case PlayerAdapterCompleted() when completed != null:
 return completed(_that);case PlayerAdapterPositionChanged() when positionChanged != null:
 return positionChanged(_that);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
-return videoSizeChanged(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoSizeChanged(_that);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
+return videoFrameProgress(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that);case PlayerAdapterErrorEvent() when error != null:
 return error(_that);case _:
@@ -153,7 +156,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String? source)?  opened,TResult Function()?  playing,TResult Function()?  paused,TResult Function()?  stopped,TResult Function( bool buffering,  double? progress)?  buffering,TResult Function()?  completed,TResult Function( Duration position)?  positionChanged,TResult Function( Duration duration)?  durationChanged,TResult Function( int width,  int height)?  videoSizeChanged,TResult Function( double volume)?  volumeChanged,TResult Function( double rate)?  rateChanged,TResult Function( String message,  Object? error,  StackTrace? stackTrace)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String? source)?  opened,TResult Function()?  playing,TResult Function()?  paused,TResult Function()?  stopped,TResult Function( bool buffering,  double? progress)?  buffering,TResult Function()?  completed,TResult Function( Duration position)?  positionChanged,TResult Function( Duration duration)?  durationChanged,TResult Function( int width,  int height)?  videoSizeChanged,TResult Function()?  videoFrameProgress,TResult Function( double volume)?  volumeChanged,TResult Function( double rate)?  rateChanged,TResult Function( String message,  Object? error,  StackTrace? stackTrace)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
 return opened(_that.source);case PlayerAdapterPlaying() when playing != null:
@@ -164,7 +167,8 @@ return buffering(_that.buffering,_that.progress);case PlayerAdapterCompleted() w
 return completed();case PlayerAdapterPositionChanged() when positionChanged != null:
 return positionChanged(_that.position);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that.duration);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
-return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
+return videoFrameProgress();case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that.volume);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that.rate);case PlayerAdapterErrorEvent() when error != null:
 return error(_that.message,_that.error,_that.stackTrace);case _:
@@ -185,7 +189,7 @@ return error(_that.message,_that.error,_that.stackTrace);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String? source)  opened,required TResult Function()  playing,required TResult Function()  paused,required TResult Function()  stopped,required TResult Function( bool buffering,  double? progress)  buffering,required TResult Function()  completed,required TResult Function( Duration position)  positionChanged,required TResult Function( Duration duration)  durationChanged,required TResult Function( int width,  int height)  videoSizeChanged,required TResult Function( double volume)  volumeChanged,required TResult Function( double rate)  rateChanged,required TResult Function( String message,  Object? error,  StackTrace? stackTrace)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String? source)  opened,required TResult Function()  playing,required TResult Function()  paused,required TResult Function()  stopped,required TResult Function( bool buffering,  double? progress)  buffering,required TResult Function()  completed,required TResult Function( Duration position)  positionChanged,required TResult Function( Duration duration)  durationChanged,required TResult Function( int width,  int height)  videoSizeChanged,required TResult Function()  videoFrameProgress,required TResult Function( double volume)  volumeChanged,required TResult Function( double rate)  rateChanged,required TResult Function( String message,  Object? error,  StackTrace? stackTrace)  error,}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened():
 return opened(_that.source);case PlayerAdapterPlaying():
@@ -196,7 +200,8 @@ return buffering(_that.buffering,_that.progress);case PlayerAdapterCompleted():
 return completed();case PlayerAdapterPositionChanged():
 return positionChanged(_that.position);case PlayerAdapterDurationChanged():
 return durationChanged(_that.duration);case PlayerAdapterVideoSizeChanged():
-return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVolumeChanged():
+return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVideoFrameProgress():
+return videoFrameProgress();case PlayerAdapterVolumeChanged():
 return volumeChanged(_that.volume);case PlayerAdapterRateChanged():
 return rateChanged(_that.rate);case PlayerAdapterErrorEvent():
 return error(_that.message,_that.error,_that.stackTrace);case _:
@@ -216,7 +221,7 @@ return error(_that.message,_that.error,_that.stackTrace);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String? source)?  opened,TResult? Function()?  playing,TResult? Function()?  paused,TResult? Function()?  stopped,TResult? Function( bool buffering,  double? progress)?  buffering,TResult? Function()?  completed,TResult? Function( Duration position)?  positionChanged,TResult? Function( Duration duration)?  durationChanged,TResult? Function( int width,  int height)?  videoSizeChanged,TResult? Function( double volume)?  volumeChanged,TResult? Function( double rate)?  rateChanged,TResult? Function( String message,  Object? error,  StackTrace? stackTrace)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String? source)?  opened,TResult? Function()?  playing,TResult? Function()?  paused,TResult? Function()?  stopped,TResult? Function( bool buffering,  double? progress)?  buffering,TResult? Function()?  completed,TResult? Function( Duration position)?  positionChanged,TResult? Function( Duration duration)?  durationChanged,TResult? Function( int width,  int height)?  videoSizeChanged,TResult? Function()?  videoFrameProgress,TResult? Function( double volume)?  volumeChanged,TResult? Function( double rate)?  rateChanged,TResult? Function( String message,  Object? error,  StackTrace? stackTrace)?  error,}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
 return opened(_that.source);case PlayerAdapterPlaying() when playing != null:
@@ -227,7 +232,8 @@ return buffering(_that.buffering,_that.progress);case PlayerAdapterCompleted() w
 return completed();case PlayerAdapterPositionChanged() when positionChanged != null:
 return positionChanged(_that.position);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that.duration);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
-return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
+return videoFrameProgress();case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that.volume);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that.rate);case PlayerAdapterErrorEvent() when error != null:
 return error(_that.message,_that.error,_that.stackTrace);case _:
@@ -712,6 +718,38 @@ as int,
 
 
 }
+
+/// @nodoc
+
+
+class PlayerAdapterVideoFrameProgress implements PlayerAdapterEvent {
+  const PlayerAdapterVideoFrameProgress();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterVideoFrameProgress);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.videoFrameProgress()';
+}
+
+
+}
+
+
+
 
 /// @nodoc
 
