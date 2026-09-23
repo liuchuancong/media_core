@@ -1,7 +1,6 @@
 import 'dart:async';
-
-import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_core/media_core.dart';
+import 'package:media_kit/media_kit.dart' as mk;
 
 /// [PlayerAdapter] implementation backed by media_kit.
 ///
@@ -12,9 +11,7 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
   ///
   /// Supply [player] to reuse an existing instance; otherwise one
   /// is created lazily inside [initialize].
-  MediaKitPlayerAdapter({String id = 'media_kit', mk.Player? player})
-      : _id = id,
-        _injectedPlayer = player;
+  MediaKitPlayerAdapter({String id = 'media_kit', mk.Player? player}) : _id = id, _injectedPlayer = player;
 
   final String _id;
   final mk.Player? _injectedPlayer;
@@ -313,18 +310,118 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
     );
   }
 
-  /// Capabilities advertised by all media_kit adapters.
+  /// Capabilities of the MPV engine, as exposed by this adapter.
+  ///
+  /// The declaration is scoped to what the adapter actually produces
+  /// or accepts today, not to what libmpv exposes in the abstract.
+  /// Backend events the adapter does not yet subscribe to
+  /// (`MPV_EVENT_VIDEO_RECONFIG`, `MPV_EVENT_AUDIO_RECONFIG`,
+  /// `metadata`, track lists, …) stay false; they can be flipped on
+  /// the same line as the subscription that makes them real.
+  ///
+  /// Signal emits and their capability flags:
+  ///
+  /// - [PlayerAdapterEvent.videoFrameProgress] is produced by
+  ///   [_observeDecodedFrames] from mpv's `estimated-vf-fps`. It is
+  ///   a rate statistic rather than a per-frame callback, but it is
+  ///   a real proof that video output is still advancing, which is
+  ///   exactly what the video-frame watchdog needs.
+  /// - [PlayerAdapterEvent.videoSizeChanged] is produced by
+  ///   [_onWidth] / [_onHeight] from the media_kit width and height
+  ///   streams.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
+    // Core playback.
+    //
+    // The adapter implements every command hook
+    // (onPlay/onPause/onStop/onSeek/onSetVolume/onSetRate) and
+    // forwards them to media_kit, so all of these are true.
+    // `supportsMuteControl` stays false: muting is done by routing
+    // through `setAudioTrack(no)` for the current source, not by a
+    // dedicated mute command the adapter accepts for the lifetime
+    // of the session.
     supportsLive: true,
     supportsSeek: true,
     supportsPause: true,
+    supportsStop: true,
     supportsRateControl: true,
     supportsVolumeControl: true,
+    supportsMuteControl: false,
+
+    // Video and rendering.
+    //
+    // Only the two signals the adapter currently emits are declared.
+    // Reconfig / hwdec info / filters / screenshot are backend
+    // capabilities that are not surfaced through the adapter yet,
+    // so they stay false until a corresponding subscription or
+    // command is added.
+    supportsVideoFrameProgress: true,
+    supportsVideoSizeChanged: true,
+    supportsVideoReconfig: false,
+    supportsHwdecInfo: false,
+    supportsVideoFilters: false,
+    supportsScreenshot: false,
+
+    // Audio.
+    supportsAudioReconfig: false,
+    supportsAudioDeviceSelection: false,
+    supportsAudioFilters: false,
+
+    // Tracks and subtitles.
+    //
+    // `setAudioOnly` and `setAudioOutputSuppressed` exist, but they
+    // are adapter-specific toggles, not the general "list and pick a
+    // track" surface the capability describes.
+    supportsTrackSelection: false,
+    supportsSubtitleTrack: false,
+    supportsExternalSubtitle: false,
+
+    // Playback state and buffering.
+    //
+    // `_onBuffer` updates metrics but does not emit a buffering
+    // progress ratio, so `supportsBufferingProgress` stays false
+    // until `emitBuffering(progress: …)` is actually wired.
+    supportsCacheState: false,
+    supportsBufferingProgress: false,
+    supportsChapterControl: false,
+    supportsLoop: false,
+
+    // Metadata and playlist.
+    supportsMetadata: false,
+    supportsPlaylist: false,
+    supportsPlaylistControl: false,
+
+    // Diagnostics and integration.
+    supportsClientMessage: false,
+    supportsLogMessages: false,
+
+    // Decoders.
     supportsHardwareDecoder: true,
     supportsSoftwareDecoder: true,
+
+    // Presentation.
+    //
+    // PiP is not provided by mpv; fullscreen is a widget-level
+    // decision the adapter does not veto.
     supportsPictureInPicture: false,
     supportsFullscreen: true,
+
+    // Source matching.
     supportedProtocols: {'http', 'https', 'hls', 'dash', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
-    supportedFormats: {'mp4', 'mkv', 'webm', 'flv', 'm3u8', 'mpd', 'mov', 'avi', 'ts', 'mp3', 'aac', 'flac', 'wav', 'ogg', 'opus'},
+    supportedFormats: {
+      'mp4',
+      'mkv',
+      'webm',
+      'flv',
+      'm3u8',
+      'mpd',
+      'mov',
+      'avi',
+      'ts',
+      'mp3',
+      'aac',
+      'flac',
+      'h265',
+      'hevc',
+    },
   );
 }

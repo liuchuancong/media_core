@@ -32,6 +32,30 @@ import 'package:flutter/foundation.dart' show protected;
 /// fails the open through [PlayerAdapterOpenException] or is
 /// dropped when the engine reports the source as healthy.
 ///
+/// Capability handling follows the single-source-of-truth rule:
+/// the only place a `supportsXxx` flag exists is
+/// [PlayerAdapterCapabilities]. This base reads [_capabilities]
+/// directly and never re-exposes a capability as its own getter,
+/// field, or constructor parameter.
+///
+/// Which `emit*` helpers are capability-gated:
+///
+/// - **Signal emits** are gated. They describe a signal the adapter
+///   promised to produce, and a call without the corresponding
+///   capability is a producer contract violation:
+///   - [emitVideoFrameProgress] ↔ `supportsVideoFrameProgress`
+///   - [emitVideoSizeChanged] ↔ `supportsVideoSizeChanged`
+///   - `emitBuffering(progress: …)` ↔ `supportsBufferingProgress`
+/// - **Fact emits** are not gated. They describe an engine state
+///   transition that has already happened (`playing`, `paused`,
+///   `positionChanged`, `volumeChanged`, …). A backend that pauses
+///   without declaring `supportsPause` is describing a real event
+///   and the report must not be suppressed.
+/// - **Command capabilities** (`supportsSeek`, `supportsPause`,
+///   `supportsRateControl`, `supportsVolumeControl`, …) do not map
+///   to any `emit*` at all; consumers use them to decide which
+///   commands to attempt.
+///
 /// Responsibilities:
 ///
 /// - run the adapter lifecycle templates
@@ -50,6 +74,10 @@ import 'package:flutter/foundation.dart' show protected;
 /// - LivePlaybackController / FallbackManager
 abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// Creates the adapter.
+  ///
+  /// [capabilities] defaults to a conservative baseline: no optional
+  /// capability is declared. Adapters that support more pass an
+  /// explicit [PlayerAdapterCapabilities] instance.
   PlayerAdapterBase({String? id, PlayerAdapterCapabilities? capabilities})
     : _id = id ?? 'adapter',
       _capabilities = capabilities ?? const PlayerAdapterCapabilities();
@@ -313,6 +341,16 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   // ---------------------------------------------------------------------------
   // Engine reports
+  //
+  // Fact emits (`playing`, `paused`, `completed`, `positionChanged`,
+  // `durationChanged`, `volumeChanged`) publish an engine state
+  // transition that has already happened. They are not gated by any
+  // capability.
+  //
+  // Signal emits (`videoFrameProgress`, `videoSizeChanged`, and the
+  // buffering progress ratio) publish a signal the adapter promised
+  // to produce. They are gated by the corresponding
+  // [PlayerAdapterCapabilities] field.
   // ---------------------------------------------------------------------------
 
   /// Reports that playback started.
@@ -345,20 +383,55 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// When it ends, [resumePlaying] decides whether playback is
   /// reported as playing or paused; engines whose own state machine
   /// re-asserts the playback state separately leave it null.
+  ///
+  /// The transition itself is a fact and is always reported. The
+  /// optional [progress] ratio is a signal: it is only forwarded when
+  /// [PlayerAdapterCapabilities.supportsBufferingProgress] is true,
+  /// because a backend that cannot measure the cache must not appear
+  /// to report a ratio.
   @protected
   void emitBuffering(bool buffering, {bool? resumePlaying, double? progress}) {
     if (!acceptsEngineEvents) return;
+
+    if (progress != null) {
+      assert(
+        _capabilities.supportsBufferingProgress,
+        '$runtimeType emitted buffering progress but '
+        'capabilities.supportsBufferingProgress is false.',
+      );
+      if (!_capabilities.supportsBufferingProgress) {
+        progress = null;
+      }
+    }
+
     if (buffering) {
       _state = _state.bufferingState();
     } else if (resumePlaying != null) {
       _state = resumePlaying ? _state.playingState() : _state.pausedState();
     }
+
     _addEvent(PlayerAdapterEvent.buffering(buffering: buffering, progress: progress));
   }
 
   /// Reports decoded video dimensions.
+  ///
+  /// Geometry is a signal the adapter promised to produce, so it is
+  /// gated by
+  /// [PlayerAdapterCapabilities.supportsVideoSizeChanged]. A call
+  /// here without that capability is a producer contract violation:
+  /// it is asserted in debug builds and dropped in release builds.
+  ///
+  /// Video geometry must never be used as a substitute for
+  /// [emitVideoFrameProgress]; a size change does not prove that
+  /// decoding is still progressing.
   @protected
   void emitVideoSizeChanged(int width, int height) {
+    assert(
+      _capabilities.supportsVideoSizeChanged,
+      '$runtimeType emitted videoSizeChanged but '
+      'capabilities.supportsVideoSizeChanged is false.',
+    );
+    if (!_capabilities.supportsVideoSizeChanged) return;
     if (!acceptsEngineEvents) return;
     if (width <= 0 || height <= 0) return;
     _state = _state.withVideoEnabled(true);
@@ -368,9 +441,11 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// Reports decoded video dimensions, dropping repeats.
   ///
   /// The comparison resets on every [open], so the first geometry of
-  /// each source is always published.
+  /// each source is always published. Capability gating is delegated
+  /// to [emitVideoSizeChanged].
   @protected
   void emitVideoSizeChangedIfChanged(int width, int height) {
+    if (!_capabilities.supportsVideoSizeChanged) return;
     if (!acceptsEngineEvents) return;
     if (width <= 0 || height <= 0) return;
     if (width == _lastReportedWidth && height == _lastReportedHeight) return;
@@ -381,11 +456,25 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   /// Reports that a decoded video frame has progressed.
   ///
-  /// This is a heartbeat for the video-frame watchdog. It is intentionally
-  /// separate from [emitVideoSizeChanged], because video dimensions describe
-  /// geometry and do not prove that frames are still being decoded.
+  /// This is a heartbeat for the video-frame watchdog. It is
+  /// intentionally separate from [emitVideoSizeChanged], because
+  /// video dimensions describe geometry and do not prove that frames
+  /// are still being decoded.
+  ///
+  /// The capability is read directly from [_capabilities]; this base
+  /// does not re-expose it as a getter, field, or constructor
+  /// parameter. A call here without
+  /// [PlayerAdapterCapabilities.supportsVideoFrameProgress] is a
+  /// producer contract violation, so it is asserted in debug builds
+  /// and silently dropped in release builds.
   @protected
   void emitVideoFrameProgress() {
+    assert(
+      _capabilities.supportsVideoFrameProgress,
+      '$runtimeType emitted videoFrameProgress but '
+      'capabilities.supportsVideoFrameProgress is false.',
+    );
+    if (!_capabilities.supportsVideoFrameProgress) return;
     if (!acceptsEngineEvents) return;
     _addEvent(const PlayerAdapterEvent.videoFrameProgress());
   }
@@ -447,7 +536,9 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// Publishes an adapter event directly.
   ///
   /// Engine-originated payloads should go through the `emit*`
-  /// helpers, which own the state transitions and the source gate.
+  /// helpers, which own the state transitions, the source gate, and
+  /// capability gating. This escape hatch is for adapter-specific
+  /// events that have no corresponding helper.
   @protected
   void emitEvent(PlayerAdapterEvent event) => _addEvent(event);
 

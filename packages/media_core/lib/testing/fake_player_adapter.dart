@@ -1,12 +1,11 @@
 import 'dart:async';
-
-import '../adapter/player_adapter.dart';
-import '../adapter/player_adapter_capabilities.dart';
-import '../adapter/player_adapter_context.dart';
-import '../adapter/player_adapter_event.dart';
-import '../adapter/player_adapter_metrics.dart';
 import '../core/player_state.dart';
 import '../source/player_source.dart';
+import '../adapter/player_adapter.dart';
+import '../adapter/player_adapter_event.dart';
+import '../adapter/player_adapter_context.dart';
+import '../adapter/player_adapter_metrics.dart';
+import '../adapter/player_adapter_capabilities.dart';
 
 /// A scriptable [PlayerAdapter] used in tests.
 ///
@@ -17,18 +16,14 @@ import '../source/player_source.dart';
 /// test error paths of higher layers.
 final class FakePlayerAdapter implements PlayerAdapter {
   /// Creates a fake adapter.
-  FakePlayerAdapter({
-    this.behavior = const FakePlayerAdapterBehavior(),
-    String id = 'fake',
-  }) : _id = id;
+  FakePlayerAdapter({this.behavior = const FakePlayerAdapterBehavior(), String id = 'fake'}) : _id = id;
 
   /// Controls how the fake responds to calls.
   FakePlayerAdapterBehavior behavior;
 
   final String _id;
 
-  final StreamController<PlayerAdapterEvent> _eventController =
-      StreamController<PlayerAdapterEvent>.broadcast();
+  final StreamController<PlayerAdapterEvent> _eventController = StreamController<PlayerAdapterEvent>.broadcast();
 
   /// Calls in invocation order.
   final List<String> calls = <String>[];
@@ -83,10 +78,7 @@ final class FakePlayerAdapter implements PlayerAdapter {
     behavior.maybeFail('initialize');
 
     if (behavior.applyInitialConfig) {
-      _mirror = _mirror.copyWith(
-        volume: context.config.volume,
-        rate: context.config.playbackRate,
-      );
+      _mirror = _mirror.copyWith(volume: context.config.volume, rate: context.config.playbackRate);
     }
 
     _initialized = true;
@@ -137,12 +129,7 @@ final class FakePlayerAdapter implements PlayerAdapter {
   Future<void> stop() async {
     calls.add('stop');
     behavior.maybeFail('stop');
-    _mirror = _mirror.copyWith(
-      playing: false,
-      paused: false,
-      completed: false,
-      position: Duration.zero,
-    );
+    _mirror = _mirror.copyWith(playing: false, paused: false, completed: false, position: Duration.zero);
     _emit(const PlayerAdapterEvent.stopped());
   }
 
@@ -350,16 +337,69 @@ final class FakePlayerAdapterBehavior {
 
   /// Default capabilities advertised by the fake.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
+    // Core playback.
     supportsLive: true,
     supportsSeek: true,
     supportsPause: true,
+    supportsStop: true,
     supportsRateControl: true,
     supportsVolumeControl: true,
+    supportsMuteControl: false, // no dedicated mute API exposed
+    // Video and rendering.
+    supportsVideoFrameProgress: false, // _onNativeFrameSignal -> emitVideoFrameProgress
+    supportsVideoSizeChanged: true, // _onWidth/_onHeight -> emitVideoSizeChanged
+    supportsVideoReconfig: false, // not subscribed yet
+    supportsHwdecInfo: false, // not exposed
+    supportsVideoFilters: false, // not exposed
+    supportsScreenshot: false, // not exposed
+    // Audio.
+    supportsAudioReconfig: false, // not subscribed
+    supportsAudioDeviceSelection: false, // not exposed
+    supportsAudioFilters: false, // not exposed
+    // Tracks and subtitles.
+    supportsTrackSelection: false, // not exposed (setAudioTrack used internally only)
+    supportsSubtitleTrack: false, // not exposed
+    supportsExternalSubtitle: false, // not exposed
+    // Playback state and buffering.
+    supportsCacheState: false, // not exposed
+    supportsBufferingProgress: false, // not emitted
+    supportsChapterControl: false, // not exposed
+    supportsLoop: false, // not exposed
+    // Metadata and playlist.
+    supportsMetadata: false,
+    supportsPlaylist: false,
+    supportsPlaylistControl: false,
+
+    // Diagnostics and integration.
+    supportsClientMessage: false,
+    supportsLogMessages: false,
+
+    // Decoders.
     supportsHardwareDecoder: true,
     supportsSoftwareDecoder: true,
+
+    // Presentation.
+    supportsPictureInPicture: false,
     supportsFullscreen: true,
-    supportedProtocols: {'http', 'https', 'file', 'asset', 'hls'},
-    supportedFormats: {'mp4', 'hls', 'mkv', 'webm'},
+
+    // Source matching.
+    supportedProtocols: {'http', 'https', 'hls', 'dash', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
+    supportedFormats: {
+      'mp4',
+      'mkv',
+      'webm',
+      'flv',
+      'm3u8',
+      'mpd',
+      'mov',
+      'avi',
+      'ts',
+      'mp3',
+      'aac',
+      'flac',
+      'h265',
+      'hevc',
+    },
   );
 
   /// Method names that should throw when invoked.
@@ -426,9 +466,6 @@ final class FakePlayerAdapterFactory {
   /// Creates a new fake adapter.
   FakePlayerAdapter create() {
     _counter++;
-    return FakePlayerAdapter(
-      id: '$prefix-$_counter',
-      behavior: behavior ?? const FakePlayerAdapterBehavior(),
-    );
+    return FakePlayerAdapter(id: '$prefix-$_counter', behavior: behavior ?? const FakePlayerAdapterBehavior());
   }
 }

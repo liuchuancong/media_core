@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show Size;
-
-import 'package:niuma_player/niuma_player.dart' as niuma;
 import 'package:media_core/media_core.dart';
+import 'package:niuma_player/niuma_player.dart' as niuma;
 
 /// [PlayerAdapter] implementation backed by niuma_player.
 ///
@@ -23,9 +22,7 @@ final class IjkPlayerAdapter implements PlayerAdapter {
   ///
   /// [forceIjk] forces the native IJK backend on Android (the
   /// default). Pass false to let niuma pick video_player first.
-  IjkPlayerAdapter({String id = 'ijk', bool forceIjk = true})
-      : _id = id,
-        _forceIjk = forceIjk;
+  IjkPlayerAdapter({String id = 'ijk', bool forceIjk = true}) : _id = id, _forceIjk = forceIjk;
 
   final String _id;
   final bool _forceIjk;
@@ -360,18 +357,123 @@ final class IjkPlayerAdapter implements PlayerAdapter {
     }
   }
 
-  /// Capabilities advertised by all ijkplayer adapters.
+  /// Capabilities of the IJKPlayer engine, as exposed by this adapter.
+  ///
+  /// The declaration is scoped to what the adapter actually produces
+  /// or accepts today, not to what the FFmpeg-backed IJKPlayer
+  /// exposes in the abstract. Backend features that are not yet
+  /// surfaced through the adapter (track lists, metadata, chapter
+  /// navigation, dynamic filters, …) stay false; they can be flipped
+  /// on the same line as the subscription or command that makes
+  /// them real.
+  ///
+  /// Signal emits and their capability flags:
+  ///
+  /// - [PlayerAdapterEvent.videoSizeChanged] is produced from
+  ///   `OnVideoSizeChangedListener`; IJKPlayer reports the decoded
+  ///   dimensions once they are known and on every later change.
+  /// - [PlayerAdapterEvent.buffering] with a `progress` ratio is
+  ///   produced from `OnBufferingUpdateListener`, which delivers
+  ///   the buffered percentage as an int.
+  ///
+  /// There is no decoded-frame heartbeat in IJKPlayer. The engine
+  /// has `OnInfoListener` / `OnSeekCompleteListener` but neither
+  /// proves that a new frame is being decoded at the current moment.
+  /// `supportsVideoFrameProgress` therefore stays false, and the
+  /// live video-frame watchdog must be disabled for this backend.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
+    // Core playback.
+    //
+    // The adapter implements every command hook and IJKPlayer
+    // supports all of them natively. `supportsMuteControl` is true
+    // because volume is a float and 0.0 is the defined mute state.
     supportsLive: true,
     supportsSeek: true,
     supportsPause: true,
+    supportsStop: true,
     supportsRateControl: true,
     supportsVolumeControl: true,
+    supportsMuteControl: true,
+
+    // Video and rendering.
+    //
+    // `supportsVideoSizeChanged` is true because the adapter consumes
+    // OnVideoSizeChangedListener. `supportsVideoFrameProgress` is
+    // false: IJKPlayer has no callback that proves frame-level
+    // progress, and the live watchdog must not infer a stall from a
+    // signal this backend never emits.
+    //
+    // The remaining video capabilities are not exposed through the
+    // adapter. `supportsScreenshot` is technically reachable on some
+    // IJKPlayer builds, but only through a custom renderer or a
+    // modified native layer; it is not an adapter-level command yet,
+    // so it stays false.
+    supportsVideoFrameProgress: false,
+    supportsVideoSizeChanged: true,
+    supportsVideoReconfig: false,
+    supportsHwdecInfo: false,
+    supportsVideoFilters: false,
+    supportsScreenshot: false,
+
+    // Audio.
+    //
+    // IJKPlayer can switch audio output and apply audio filters
+    // through setOption, but the adapter does not expose those
+    // surfaces yet.
+    supportsAudioReconfig: false,
+    supportsAudioDeviceSelection: false,
+    supportsAudioFilters: false,
+
+    // Tracks and subtitles.
+    //
+    // `OnTimedTextListener` exists, but the adapter does not yet
+    // forward subtitle payloads, and there is no track-list surface.
+    supportsTrackSelection: false,
+    supportsSubtitleTrack: false,
+    supportsExternalSubtitle: false,
+
+    // Playback state and buffering.
+    //
+    // `OnBufferingUpdateListener` delivers a percent value, so a
+    // buffering progress ratio is available. There is no cache
+    // breakdown or chapter surface.
+    supportsCacheState: false,
+    supportsBufferingProgress: true,
+    supportsChapterControl: false,
+    supportsLoop: false,
+
+    // Metadata and playlist.
+    //
+    // `getMediaInfo()` can expose metadata, but the adapter does
+    // not subscribe to it or expose it as a stream.
+    supportsMetadata: false,
+    supportsPlaylist: false,
+    supportsPlaylistControl: false,
+
+    // Diagnostics and integration.
+    supportsClientMessage: false,
+    supportsLogMessages: false,
+
+    // Decoders.
+    //
+    // IJKPlayer is compiled with both software (FFmpeg) and
+    // hardware (MediaCodec) decoders, and the adapter can select
+    // between them via setOption.
     supportsHardwareDecoder: true,
     supportsSoftwareDecoder: true,
+
+    // Presentation.
+    //
+    // PiP is not provided by IJKPlayer; fullscreen is a widget-level
+    // decision the adapter does not veto.
     supportsPictureInPicture: false,
     supportsFullscreen: true,
-    supportedProtocols: {'http', 'https', 'hls', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
-    supportedFormats: {'mp4', 'mkv', 'webm', 'flv', 'm3u8', 'mov', 'avi', 'ts', 'mp3', 'aac', 'flac', 'wav', 'ogg', 'opus', 'h265', 'hevc'},
+
+    // Source matching.
+    //
+    // IJKPlayer's FFmpeg build covers a wider protocol and format
+    // set than most engines, including RTMP, RTSP and SRT.
+    supportedProtocols: {'http', 'https', 'hls', 'rtmp', 'rtsp', 'srt', 'udp', 'file', 'asset'},
+    supportedFormats: {'mp4', 'mkv', 'webm', 'flv', 'm3u8', 'ts', 'mov', 'avi', 'mp3', 'aac', 'flac', 'h265', 'hevc'},
   );
 }
