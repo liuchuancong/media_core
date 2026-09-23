@@ -99,6 +99,16 @@ final class PlayerAdapterRegistration {
   final PlayerAdapterFactory factory;
 
   /// Adapter capabilities.
+  ///
+  /// This is the declaration used *before* an adapter exists: the selector
+  /// scores registrations by protocol, format and live support, and the
+  /// kernel needs those answers without instantiating a backend.
+  ///
+  /// It is not the authority for a running adapter. Consumers that hold an
+  /// instance read `adapter.capabilities`, because an adapter may be built
+  /// with a narrower declaration than its default. Keep the two in step by
+  /// handing the registration the adapter's own constant
+  /// (`SomeAdapter.defaultCapabilities`) instead of repeating the literal.
   final PlayerAdapterCapabilities capabilities;
 
   /// Selection priority.
