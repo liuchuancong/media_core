@@ -151,6 +151,17 @@ final class VideoPlayerAdapter implements PlayerAdapter {
     _emit(PlayerAdapterEvent.volumeChanged(volume: volume.clamp(0.0, 1.0)));
   }
 
+  /// Ignored: the plugin has no video-track control.
+  ///
+  /// [vp.VideoPlayerController] can only start, pause, seek, set the
+  /// speed and set the volume; the video decoder follows the source.
+  /// Hiding the surface is a rendering decision the presentation layer
+  /// makes, not an audio-only mode, so the adapter declares
+  /// [PlayerAdapterCapabilities.supportsAudioOnly] as false and keeps
+  /// this method a documented no-op.
+  @override
+  Future<void> setAudioOnly(bool audioOnly) async {}
+
   @override
   Future<void> setRate(double rate) async {
     _requireReady();
@@ -268,166 +279,102 @@ final class VideoPlayerAdapter implements PlayerAdapter {
     await c.dispose();
   }
 
-  /// Capabilities of the ExoPlayer (Media3) engine, as exposed by this adapter.
+  /// Capabilities of this adapter, not of the ExoPlayer/AVPlayer pair
+  /// underneath it.
   ///
-  /// ExoPlayer surfaces almost every capability through a single
-  /// [Player.Listener] event model, so the declaration closely tracks the
-  /// listener callbacks the adapter actually subscribes to. Backend
-  /// features reachable only through a separate sub-API (Effects,
-  /// MediaCodec info, PixelCopy screenshot) stay false until the adapter
-  /// wraps them.
+  /// The backend is the official Flutter `video_player` plugin, whose
+  /// whole public surface is [vp.VideoPlayerController] plus the
+  /// [vp.VideoPlayerValue] it notifies: position, duration, size,
+  /// buffered range, buffering flag, playing flag, speed, volume and
+  /// error. Nothing else is reachable — no track list, no effects, no
+  /// decoder selection, no repeat mode — so every capability that would
+  /// need one of those sub-APIs is declared false here even though the
+  /// platform player implements it. An earlier revision of this list
+  /// described the Media3 API surface instead of this adapter's, which
+  /// promised signals the adapter could never emit.
   ///
   /// Signal emits and their capability flags:
   ///
-  /// - [PlayerAdapterEvent.videoFrameProgress] is produced from
-  ///   `VideoFrameMetadataListener.onVideoFrameAboutToBeRendered()`, which
-  ///   fires on the playback thread for every frame about to be rendered.
   /// - [PlayerAdapterEvent.videoSizeChanged] is produced from
-  ///   `Player.Listener.onVideoSizeChanged()`.
-  /// - [PlayerAdapterEvent.buffering] with a `progress` ratio is produced
-  ///   from `Player.Listener.onPlaybackStateChanged()` combined with
-  ///   `player.getBufferedPercentage()` when the state is BUFFERING.
+  ///   `VideoPlayerValue.size`.
+  /// - [PlayerAdapterEvent.buffering] is produced from
+  ///   `VideoPlayerValue.isBuffering` without a ratio, because the value
+  ///   exposes the buffered *range*, not a completion percentage.
+  /// - [PlayerAdapterEvent.videoFrameProgress] is not produced: the
+  ///   plugin publishes no per-frame callback, and a position update is
+  ///   not proof that a frame was decoded.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
     // Core playback.
     //
-    // Every command maps to an ExoPlayer method:
-    // play() / pause() / seekTo() / setPlaybackSpeed() / setVolume().
-    // Mute is `setVolume(0f)` with a remembered restore value.
+    // play() / pause() / seekTo() / setPlaybackSpeed() / setVolume() are
+    // all part of the controller API. `supportsMuteControl` is false:
+    // the plugin can only lower the volume, it has no mute switch.
+    // `supportsAudioOnly` is false: there is no video-track control, so
+    // the decoder cannot be switched off. See [setAudioOnly].
     supportsLive: true,
     supportsSeek: true,
     supportsPause: true,
     supportsStop: true,
     supportsRateControl: true,
     supportsVolumeControl: true,
-    supportsMuteControl: true,
+    supportsMuteControl: false,
+    supportsAudioOnly: false,
 
     // Video and rendering.
-    //
-    // `supportsVideoFrameProgress` is true because Media3 exposes
-    // VideoFrameMetadataListener, which delivers a per-frame callback
-    // on the playback thread. This is the most direct frame heartbeat
-    // any backend in this codebase offers.
-    //
-    // `supportsVideoSizeChanged` is true from onVideoSizeChanged().
-    //
-    // `supportsVideoReconfig` is false: Media3 has no single
-    // "video output reconfigured" event; a size change is the closest
-    // signal, and that is already covered by videoSizeChanged.
-    //
-    // `supportsHwdecInfo` is false: Media3 does not expose a public
-    // "current hardware decoder" property. It can be inferred from
-    // RendererCapabilities, but that describes the decoders available,
-    // not the one actually active for the current track.
-    //
-    // `supportsVideoFilters` is true: setVideoEffects() accepts a list
-    // of Effect instances that can be added and updated at runtime.
-    //
-    // `supportsScreenshot` is false: Media3 has no built-in screenshot
-    // command; it must be built with PixelCopy on top of the SurfaceView.
-    supportsVideoFrameProgress: true,
+    supportsVideoFrameProgress: false,
     supportsVideoSizeChanged: true,
     supportsVideoReconfig: false,
     supportsHwdecInfo: false,
-    supportsVideoFilters: true,
+    supportsVideoFilters: false,
     supportsScreenshot: false,
 
     // Audio.
-    //
-    // `supportsAudioReconfig` is false: no dedicated audio-output
-    // reconfigured event.
-    //
-    // `supportsAudioDeviceSelection` is true from
-    // ExoPlayer.setPreferredAudioDevice(AudioDeviceInfo) (API 23+).
-    //
-    // `supportsAudioFilters` is false: Media3 audio effects exist as
-    // AudioProcessor, but they are part of the audio pipeline
-    // configuration, not a runtime command the adapter exposes.
     supportsAudioReconfig: false,
-    supportsAudioDeviceSelection: true,
+    supportsAudioDeviceSelection: false,
     supportsAudioFilters: false,
 
     // Tracks and subtitles.
-    //
-    // Track selection is fully supported:
-    //   player.getCurrentTracks() enumerates all track groups.
-    //   player.trackSelectionParameters = ... selects a track.
-    // Text (subtitle) tracks are part of the same track list, and
-    // external subtitles can be attached through
-    // MediaItem.SubtitleConfiguration.
-    supportsTrackSelection: true,
-    supportsSubtitleTrack: true,
-    supportsExternalSubtitle: true,
+    supportsTrackSelection: false,
+    supportsSubtitleTrack: false,
+    supportsExternalSubtitle: false,
 
     // Playback state and buffering.
     //
-    // `supportsCacheState` is true: `getBufferedPosition()` and
-    // `getBufferedPercentage()` expose the cache window; the
-    // adapter's metrics already track the buffered duration.
-    //
-    // `supportsBufferingProgress` is true: getBufferedPercentage()
-    // returns 0..100 while STATE_BUFFERING.
-    //
-    // `supportsChapterControl` is false: Media3 has no chapter
-    // model; chapters must be parsed from metadata by the app.
-    //
-    // `supportsLoop` is true: setRepeatMode(REPEAT_MODE_ONE) loops
-    // a single item, REPEAT_MODE_ALL loops the playlist.
-    supportsCacheState: true,
-    supportsBufferingProgress: true,
+    // The buffered range is copied into metrics, but no ratio is ever
+    // published, and the plugin has no repeat mode.
+    supportsCacheState: false,
+    supportsBufferingProgress: false,
     supportsChapterControl: false,
-    supportsLoop: true,
+    supportsLoop: false,
 
     // Metadata and playlist.
-    //
-    // `supportsMetadata` is true from
-    // Player.Listener.onMediaMetadataChanged(MediaMetadata).
-    //
-    // `supportsPlaylist` is true: setMediaItems() builds a playlist,
-    // onMediaItemTransition() reports position changes, and
-    // getCurrentMediaItemIndex() is observable.
-    //
-    // `supportsPlaylistControl` is true: addMediaItem(),
-    // removeMediaItem(), moveMediaItem(), seekToNextMediaItem(),
-    // seekToPreviousMediaItem() are all part of the Player interface.
-    supportsMetadata: true,
-    supportsPlaylist: true,
-    supportsPlaylistControl: true,
+    supportsMetadata: false,
+    supportsPlaylist: false,
+    supportsPlaylistControl: false,
 
     // Diagnostics and integration.
-    //
-    // Media3 has no client-message channel comparable to mpv's
-    // MPV_EVENT_CLIENT_MESSAGE.
-    //
-    // `supportsLogMessages` is false at the adapter surface: EventLogger
-    // exists, but it writes to Logcat rather than through a listener
-    // the adapter can subscribe to as a typed stream.
     supportsClientMessage: false,
     supportsLogMessages: false,
 
     // Decoders.
     //
-    // Media3 supports both hardware (MediaCodec) and software
-    // (FFmpeg extension) decoders. The adapter can choose between
-    // them via RenderersFactory / DefaultRenderersFactory.
+    // Decoding goes through the platform player (MediaCodec on Android,
+    // VideoToolbox on iOS); the plugin exposes no decoder choice, so
+    // this describes the backend rather than a switch the adapter owns.
     supportsHardwareDecoder: true,
     supportsSoftwareDecoder: true,
 
     // Presentation.
-    //
-    // PiP is a system-level feature on Android; the app can enter PiP
-    // mode while an ExoPlayer SurfaceView is mounted, but Media3 itself
-    // has no PiP command, so the adapter declares false.
-    //
-    // Fullscreen is a widget-level decision the adapter does not veto.
     supportsPictureInPicture: false,
     supportsFullscreen: true,
 
     // Source matching.
     //
-    // Media3's default extractors cover a broad set; the FFmpeg
-    // extension widens it further. The list below is the safe core
-    // set the adapter can open without an extension.
-    supportedProtocols: {'http', 'https', 'hls', 'dash', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
-    supportedFormats: {'mp4', 'mkv', 'webm', 'flv', 'm3u8', 'mpd', 'ts', 'mov', 'mp3', 'aac', 'flac', 'h265', 'hevc'},
+    // The plugin opens http(s) sources, HLS playlists on both mobile
+    // platforms, and local files or assets. DASH, RTSP and RTMP are
+    // deliberately absent: they need player modules the plugin does not
+    // ship.
+    supportedProtocols: {'http', 'https', 'hls', 'file', 'asset'},
+    supportedFormats: {'mp4', 'm4v', 'mov', 'ts', 'webm'},
   );
 }

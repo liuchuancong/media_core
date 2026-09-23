@@ -40,6 +40,12 @@ import 'package:media_core/adapter/player_adapter_capabilities.dart';
 /// `supportsXxx` flags, mirror getters, or per-capability setters. The
 /// snapshot is bound through [updateCapabilities] and re-bound whenever
 /// the active adapter changes (fallback, engine switch, close).
+///
+/// A capability describes what an adapter *can* produce; a session can
+/// still rule a signal out. Audio-only playback is that case:
+/// [setVideoExpected] with `false` keeps the frame watchdog disarmed for
+/// the whole session, because an audio-only source has no video track and
+/// therefore never produces the heartbeat it waits for.
 final class LiveWatchdogs {
   LiveWatchdogs({
     PlayerAdapterCapabilities? capabilities,
@@ -164,6 +170,7 @@ final class LiveWatchdogs {
   bool _playing = false;
   bool _buffering = false;
   bool _presentationVisible = true;
+  bool _videoExpected = true;
   bool _disposed = false;
 
   /// Called when a stall is inferred.
@@ -301,6 +308,32 @@ final class LiveWatchdogs {
     }
   }
 
+  /// Marks whether decoded video frames are expected for the session.
+  ///
+  /// Audio-only playback has no video track, so no frame heartbeat can
+  /// ever arrive and a missing one proves nothing. Passing `false` keeps
+  /// the frame watchdog disarmed instead of inferring a stall from a
+  /// signal the session was never going to produce; passing `true` arms
+  /// it again for the current playback state.
+  ///
+  /// This is a session-level mode rather than a per-source state, like
+  /// [setPresentationVisible], so it survives source changes.
+  void setVideoExpected(bool expected) {
+    if (_disposed) return;
+    if (_videoExpected == expected) return;
+
+    _videoExpected = expected;
+
+    if (!expected) {
+      _cancelVideoFrameStall();
+      return;
+    }
+
+    if (_playing && !_buffering && _presentationVisible) {
+      _armVideoFrameStall();
+    }
+  }
+
   bool get isPlaying => _playing;
 
   // ---------------------------------------------------------------------------
@@ -385,6 +418,8 @@ final class LiveWatchdogs {
   /// - the adapter must declare
   ///   [PlayerAdapterCapabilities.supportsVideoFrameProgress]
   /// - the watchdog must be enabled and the timeout non-zero
+  /// - video frames must be expected for the session
+  ///   ([setVideoExpected]; false for audio-only playback)
   /// - the mounted presentation must be visible
   /// - playback must be running
   /// - buffering must not be in progress (no frames are expected while
@@ -395,6 +430,7 @@ final class LiveWatchdogs {
 
     if (!_canWatch ||
         !_supportsVideoFrameProgress ||
+        !_videoExpected ||
         videoFrameStallTimeout <= Duration.zero ||
         !_presentationVisible ||
         !_playing ||
@@ -408,7 +444,7 @@ final class LiveWatchdogs {
         .listen((_) {
           if (_disposed) return;
 
-          if (!_presentationVisible || !_playing || !_supportsVideoFrameProgress) {
+          if (!_presentationVisible || !_playing || !_videoExpected || !_supportsVideoFrameProgress) {
             return;
           }
 
@@ -448,8 +484,26 @@ final class LiveWatchdogs {
     _videoFrameSubscription = null;
   }
 
-  /// Cancels every watchdog.
+  /// Cancels every watchdog and clears the observations behind them.
+  ///
+  /// The observed playback flags are dropped together with the timers so
+  /// a retired source cannot influence the next one. They are read back
+  /// by [armSourceReady] and by [updateCapabilities] when the next
+  /// adapter is bound, and a leftover `playing` would either disable the
+  /// source-ready deadline or arm the frame deadline before the new
+  /// source has produced anything.
+  ///
+  /// Call this when:
+  ///
+  /// - the source changes
+  /// - the playback generation changes
+  /// - the user pauses
+  /// - recovery takes ownership
+  /// - the controller closes the current source
   void cancelAll() {
+    _playing = false;
+    _buffering = false;
+
     _cancelSourceReady();
     _cancelContinuity();
     _cancelBufferingStall();

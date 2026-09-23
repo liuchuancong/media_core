@@ -37,6 +37,9 @@ final class FakePlayerAdapter implements PlayerAdapter {
   /// Rates passed to [setRate].
   final List<double> rates = <double>[];
 
+  /// Audio-only values passed to [setAudioOnly].
+  final List<bool> audioOnlyValues = <bool>[];
+
   /// Positions passed to [seek].
   final List<Duration> seeks = <Duration>[];
 
@@ -161,6 +164,14 @@ final class FakePlayerAdapter implements PlayerAdapter {
   }
 
   @override
+  Future<void> setAudioOnly(bool audioOnly) async {
+    calls.add('setAudioOnly');
+    behavior.maybeFail('setAudioOnly');
+    audioOnlyValues.add(audioOnly);
+    _mirror = _mirror.copyWith(audioOnly: audioOnly);
+  }
+
+  @override
   Future<void> close() async {
     calls.add('close');
     behavior.maybeFail('close');
@@ -192,6 +203,15 @@ final class FakePlayerAdapter implements PlayerAdapter {
   void emitCompleted() {
     _mirror = _mirror.copyWith(completed: true, playing: false);
     _emit(const PlayerAdapterEvent.completed());
+  }
+
+  /// Emits a decoded-video-frame heartbeat.
+  ///
+  /// Feeds the live frame watchdog exactly like a real adapter's
+  /// frame-progress signal, which is why the fake declares
+  /// [PlayerAdapterCapabilities.supportsVideoFrameProgress].
+  void emitVideoFrameProgress() {
+    _emit(const PlayerAdapterEvent.videoFrameProgress());
   }
 
   /// Emits an error event and marks the mirror as failed.
@@ -236,6 +256,7 @@ final class PlayerAdapterStateMirror {
     this.rate = 1.0,
     this.width,
     this.height,
+    this.audioOnly = false,
     this.errorMessage,
   });
 
@@ -254,6 +275,9 @@ final class PlayerAdapterStateMirror {
   final double rate;
   final int? width;
   final int? height;
+
+  /// Whether playback is restricted to the audio track.
+  final bool audioOnly;
   final String? errorMessage;
 
   /// Maps the mirror onto the semantic core [PlayerState].
@@ -300,6 +324,7 @@ final class PlayerAdapterStateMirror {
     double? rate,
     int? width,
     int? height,
+    bool? audioOnly,
     String? errorMessage,
   }) {
     return PlayerAdapterStateMirror(
@@ -316,6 +341,7 @@ final class PlayerAdapterStateMirror {
       rate: rate ?? this.rate,
       width: width ?? this.width,
       height: height ?? this.height,
+      audioOnly: audioOnly ?? this.audioOnly,
       errorMessage: errorMessage ?? this.errorMessage,
     );
   }
@@ -345,8 +371,9 @@ final class FakePlayerAdapterBehavior {
     supportsRateControl: true,
     supportsVolumeControl: true,
     supportsMuteControl: false, // no dedicated mute API exposed
+    supportsAudioOnly: true, // setAudioOnly records and mirrors the value
     // Video and rendering.
-    supportsVideoFrameProgress: false, // _onNativeFrameSignal -> emitVideoFrameProgress
+    supportsVideoFrameProgress: true, // emitVideoFrameProgress
     supportsVideoSizeChanged: true, // _onWidth/_onHeight -> emitVideoSizeChanged
     supportsVideoReconfig: false, // not subscribed yet
     supportsHwdecInfo: false, // not exposed

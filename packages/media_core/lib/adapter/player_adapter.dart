@@ -77,6 +77,17 @@ abstract interface class PlayerAdapter {
   /// Sets playback speed.
   Future<void> setRate(double rate);
 
+  /// Restricts playback to the audio track.
+  ///
+  /// Only meaningful when
+  /// [PlayerAdapterCapabilities.supportsAudioOnly] is declared; an
+  /// adapter without that capability may ignore the command.
+  ///
+  /// Implementations that own a video track must keep the setting
+  /// across later [open] calls, because recovery replays a source
+  /// without going back through the application.
+  Future<void> setAudioOnly(bool audioOnly);
+
   /// Closes current source.
   Future<void> close();
 

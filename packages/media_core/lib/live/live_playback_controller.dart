@@ -25,6 +25,7 @@ import '../operation/operation_type.dart';
 import '../session/session_snapshot.dart';
 import '../fallback/backend_fallback.dart';
 import '../operation/operation_tracker.dart';
+import '../adapter/player_adapter.dart';
 import '../adapter/player_adapter_event.dart';
 import '../operation/operation_registry.dart';
 import '../operation/operation_cancel_token.dart';
@@ -63,10 +64,23 @@ final class LiveSourceRequest {
 /// operation are plumbing underneath it.
 ///
 /// Capability handling: the controller never reads individual capability
-/// flags. It forwards the active adapter's whole [PlayerAdapterCapabilities]
-/// snapshot to [LiveWatchdogs] whenever the adapter instance changes — on
-/// first bind, on engine switch, and on close (as null). The watchdog bundle
-/// reads the fields it cares about directly from that snapshot.
+/// flags except to decide whether a command can be attempted. It forwards
+/// the active adapter's whole [PlayerAdapterCapabilities] snapshot to
+/// [LiveWatchdogs] whenever the adapter instance changes — on first bind,
+/// on engine switch, and on close (as null). The watchdog bundle reads the
+/// fields it cares about directly from that snapshot.
+///
+/// The audio-only preference is the one session mode the controller keeps
+/// on behalf of the application. [setAudioOnly] stores it, pushes it to
+/// the active adapter (`supportsAudioOnly`) and tells the watchdogs that
+/// no video frames are expected; [_bindHandle] pushes it onto every newly
+/// bound adapter, so an engine fallback inside this class cannot silently
+/// restore video.
+///
+/// That preference is also why the frame watchdog is disabled at the
+/// session level rather than by capability: an audio-only source has no
+/// video track, and whether the adapter *could* report a frame heartbeat
+/// says nothing about whether one will ever arrive.
 final class LivePlaybackController {
   LivePlaybackController(
     this.kernel, {
@@ -134,6 +148,7 @@ final class LivePlaybackController {
 
   int _generation = 0;
   bool _playbackRequested = false;
+  bool _audioOnly = false;
 
   LiveSourceRequest? _request;
   String? _currentUrl;
@@ -261,6 +276,47 @@ final class LivePlaybackController {
   /// Sets volume (0.0–1.0).
   Future<void> setVolume(double volume) async {
     await _handle?.setVolume(volume.clamp(0.0, 1.0));
+  }
+
+  /// Whether playback is restricted to the audio track.
+  bool get audioOnly => _audioOnly;
+
+  /// Restricts playback to the audio track.
+  ///
+  /// The preference outlives the current source: it is remembered here and
+  /// re-applied whenever an adapter is bound, because recovery, line
+  /// cycling and engine fallback all replay sources inside the kernel
+  /// without the application being involved.
+  ///
+  /// Adapters that do not declare
+  /// [PlayerAdapterCapabilities.supportsAudioOnly] are left untouched —
+  /// their video track cannot be switched off — but the watchdog side is
+  /// updated either way, so a session that expects no video never reports
+  /// a frame stall.
+  Future<void> setAudioOnly(bool audioOnly) async {
+    if (_audioOnly == audioOnly) return;
+
+    _audioOnly = audioOnly;
+
+    watchdogs.setVideoExpected(!audioOnly);
+
+    final adapter = _handle?.adapter;
+
+    if (adapter != null) {
+      await _applyAudioOnly(adapter);
+    }
+  }
+
+  /// Applies [audioOnly] to [adapter] when it declares the capability.
+  Future<void> _applyAudioOnly(PlayerAdapter adapter) async {
+    if (!adapter.capabilities.supportsAudioOnly) return;
+
+    try {
+      await adapter.setAudioOnly(_audioOnly);
+    } catch (_) {
+      // A track switch is best effort: playback itself is unaffected, and
+      // the next bind re-applies the preference.
+    }
   }
 
   /// Marks whether the current route owns the mounted video
@@ -436,7 +492,7 @@ final class LivePlaybackController {
       if (handle == null || handle.disposed) {
         handle = await kernel.create();
         if (!_isCurrent(generation)) return;
-        _bindHandle(handle);
+        await _bindHandle(handle);
       }
 
       if (!_isCurrent(generation)) return;
@@ -497,26 +553,36 @@ final class LivePlaybackController {
 
   /// Rebinds the controller to the current adapter of [handle].
   ///
-  /// Two things must always move together here, because they both belong
+  /// Three things must always move together here, because they all belong
   /// to the adapter *instance* the handle currently holds:
   ///
   /// - the watchdog capability snapshot, read from
   ///   `handle.adapter.capabilities`
   /// - the adapter event subscription, taken from
   ///   `handle.adapter.events`
+  /// - the session preferences the adapter accepts as commands, today the
+  ///   audio-only track switch
   ///
   /// `PlayerHandle.attachAdapter` replaces the adapter instance, so a
-  /// caller that performs one without the other leaves the controller
-  /// either watching a closed event stream or feeding the watchdog a
-  /// stale capability set. Keep them coupled; do not lift either out.
-  void _bindHandle(PlayerHandle handle) {
+  /// caller that performs one without the others leaves the controller
+  /// either watching a closed event stream, feeding the watchdog a stale
+  /// capability set, or running a fresh engine with video on. Keep them
+  /// coupled; do not lift any of them out.
+  Future<void> _bindHandle(PlayerHandle handle) async {
     _handle = handle;
 
     _eventSub?.cancel();
 
     watchdogs.updateCapabilities(handle.adapter.capabilities);
+    watchdogs.setVideoExpected(!_audioOnly);
 
     _eventSub = handle.adapter.events.listen(_onAdapterEvent, onError: _onAdapterEventError);
+
+    // A freshly created adapter starts with its video track enabled, so
+    // only the audio-only preference has to be pushed onto it.
+    if (_audioOnly) {
+      await _applyAudioOnly(handle.adapter);
+    }
   }
 
   void _onAdapterEvent(PlayerAdapterEvent adapterEvent) {
@@ -821,9 +887,10 @@ final class LivePlaybackController {
       if (!_isCurrent(generation)) return false;
 
       // attachAdapter replaced the adapter instance. The capability
-      // snapshot and the event subscription both belong to the adapter
-      // instance, so rebind them together through _bindHandle.
-      _bindHandle(handle);
+      // snapshot, the event subscription and the session preferences
+      // all belong to the adapter instance, so rebind them together
+      // through _bindHandle.
+      await _bindHandle(handle);
 
       final url = _currentUrl;
       final request = _request;

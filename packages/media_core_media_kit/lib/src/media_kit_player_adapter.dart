@@ -28,6 +28,7 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _hasOpened = false;
+  bool _audioOnly = false;
 
   int? _width;
   int? _height;
@@ -96,6 +97,14 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
 
     await player.open(mk.Media(uri, httpHeaders: headers), play: false);
 
+    // `vid` is an option default, not a sticky property: loading a new
+    // file resets the track selection, so the audio-only preference has
+    // to be re-applied for every source, including the replays this
+    // adapter never hears about from the application.
+    if (_audioOnly) {
+      await player.setVideoTrack(mk.VideoTrack.no());
+    }
+
     _hasOpened = true;
     _state = _state.withSource(true);
     _emit(PlayerAdapterEvent.opened(source: source.id.value));
@@ -146,6 +155,19 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
   Future<void> setRate(double rate) async {
     _requireReady();
     await player.setRate(rate);
+  }
+
+  /// Restricts playback to the audio track.
+  ///
+  /// libmpv owns this through the `vid` property, so the video decoder
+  /// stops instead of the picture merely being hidden.
+  @override
+  Future<void> setAudioOnly(bool audioOnly) async {
+    _requireReady();
+    if (_audioOnly == audioOnly) return;
+
+    _audioOnly = audioOnly;
+    await player.setVideoTrack(audioOnly ? mk.VideoTrack.no() : mk.VideoTrack.auto());
   }
 
   @override
@@ -321,14 +343,18 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
   ///
   /// Signal emits and their capability flags:
   ///
-  /// - [PlayerAdapterEvent.videoFrameProgress] is produced by
-  ///   [_observeDecodedFrames] from mpv's `estimated-vf-fps`. It is
-  ///   a rate statistic rather than a per-frame callback, but it is
-  ///   a real proof that video output is still advancing, which is
-  ///   exactly what the video-frame watchdog needs.
   /// - [PlayerAdapterEvent.videoSizeChanged] is produced by
   ///   [_onWidth] / [_onHeight] from the media_kit width and height
   ///   streams.
+  ///
+  /// There is no decoded-frame heartbeat: this adapter subscribes to
+  /// the width, height, position, duration, volume, rate, playing,
+  /// completed, buffering, buffer, error and audio-bitrate streams,
+  /// and none of them proves that a frame is being decoded right now.
+  /// `estimated-vf-fps` would be that signal, but this adapter does not
+  /// observe it, so `supportsVideoFrameProgress` stays false and the
+  /// live frame watchdog remains off for this backend instead of waiting
+  /// for a heartbeat that never arrives.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
     // Core playback.
     //
@@ -347,14 +373,19 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
     supportsVolumeControl: true,
     supportsMuteControl: false,
 
+    // `supportsAudioOnly` is true: the adapter drives mpv's `vid`
+    // property, so the video track is switched off rather than hidden.
+    supportsAudioOnly: true,
+
     // Video and rendering.
     //
-    // Only the two signals the adapter currently emits are declared.
-    // Reconfig / hwdec info / filters / screenshot are backend
-    // capabilities that are not surfaced through the adapter yet,
-    // so they stay false until a corresponding subscription or
-    // command is added.
-    supportsVideoFrameProgress: true,
+    // Only `videoSizeChanged` is declared. Reconfig / hwdec info /
+    // filters / screenshot are backend capabilities that are not
+    // surfaced through the adapter yet, so they stay false until a
+    // corresponding subscription or command is added, and
+    // `supportsVideoFrameProgress` is false because this adapter
+    // produces no frame heartbeat (see the class comment above).
+    supportsVideoFrameProgress: false,
     supportsVideoSizeChanged: true,
     supportsVideoReconfig: false,
     supportsHwdecInfo: false,

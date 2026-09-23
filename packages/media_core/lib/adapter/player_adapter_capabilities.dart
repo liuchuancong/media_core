@@ -48,6 +48,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     this.supportsRateControl = false,
     this.supportsVolumeControl = false,
     this.supportsMuteControl = false,
+    this.supportsAudioOnly = false,
 
     // Video and rendering.
     this.supportsVideoFrameProgress = false,
@@ -119,6 +120,19 @@ final class PlayerAdapterCapabilities extends Equatable {
 
   /// Whether muting without changing the volume level is supported.
   final bool supportsMuteControl;
+
+  /// Whether playback can be restricted to the audio track.
+  ///
+  /// Audio-only means the video track is disabled (not merely hidden):
+  /// backends expose this through their own track switch, for example
+  /// mpv's `vid` property or IJKPlayer's `disable-vid` option. An
+  /// adapter that can only hide the video surface must declare `false`,
+  /// because the decoder would keep running and the promise of the
+  /// command would be a rendering trick rather than the real thing.
+  ///
+  /// Declaring `true` is what makes [PlayerAdapter.setAudioOnly] reach
+  /// the backend; the base drops the command otherwise.
+  final bool supportsAudioOnly;
 
   // ---------------------------------------------------------------------------
   // Video and rendering
@@ -342,6 +356,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     bool? supportsRateControl,
     bool? supportsVolumeControl,
     bool? supportsMuteControl,
+    bool? supportsAudioOnly,
     bool? supportsVideoFrameProgress,
     bool? supportsVideoSizeChanged,
     bool? supportsVideoReconfig,
@@ -378,6 +393,7 @@ final class PlayerAdapterCapabilities extends Equatable {
       supportsRateControl: supportsRateControl ?? this.supportsRateControl,
       supportsVolumeControl: supportsVolumeControl ?? this.supportsVolumeControl,
       supportsMuteControl: supportsMuteControl ?? this.supportsMuteControl,
+      supportsAudioOnly: supportsAudioOnly ?? this.supportsAudioOnly,
       supportsVideoFrameProgress: supportsVideoFrameProgress ?? this.supportsVideoFrameProgress,
       supportsVideoSizeChanged: supportsVideoSizeChanged ?? this.supportsVideoSizeChanged,
       supportsVideoReconfig: supportsVideoReconfig ?? this.supportsVideoReconfig,
@@ -417,6 +433,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     supportsRateControl,
     supportsVolumeControl,
     supportsMuteControl,
+    supportsAudioOnly,
     supportsVideoFrameProgress,
     supportsVideoSizeChanged,
     supportsVideoReconfig,

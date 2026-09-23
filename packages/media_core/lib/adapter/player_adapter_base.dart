@@ -52,8 +52,8 @@ import 'package:flutter/foundation.dart' show protected;
 ///   without declaring `supportsPause` is describing a real event
 ///   and the report must not be suppressed.
 /// - **Command capabilities** (`supportsSeek`, `supportsPause`,
-///   `supportsRateControl`, `supportsVolumeControl`, …) do not map
-///   to any `emit*` at all; consumers use them to decide which
+///   `supportsRateControl`, `supportsVolumeControl`, `supportsAudioOnly`, …)
+///   do not map to any `emit*` at all; consumers use them to decide which
 ///   commands to attempt.
 ///
 /// Responsibilities:
@@ -90,6 +90,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   bool _initialized = false;
   bool _disposed = false;
+  bool _audioOnly = false;
 
   // Source-scoped event acceptance with deferred open errors.
   bool _acceptSourceEvents = false;
@@ -124,6 +125,14 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// Whether the adapter has been disposed.
   @protected
   bool get isDisposed => _disposed;
+
+  /// Whether playback is currently restricted to the audio track.
+  ///
+  /// This is runtime state, not a capability: the adapter that owns a
+  /// video track reads it in [onAfterOpen] to re-apply the setting after
+  /// a source was (re)opened behind the application's back.
+  @protected
+  bool get audioOnly => _audioOnly;
 
   /// Whether engine-reported events are scoped to the source
   /// currently being opened.
@@ -258,6 +267,31 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     _addEvent(PlayerAdapterEvent.rateChanged(rate: rate));
   }
 
+  /// Restricts playback to the audio track.
+  ///
+  /// Gated by [PlayerAdapterCapabilities.supportsAudioOnly]: an adapter
+  /// that cannot disable its video track is asserted in debug builds and
+  /// left untouched in release builds, so a missing capability never
+  /// turns into a silent "video still decoding" state.
+  ///
+  /// The setting is remembered in [audioOnly] for the whole adapter
+  /// lifetime, so [onAfterOpen] can re-apply it after a recovery replay.
+  @override
+  Future<void> setAudioOnly(bool audioOnly) async {
+    requireReady();
+
+    assert(
+      _capabilities.supportsAudioOnly,
+      '$runtimeType received setAudioOnly but '
+      'capabilities.supportsAudioOnly is false.',
+    );
+    if (!_capabilities.supportsAudioOnly) return;
+    if (_audioOnly == audioOnly) return;
+
+    _audioOnly = audioOnly;
+    await onSetAudioOnly(audioOnly);
+  }
+
   @override
   Future<void> close() async {
     if (!_initialized || _disposed) return;
@@ -324,6 +358,12 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   @protected
   Future<void> onSetRate(double rate);
+
+  /// Applies [setAudioOnly] to the engine.
+  ///
+  /// Only called when the capability is declared and the value changed.
+  @protected
+  Future<void> onSetAudioOnly(bool audioOnly) async {}
 
   @protected
   Future<void> onClose();
@@ -415,26 +455,38 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   /// Reports decoded video dimensions.
   ///
-  /// Geometry is a signal the adapter promised to produce, so it is
-  /// gated by
+  /// Geometry is a signal the adapter promised to produce, so publishing
+  /// it is gated by
   /// [PlayerAdapterCapabilities.supportsVideoSizeChanged]. A call
   /// here without that capability is a producer contract violation:
   /// it is asserted in debug builds and dropped in release builds.
+  ///
+  /// The capability only gates the *signal*. The state transition it
+  /// carries — the source has video — is applied either way, because a
+  /// backend that cannot report geometry may still be decoding video,
+  /// and `videoEnabled` must not depend on whether the dimensions are
+  /// observable.
   ///
   /// Video geometry must never be used as a substitute for
   /// [emitVideoFrameProgress]; a size change does not prove that
   /// decoding is still progressing.
   @protected
   void emitVideoSizeChanged(int width, int height) {
+    if (!acceptsEngineEvents) return;
+    if (width <= 0 || height <= 0) return;
+
+    // The source has video. That is a fact about the engine, applied
+    // whether or not the adapter promised to report the geometry, so the
+    // state never depends on the signal declaration.
+    _state = _state.withVideoEnabled(true);
+
     assert(
       _capabilities.supportsVideoSizeChanged,
       '$runtimeType emitted videoSizeChanged but '
       'capabilities.supportsVideoSizeChanged is false.',
     );
     if (!_capabilities.supportsVideoSizeChanged) return;
-    if (!acceptsEngineEvents) return;
-    if (width <= 0 || height <= 0) return;
-    _state = _state.withVideoEnabled(true);
+
     _addEvent(PlayerAdapterEvent.videoSizeChanged(width: width, height: height));
   }
 
@@ -445,7 +497,6 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// to [emitVideoSizeChanged].
   @protected
   void emitVideoSizeChangedIfChanged(int width, int height) {
-    if (!_capabilities.supportsVideoSizeChanged) return;
     if (!acceptsEngineEvents) return;
     if (width <= 0 || height <= 0) return;
     if (width == _lastReportedWidth && height == _lastReportedHeight) return;

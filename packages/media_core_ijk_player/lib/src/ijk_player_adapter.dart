@@ -152,6 +152,15 @@ final class IjkPlayerAdapter implements PlayerAdapter {
     _emit(PlayerAdapterEvent.rateChanged(rate: rate));
   }
 
+  /// Ignored: niuma_player exposes no video-track switch.
+  ///
+  /// IJKPlayer itself has one (`disable-vid`), but the niuma_player
+  /// surface this adapter is built on does not forward options, so the
+  /// adapter cannot promise the command and declares
+  /// [PlayerAdapterCapabilities.supportsAudioOnly] as false.
+  @override
+  Future<void> setAudioOnly(bool audioOnly) async {}
+
   // Settings that arrived before a controller existed.
   double? _pendingVolume;
   double? _pendingRate;
@@ -369,18 +378,18 @@ final class IjkPlayerAdapter implements PlayerAdapter {
   ///
   /// Signal emits and their capability flags:
   ///
-  /// - [PlayerAdapterEvent.videoSizeChanged] is produced from
-  ///   `OnVideoSizeChangedListener`; IJKPlayer reports the decoded
+  /// - [PlayerAdapterEvent.videoSizeChanged] is produced from the
+  ///   controller's size value; the engine reports the decoded
   ///   dimensions once they are known and on every later change.
-  /// - [PlayerAdapterEvent.buffering] with a `progress` ratio is
-  ///   produced from `OnBufferingUpdateListener`, which delivers
-  ///   the buffered percentage as an int.
   ///
-  /// There is no decoded-frame heartbeat in IJKPlayer. The engine
-  /// has `OnInfoListener` / `OnSeekCompleteListener` but neither
-  /// proves that a new frame is being decoded at the current moment.
-  /// `supportsVideoFrameProgress` therefore stays false, and the
-  /// live video-frame watchdog must be disabled for this backend.
+  /// There is no buffering progress ratio and no decoded-frame
+  /// heartbeat: this adapter consumes the controller's
+  /// [niuma.NiumaPlayerValue] notifications, which carry position,
+  /// duration, buffered range, size, phase and speed. `buffered` is
+  /// recorded in metrics rather than published as a ratio, so
+  /// `supportsBufferingProgress` stays false, and nothing in the value
+  /// proves that a frame is being decoded, so
+  /// `supportsVideoFrameProgress` stays false as well.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
     // Core playback.
     //
@@ -394,6 +403,12 @@ final class IjkPlayerAdapter implements PlayerAdapter {
     supportsRateControl: true,
     supportsVolumeControl: true,
     supportsMuteControl: true,
+
+    // `supportsAudioOnly` is false: IJKPlayer has the `disable-vid`
+    // option, but niuma_player does not forward player options, so this
+    // adapter has no way to switch the video track off. See
+    // [setAudioOnly].
+    supportsAudioOnly: false,
 
     // Video and rendering.
     //
@@ -434,11 +449,11 @@ final class IjkPlayerAdapter implements PlayerAdapter {
 
     // Playback state and buffering.
     //
-    // `OnBufferingUpdateListener` delivers a percent value, so a
-    // buffering progress ratio is available. There is no cache
-    // breakdown or chapter surface.
+    // The buffered range is recorded in metrics, but no ratio is ever
+    // published through `emitBuffering`, so the capability stays false.
+    // There is no cache breakdown or chapter surface.
     supportsCacheState: false,
-    supportsBufferingProgress: true,
+    supportsBufferingProgress: false,
     supportsChapterControl: false,
     supportsLoop: false,
 
