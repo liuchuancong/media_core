@@ -61,6 +61,12 @@ final class LiveSourceRequest {
 /// The controller still owns the recovery ladder (same source → line →
 /// engine → backoff → terminal) and the watchdog wiring; session and
 /// operation are plumbing underneath it.
+///
+/// Capability handling: the controller never reads individual capability
+/// flags. It forwards the active adapter's whole [PlayerAdapterCapabilities]
+/// snapshot to [LiveWatchdogs] whenever the adapter instance changes — on
+/// first bind, on engine switch, and on close (as null). The watchdog bundle
+/// reads the fields it cares about directly from that snapshot.
 final class LivePlaybackController {
   LivePlaybackController(
     this.kernel, {
@@ -275,6 +281,11 @@ final class LivePlaybackController {
     final handle = _handle;
     _handle = null;
     _currentUrl = null;
+
+    // Drop the capability snapshot with the handle so the next source
+    // cannot inherit the previous adapter's declarations.
+    watchdogs.updateCapabilities(null);
+
     if (handle != null) {
       await kernel.release(handle.id);
     }
@@ -484,10 +495,26 @@ final class LivePlaybackController {
   // Handle binding
   // ---------------------------------------------------------------------------
 
+  /// Rebinds the controller to the current adapter of [handle].
+  ///
+  /// Two things must always move together here, because they both belong
+  /// to the adapter *instance* the handle currently holds:
+  ///
+  /// - the watchdog capability snapshot, read from
+  ///   `handle.adapter.capabilities`
+  /// - the adapter event subscription, taken from
+  ///   `handle.adapter.events`
+  ///
+  /// `PlayerHandle.attachAdapter` replaces the adapter instance, so a
+  /// caller that performs one without the other leaves the controller
+  /// either watching a closed event stream or feeding the watchdog a
+  /// stale capability set. Keep them coupled; do not lift either out.
   void _bindHandle(PlayerHandle handle) {
     _handle = handle;
 
     _eventSub?.cancel();
+
+    watchdogs.updateCapabilities(handle.adapter.capabilities);
 
     _eventSub = handle.adapter.events.listen(_onAdapterEvent, onError: _onAdapterEventError);
   }
@@ -546,7 +573,74 @@ final class LivePlaybackController {
           generation,
         );
 
-      default:
+      case PlayerAdapterOpened():
+        // PlayerHandle already translates the opened event
+        // into the core/session event pipeline.
+        break;
+
+      case PlayerAdapterStopped():
+        // Stop is controlled by the live controller itself.
+        break;
+
+      case PlayerAdapterCompleted():
+        // Live playback normally does not complete naturally.
+        // Recovery is driven by watchdog/error events instead.
+        break;
+
+      case PlayerAdapterDurationChanged():
+        // Duration is not used by live playback recovery.
+        break;
+
+      case PlayerAdapterVideoReconfigured():
+        // Video output reconfiguration does not prove frame progress.
+        break;
+
+      case PlayerAdapterHwdecChanged():
+        // Decoder information is diagnostic/runtime information.
+        // It does not directly trigger recovery.
+        break;
+
+      case PlayerAdapterAudioReconfigured():
+        // Audio output reconfiguration does not affect the
+        // video-frame watchdog.
+        break;
+
+      case PlayerAdapterAudioDeviceChanged():
+        // Audio device changes do not affect live video recovery.
+        break;
+
+      case PlayerAdapterSubtitleChanged():
+        // Subtitle changes are presentation information only.
+        break;
+
+      case PlayerAdapterCacheChanged():
+        // Cache state is informational here.
+        // Buffering recovery is driven by PlayerAdapterBuffering
+        // and the buffering watchdog.
+        break;
+
+      case PlayerAdapterMetadataChanged():
+        // Metadata is not part of live recovery control flow.
+        break;
+
+      case PlayerAdapterPlaylistChanged():
+        // Playlist changes are not used by this live controller.
+        break;
+
+      case PlayerAdapterClientMessage():
+        // Backend client messages are diagnostic information.
+        break;
+
+      case PlayerAdapterLogMessage():
+        // Backend log messages are diagnostic information.
+        break;
+
+      case PlayerAdapterVolumeChanged():
+        // Volume changes do not affect live recovery.
+        break;
+
+      case PlayerAdapterRateChanged():
+        // Playback rate changes do not affect live recovery.
         break;
     }
   }
@@ -725,6 +819,11 @@ final class LivePlaybackController {
       await handle.attachAdapter(registration);
 
       if (!_isCurrent(generation)) return false;
+
+      // attachAdapter replaced the adapter instance. The capability
+      // snapshot and the event subscription both belong to the adapter
+      // instance, so rebind them together through _bindHandle.
+      _bindHandle(handle);
 
       final url = _currentUrl;
       final request = _request;

@@ -69,6 +69,89 @@ abstract class PlayerAdapterEvent with _$PlayerAdapterEvent {
   /// [videoSizeChanged], which only describes video geometry.
   const factory PlayerAdapterEvent.videoFrameProgress() = PlayerAdapterVideoFrameProgress;
 
+  /// Video output configuration changed.
+  ///
+  /// This event indicates that the backend reconfigured its
+  /// video output, such as resolution, pixel format, rotation,
+  /// or video filter chain.
+  const factory PlayerAdapterEvent.videoReconfigured() = PlayerAdapterVideoReconfigured;
+
+  /// Hardware decoder changed.
+  ///
+  /// [decoder] identifies the currently active decoder when
+  /// available, such as a hardware decoder name.
+  const factory PlayerAdapterEvent.hwdecChanged({String? decoder}) = PlayerAdapterHwdecChanged;
+
+  /// Audio output configuration changed.
+  ///
+  /// This event indicates that the backend reconfigured its
+  /// audio output.
+  const factory PlayerAdapterEvent.audioReconfigured() = PlayerAdapterAudioReconfigured;
+
+  /// Audio output device changed.
+  ///
+  /// [device] identifies the currently selected audio output
+  /// device when available.
+  const factory PlayerAdapterEvent.audioDeviceChanged({String? device}) = PlayerAdapterAudioDeviceChanged;
+
+  /// Subtitle track content changed.
+  ///
+  /// [text] contains the currently displayed subtitle text
+  /// when available.
+  const factory PlayerAdapterEvent.subtitleChanged({String? text}) = PlayerAdapterSubtitleChanged;
+
+  /// Cache state changed.
+  ///
+  /// This event describes runtime cache or buffering information
+  /// reported by the backend.
+  const factory PlayerAdapterEvent.cacheChanged({
+    /// Whether the backend is currently buffering.
+    bool? buffering,
+
+    /// Cached duration when available.
+    Duration? duration,
+
+    /// Cached or buffered progress when available.
+    double? progress,
+  }) = PlayerAdapterCacheChanged;
+
+  /// Playback metadata changed.
+  ///
+  /// [metadata] contains metadata reported by the backend.
+  const factory PlayerAdapterEvent.metadataChanged({required Map<String, dynamic> metadata}) =
+      PlayerAdapterMetadataChanged;
+
+  /// Playlist changed.
+  ///
+  /// [items] contains the current playlist items.
+  ///
+  /// [index] contains the currently selected item when available.
+  const factory PlayerAdapterEvent.playlistChanged({required List<String> items, int? index}) =
+      PlayerAdapterPlaylistChanged;
+
+  /// Backend client message received.
+  ///
+  /// [message] contains the backend message.
+  ///
+  /// [args] contains optional message arguments.
+  const factory PlayerAdapterEvent.clientMessage({
+    /// Backend message.
+    required String message,
+
+    /// Optional message arguments.
+    @Default(<String>[]) List<String> args,
+  }) = PlayerAdapterClientMessage;
+
+  /// Backend log message received.
+  ///
+  /// [level] contains the log level.
+  ///
+  /// [prefix] contains the backend log prefix.
+  ///
+  /// [text] contains the log message.
+  const factory PlayerAdapterEvent.logMessage({required String level, required String prefix, required String text}) =
+      PlayerAdapterLogMessage;
+
   /// Volume changed.
   const factory PlayerAdapterEvent.volumeChanged({required double volume}) = PlayerAdapterVolumeChanged;
 
@@ -97,6 +180,28 @@ extension PlayerAdapterEventExtension on PlayerAdapterEvent {
 
   /// Whether event affects media geometry.
   bool get affectsGeometry {
-    return this is PlayerAdapterVideoSizeChanged;
+    return this is PlayerAdapterVideoSizeChanged || this is PlayerAdapterVideoReconfigured;
+  }
+
+  /// Whether this event represents a decoded video frame heartbeat.
+  bool get isVideoHeartbeat {
+    return this is PlayerAdapterVideoFrameProgress;
+  }
+
+  /// Whether event affects buffering state.
+  bool get affectsBuffering {
+    return this is PlayerAdapterBuffering || this is PlayerAdapterCacheChanged;
+  }
+
+  /// Whether event affects audio output.
+  bool get affectsAudioOutput {
+    return this is PlayerAdapterAudioReconfigured ||
+        this is PlayerAdapterAudioDeviceChanged ||
+        this is PlayerAdapterVolumeChanged;
+  }
+
+  /// Whether this event is a backend diagnostic event.
+  bool get isDiagnostic {
+    return this is PlayerAdapterClientMessage || this is PlayerAdapterLogMessage;
   }
 }

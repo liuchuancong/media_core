@@ -1,43 +1,41 @@
 import 'dart:async';
-
-import 'package:rxdart/rxdart.dart';
-
-import '../adapter/player_adapter.dart';
-import '../adapter/player_adapter_event.dart';
-import '../adapter/player_adapter_metrics.dart';
-import '../adapter/player_adapter_registry.dart';
-import '../adapter/player_adapter_context.dart';
-import '../adapter/player_adapter_capabilities.dart';
 import '../core/player.dart';
-import '../core/player_config.dart';
+import 'kernel_options.dart';
 import '../core/player_state.dart';
-import '../event/event_context.dart';
-import '../event/event_priority.dart';
+import 'package:rxdart/rxdart.dart';
+import '../core/player_config.dart';
 import '../event/player_event.dart';
-import '../event/player_event_bus.dart';
-import '../event/player_event_type.dart';
-import '../identity/generation_id.dart';
 import '../identity/player_id.dart';
+import '../event/event_context.dart';
 import '../identity/session_id.dart';
-import '../lifecycle/lifecycle_controller.dart';
-import '../lifecycle/lifecycle_snapshot.dart';
-import '../playback/playback_command.dart';
-import '../playback/playback_controller.dart';
-import '../playback/playback_state.dart';
+import '../event/event_priority.dart';
 import '../policy/player_policy.dart';
-import '../platform/platform_capabilities.dart';
+import '../source/player_source.dart';
+import '../session/session_state.dart';
+import '../adapter/player_adapter.dart';
+import '../event/player_event_bus.dart';
+import '../identity/generation_id.dart';
+import '../session/player_session.dart';
+import '../event/player_event_type.dart';
+import '../playback/playback_state.dart';
+import '../session/session_context.dart';
+import '../recovery/recovery_reason.dart';
+import '../session/session_snapshot.dart';
+import '../playback/playback_command.dart';
 import '../recovery/recovery_context.dart';
 import '../recovery/recovery_manager.dart';
-import '../recovery/recovery_reason.dart';
-import '../recovery/recovery_snapshot.dart';
 import '../fallback/backend_fallback.dart';
-import '../session/player_session.dart';
-import '../session/session_context.dart';
+import '../recovery/recovery_snapshot.dart';
 import '../session/session_controller.dart';
-import '../session/session_snapshot.dart';
-import '../session/session_state.dart';
-import '../source/player_source.dart';
-import 'kernel_options.dart';
+import '../adapter/player_adapter_event.dart';
+import '../lifecycle/lifecycle_snapshot.dart';
+import '../playback/playback_controller.dart';
+import '../adapter/player_adapter_metrics.dart';
+import '../adapter/player_adapter_context.dart';
+import '../lifecycle/lifecycle_controller.dart';
+import '../platform/platform_capabilities.dart';
+import '../adapter/player_adapter_registry.dart';
+import '../adapter/player_adapter_capabilities.dart';
 
 /// Callback invoked when a handle exhausted recovery and wants
 /// the kernel to attempt a backend fallback.
@@ -473,36 +471,96 @@ final class PlayerHandle {
     switch (event) {
       case PlayerAdapterOpened():
         _publish(PlayerEventType.source, const <String, Object?>{'action': 'adapterOpened'});
+
       case PlayerAdapterPlaying():
         _playback.apply(const PlaybackCommand.play());
         _sessionController.play();
+
       case PlayerAdapterPaused():
         _playback.apply(const PlaybackCommand.pause());
         _sessionController.pause();
+
       case PlayerAdapterStopped():
         _playback.apply(const PlaybackCommand.stop());
         _sessionController.stop();
+
       case PlayerAdapterBuffering(buffering: final buffering, progress: final progress):
         _playback.setBuffering(buffering);
         _sessionController.buffering();
-        _publish(
-          PlayerEventType.buffering,
-          <String, Object?>{'buffering': buffering, 'progress': ?progress},
-        );
+        _publish(PlayerEventType.buffering, <String, Object?>{'buffering': buffering, 'progress': progress});
+
       case PlayerAdapterCompleted():
         _sessionController.complete();
         _publish(PlayerEventType.playback, const <String, Object?>{'action': 'completed'});
         _handleCompletion();
+
       case PlayerAdapterPositionChanged(position: final position):
         _playback.updatePosition(position);
+
       case PlayerAdapterDurationChanged(duration: final duration):
         _playback.updateDuration(duration);
+
       case PlayerAdapterVideoSizeChanged(width: final width, height: final height):
         _publish(PlayerEventType.renderer, <String, Object?>{'width': width, 'height': height});
+
+      case PlayerAdapterVideoFrameProgress():
+        // Frame heartbeat is consumed by adapter-level watchdogs.
+        break;
+
+      case PlayerAdapterVideoReconfigured():
+        _publish(PlayerEventType.renderer, const <String, Object?>{'action': 'videoReconfigured'});
+
+      case PlayerAdapterHwdecChanged(decoder: final decoder):
+        _publish(PlayerEventType.renderer, <String, Object?>{'action': 'hwdecChanged', 'decoder': decoder});
+
+      case PlayerAdapterAudioReconfigured():
+        _publish(PlayerEventType.audio, const <String, Object?>{'action': 'audioReconfigured'});
+
+      case PlayerAdapterAudioDeviceChanged(device: final device):
+        _publish(PlayerEventType.audio, <String, Object?>{'action': 'audioDeviceChanged', 'device': device});
+
+      case PlayerAdapterSubtitleChanged(text: final text):
+        _publish(PlayerEventType.renderer, <String, Object?>{'action': 'subtitleChanged', 'text': text});
+
+      case PlayerAdapterCacheChanged(buffering: final buffering, duration: final duration, progress: final progress):
+        _publish(PlayerEventType.buffering, <String, Object?>{
+          'action': 'cacheChanged',
+          'buffering': buffering,
+          'durationMs': duration?.inMilliseconds,
+          'progress': progress,
+        });
+
+      case PlayerAdapterMetadataChanged(metadata: final metadata):
+        _publish(PlayerEventType.player, <String, Object?>{'action': 'metadataChanged', 'metadata': metadata});
+
+      case PlayerAdapterPlaylistChanged(items: final items, index: final index):
+        _publish(PlayerEventType.player, <String, Object?>{
+          'action': 'playlistChanged',
+          'items': items,
+          'index': index,
+        });
+
+      case PlayerAdapterClientMessage(message: final message, args: final args):
+        _publish(PlayerEventType.player, <String, Object?>{
+          'action': 'clientMessage',
+          'message': message,
+          'args': args,
+        });
+
+      case PlayerAdapterLogMessage(level: final level, prefix: final prefix, text: final text):
+        _publish(PlayerEventType.player, <String, Object?>{
+          'action': 'logMessage',
+          'level': level,
+          'prefix': prefix,
+          'text': text,
+        });
+
       case PlayerAdapterVolumeChanged(volume: final volume):
         _playback.apply(PlaybackCommand.volume(volume));
+
       case PlayerAdapterRateChanged(rate: final rate):
         _playback.apply(PlaybackCommand.rate(rate));
+
       case PlayerAdapterErrorEvent(message: final message, error: final error, stackTrace: final stackTrace):
         _handleAdapterError(message, error, stackTrace);
     }
@@ -542,8 +600,7 @@ final class PlayerHandle {
     );
 
     final maxAttempts = config.maxRecoveryAttempts;
-    final canRecover =
-        _options.enableRecovery && config.enableRecovery && _currentSource != null && maxAttempts > 0;
+    final canRecover = _options.enableRecovery && config.enableRecovery && _currentSource != null && maxAttempts > 0;
     final canFallback = _options.enableFallback && config.enableFallback;
 
     if (!canRecover) {
@@ -559,12 +616,7 @@ final class PlayerHandle {
     final wasPlaying = _playback.current.isPlaying;
 
     _recovery.start(
-      RecoveryContext(
-        reason: _reasonFor(message),
-        sourceId: source.id,
-        generationId: generation,
-        message: message,
-      ),
+      RecoveryContext(reason: _reasonFor(message), sourceId: source.id, generationId: generation, message: message),
     );
 
     _publish(PlayerEventType.recovery, <String, Object?>{
@@ -630,10 +682,10 @@ final class PlayerHandle {
       } catch (_) {
         if (_recovery.state.attempt >= maxAttempts) {
           _recovery.exhaust();
-          _publish(
-            PlayerEventType.recovery,
-            <String, Object?>{'action': 'exhausted', 'attempts': _recovery.state.attempt},
-          );
+          _publish(PlayerEventType.recovery, <String, Object?>{
+            'action': 'exhausted',
+            'attempts': _recovery.state.attempt,
+          });
           if (_options.enableFallback && config.enableFallback) {
             _onFallbackRequested?.call(this, message);
           }
@@ -693,9 +745,7 @@ final class PlayerHandle {
     if (!_options.enableEventBus) {
       return;
     }
-    _eventBus.publish(
-      GenericPlayerEvent(type: type, data: data, priority: priority, context: _buildContext()),
-    );
+    _eventBus.publish(GenericPlayerEvent(type: type, data: data, priority: priority, context: _buildContext()));
   }
 
   void _ensureNotDisposed() {

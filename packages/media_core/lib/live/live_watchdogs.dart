@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'live_playback_models.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:media_core/adapter/player_adapter_capabilities.dart';
 
 /// Watchdog-driven orchestration for live (non-seekable) streams.
 ///
@@ -32,16 +33,23 @@ import 'package:rxdart/rxdart.dart';
 ///
 /// All watchdogs are source-local. The owner should call [cancelAll] when
 /// the current source/generation is retired.
+///
+/// Capability handling follows the single-source-of-truth rule: this
+/// class holds a [PlayerAdapterCapabilities] snapshot and reads the
+/// fields it cares about directly. It does not declare its own
+/// `supportsXxx` flags, mirror getters, or per-capability setters. The
+/// snapshot is bound through [updateCapabilities] and re-bound whenever
+/// the active adapter changes (fallback, engine switch, close).
 final class LiveWatchdogs {
-  /// Creates the watchdog bundle.
   LiveWatchdogs({
+    PlayerAdapterCapabilities? capabilities,
     this.sourceReadyTimeout = const Duration(seconds: 18),
     this.unexpectedPauseGrace = const Duration(milliseconds: 350),
     this.unexpectedPauseFailureGrace = const Duration(seconds: 5),
     this.bufferingStallTimeout = const Duration(seconds: 12),
     this.videoFrameStallTimeout = const Duration(seconds: 10),
     this.enabled = true,
-  });
+  }) : _capabilities = capabilities;
 
   /// Opened-but-not-playing deadline.
   ///
@@ -58,6 +66,9 @@ final class LiveWatchdogs {
   final Duration bufferingStallTimeout;
 
   /// Deadline without any new video frame while playing.
+  ///
+  /// Only consulted when the bound capability snapshot declares
+  /// [PlayerAdapterCapabilities.supportsVideoFrameProgress].
   final Duration videoFrameStallTimeout;
 
   /// Master switch.
@@ -66,10 +77,72 @@ final class LiveWatchdogs {
   final bool enabled;
 
   // ---------------------------------------------------------------------------
+  // Bound capabilities
+  // ---------------------------------------------------------------------------
+
+  PlayerAdapterCapabilities? _capabilities;
+
+  /// The capability snapshot currently bound to these watchdogs.
+  ///
+  /// This is a bound view, not the authoritative declaration — the
+  /// authority is the adapter's own `capabilities`. Read this only for
+  /// diagnostics and tests.
+  PlayerAdapterCapabilities? get capabilities => _capabilities;
+
+  /// Binds the capability snapshot of the active adapter.
+  ///
+  /// Call this whenever the active adapter is created, replaced, or
+  /// released:
+  ///
+  /// - after the handle is bound for a new source
+  /// - after the engine is switched via `attachAdapter`
+  /// - with null on [close] and [dispose], so a stale snapshot never
+  ///   leaks into the next source
+  ///
+  /// Passing null clears the snapshot; the frame-progress watchdog then
+  /// treats the adapter as not supporting the signal.
+  ///
+  /// Only the fields this bundle actually consumes are read, and they
+  /// are read directly from the snapshot. No capability is mirrored as
+  /// a field, getter, or constructor parameter here.
+  ///
+  /// Re-binding is a no-op when the snapshot compares equal, so calling
+  /// this on every open with the same adapter does not reset a running
+  /// video-frame timeout window. The watchdog only reacts when the
+  /// consumed capability (`supportsVideoFrameProgress`) actually
+  /// changes value.
+  void updateCapabilities(PlayerAdapterCapabilities? capabilities) {
+    if (_disposed) return;
+    if (_capabilities == capabilities) return;
+
+    final wasSupported = _supportsVideoFrameProgress;
+    _capabilities = capabilities;
+    final nowSupported = _supportsVideoFrameProgress;
+
+    // Only the frame-progress signal is capability-gated. Re-evaluate
+    // it so a live subscription never outlives a change of declaration
+    // in either direction. Other watchdogs derive from state
+    // transitions and are not affected by capability changes.
+    if (wasSupported == nowSupported) return;
+
+    if (!nowSupported) {
+      _cancelVideoFrameStall();
+      return;
+    }
+
+    if (_playing && !_buffering && _presentationVisible) {
+      _armVideoFrameStall();
+    }
+  }
+
+  /// Whether the bound adapter declares a decoded-frame heartbeat.
+  bool get _supportsVideoFrameProgress => _capabilities?.supportsVideoFrameProgress ?? false;
+
+  // ---------------------------------------------------------------------------
   // RxDart event sources
   // ---------------------------------------------------------------------------
 
-  /// Emits whenever a new video frame/progress observation is received.
+  /// Emits whenever a new decoded video frame is observed.
   ///
   /// The frame watchdog uses switchMap so every new frame cancels the
   /// previous timeout and starts a fresh timeout window.
@@ -130,10 +203,6 @@ final class LiveWatchdogs {
   // Playing state
   // ---------------------------------------------------------------------------
 
-  /// Feeds the playing state from adapter events.
-  ///
-  /// [fromUserIntent] distinguishes a user pause from a transport hiccup.
-  /// Only an unexpected pause starts the continuity watchdog.
   void onPlayingChanged(bool playing, {required bool fromUserIntent}) {
     if (_disposed) return;
 
@@ -172,7 +241,6 @@ final class LiveWatchdogs {
   // Buffering state
   // ---------------------------------------------------------------------------
 
-  /// Feeds the buffering state from adapter events.
   void onBufferingChanged(bool buffering) {
     if (_disposed) return;
 
@@ -198,11 +266,14 @@ final class LiveWatchdogs {
   // Video frame progress
   // ---------------------------------------------------------------------------
 
-  /// Feeds a video-size / frame-progress observation.
+  /// Feeds a real decoded-video-frame observation.
   ///
-  /// Every frame restarts the video-frame timeout.
+  /// This must only be called from [PlayerAdapterEvent.videoFrameProgress].
+  ///
+  /// Video-size changes, position changes, metadata changes, and other
+  /// backend events must not be treated as decoded-frame progress.
   void onFrameProgress() {
-    if (_disposed || !_playing || !_presentationVisible) {
+    if (_disposed || !_playing || !_presentationVisible || !_supportsVideoFrameProgress) {
       return;
     }
 
@@ -215,7 +286,9 @@ final class LiveWatchdogs {
 
   /// Marks whether a route currently owns the mounted video presentation.
   ///
-  /// Hidden presentations do not run the frame watchdog.
+  /// Hidden presentations do not run the frame watchdog. Buffering state
+  /// is checked by [armVideoFrameStall] itself, so this method does not
+  /// need to duplicate it.
   void setPresentationVisible(bool visible) {
     if (_disposed) return;
 
@@ -228,7 +301,6 @@ final class LiveWatchdogs {
     }
   }
 
-  /// Whether the playing state is currently true.
   bool get isPlaying => _playing;
 
   // ---------------------------------------------------------------------------
@@ -305,29 +377,41 @@ final class LiveWatchdogs {
   // Video frame watchdog
   // ---------------------------------------------------------------------------
 
+  /// Arms the decoded-frame stall deadline.
+  ///
+  /// All preconditions are checked here so callers do not need to
+  /// remember them:
+  ///
+  /// - the adapter must declare
+  ///   [PlayerAdapterCapabilities.supportsVideoFrameProgress]
+  /// - the watchdog must be enabled and the timeout non-zero
+  /// - the mounted presentation must be visible
+  /// - playback must be running
+  /// - buffering must not be in progress (no frames are expected while
+  ///   the engine is filling its cache, so a missing heartbeat is not
+  ///   a stall)
   void _armVideoFrameStall() {
     _cancelVideoFrameStall();
 
-    if (!_canWatch || videoFrameStallTimeout <= Duration.zero || !_presentationVisible || !_playing) {
+    if (!_canWatch ||
+        !_supportsVideoFrameProgress ||
+        videoFrameStallTimeout <= Duration.zero ||
+        !_presentationVisible ||
+        !_playing ||
+        _buffering) {
       return;
     }
 
-    // Start a fresh watchdog immediately.
-    //
-    // Every subsequent frame emits into [_frameProgress]. switchMap cancels
-    // the previous TimerStream and creates a new timeout window.
     _videoFrameSubscription = _frameProgress
         .startWith(null)
         .switchMap<void>((_) => TimerStream<void>(null, videoFrameStallTimeout))
         .listen((_) {
           if (_disposed) return;
 
-          if (!_presentationVisible || !_playing) {
+          if (!_presentationVisible || !_playing || !_supportsVideoFrameProgress) {
             return;
           }
 
-          // One stall is enough. The controller decides whether to recover
-          // using the same source, another line, another engine, etc.
           _cancelVideoFrameStall();
 
           onStall?.call(LiveStallKind.videoFrameStallTimeout);
@@ -365,14 +449,6 @@ final class LiveWatchdogs {
   }
 
   /// Cancels every watchdog.
-  ///
-  /// Call this when:
-  ///
-  /// - the source changes
-  /// - the playback generation changes
-  /// - the user pauses
-  /// - recovery takes ownership
-  /// - the controller closes the current source
   void cancelAll() {
     _cancelSourceReady();
     _cancelContinuity();
@@ -390,6 +466,7 @@ final class LiveWatchdogs {
 
     onStall = null;
     onReassertPlay = null;
+    _capabilities = null;
 
     _frameProgress.close();
   }

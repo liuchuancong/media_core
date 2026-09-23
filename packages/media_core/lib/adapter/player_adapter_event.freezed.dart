@@ -56,7 +56,7 @@ extension PlayerAdapterEventPatterns on PlayerAdapterEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlayerAdapterOpened value)?  opened,TResult Function( PlayerAdapterPlaying value)?  playing,TResult Function( PlayerAdapterPaused value)?  paused,TResult Function( PlayerAdapterStopped value)?  stopped,TResult Function( PlayerAdapterBuffering value)?  buffering,TResult Function( PlayerAdapterCompleted value)?  completed,TResult Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult Function( PlayerAdapterRateChanged value)?  rateChanged,TResult Function( PlayerAdapterErrorEvent value)?  error,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlayerAdapterOpened value)?  opened,TResult Function( PlayerAdapterPlaying value)?  playing,TResult Function( PlayerAdapterPaused value)?  paused,TResult Function( PlayerAdapterStopped value)?  stopped,TResult Function( PlayerAdapterBuffering value)?  buffering,TResult Function( PlayerAdapterCompleted value)?  completed,TResult Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult Function( PlayerAdapterVideoReconfigured value)?  videoReconfigured,TResult Function( PlayerAdapterHwdecChanged value)?  hwdecChanged,TResult Function( PlayerAdapterAudioReconfigured value)?  audioReconfigured,TResult Function( PlayerAdapterAudioDeviceChanged value)?  audioDeviceChanged,TResult Function( PlayerAdapterSubtitleChanged value)?  subtitleChanged,TResult Function( PlayerAdapterCacheChanged value)?  cacheChanged,TResult Function( PlayerAdapterMetadataChanged value)?  metadataChanged,TResult Function( PlayerAdapterPlaylistChanged value)?  playlistChanged,TResult Function( PlayerAdapterClientMessage value)?  clientMessage,TResult Function( PlayerAdapterLogMessage value)?  logMessage,TResult Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult Function( PlayerAdapterRateChanged value)?  rateChanged,TResult Function( PlayerAdapterErrorEvent value)?  error,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
@@ -69,7 +69,17 @@ return completed(_that);case PlayerAdapterPositionChanged() when positionChanged
 return positionChanged(_that);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
 return videoSizeChanged(_that);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
-return videoFrameProgress(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoFrameProgress(_that);case PlayerAdapterVideoReconfigured() when videoReconfigured != null:
+return videoReconfigured(_that);case PlayerAdapterHwdecChanged() when hwdecChanged != null:
+return hwdecChanged(_that);case PlayerAdapterAudioReconfigured() when audioReconfigured != null:
+return audioReconfigured(_that);case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
+return audioDeviceChanged(_that);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
+return subtitleChanged(_that);case PlayerAdapterCacheChanged() when cacheChanged != null:
+return cacheChanged(_that);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return metadataChanged(_that);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
+return playlistChanged(_that);case PlayerAdapterClientMessage() when clientMessage != null:
+return clientMessage(_that);case PlayerAdapterLogMessage() when logMessage != null:
+return logMessage(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that);case PlayerAdapterErrorEvent() when error != null:
 return error(_that);case _:
@@ -90,7 +100,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlayerAdapterOpened value)  opened,required TResult Function( PlayerAdapterPlaying value)  playing,required TResult Function( PlayerAdapterPaused value)  paused,required TResult Function( PlayerAdapterStopped value)  stopped,required TResult Function( PlayerAdapterBuffering value)  buffering,required TResult Function( PlayerAdapterCompleted value)  completed,required TResult Function( PlayerAdapterPositionChanged value)  positionChanged,required TResult Function( PlayerAdapterDurationChanged value)  durationChanged,required TResult Function( PlayerAdapterVideoSizeChanged value)  videoSizeChanged,required TResult Function( PlayerAdapterVideoFrameProgress value)  videoFrameProgress,required TResult Function( PlayerAdapterVolumeChanged value)  volumeChanged,required TResult Function( PlayerAdapterRateChanged value)  rateChanged,required TResult Function( PlayerAdapterErrorEvent value)  error,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlayerAdapterOpened value)  opened,required TResult Function( PlayerAdapterPlaying value)  playing,required TResult Function( PlayerAdapterPaused value)  paused,required TResult Function( PlayerAdapterStopped value)  stopped,required TResult Function( PlayerAdapterBuffering value)  buffering,required TResult Function( PlayerAdapterCompleted value)  completed,required TResult Function( PlayerAdapterPositionChanged value)  positionChanged,required TResult Function( PlayerAdapterDurationChanged value)  durationChanged,required TResult Function( PlayerAdapterVideoSizeChanged value)  videoSizeChanged,required TResult Function( PlayerAdapterVideoFrameProgress value)  videoFrameProgress,required TResult Function( PlayerAdapterVideoReconfigured value)  videoReconfigured,required TResult Function( PlayerAdapterHwdecChanged value)  hwdecChanged,required TResult Function( PlayerAdapterAudioReconfigured value)  audioReconfigured,required TResult Function( PlayerAdapterAudioDeviceChanged value)  audioDeviceChanged,required TResult Function( PlayerAdapterSubtitleChanged value)  subtitleChanged,required TResult Function( PlayerAdapterCacheChanged value)  cacheChanged,required TResult Function( PlayerAdapterMetadataChanged value)  metadataChanged,required TResult Function( PlayerAdapterPlaylistChanged value)  playlistChanged,required TResult Function( PlayerAdapterClientMessage value)  clientMessage,required TResult Function( PlayerAdapterLogMessage value)  logMessage,required TResult Function( PlayerAdapterVolumeChanged value)  volumeChanged,required TResult Function( PlayerAdapterRateChanged value)  rateChanged,required TResult Function( PlayerAdapterErrorEvent value)  error,}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened():
@@ -103,7 +113,17 @@ return completed(_that);case PlayerAdapterPositionChanged():
 return positionChanged(_that);case PlayerAdapterDurationChanged():
 return durationChanged(_that);case PlayerAdapterVideoSizeChanged():
 return videoSizeChanged(_that);case PlayerAdapterVideoFrameProgress():
-return videoFrameProgress(_that);case PlayerAdapterVolumeChanged():
+return videoFrameProgress(_that);case PlayerAdapterVideoReconfigured():
+return videoReconfigured(_that);case PlayerAdapterHwdecChanged():
+return hwdecChanged(_that);case PlayerAdapterAudioReconfigured():
+return audioReconfigured(_that);case PlayerAdapterAudioDeviceChanged():
+return audioDeviceChanged(_that);case PlayerAdapterSubtitleChanged():
+return subtitleChanged(_that);case PlayerAdapterCacheChanged():
+return cacheChanged(_that);case PlayerAdapterMetadataChanged():
+return metadataChanged(_that);case PlayerAdapterPlaylistChanged():
+return playlistChanged(_that);case PlayerAdapterClientMessage():
+return clientMessage(_that);case PlayerAdapterLogMessage():
+return logMessage(_that);case PlayerAdapterVolumeChanged():
 return volumeChanged(_that);case PlayerAdapterRateChanged():
 return rateChanged(_that);case PlayerAdapterErrorEvent():
 return error(_that);case _:
@@ -123,7 +143,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlayerAdapterOpened value)?  opened,TResult? Function( PlayerAdapterPlaying value)?  playing,TResult? Function( PlayerAdapterPaused value)?  paused,TResult? Function( PlayerAdapterStopped value)?  stopped,TResult? Function( PlayerAdapterBuffering value)?  buffering,TResult? Function( PlayerAdapterCompleted value)?  completed,TResult? Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult? Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult? Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult? Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult? Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult? Function( PlayerAdapterRateChanged value)?  rateChanged,TResult? Function( PlayerAdapterErrorEvent value)?  error,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlayerAdapterOpened value)?  opened,TResult? Function( PlayerAdapterPlaying value)?  playing,TResult? Function( PlayerAdapterPaused value)?  paused,TResult? Function( PlayerAdapterStopped value)?  stopped,TResult? Function( PlayerAdapterBuffering value)?  buffering,TResult? Function( PlayerAdapterCompleted value)?  completed,TResult? Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult? Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult? Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult? Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult? Function( PlayerAdapterVideoReconfigured value)?  videoReconfigured,TResult? Function( PlayerAdapterHwdecChanged value)?  hwdecChanged,TResult? Function( PlayerAdapterAudioReconfigured value)?  audioReconfigured,TResult? Function( PlayerAdapterAudioDeviceChanged value)?  audioDeviceChanged,TResult? Function( PlayerAdapterSubtitleChanged value)?  subtitleChanged,TResult? Function( PlayerAdapterCacheChanged value)?  cacheChanged,TResult? Function( PlayerAdapterMetadataChanged value)?  metadataChanged,TResult? Function( PlayerAdapterPlaylistChanged value)?  playlistChanged,TResult? Function( PlayerAdapterClientMessage value)?  clientMessage,TResult? Function( PlayerAdapterLogMessage value)?  logMessage,TResult? Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult? Function( PlayerAdapterRateChanged value)?  rateChanged,TResult? Function( PlayerAdapterErrorEvent value)?  error,}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
@@ -136,7 +156,17 @@ return completed(_that);case PlayerAdapterPositionChanged() when positionChanged
 return positionChanged(_that);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
 return videoSizeChanged(_that);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
-return videoFrameProgress(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoFrameProgress(_that);case PlayerAdapterVideoReconfigured() when videoReconfigured != null:
+return videoReconfigured(_that);case PlayerAdapterHwdecChanged() when hwdecChanged != null:
+return hwdecChanged(_that);case PlayerAdapterAudioReconfigured() when audioReconfigured != null:
+return audioReconfigured(_that);case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
+return audioDeviceChanged(_that);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
+return subtitleChanged(_that);case PlayerAdapterCacheChanged() when cacheChanged != null:
+return cacheChanged(_that);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return metadataChanged(_that);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
+return playlistChanged(_that);case PlayerAdapterClientMessage() when clientMessage != null:
+return clientMessage(_that);case PlayerAdapterLogMessage() when logMessage != null:
+return logMessage(_that);case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that);case PlayerAdapterErrorEvent() when error != null:
 return error(_that);case _:
@@ -156,7 +186,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String? source)?  opened,TResult Function()?  playing,TResult Function()?  paused,TResult Function()?  stopped,TResult Function( bool buffering,  double? progress)?  buffering,TResult Function()?  completed,TResult Function( Duration position)?  positionChanged,TResult Function( Duration duration)?  durationChanged,TResult Function( int width,  int height)?  videoSizeChanged,TResult Function()?  videoFrameProgress,TResult Function( double volume)?  volumeChanged,TResult Function( double rate)?  rateChanged,TResult Function( String message,  Object? error,  StackTrace? stackTrace)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String? source)?  opened,TResult Function()?  playing,TResult Function()?  paused,TResult Function()?  stopped,TResult Function( bool buffering,  double? progress)?  buffering,TResult Function()?  completed,TResult Function( Duration position)?  positionChanged,TResult Function( Duration duration)?  durationChanged,TResult Function( int width,  int height)?  videoSizeChanged,TResult Function()?  videoFrameProgress,TResult Function()?  videoReconfigured,TResult Function( String? decoder)?  hwdecChanged,TResult Function()?  audioReconfigured,TResult Function( String? device)?  audioDeviceChanged,TResult Function( String? text)?  subtitleChanged,TResult Function( bool? buffering,  Duration? duration,  double? progress)?  cacheChanged,TResult Function( Map<String, dynamic> metadata)?  metadataChanged,TResult Function( List<String> items,  int? index)?  playlistChanged,TResult Function( String message,  List<String> args)?  clientMessage,TResult Function( String level,  String prefix,  String text)?  logMessage,TResult Function( double volume)?  volumeChanged,TResult Function( double rate)?  rateChanged,TResult Function( String message,  Object? error,  StackTrace? stackTrace)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
 return opened(_that.source);case PlayerAdapterPlaying() when playing != null:
@@ -168,7 +198,17 @@ return completed();case PlayerAdapterPositionChanged() when positionChanged != n
 return positionChanged(_that.position);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that.duration);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
 return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
-return videoFrameProgress();case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoFrameProgress();case PlayerAdapterVideoReconfigured() when videoReconfigured != null:
+return videoReconfigured();case PlayerAdapterHwdecChanged() when hwdecChanged != null:
+return hwdecChanged(_that.decoder);case PlayerAdapterAudioReconfigured() when audioReconfigured != null:
+return audioReconfigured();case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
+return audioDeviceChanged(_that.device);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
+return subtitleChanged(_that.text);case PlayerAdapterCacheChanged() when cacheChanged != null:
+return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return metadataChanged(_that.metadata);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
+return playlistChanged(_that.items,_that.index);case PlayerAdapterClientMessage() when clientMessage != null:
+return clientMessage(_that.message,_that.args);case PlayerAdapterLogMessage() when logMessage != null:
+return logMessage(_that.level,_that.prefix,_that.text);case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that.volume);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that.rate);case PlayerAdapterErrorEvent() when error != null:
 return error(_that.message,_that.error,_that.stackTrace);case _:
@@ -189,7 +229,7 @@ return error(_that.message,_that.error,_that.stackTrace);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String? source)  opened,required TResult Function()  playing,required TResult Function()  paused,required TResult Function()  stopped,required TResult Function( bool buffering,  double? progress)  buffering,required TResult Function()  completed,required TResult Function( Duration position)  positionChanged,required TResult Function( Duration duration)  durationChanged,required TResult Function( int width,  int height)  videoSizeChanged,required TResult Function()  videoFrameProgress,required TResult Function( double volume)  volumeChanged,required TResult Function( double rate)  rateChanged,required TResult Function( String message,  Object? error,  StackTrace? stackTrace)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String? source)  opened,required TResult Function()  playing,required TResult Function()  paused,required TResult Function()  stopped,required TResult Function( bool buffering,  double? progress)  buffering,required TResult Function()  completed,required TResult Function( Duration position)  positionChanged,required TResult Function( Duration duration)  durationChanged,required TResult Function( int width,  int height)  videoSizeChanged,required TResult Function()  videoFrameProgress,required TResult Function()  videoReconfigured,required TResult Function( String? decoder)  hwdecChanged,required TResult Function()  audioReconfigured,required TResult Function( String? device)  audioDeviceChanged,required TResult Function( String? text)  subtitleChanged,required TResult Function( bool? buffering,  Duration? duration,  double? progress)  cacheChanged,required TResult Function( Map<String, dynamic> metadata)  metadataChanged,required TResult Function( List<String> items,  int? index)  playlistChanged,required TResult Function( String message,  List<String> args)  clientMessage,required TResult Function( String level,  String prefix,  String text)  logMessage,required TResult Function( double volume)  volumeChanged,required TResult Function( double rate)  rateChanged,required TResult Function( String message,  Object? error,  StackTrace? stackTrace)  error,}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened():
 return opened(_that.source);case PlayerAdapterPlaying():
@@ -201,7 +241,17 @@ return completed();case PlayerAdapterPositionChanged():
 return positionChanged(_that.position);case PlayerAdapterDurationChanged():
 return durationChanged(_that.duration);case PlayerAdapterVideoSizeChanged():
 return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVideoFrameProgress():
-return videoFrameProgress();case PlayerAdapterVolumeChanged():
+return videoFrameProgress();case PlayerAdapterVideoReconfigured():
+return videoReconfigured();case PlayerAdapterHwdecChanged():
+return hwdecChanged(_that.decoder);case PlayerAdapterAudioReconfigured():
+return audioReconfigured();case PlayerAdapterAudioDeviceChanged():
+return audioDeviceChanged(_that.device);case PlayerAdapterSubtitleChanged():
+return subtitleChanged(_that.text);case PlayerAdapterCacheChanged():
+return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterMetadataChanged():
+return metadataChanged(_that.metadata);case PlayerAdapterPlaylistChanged():
+return playlistChanged(_that.items,_that.index);case PlayerAdapterClientMessage():
+return clientMessage(_that.message,_that.args);case PlayerAdapterLogMessage():
+return logMessage(_that.level,_that.prefix,_that.text);case PlayerAdapterVolumeChanged():
 return volumeChanged(_that.volume);case PlayerAdapterRateChanged():
 return rateChanged(_that.rate);case PlayerAdapterErrorEvent():
 return error(_that.message,_that.error,_that.stackTrace);case _:
@@ -221,7 +271,7 @@ return error(_that.message,_that.error,_that.stackTrace);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String? source)?  opened,TResult? Function()?  playing,TResult? Function()?  paused,TResult? Function()?  stopped,TResult? Function( bool buffering,  double? progress)?  buffering,TResult? Function()?  completed,TResult? Function( Duration position)?  positionChanged,TResult? Function( Duration duration)?  durationChanged,TResult? Function( int width,  int height)?  videoSizeChanged,TResult? Function()?  videoFrameProgress,TResult? Function( double volume)?  volumeChanged,TResult? Function( double rate)?  rateChanged,TResult? Function( String message,  Object? error,  StackTrace? stackTrace)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String? source)?  opened,TResult? Function()?  playing,TResult? Function()?  paused,TResult? Function()?  stopped,TResult? Function( bool buffering,  double? progress)?  buffering,TResult? Function()?  completed,TResult? Function( Duration position)?  positionChanged,TResult? Function( Duration duration)?  durationChanged,TResult? Function( int width,  int height)?  videoSizeChanged,TResult? Function()?  videoFrameProgress,TResult? Function()?  videoReconfigured,TResult? Function( String? decoder)?  hwdecChanged,TResult? Function()?  audioReconfigured,TResult? Function( String? device)?  audioDeviceChanged,TResult? Function( String? text)?  subtitleChanged,TResult? Function( bool? buffering,  Duration? duration,  double? progress)?  cacheChanged,TResult? Function( Map<String, dynamic> metadata)?  metadataChanged,TResult? Function( List<String> items,  int? index)?  playlistChanged,TResult? Function( String message,  List<String> args)?  clientMessage,TResult? Function( String level,  String prefix,  String text)?  logMessage,TResult? Function( double volume)?  volumeChanged,TResult? Function( double rate)?  rateChanged,TResult? Function( String message,  Object? error,  StackTrace? stackTrace)?  error,}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
 return opened(_that.source);case PlayerAdapterPlaying() when playing != null:
@@ -233,7 +283,17 @@ return completed();case PlayerAdapterPositionChanged() when positionChanged != n
 return positionChanged(_that.position);case PlayerAdapterDurationChanged() when durationChanged != null:
 return durationChanged(_that.duration);case PlayerAdapterVideoSizeChanged() when videoSizeChanged != null:
 return videoSizeChanged(_that.width,_that.height);case PlayerAdapterVideoFrameProgress() when videoFrameProgress != null:
-return videoFrameProgress();case PlayerAdapterVolumeChanged() when volumeChanged != null:
+return videoFrameProgress();case PlayerAdapterVideoReconfigured() when videoReconfigured != null:
+return videoReconfigured();case PlayerAdapterHwdecChanged() when hwdecChanged != null:
+return hwdecChanged(_that.decoder);case PlayerAdapterAudioReconfigured() when audioReconfigured != null:
+return audioReconfigured();case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
+return audioDeviceChanged(_that.device);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
+return subtitleChanged(_that.text);case PlayerAdapterCacheChanged() when cacheChanged != null:
+return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return metadataChanged(_that.metadata);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
+return playlistChanged(_that.items,_that.index);case PlayerAdapterClientMessage() when clientMessage != null:
+return clientMessage(_that.message,_that.args);case PlayerAdapterLogMessage() when logMessage != null:
+return logMessage(_that.level,_that.prefix,_that.text);case PlayerAdapterVolumeChanged() when volumeChanged != null:
 return volumeChanged(_that.volume);case PlayerAdapterRateChanged() when rateChanged != null:
 return rateChanged(_that.rate);case PlayerAdapterErrorEvent() when error != null:
 return error(_that.message,_that.error,_that.stackTrace);case _:
@@ -750,6 +810,650 @@ String toString() {
 
 
 
+
+/// @nodoc
+
+
+class PlayerAdapterVideoReconfigured implements PlayerAdapterEvent {
+  const PlayerAdapterVideoReconfigured();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterVideoReconfigured);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.videoReconfigured()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class PlayerAdapterHwdecChanged implements PlayerAdapterEvent {
+  const PlayerAdapterHwdecChanged({this.decoder});
+  
+
+ final  String? decoder;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterHwdecChangedCopyWith<PlayerAdapterHwdecChanged> get copyWith => _$PlayerAdapterHwdecChangedCopyWithImpl<PlayerAdapterHwdecChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterHwdecChanged&&(identical(other.decoder, decoder) || other.decoder == decoder));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,decoder);
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.hwdecChanged(decoder: $decoder)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterHwdecChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterHwdecChangedCopyWith(PlayerAdapterHwdecChanged value, $Res Function(PlayerAdapterHwdecChanged) _then) = _$PlayerAdapterHwdecChangedCopyWithImpl;
+@useResult
+$Res call({
+ String? decoder
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterHwdecChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterHwdecChangedCopyWith<$Res> {
+  _$PlayerAdapterHwdecChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterHwdecChanged _self;
+  final $Res Function(PlayerAdapterHwdecChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? decoder = freezed,}) {
+  return _then(PlayerAdapterHwdecChanged(
+decoder: freezed == decoder ? _self.decoder : decoder // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterAudioReconfigured implements PlayerAdapterEvent {
+  const PlayerAdapterAudioReconfigured();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterAudioReconfigured);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.audioReconfigured()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class PlayerAdapterAudioDeviceChanged implements PlayerAdapterEvent {
+  const PlayerAdapterAudioDeviceChanged({this.device});
+  
+
+ final  String? device;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterAudioDeviceChangedCopyWith<PlayerAdapterAudioDeviceChanged> get copyWith => _$PlayerAdapterAudioDeviceChangedCopyWithImpl<PlayerAdapterAudioDeviceChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterAudioDeviceChanged&&(identical(other.device, device) || other.device == device));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,device);
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.audioDeviceChanged(device: $device)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterAudioDeviceChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterAudioDeviceChangedCopyWith(PlayerAdapterAudioDeviceChanged value, $Res Function(PlayerAdapterAudioDeviceChanged) _then) = _$PlayerAdapterAudioDeviceChangedCopyWithImpl;
+@useResult
+$Res call({
+ String? device
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterAudioDeviceChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterAudioDeviceChangedCopyWith<$Res> {
+  _$PlayerAdapterAudioDeviceChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterAudioDeviceChanged _self;
+  final $Res Function(PlayerAdapterAudioDeviceChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? device = freezed,}) {
+  return _then(PlayerAdapterAudioDeviceChanged(
+device: freezed == device ? _self.device : device // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterSubtitleChanged implements PlayerAdapterEvent {
+  const PlayerAdapterSubtitleChanged({this.text});
+  
+
+ final  String? text;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterSubtitleChangedCopyWith<PlayerAdapterSubtitleChanged> get copyWith => _$PlayerAdapterSubtitleChangedCopyWithImpl<PlayerAdapterSubtitleChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterSubtitleChanged&&(identical(other.text, text) || other.text == text));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,text);
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.subtitleChanged(text: $text)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterSubtitleChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterSubtitleChangedCopyWith(PlayerAdapterSubtitleChanged value, $Res Function(PlayerAdapterSubtitleChanged) _then) = _$PlayerAdapterSubtitleChangedCopyWithImpl;
+@useResult
+$Res call({
+ String? text
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterSubtitleChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterSubtitleChangedCopyWith<$Res> {
+  _$PlayerAdapterSubtitleChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterSubtitleChanged _self;
+  final $Res Function(PlayerAdapterSubtitleChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? text = freezed,}) {
+  return _then(PlayerAdapterSubtitleChanged(
+text: freezed == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterCacheChanged implements PlayerAdapterEvent {
+  const PlayerAdapterCacheChanged({this.buffering, this.duration, this.progress});
+  
+
+/// Whether the backend is currently buffering.
+ final  bool? buffering;
+/// Cached duration when available.
+ final  Duration? duration;
+/// Cached or buffered progress when available.
+ final  double? progress;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterCacheChangedCopyWith<PlayerAdapterCacheChanged> get copyWith => _$PlayerAdapterCacheChangedCopyWithImpl<PlayerAdapterCacheChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterCacheChanged&&(identical(other.buffering, buffering) || other.buffering == buffering)&&(identical(other.duration, duration) || other.duration == duration)&&(identical(other.progress, progress) || other.progress == progress));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,buffering,duration,progress);
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.cacheChanged(buffering: $buffering, duration: $duration, progress: $progress)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterCacheChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterCacheChangedCopyWith(PlayerAdapterCacheChanged value, $Res Function(PlayerAdapterCacheChanged) _then) = _$PlayerAdapterCacheChangedCopyWithImpl;
+@useResult
+$Res call({
+ bool? buffering, Duration? duration, double? progress
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterCacheChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterCacheChangedCopyWith<$Res> {
+  _$PlayerAdapterCacheChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterCacheChanged _self;
+  final $Res Function(PlayerAdapterCacheChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? buffering = freezed,Object? duration = freezed,Object? progress = freezed,}) {
+  return _then(PlayerAdapterCacheChanged(
+buffering: freezed == buffering ? _self.buffering : buffering // ignore: cast_nullable_to_non_nullable
+as bool?,duration: freezed == duration ? _self.duration : duration // ignore: cast_nullable_to_non_nullable
+as Duration?,progress: freezed == progress ? _self.progress : progress // ignore: cast_nullable_to_non_nullable
+as double?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterMetadataChanged implements PlayerAdapterEvent {
+  const PlayerAdapterMetadataChanged({required  Map<String, dynamic> metadata}): _metadata = metadata;
+  
+
+ final  Map<String, dynamic> _metadata;
+ Map<String, dynamic> get metadata {
+  if (_metadata is EqualUnmodifiableMapView) return _metadata;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_metadata);
+}
+
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterMetadataChangedCopyWith<PlayerAdapterMetadataChanged> get copyWith => _$PlayerAdapterMetadataChangedCopyWithImpl<PlayerAdapterMetadataChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterMetadataChanged&&const DeepCollectionEquality().equals(other.metadata, _metadata));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_metadata));
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.metadataChanged(metadata: $metadata)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterMetadataChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterMetadataChangedCopyWith(PlayerAdapterMetadataChanged value, $Res Function(PlayerAdapterMetadataChanged) _then) = _$PlayerAdapterMetadataChangedCopyWithImpl;
+@useResult
+$Res call({
+ Map<String, dynamic> metadata
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterMetadataChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterMetadataChangedCopyWith<$Res> {
+  _$PlayerAdapterMetadataChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterMetadataChanged _self;
+  final $Res Function(PlayerAdapterMetadataChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? metadata = null,}) {
+  return _then(PlayerAdapterMetadataChanged(
+metadata: null == metadata ? _self._metadata : metadata // ignore: cast_nullable_to_non_nullable
+as Map<String, dynamic>,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterPlaylistChanged implements PlayerAdapterEvent {
+  const PlayerAdapterPlaylistChanged({required  List<String> items, this.index}): _items = items;
+  
+
+ final  List<String> _items;
+ List<String> get items {
+  if (_items is EqualUnmodifiableListView) return _items;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_items);
+}
+
+ final  int? index;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterPlaylistChangedCopyWith<PlayerAdapterPlaylistChanged> get copyWith => _$PlayerAdapterPlaylistChangedCopyWithImpl<PlayerAdapterPlaylistChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterPlaylistChanged&&const DeepCollectionEquality().equals(other.items, _items)&&(identical(other.index, index) || other.index == index));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_items),index);
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.playlistChanged(items: $items, index: $index)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterPlaylistChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterPlaylistChangedCopyWith(PlayerAdapterPlaylistChanged value, $Res Function(PlayerAdapterPlaylistChanged) _then) = _$PlayerAdapterPlaylistChangedCopyWithImpl;
+@useResult
+$Res call({
+ List<String> items, int? index
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterPlaylistChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterPlaylistChangedCopyWith<$Res> {
+  _$PlayerAdapterPlaylistChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterPlaylistChanged _self;
+  final $Res Function(PlayerAdapterPlaylistChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? items = null,Object? index = freezed,}) {
+  return _then(PlayerAdapterPlaylistChanged(
+items: null == items ? _self._items : items // ignore: cast_nullable_to_non_nullable
+as List<String>,index: freezed == index ? _self.index : index // ignore: cast_nullable_to_non_nullable
+as int?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterClientMessage implements PlayerAdapterEvent {
+  const PlayerAdapterClientMessage({required this.message,  List<String> args = const <String>[]}): _args = args;
+  
+
+/// Backend message.
+ final  String message;
+/// Optional message arguments.
+ final  List<String> _args;
+/// Optional message arguments.
+@JsonKey() List<String> get args {
+  if (_args is EqualUnmodifiableListView) return _args;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_args);
+}
+
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterClientMessageCopyWith<PlayerAdapterClientMessage> get copyWith => _$PlayerAdapterClientMessageCopyWithImpl<PlayerAdapterClientMessage>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterClientMessage&&(identical(other.message, message) || other.message == message)&&const DeepCollectionEquality().equals(other.args, _args));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,message,const DeepCollectionEquality().hash(_args));
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.clientMessage(message: $message, args: $args)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterClientMessageCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterClientMessageCopyWith(PlayerAdapterClientMessage value, $Res Function(PlayerAdapterClientMessage) _then) = _$PlayerAdapterClientMessageCopyWithImpl;
+@useResult
+$Res call({
+ String message, List<String> args
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterClientMessageCopyWithImpl<$Res>
+    implements $PlayerAdapterClientMessageCopyWith<$Res> {
+  _$PlayerAdapterClientMessageCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterClientMessage _self;
+  final $Res Function(PlayerAdapterClientMessage) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? message = null,Object? args = null,}) {
+  return _then(PlayerAdapterClientMessage(
+message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
+as String,args: null == args ? _self._args : args // ignore: cast_nullable_to_non_nullable
+as List<String>,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterLogMessage implements PlayerAdapterEvent {
+  const PlayerAdapterLogMessage({required this.level, required this.prefix, required this.text});
+  
+
+ final  String level;
+ final  String prefix;
+ final  String text;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterLogMessageCopyWith<PlayerAdapterLogMessage> get copyWith => _$PlayerAdapterLogMessageCopyWithImpl<PlayerAdapterLogMessage>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterLogMessage&&(identical(other.level, level) || other.level == level)&&(identical(other.prefix, prefix) || other.prefix == prefix)&&(identical(other.text, text) || other.text == text));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,level,prefix,text);
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.logMessage(level: $level, prefix: $prefix, text: $text)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterLogMessageCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterLogMessageCopyWith(PlayerAdapterLogMessage value, $Res Function(PlayerAdapterLogMessage) _then) = _$PlayerAdapterLogMessageCopyWithImpl;
+@useResult
+$Res call({
+ String level, String prefix, String text
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterLogMessageCopyWithImpl<$Res>
+    implements $PlayerAdapterLogMessageCopyWith<$Res> {
+  _$PlayerAdapterLogMessageCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterLogMessage _self;
+  final $Res Function(PlayerAdapterLogMessage) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? level = null,Object? prefix = null,Object? text = null,}) {
+  return _then(PlayerAdapterLogMessage(
+level: null == level ? _self.level : level // ignore: cast_nullable_to_non_nullable
+as String,prefix: null == prefix ? _self.prefix : prefix // ignore: cast_nullable_to_non_nullable
+as String,text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
 
 /// @nodoc
 
