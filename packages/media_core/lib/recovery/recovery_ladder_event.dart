@@ -102,6 +102,10 @@ final class RecoveryLadderStarted extends RecoveryLadderEvent {
   final RecoveryBudget budget;
 
   /// Whether this run replaced an earlier one for the same failure.
+  ///
+  /// True when the ladder escalated past rungs that already failed on this
+  /// engine/source pair, so [plan] is the remainder of the escalation
+  /// rather than the full one.
   final bool superseded;
 
   /// The plan as a readable chain.

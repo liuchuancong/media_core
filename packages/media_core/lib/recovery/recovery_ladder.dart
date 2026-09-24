@@ -170,6 +170,28 @@ final class RecoveryLadder {
   /// Decision context of the current (or last) run.
   RecoverySession? get session => _session;
 
+  /// Setups that recovered and then broke again shortly after.
+  ///
+  /// Recovery that "succeeds" and fails again inside [_repeatWindow] is
+  /// not recovery: the setup itself is unfit, and repeating the same rung
+  /// only postpones the escalation. A streak makes the next run start
+  /// higher up the ladder — reopen, then next line, then next backend —
+  /// which is what turns "freeze · reopen · freeze · reopen …" into
+  /// "freeze · next line · freeze · next backend · give up".
+  ///
+  /// Keyed by engine and source, so changing either one starts a fresh
+  /// streak: the new combination has not been tried yet.
+  final Map<String, ({int count, DateTime at})> _streaks = <String, ({int count, DateTime at})>{};
+
+  /// How long a recovery is considered to have "held" before it counts as
+  /// a repeat rather than a new fault.
+  static const Duration _repeatWindow = Duration(minutes: 2);
+
+  /// Setups currently considered repeat offenders.
+  Map<String, int> get repeatStreaks {
+    return Map<String, int>.unmodifiable(_streaks.map((key, value) => MapEntry(key, value.count)));
+  }
+
   /// Number of steps executed in the current (or last) run.
   int get attempt => _attempts;
 
@@ -263,13 +285,76 @@ final class RecoveryLadder {
 
     final generation = ++_generation;
 
+    final escalate = _escalationFor(failure);
+
     _status = RecoveryLadderStatus.running;
     _failure = failure;
     _attempts = 0;
     _stepCounts.clear();
-    _run = _drive(failure, generation);
+    _run = _drive(failure, generation, escalate);
 
     return true;
+  }
+
+  /// How many rungs this fault has already proven useless on.
+  int _escalationFor(RecoveryFailure failure) {
+    final streak = _streaks[_setupKeyOf(failure)];
+
+    if (streak == null) {
+      return 0;
+    }
+
+    if (clock.now().difference(streak.at) > _repeatWindow) {
+      _streaks.remove(_setupKeyOf(failure));
+
+      return 0;
+    }
+
+    return streak.count;
+  }
+
+  /// Identity of the engine + source pair a failure belongs to.
+  String _setupKeyOf(RecoveryFailure failure) {
+    return '${failure.backendId ?? '-'}|${failure.sourceId?.value ?? failure.uri ?? '-'}';
+  }
+
+  /// Identity of the engine + source pair of [session].
+  String _setupKey(RecoverySession session) {
+    return '${session.backendId ?? '-'}|${session.source?.id.value ?? '-'}';
+  }
+
+  /// Drops the rungs a repeat failure has already climbed.
+  ///
+  /// The escalation order of [plan] is the order rungs are meant to be
+  /// tried in, so skipping its first [escalate] physical rungs is exactly
+  /// "start where the last attempt left off". Never returns an empty plan:
+  /// when everything has been skipped, the deepest rung is retried once
+  /// more so the run still terminates on the candidate lists running out
+  /// rather than on a planner quirk.
+  List<RecoveryStepKind> _effectivePlan(List<RecoveryStepKind> plan, int escalate) {
+    if (escalate <= 0 || plan.isEmpty) {
+      return plan;
+    }
+
+    final rungs = plan.where((kind) => kind != RecoveryStepKind.backoff).toList();
+
+    if (rungs.isEmpty) {
+      return plan;
+    }
+
+    final remaining = rungs.skip(escalate).toList();
+
+    if (remaining.isEmpty) {
+      return <RecoveryStepKind>[
+        rungs.last,
+        if (plan.contains(RecoveryStepKind.backoff)) RecoveryStepKind.backoff,
+      ];
+    }
+
+    return <RecoveryStepKind>[
+      ...remaining,
+      if (plan.contains(RecoveryStepKind.backoff)) RecoveryStepKind.backoff,
+    ];
   }
 
   /// Stops the current run and returns to [RecoveryLadderStatus.idle].
@@ -331,7 +416,7 @@ final class RecoveryLadder {
   // Driving
   // ---------------------------------------------------------------------------
 
-  Future<void> _drive(RecoveryFailure failure, int generation) async {
+  Future<void> _drive(RecoveryFailure failure, int generation, [int escalateFrom = 0]) async {
     try {
       if (!target.isRecoveryAvailable) {
         _finishExhausted(generation, failure, 'Recovery target is not available.');
@@ -343,13 +428,15 @@ final class RecoveryLadder {
 
       _session = session;
 
-      final plan = policy.plan(failure, session);
+      final proposed = policy.plan(failure, session);
+      final plan = _effectivePlan(proposed, escalateFrom);
 
-      _emit(RecoveryLadderStarted(failure: failure, plan: plan, budget: budget));
+      _emit(RecoveryLadderStarted(failure: failure, plan: plan, budget: budget, superseded: escalateFrom > 0));
 
       MediaCoreLog.info(
         LogCategory.recovery,
-        'ladder started: ${plan.isEmpty ? '<no step allowed>' : plan.map((kind) => kind.name).join(' -> ')}',
+        'ladder started: ${plan.isEmpty ? '<no step allowed>' : plan.map((kind) => kind.name).join(' -> ')}'
+            '${escalateFrom > 0 ? ' (escalated past $escalateFrom rung(s): this setup already failed after recovering)' : ''}',
         fields: <String, Object?>{
           'reportedBy': failure.source.name,
           'code': failure.code.value,
@@ -705,6 +792,8 @@ final class RecoveryLadder {
 
     _status = RecoveryLadderStatus.completed;
 
+    _recordStreak();
+
     MediaCoreLog.info(
       LogCategory.recovery,
       'ladder recovered via ${step.label} after $_attempts attempt(s)',
@@ -737,6 +826,35 @@ final class RecoveryLadder {
     _emit(RecoveryLadderExhausted(attempt: _attempts, message: message, failure: failure));
   }
 
+  /// Counts how often the setup that just recovered has done so recently.
+  ///
+  /// The count is read back on the next report for the same engine and
+  /// source, where it raises the starting rung.
+  void _recordStreak() {
+    final session = _session;
+
+    if (session == null) {
+      return;
+    }
+
+    final key = _setupKey(session);
+    final previous = _streaks[key];
+    final now = clock.now();
+    final expired = previous == null || now.difference(previous.at) > _repeatWindow;
+
+    _streaks[key] = (count: expired ? 1 : previous.count + 1, at: now);
+
+    MediaCoreLog.info(
+      LogCategory.recovery,
+      'recovery streak for $key is now ${_streaks[key]!.count}',
+      fields: <String, Object?>{
+        'engine': session.backendId,
+        'line': session.source?.id.value,
+        'windowSeconds': _repeatWindow.inSeconds,
+      },
+    );
+  }
+
   /// Stops the current run without deciding anything.
   ///
   /// The in-flight step (if any) is not cancelled — a native backend call
@@ -766,6 +884,7 @@ final class RecoveryLadder {
     _attempts = 0;
     _lastStepFailure = null;
     _stepCounts.clear();
+    _streaks.clear();
   }
 
   /// Completes a pending backoff wait, if there is one.
