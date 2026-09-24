@@ -38,16 +38,45 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// [config] carries open-time mpv options; [videoConfig] carries
   /// surface options. Both are reachable at any time through the
   /// matching getters / setters.
+  ///
+  /// [capabilities] is normalised before being handed to the base: see
+  /// [_honestCapabilities]. A caller may pass a declaration that claims
+  /// video-frame progress on a platform where the observer is never
+  /// started, and the base must not report a capability the adapter
+  /// cannot honour.
   MediaKitPlayerAdapter({
     super.id = kMediaKitPlayerBackendId,
-    super.capabilities = defaultCapabilities,
+    PlayerAdapterCapabilities capabilities = defaultCapabilities,
     mk.Player? player,
     this.config = const MediaKitPlayerConfig(),
     MediaKitVideoConfig videoConfig = const MediaKitVideoConfig(),
   }) : _injectedPlayer = player,
-       _videoConfig = videoConfig {
+       _videoConfig = videoConfig,
+       super(capabilities: _honestCapabilities(capabilities)) {
     _fitNotifier.value = videoConfig.fit;
   }
+
+  /// Narrows [capabilities] to what this platform actually implements.
+  ///
+  /// The decoded-frame heartbeat is Windows-only (see
+  /// [_frameProgressSupported]), so on every other platform
+  /// `supportsVideoFrameProgress` must be reported as `false`.
+  ///
+  /// This matters beyond bookkeeping: the live watchdog bundle arms a
+  /// frame-stall timer from this flag alone. Reporting `true` where no
+  /// heartbeat can ever arrive makes the watchdog declare a stall on a
+  /// perfectly healthy stream, and recovery then tears the stream down
+  /// and reopens it on every timeout, forever.
+  static PlayerAdapterCapabilities _honestCapabilities(PlayerAdapterCapabilities capabilities) {
+    if (_frameProgressSupported || !capabilities.supportsVideoFrameProgress) {
+      return capabilities;
+    }
+
+    return capabilities.copyWith(supportsVideoFrameProgress: false);
+  }
+
+  /// Whether this platform starts the decoded-frame observer.
+  static bool get _frameProgressSupported => defaultTargetPlatform == TargetPlatform.windows;
 
   final mk.Player? _injectedPlayer;
 
@@ -262,7 +291,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// The native `estimated-vf-fps` observation is intentionally limited
   /// to Windows. Other platforms do not start the observer and do not
   /// emit video frame progress events.
-  bool get _supportsVideoFrameProgress => defaultTargetPlatform == TargetPlatform.windows;
+  bool get _supportsVideoFrameProgress => _frameProgressSupported;
 
   /// Ensures the media_kit native libraries are loaded.
   static void ensureInitialized() {
@@ -879,6 +908,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     supportsAudioOnly: true,
 
     // Video and rendering.
+    //
+    // Frame progress is declared optimistically here and narrowed per
+    // platform by the constructor: the heartbeat is Windows-only, so the
+    // instance reports `true` on Windows and `false` everywhere else. Do
+    // not read this constant as the running adapter's answer — read
+    // `adapter.capabilities`.
     supportsVideoFrameProgress: true,
     supportsVideoSizeChanged: true,
     supportsVideoReconfig: false,
