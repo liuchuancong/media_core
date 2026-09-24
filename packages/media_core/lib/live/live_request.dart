@@ -14,12 +14,17 @@ import '../identity/source_id.dart';
 /// fields backend selection reads. A request built from URLs the framework
 /// has to re-parse is a request whose selection inputs were guessed.
 ///
-/// Recovery scope is declared here as well: [sources] with more than one
-/// entry means "make this play — switch lines, then engines, as needed".
-/// A single source means "try this one; if it fails, report and let me
-/// decide" — the framework will not silently attach another engine for a
-/// request that only ever named one path. [allowEngineFallback] overrides
-/// that default explicitly.
+/// Recovery scope is declared here as well. The number of sources decides
+/// how much *line* fallback there is — and nothing else:
+///
+/// - Multiple sources: sweep every line on the current engine, then move
+///   to the next engine and sweep again, until something plays.
+/// - A single source: there is no other line, so the sweep is one engine,
+///   one line — but the next engine still gets its turn on the same URL.
+///
+/// In both shapes the failure is reported to the caller only after every
+/// allowed engine has been tried. Pass `allowEngineFallback: false` to
+/// refuse engine escalation entirely and have the first failure surface.
 final class LiveSourceRequest {
   LiveSourceRequest({
     required List<PlayerSource> sources,

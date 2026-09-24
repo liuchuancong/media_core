@@ -151,7 +151,13 @@ final class LivePlaybackController {
     _request = request;
     _sources = request.sources;
     _preferredBackend = preferredBackend;
-    _engineFallbackAllowed = request.allowEngineFallback ?? request.hasAlternatives;
+    _engineFallbackAllowed = request.allowEngineFallback ?? true;
+    // Engine escalation is allowed for every request unless the caller
+    // explicitly refuses it. A single-URL request has no other line to
+    // sweep, so its sweep is one engine, one line — but if that fails the
+    // next engine still gets its turn on the same URL before the failure
+    // is surfaced. The number of URLs decides how much *line* fallback
+    // there is, never whether engines may be tried.
     _playbackRequested = true;
     _playGeneration++;
     _sweepStart = 0;
@@ -442,6 +448,13 @@ final class LivePlaybackController {
     handle.setRecoveryEnabled(false);
     handle.declarePlayIntent(true);
 
+    // Every watchdog armed for a previous candidate is stale now: its
+    // source is being torn down, and a timer firing during *this* open
+    // would queue a recovery sweep against a stream that is still being
+    // attached — the "switching even though it just started playing"
+    // behaviour. Cancel them; they are re-armed below on success.
+    watchdogs.cancelAll();
+
     await handle.open(source);
 
     if (_abandoned(generation)) {
@@ -467,11 +480,20 @@ final class LivePlaybackController {
     _setState(_liveState(PlayerPlaybackState.buffering));
   }
 
-  /// Waits until [handle]'s playback position actually advances.
+  /// Waits until [handle] shows any sign of real playback.
   ///
   /// An engine that accepts a source but never delivers a frame — the
   /// "freeze that looks like success" — fails here instead of ending the
   /// sweep on a silent player.
+  ///
+  /// The success bar is *any* positive position progress, not a jump:
+  /// some live sources (huya FLV, for one) start their demuxer clock near
+  /// zero and only creep forward a few tens of milliseconds while the
+  /// picture is in fact playing. Requiring a 400ms jump used to condemn
+  /// exactly those healthy streams, and the sweep then tore down engine
+  /// after engine that was already on screen. A stream that moves at all
+  /// has passed verification; if it later stops moving, the position-stall
+  /// watchdog is the detector for that, not this gate.
   Future<void> _verifyPlayback(PlayerHandle handle, PlayerSource source) async {
     final until = DateTime.now().add(_verificationWindow);
     var last = handle.playbackStream.value.position;
@@ -483,12 +505,8 @@ final class LivePlaybackController {
 
       final position = handle.playbackStream.value.position;
 
-      if (position > last + const Duration(milliseconds: 400)) {
-        return;
-      }
-
       if (position > last) {
-        last = position;
+        return;
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -496,7 +514,8 @@ final class LivePlaybackController {
 
     throw StateError(
       '${source.uri} on ${handle.backendId} opened but never played '
-      '(no position progress in ${_verificationWindow.inSeconds}s).',
+      '(position frozen at ${last.inMilliseconds}ms for '
+      '${_verificationWindow.inSeconds}s).',
     );
   }
 

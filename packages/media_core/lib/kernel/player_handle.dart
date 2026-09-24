@@ -1732,7 +1732,12 @@ final class PlayerHandle implements RecoveryTarget {
 
       final current = _runtime.playback.current;
 
-      if (current.position > last + const Duration(milliseconds: 400)) {
+      // Any positive progress counts. Some live streams start their
+      // demuxer clock near zero and creep forward by tens of
+      // milliseconds while the picture is already on screen; demanding
+      // a large jump used to condemn those healthy streams. A stream
+      // that stops moving *later* is the position-stall watchdog's job.
+      if (current.position > last) {
         MediaCoreLog.debug(
           LogCategory.recovery,
           'recovery step verified: position advancing (${current.position.inMilliseconds}ms)',
@@ -1740,10 +1745,6 @@ final class PlayerHandle implements RecoveryTarget {
         );
 
         return;
-      }
-
-      if (current.position > last) {
-        last = current.position;
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 250));
