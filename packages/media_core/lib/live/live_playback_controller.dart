@@ -24,6 +24,19 @@ import '../task/task_type.dart';
 /// How long a freshly opened source has to prove that playback is real.
 const Duration _verificationWindow = Duration(seconds: 8);
 
+/// Resolves the sources for the next engine of a sweep.
+///
+/// Invoked *before* the controller attaches the next engine, with the
+/// engine id that is about to be attached and the sources that just
+/// failed. Many live-site URLs are signed and single-use — consumed by
+/// the first engine's attempt — so the caller usually wants to refetch
+/// fresh lines here. Return the new sources to sweep from line 0, an
+/// empty list to reuse the current ones.
+typedef EngineFallbackSourceResolver = Future<List<PlayerSource>> Function(
+  String nextEngine,
+  List<PlayerSource> currentSources,
+);
+
 /// Orchestrates live playback on top of a [PlayerKernel].
 ///
 /// One structural idea holds the module together: **every action is a task
@@ -60,13 +73,19 @@ const Duration _verificationWindow = Duration(seconds: 8);
 /// there is exactly one recovery path and the caller can read all of it
 /// here.
 final class LivePlaybackController {
-  LivePlaybackController(this.kernel, {LiveWatchdogs? watchdogs})
+  LivePlaybackController(this.kernel, {LiveWatchdogs? watchdogs, this.onEngineFallbackSources})
     : watchdogs = watchdogs ?? LiveWatchdogs() {
     _wireWatchdogs();
   }
 
   /// The kernel providing players and adapters.
   final PlayerKernel kernel;
+
+  /// Called before the sweep attaches the next engine, when every line
+  /// failed on the current one. See [EngineFallbackSourceResolver].
+  ///
+  /// Null — the default — reuses the existing lines for the next engine.
+  final EngineFallbackSourceResolver? onEngineFallbackSources;
 
   /// Watchdog bundle inferring stalls.
   final LiveWatchdogs watchdogs;
@@ -79,6 +98,17 @@ final class LivePlaybackController {
 
   bool _draining = false;
   bool _disposed = false;
+
+  /// Whether a sweep task is running right now.
+  ///
+  /// While it is, adapter errors and watchdog stalls are the *running
+  /// sweep's* business — its catch already advances to the next
+  /// candidate. Enqueueing a recover task on top used to start a second
+  /// sweep that re-opened line 0 behind the first one's back, which is
+  /// Last adapter error seen while a sweep is running. The verification
+  /// loop checks it so an engine-reported failure fails the candidate
+  /// immediately instead of waiting out the full verification window.
+  String? _sweepAdapterError;
 
   /// Bumped by [play] and [close]. A sweep captures it when it starts and
   /// abandons itself if it moved meanwhile.
@@ -381,7 +411,7 @@ final class LivePlaybackController {
         first = false;
       }
 
-      if (!_nextCandidate()) {
+      if (!await _nextCandidate()) {
         await _reportExhausted(source, engine);
 
         return;
@@ -391,7 +421,12 @@ final class LivePlaybackController {
 
   /// Moves to the next candidate: next source, else next engine (when
   /// allowed) restarting its sweep at the line the user was watching.
-  bool _nextCandidate() {
+  ///
+  /// Before the engine switch, [onEngineFallbackSources] gets one chance
+  /// to hand over fresh lines: signed live URLs are frequently single-use,
+  /// and replaying them on the next engine would fail the whole sweep for
+  /// an expired signature rather than a broken engine.
+  Future<bool> _nextCandidate() async {
     if (_sourceIndex + 1 < _sources.length) {
       _sourceIndex++;
 
@@ -402,18 +437,52 @@ final class LivePlaybackController {
       return false;
     }
 
+    final nextEngine = _engines[_engineIndex + 1];
+
+    var nextSources = _sources;
+    var resumeAt = _sweepStart;
+
+    final resolver = onEngineFallbackSources;
+
+    if (resolver != null) {
+      try {
+        final refreshed = await resolver(nextEngine, _sources);
+
+        if (refreshed.isNotEmpty) {
+          nextSources = List<PlayerSource>.unmodifiable(refreshed);
+          resumeAt = 0;
+
+          MediaCoreLog.info(
+            LogCategory.fallback,
+            'engine switch sources refreshed by the caller',
+            fields: <String, Object?>{'nextEngine': nextEngine, 'lines': nextSources.length},
+          );
+        }
+      } catch (error) {
+        MediaCoreLog.warning(
+          LogCategory.fallback,
+          'engine switch source refresh failed — reusing the current lines',
+          error: error,
+          fields: <String, Object?>{'nextEngine': nextEngine},
+        );
+      }
+    }
+
     MediaCoreLog.info(
       LogCategory.fallback,
-      'all sources failed on ${_engines[_engineIndex]} — switching to ${_engines[_engineIndex + 1]}',
+      'all sources failed on ${_engines[_engineIndex]} — switching to $nextEngine',
       fields: <String, Object?>{
         'from': _engines[_engineIndex],
-        'to': _engines[_engineIndex + 1],
-        'resumeAtLine': _sweepStart,
+        'to': nextEngine,
+        'resumeAtLine': resumeAt,
+        'refreshed': !identical(nextSources, _sources),
       },
     );
 
+    _sources = nextSources;
+    _sweepStart = resumeAt;
     _engineIndex++;
-    _sourceIndex = _sweepStart;
+    _sourceIndex = resumeAt;
 
     return true;
   }
@@ -454,6 +523,8 @@ final class LivePlaybackController {
     // attached — the "switching even though it just started playing"
     // behaviour. Cancel them; they are re-armed below on success.
     watchdogs.cancelAll();
+
+    _sweepAdapterError = null;
 
     await handle.open(source);
 
@@ -501,6 +572,12 @@ final class LivePlaybackController {
     while (DateTime.now().isBefore(until)) {
       if (_disposed || !_playbackRequested) {
         throw StateError('Playback verification abandoned: playback was stopped.');
+      }
+
+      final adapterError = _sweepAdapterError;
+
+      if (adapterError != null) {
+        throw StateError('${source.uri} on ${handle.backendId} failed while verifying: $adapterError');
       }
 
       final position = handle.playbackStream.value.position;
@@ -619,7 +696,10 @@ final class LivePlaybackController {
 
   void _wireWatchdogs() {
     watchdogs.onStall = (kind) {
-      if (!_playbackRequested || _disposed) {
+      // A task already running owns the player: a sweep handles its own
+      // failures, and pause/close supersede recovery. Only a stall with
+      // the queue idle — normal playback — enqueues a recover task.
+      if (!_playbackRequested || _disposed || _draining) {
         return;
       }
 
@@ -701,7 +781,14 @@ final class LivePlaybackController {
           fields: <String, Object?>{'backend': backendId, 'line': _currentSource?.uri.toString()},
         );
 
-        if (_playbackRequested) {
+        // The queue is the serialization authority. A task already
+        // running (a sweep, a pause, a close) owns this failure: the
+        // sweep's catch advances to the next candidate, and pause/close
+        // supersede recovery outright. Only an error with the queue idle
+        // — normal playback — enqueues a recover task.
+        if (_draining) {
+          _sweepAdapterError = message;
+        } else if (_playbackRequested) {
           _supersedeQueued('superseded by adapter error');
           _sweepStart = _sourceIndex;
 

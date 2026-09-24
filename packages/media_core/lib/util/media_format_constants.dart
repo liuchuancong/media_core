@@ -191,7 +191,6 @@ abstract final class BetterPlayerFormats {
     'mkv',
     'webm',
     'avi',
-    'flv',
     'f4v',
     '3gp',
     '3g2',
