@@ -51,13 +51,19 @@ final class LineFallbackState extends Equatable {
   }
 
   LineFallbackState start({required List<String> candidates, String? currentLine}) {
+    // The line currently being attempted must not remain in the candidate
+    // pool: next() would hand it back and the ladder would never advance.
+    final List<String> remaining = currentLine != null && candidates.contains(currentLine)
+        ? (List<String>.from(candidates)..remove(currentLine))
+        : List<String>.from(candidates);
+
     return LineFallbackState(
       currentLine: currentLine,
-      candidates: List<String>.unmodifiable(candidates),
+      candidates: List<String>.unmodifiable(remaining),
       attempt: 0,
       active: true,
       completed: false,
-      exhausted: candidates.isEmpty,
+      exhausted: remaining.isEmpty,
     );
   }
 
@@ -83,11 +89,15 @@ final class LineFallbackState extends Equatable {
   }
 
   LineFallbackState markFailed() {
+    // A failed attempt must not deactivate the state machine: the caller
+    // immediately calls next() to advance to the following line. Marking
+    // the state inactive here would make select() a no-op and the same
+    // line would be handed back forever.
     return LineFallbackState(
       currentLine: currentLine,
       candidates: candidates,
       attempt: attempt,
-      active: false,
+      active: active,
       completed: false,
       exhausted: candidates.isEmpty,
     );

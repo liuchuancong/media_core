@@ -125,11 +125,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   @override
   Widget build() {
     final c = _controller;
-
     if (c == null) {
       return const SizedBox.shrink();
     }
-
     return BetterPlayer(controller: c);
   }
 
@@ -147,6 +145,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onInitialize(PlayerAdapterContext context) async {
+    debugPrint('[BPDIAG] onInitialize called');
     _context = context;
     _lastReportedError = null;
 

@@ -240,6 +240,11 @@ final class LivePlaybackController {
 
     _beginOperation(OperationType.open);
 
+    // Seed the line fallback with this request's candidates. The ladder
+    // relies on it to know which lines were already tried, so the candidate
+    // set must be injected here and re-seeded on every fresh play().
+    _lineFallback.start(request.urls, currentLine: request.urls.first);
+
     return _open(generation, request.urls.first);
   }
 
@@ -256,6 +261,8 @@ final class LivePlaybackController {
     final generation = _generation;
 
     _beginOperation(OperationType.load);
+
+    _lineFallback.start(urls, currentLine: urls[index]);
 
     return _open(generation, urls[index]);
   }
@@ -279,6 +286,12 @@ final class LivePlaybackController {
     final generation = ++_generation;
 
     _beginOperation(OperationType.retry);
+
+    // A manual retry restarts the whole line ladder from the current line.
+    final urls = lines;
+    if (urls.isNotEmpty) {
+      _lineFallback.start(urls, currentLine: url);
+    }
 
     return _open(generation, url);
   }
@@ -896,6 +909,11 @@ final class LivePlaybackController {
     _beginOperation(_operationTypeFor(action));
 
     // 1. Same-engine bounded replay.
+    //
+    // _sameEngineAttempts counts replays of the same source under the
+    // current engine. It must NOT be reset when switching lines: a reset
+    // turns the ladder into a ring (line 1 → 2 → … → N → line 1 → …) and
+    // the engine-switch step below is never reached.
     if ((action == ErrorPolicyAction.retry || action == ErrorPolicyAction.recover) &&
         _currentUrl != null &&
         _sameEngineAttempts < maxSameEngineRecoveryAttempts) {
@@ -906,26 +924,32 @@ final class LivePlaybackController {
       return;
     }
 
-    // 2. Line switch.
+    // 2. Next line, driven by LineFallback.
+    //
+    // The previous implementation derived the next line with
+    // (lineIndex + 1) % urls.length, a ring: after the last line failed,
+    // it wrapped back to the first, the `urls[nextIndex] != _currentUrl`
+    // guard still held, and the method returned before ever reaching the
+    // engine switch. LineFallback is itself a finite-line traversal state
+    // machine; let it own that state instead of computing a second one.
     if (action == ErrorPolicyAction.fallback ||
         action == ErrorPolicyAction.retry ||
         action == ErrorPolicyAction.recover) {
-      final urls = lines;
+      _lineFallback.markFailed();
 
-      if (urls.length > 1 && _currentUrl != null) {
-        final nextIndex = (lineIndex + 1) % urls.length;
+      final nextLine = _lineFallback.next();
 
-        if (urls[nextIndex] != _currentUrl) {
-          _sameEngineAttempts = 0;
-
-          await _open(generation, urls[nextIndex]);
-
-          return;
-        }
+      if (nextLine != null) {
+        await _open(generation, nextLine);
+        return;
       }
     }
 
     // 3. Engine switch.
+    //
+    // Reached only once LineFallback has exhausted every candidate line.
+    // A new engine gets a fresh same-engine retry budget, so
+    // _sameEngineAttempts is reset here (and only here on success).
     if (action == ErrorPolicyAction.fallback ||
         action == ErrorPolicyAction.retry ||
         action == ErrorPolicyAction.recover) {
@@ -955,11 +979,17 @@ final class LivePlaybackController {
         _sameEngineAttempts = 0;
         _backoffAttempt = 0;
 
-        final url = _currentUrl;
+        // Backoff is the last pass: rescan the whole candidate set from
+        // the first line.
+        final urls = lines;
 
-        if (url != null) {
-          unawaited(_open(generation, url));
+        if (urls.isEmpty) {
+          return;
         }
+
+        _lineFallback.start(urls, currentLine: urls.first);
+
+        unawaited(_open(generation, urls.first));
       });
 
       return;
@@ -1010,8 +1040,10 @@ final class LivePlaybackController {
       return false;
     }
 
+    final currentBackend = backendId;
+
     final candidates = kernel.registry.registrations
-        .where((registration) => registration.enabled && registration.id != backendId)
+        .where((registration) => registration.enabled && registration.id != currentBackend)
         .map((registration) => registration.id)
         .toList();
 
@@ -1019,71 +1051,90 @@ final class LivePlaybackController {
       return false;
     }
 
-    _engineFallback.start(candidates, currentBackend: backendId);
+    _engineFallback.start(candidates, currentBackend: currentBackend);
 
-    final next = _engineFallback.next();
+    while (_isCurrent(generation) && _playbackRequested) {
+      final nextBackend = _engineFallback.next();
 
-    if (next == null) {
-      return false;
-    }
+      if (nextBackend == null) {
+        return false;
+      }
 
-    final handle = _handle;
-
-    if (handle == null || handle.disposed) {
-      return false;
-    }
-
-    try {
-      final registration = kernel.registry.get(next);
+      final registration = kernel.registry.get(nextBackend);
 
       if (registration == null) {
+        _engineFallback.markFailed();
+        continue;
+      }
+
+      final handle = _handle;
+
+      if (handle == null || handle.disposed) {
         return false;
       }
 
-      _watchdogRecoveryGeneration++;
+      try {
+        _watchdogRecoveryGeneration++;
 
-      await handle.attachAdapter(registration);
+        // Replace the adapter owned by the existing handle.
+        await handle.attachAdapter(registration);
 
-      if (!_isCurrent(generation)) {
-        return false;
+        if (!_isCurrent(generation) || !_playbackRequested || _handle != handle || handle.disposed) {
+          return false;
+        }
+
+        // attachAdapter() replaces the adapter instance.
+        //
+        // The watchdog capabilities, adapter event subscription and
+        // session preferences must all be rebound to the new instance.
+        await _bindHandle(handle);
+
+        if (!_isCurrent(generation) || !_playbackRequested || _handle != handle || handle.disposed) {
+          return false;
+        }
+
+        final url = _currentUrl;
+        final request = _request;
+
+        if (url == null || request == null) {
+          return false;
+        }
+
+        // A new engine gets its own line-fallback lifecycle.
+        //
+        // The current line is tried first on the new engine, followed by
+        // the remaining candidates when this engine fails.
+        final switchUrls = lines;
+
+        if (switchUrls.isNotEmpty) {
+          _lineFallback.start(switchUrls, currentLine: url);
+        }
+
+        final source = _toSource(url, request);
+
+        _advanceSession(source);
+
+        await handle.open(source);
+
+        if (!_isCurrent(generation) || !_playbackRequested || _handle != handle || handle.disposed) {
+          return false;
+        }
+
+        watchdogs.armSourceReady();
+
+        return true;
+      } catch (_) {
+        if (!_isCurrent(generation) || !_playbackRequested || _handle != handle || handle.disposed) {
+          return false;
+        }
+
+        // This engine failed to attach/open.
+        // Let BackendFallback move to the next engine.
+        _engineFallback.markFailed();
       }
-
-      // attachAdapter replaced the adapter instance. The capability
-      // snapshot, the event subscription and the session preferences
-      // all belong to the adapter instance, so rebind them together
-      // through _bindHandle.
-      await _bindHandle(handle);
-
-      if (!_isCurrent(generation)) {
-        return false;
-      }
-
-      final url = _currentUrl;
-      final request = _request;
-
-      if (url == null || request == null) {
-        return false;
-      }
-
-      final source = _toSource(url, request);
-
-      _advanceSession(source);
-
-      await handle.open(source);
-
-      if (!_isCurrent(generation)) {
-        return false;
-      }
-
-      watchdogs.armSourceReady();
-
-      _completeCurrentOperation();
-
-      return true;
-    } catch (_) {
-      _engineFallback.markFailed();
-      return false;
     }
+
+    return false;
   }
 
   // ---------------------------------------------------------------------------
