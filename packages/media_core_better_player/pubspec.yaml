@@ -1,4 +1,4 @@
-name: media_core_video_player
+name: media_core_better_player
 description: video_player backend adapter for the media_core player framework.
 publish_to: none
 version: 0.1.0

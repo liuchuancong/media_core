@@ -83,7 +83,7 @@ adapter 报错后内核自动执行：
 |---|---|---|
 | `media_core_media_kit` | media_kit | 全能后端，协议/格式覆盖最广 |
 | `media_core_ijk_player` | ijk (niuma_player) | FLV / H.265，移动端 |
-| `media_core_video_player` | 官方 video_player | 轻量、纯 Flutter 生态 |
+| `media_core_better_player` | 官方 video_player | 轻量、纯 Flutter 生态 |
 | `media_core_native` | 平台原生 | 平台播放器 |
 
 每个适配包提供 `XxxAdapterFactory` 与 `registerXxxRegistry()` / `defaultRegistration()` 两种注册方式。
@@ -100,7 +100,7 @@ adapter 报错后内核自动执行：
 packages/
   media_core/               核心（本包）
   media_core_media_kit/     media_kit 适配
-  media_core_video_player/  video_player 适配
+  media_core_better_player/  video_player 适配
   media_core_ijk_player/    ijk (niuma_player) 适配
   media_core_native/        原生适配
 examples/example/           示例 App

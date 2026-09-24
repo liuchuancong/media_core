@@ -1,4 +1,4 @@
-# media_core_video_player
+# media_core_better_player
 
 > 基於 Flutter 官方 [video_player](https://pub.dev/packages/video_player) 插件的 media_core 播放後端適配器。
 
