@@ -4,7 +4,6 @@ import '../core/player_state.dart';
 import 'live_playback_models.dart';
 import '../error/error_policy.dart';
 import '../identity/player_id.dart';
-import '../identity/source_id.dart';
 import '../error/error_context.dart';
 import '../identity/session_id.dart';
 import '../operation/operation.dart';
@@ -18,6 +17,7 @@ import '../source/source_headers.dart';
 import '../fallback/line_fallback.dart';
 import '../identity/generation_id.dart';
 import '../session/player_session.dart';
+import '../adapter/player_adapter.dart';
 import '../error/player_error_code.dart';
 import '../session/session_context.dart';
 import '../session/session_manager.dart';
@@ -25,10 +25,10 @@ import '../operation/operation_type.dart';
 import '../session/session_snapshot.dart';
 import '../fallback/backend_fallback.dart';
 import '../operation/operation_tracker.dart';
-import '../adapter/player_adapter.dart';
 import '../adapter/player_adapter_event.dart';
 import '../operation/operation_registry.dart';
 import '../operation/operation_cancel_token.dart';
+import 'package:media_core/identity/source_id.dart';
 
 /// A live playback request: primary URL plus fallback lines.
 final class LiveSourceRequest {
@@ -81,6 +81,16 @@ final class LiveSourceRequest {
 /// session level rather than by capability: an audio-only source has no
 /// video track, and whether the adapter *could* report a frame heartbeat
 /// says nothing about whether one will ever arrive.
+///
+/// Recovery ownership:
+///
+/// * [LiveWatchdogs] detects stalls only.
+/// * [LiveWatchdogs] emits [LiveWatchdogRecoveryAction].
+/// * [LivePlaybackController] translates that action into a playback
+///   command.
+/// * [PlayerHandle] is the only lifecycle-safe backend operation boundary.
+///
+/// The controller never calls an adapter directly for recovery.
 final class LivePlaybackController {
   LivePlaybackController(
     this.kernel, {
@@ -150,6 +160,18 @@ final class LivePlaybackController {
   bool _playbackRequested = false;
   bool _audioOnly = false;
 
+  /// Generation of the watchdog recovery request currently being executed.
+  ///
+  /// This is separate from [_generation]:
+  ///
+  /// - [_generation] identifies the logical playback/source lifecycle.
+  /// - [_watchdogRecoveryGeneration] identifies one watchdog recovery
+  ///   command.
+  ///
+  /// A recovery result from an older request must never settle a newer
+  /// watchdog recovery request.
+  int _watchdogRecoveryGeneration = 0;
+
   LiveSourceRequest? _request;
   String? _currentUrl;
   int _sameEngineAttempts = 0;
@@ -209,9 +231,13 @@ final class LivePlaybackController {
     _playbackRequested = true;
     _sameEngineAttempts = 0;
     _backoffAttempt = 0;
+
     _cancelBackoff();
 
+    _watchdogRecoveryGeneration++;
+
     final generation = ++_generation;
+
     _beginOperation(OperationType.open);
 
     return _open(generation, request.urls.first);
@@ -220,11 +246,15 @@ final class LivePlaybackController {
   /// Switches to line [index] of the current request.
   Future<void> switchLine(int index) {
     final urls = lines;
+
     if (index < 0 || index >= urls.length) {
       return Future<void>.value();
     }
 
+    _watchdogRecoveryGeneration++;
+
     final generation = _generation;
+
     _beginOperation(OperationType.load);
 
     return _open(generation, urls[index]);
@@ -233,6 +263,7 @@ final class LivePlaybackController {
   /// Replays the current source from scratch.
   Future<void> retry() {
     final url = _currentUrl;
+
     if (url == null || _request == null) {
       return Future<void>.value();
     }
@@ -240,9 +271,13 @@ final class LivePlaybackController {
     _playbackRequested = true;
     _sameEngineAttempts = 0;
     _backoffAttempt = 0;
+
     _cancelBackoff();
 
+    _watchdogRecoveryGeneration++;
+
     final generation = ++_generation;
+
     _beginOperation(OperationType.retry);
 
     return _open(generation, url);
@@ -251,17 +286,52 @@ final class LivePlaybackController {
   /// Pauses playback (a user intent — watchdogs stand down).
   Future<void> pause() async {
     _playbackRequested = false;
+
+    // A user pause is a lifecycle boundary for recovery.
+    // Any recovery already waiting inside the controller becomes stale.
+    _watchdogRecoveryGeneration++;
+
     watchdogs.cancelAll();
     _cancelBackoff();
+
     await _handle?.pause();
+
     _setState(_liveState(PlayerPlaybackState.paused));
   }
 
   /// Resumes playback.
   Future<void> resume() async {
     _playbackRequested = true;
-    await _handle?.play();
-    _setState(_liveState(PlayerPlaybackState.playing));
+
+    final handle = _handle;
+
+    if (handle == null || handle.disposed) {
+      return;
+    }
+
+    try {
+      await handle.play();
+
+      if (!_playbackRequested || _handle != handle || handle.disposed) {
+        return;
+      }
+
+      _setState(_liveState(PlayerPlaybackState.playing));
+    } catch (error) {
+      if (!_playbackRequested || _handle != handle || handle.disposed) {
+        return;
+      }
+
+      _scheduleRecovery(
+        PlayerFailure(
+          code: PlayerErrorCode.backendPlayFailed,
+          message: 'resume failed: $error',
+          cause: error,
+          context: _contextFor(_currentUrl),
+        ),
+        _generation,
+      );
+    }
   }
 
   /// Toggles pause/resume.
@@ -275,7 +345,7 @@ final class LivePlaybackController {
 
   /// Sets volume (0.0–1.0).
   Future<void> setVolume(double volume) async {
-    await _handle?.setVolume(volume.clamp(0.0, 1.0));
+    await _handle?.setVolume(volume.clamp(0.0, 1.0).toDouble());
   }
 
   /// Whether playback is restricted to the audio track.
@@ -294,7 +364,9 @@ final class LivePlaybackController {
   /// updated either way, so a session that expects no video never reports
   /// a frame stall.
   Future<void> setAudioOnly(bool audioOnly) async {
-    if (_audioOnly == audioOnly) return;
+    if (_audioOnly == audioOnly) {
+      return;
+    }
 
     _audioOnly = audioOnly;
 
@@ -309,7 +381,9 @@ final class LivePlaybackController {
 
   /// Applies [audioOnly] to [adapter] when it declares the capability.
   Future<void> _applyAudioOnly(PlayerAdapter adapter) async {
-    if (!adapter.capabilities.supportsAudioOnly) return;
+    if (!adapter.capabilities.supportsAudioOnly) {
+      return;
+    }
 
     try {
       await adapter.setAudioOnly(_audioOnly);
@@ -328,13 +402,19 @@ final class LivePlaybackController {
   /// Stops playback and releases the player.
   Future<void> close() async {
     _beginOperation(OperationType.close);
+
     _playbackRequested = false;
     _generation++;
+    _watchdogRecoveryGeneration++;
+
     watchdogs.cancelAll();
     _cancelBackoff();
+
     await _eventSub?.cancel();
     _eventSub = null;
+
     final handle = _handle;
+
     _handle = null;
     _currentUrl = null;
 
@@ -345,7 +425,9 @@ final class LivePlaybackController {
     if (handle != null) {
       await kernel.release(handle.id);
     }
+
     _setState(PlayerState.idle);
+
     _completeCurrentOperation();
   }
 
@@ -354,12 +436,16 @@ final class LivePlaybackController {
     await close();
 
     _cancelCurrentOperation();
+
     _operationTracker.dispose();
     _operationRegistry.dispose();
+
     await _sessionManager.dispose();
+
     _session = null;
 
     watchdogs.dispose();
+
     await _stateController.close();
     await _failureController.close();
   }
@@ -371,7 +457,10 @@ final class LivePlaybackController {
   /// Ensures a session exists, creating one if needed.
   PlayerSession _ensureSession(PlayerSource source) {
     final existing = _session;
-    if (existing != null) return existing;
+
+    if (existing != null) {
+      return existing;
+    }
 
     final session = _sessionManager.create(
       SessionContext(
@@ -384,13 +473,17 @@ final class LivePlaybackController {
     );
 
     _session = session;
+
     return session;
   }
 
   /// Advances the session generation and refreshes its source context.
   void _advanceSession(PlayerSource source) {
     final session = _session;
-    if (session == null) return;
+
+    if (session == null) {
+      return;
+    }
 
     session.updateContext(
       session.context.copyWith(sourceId: source.id, source: source, generationId: session.generation.id),
@@ -424,7 +517,10 @@ final class LivePlaybackController {
   /// Marks the current operation complete.
   void _completeCurrentOperation() {
     final operation = _currentOperation;
-    if (operation == null || operation.isTerminal) return;
+
+    if (operation == null || operation.isTerminal) {
+      return;
+    }
 
     final completed = operation.complete();
 
@@ -439,7 +535,10 @@ final class LivePlaybackController {
   /// Marks the current operation failed.
   void _failCurrentOperation() {
     final operation = _currentOperation;
-    if (operation == null || operation.isTerminal) return;
+
+    if (operation == null || operation.isTerminal) {
+      return;
+    }
 
     final failed = operation.fail();
 
@@ -454,6 +553,7 @@ final class LivePlaybackController {
   /// Cancels the current operation.
   void _cancelCurrentOperation() {
     final operation = _currentOperation;
+
     if (operation == null || operation.isTerminal) {
       _currentCancelToken?.dispose();
       _currentCancelToken = null;
@@ -478,12 +578,20 @@ final class LivePlaybackController {
   // ---------------------------------------------------------------------------
 
   Future<void> _open(int generation, String url) async {
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation)) {
+      return;
+    }
+
     final request = _request;
-    if (request == null) return;
+
+    if (request == null) {
+      return;
+    }
 
     _currentUrl = url;
+
     _setState(_liveState(PlayerPlaybackState.opening));
+
     watchdogs.cancelAll();
 
     try {
@@ -491,26 +599,39 @@ final class LivePlaybackController {
 
       if (handle == null || handle.disposed) {
         handle = await kernel.create();
-        if (!_isCurrent(generation)) return;
+
+        if (!_isCurrent(generation)) {
+          await _releaseStaleHandle(handle);
+          return;
+        }
+
         await _bindHandle(handle);
       }
 
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        return;
+      }
 
       final source = _toSource(url, request);
+
       _ensureSession(source);
       _advanceSession(source);
 
       await handle.open(source);
 
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        return;
+      }
 
       watchdogs.armSourceReady();
+
       _setState(_liveState(PlayerPlaybackState.buffering));
 
       _completeCurrentOperation();
     } catch (error) {
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        return;
+      }
 
       _failCurrentOperation();
 
@@ -523,6 +644,19 @@ final class LivePlaybackController {
         ),
         generation,
       );
+    }
+  }
+
+  Future<void> _releaseStaleHandle(PlayerHandle handle) async {
+    if (_handle == handle) {
+      _handle = null;
+    }
+
+    try {
+      await kernel.release(handle.id);
+    } catch (_) {
+      // Best-effort cleanup of a handle created for an already-retired
+      // controller generation.
     }
   }
 
@@ -571,9 +705,12 @@ final class LivePlaybackController {
   Future<void> _bindHandle(PlayerHandle handle) async {
     _handle = handle;
 
-    _eventSub?.cancel();
+    await _eventSub?.cancel();
+
+    _eventSub = null;
 
     watchdogs.updateCapabilities(handle.adapter.capabilities);
+
     watchdogs.setVideoExpected(!_audioOnly);
 
     _eventSub = handle.adapter.events.listen(_onAdapterEvent, onError: _onAdapterEventError);
@@ -732,7 +869,9 @@ final class LivePlaybackController {
   }
 
   Future<void> _recover(PlayerFailure failure, int generation) async {
-    if (!_isCurrent(generation) || !_playbackRequested) return;
+    if (!_isCurrent(generation) || !_playbackRequested) {
+      return;
+    }
 
     watchdogs.cancelAll();
 
@@ -761,7 +900,9 @@ final class LivePlaybackController {
         _currentUrl != null &&
         _sameEngineAttempts < maxSameEngineRecoveryAttempts) {
       _sameEngineAttempts++;
+
       await _open(generation, _currentUrl!);
+
       return;
     }
 
@@ -826,6 +967,7 @@ final class LivePlaybackController {
 
     // 5. Terminal.
     _failCurrentOperation();
+
     await _terminate(failure);
   }
 
@@ -850,6 +992,10 @@ final class LivePlaybackController {
   Future<void> _terminate(PlayerFailure failure) async {
     _playbackRequested = false;
 
+    _watchdogRecoveryGeneration++;
+
+    watchdogs.cancelAll();
+
     _setState(_liveState(PlayerPlaybackState.error));
 
     _session?.updateState(const SessionState.error());
@@ -860,31 +1006,47 @@ final class LivePlaybackController {
   }
 
   Future<bool> _trySwitchEngine(int generation) async {
+    if (!_isCurrent(generation) || !_playbackRequested) {
+      return false;
+    }
+
     final candidates = kernel.registry.registrations
         .where((registration) => registration.enabled && registration.id != backendId)
         .map((registration) => registration.id)
         .toList();
 
-    if (candidates.isEmpty) return false;
+    if (candidates.isEmpty) {
+      return false;
+    }
 
     _engineFallback.start(candidates, currentBackend: backendId);
 
     final next = _engineFallback.next();
 
-    if (next == null) return false;
+    if (next == null) {
+      return false;
+    }
 
     final handle = _handle;
 
-    if (handle == null) return false;
+    if (handle == null || handle.disposed) {
+      return false;
+    }
 
     try {
       final registration = kernel.registry.get(next);
 
-      if (registration == null) return false;
+      if (registration == null) {
+        return false;
+      }
+
+      _watchdogRecoveryGeneration++;
 
       await handle.attachAdapter(registration);
 
-      if (!_isCurrent(generation)) return false;
+      if (!_isCurrent(generation)) {
+        return false;
+      }
 
       // attachAdapter replaced the adapter instance. The capability
       // snapshot, the event subscription and the session preferences
@@ -892,10 +1054,16 @@ final class LivePlaybackController {
       // through _bindHandle.
       await _bindHandle(handle);
 
+      if (!_isCurrent(generation)) {
+        return false;
+      }
+
       final url = _currentUrl;
       final request = _request;
 
-      if (url == null || request == null) return false;
+      if (url == null || request == null) {
+        return false;
+      }
 
       final source = _toSource(url, request);
 
@@ -903,9 +1071,12 @@ final class LivePlaybackController {
 
       await handle.open(source);
 
-      if (!_isCurrent(generation)) return false;
+      if (!_isCurrent(generation)) {
+        return false;
+      }
 
       watchdogs.armSourceReady();
+
       _completeCurrentOperation();
 
       return true;
@@ -919,14 +1090,24 @@ final class LivePlaybackController {
   // Internals
   // ---------------------------------------------------------------------------
 
-  bool _isCurrent(int generation) => generation == _generation && _request != null;
+  bool _isCurrent(int generation) {
+    return generation == _generation && _request != null && _playbackRequested;
+  }
+
+  bool _isWatchdogRecoveryCurrent(int generation) {
+    final handle = _handle;
+
+    return generation == _watchdogRecoveryGeneration && _playbackRequested && handle != null && !handle.disposed;
+  }
 
   PlayerState _liveState(PlayerPlaybackState playback) {
     return PlayerState(lifecycle: PlayerLifecycleState.ready, playback: playback, hasSource: true);
   }
 
   void _setState(PlayerState next) {
-    if (state == next) return;
+    if (state == next) {
+      return;
+    }
 
     state = next;
 
@@ -982,24 +1163,102 @@ final class LivePlaybackController {
   // ---------------------------------------------------------------------------
 
   void _wireWatchdogs() {
+    /// Watchdogs only report inferred stalls.
+    ///
+    /// The controller decides which recovery ladder to enter.
     watchdogs.onStall = (kind) {
-      if (!_playbackRequested) return;
+      if (!_playbackRequested) {
+        return;
+      }
 
-      _scheduleRecovery(_failureForStall(kind), _generation);
+      final generation = _generation;
+
+      _scheduleRecovery(_failureForStall(kind), generation);
     };
 
-    watchdogs.onReassertPlay = () async {
+    /// Watchdogs never call PlayerHandle directly.
+    ///
+    /// They only request a recovery action. The controller owns the
+    /// asynchronous boundary and reports the result back after the
+    /// PlayerHandle operation completes.
+    watchdogs.onRecoveryRequested = (action) {
+      if (!_playbackRequested) {
+        watchdogs.reportRecoveryResult(false);
+        return;
+      }
+
+      final recoveryGeneration = ++_watchdogRecoveryGeneration;
+      final playbackGeneration = _generation;
       final handle = _handle;
 
-      if (handle == null) return false;
-
-      try {
-        await handle.play();
-        return true;
-      } catch (_) {
-        return false;
+      if (handle == null || handle.disposed) {
+        watchdogs.reportRecoveryResult(false);
+        return;
       }
+
+      unawaited(_handleWatchdogRecovery(action, recoveryGeneration, playbackGeneration, handle));
     };
+  }
+
+  /// Executes a watchdog recovery action through [PlayerHandle].
+  ///
+  /// This is deliberately the only bridge between watchdog recovery
+  /// requests and actual player operations.
+  ///
+  /// [PlayerHandle] performs the lifecycle/generation checks. If the
+  /// source was closed, replaced, or the handle was disposed while the
+  /// operation was waiting, the handle prevents the stale command from
+  /// reaching the backend or committing stale playback state.
+  ///
+  /// The controller additionally checks its own playback generation and
+  /// watchdog recovery generation after the asynchronous operation returns.
+  /// This protects the watchdog result itself from becoming stale.
+  Future<void> _handleWatchdogRecovery(
+    LiveWatchdogRecoveryAction action,
+    int recoveryGeneration,
+    int playbackGeneration,
+    PlayerHandle handle,
+  ) async {
+    try {
+      if (!_isCurrent(playbackGeneration) ||
+          !_isWatchdogRecoveryCurrent(recoveryGeneration) ||
+          !_playbackRequested ||
+          _handle != handle ||
+          handle.disposed) {
+        return;
+      }
+
+      switch (action) {
+        case LiveWatchdogRecoveryAction.reassertPlay:
+          try {
+            await handle.play();
+          } catch (_) {
+            if (_isWatchdogRecoveryCurrent(recoveryGeneration)) {
+              watchdogs.reportRecoveryResult(false);
+            }
+
+            return;
+          }
+
+          if (!_isWatchdogRecoveryCurrent(recoveryGeneration)) {
+            return;
+          }
+
+          if (!_isCurrent(playbackGeneration) || !_playbackRequested || _handle != handle || handle.disposed) {
+            watchdogs.reportRecoveryResult(false);
+            return;
+          }
+
+          // Successful completion means PlayerHandle accepted the play
+          // operation. The adapter's Playing event remains the authoritative
+          // observation of actual playback state.
+          watchdogs.reportRecoveryResult(true);
+      }
+    } catch (_) {
+      if (_isWatchdogRecoveryCurrent(recoveryGeneration)) {
+        watchdogs.reportRecoveryResult(false);
+      }
+    }
   }
 
   /// Maps a watchdog-inferred [LiveStallKind] onto the shared error
@@ -1008,10 +1267,15 @@ final class LivePlaybackController {
   PlayerFailure _failureForStall(LiveStallKind kind) {
     final code = switch (kind) {
       LiveStallKind.sourceReadyTimeout => PlayerErrorCode.timeout,
+
       LiveStallKind.unexpectedPauseResumed => PlayerErrorCode.playbackFailed,
+
       LiveStallKind.unexpectedPauseResumeFailed => PlayerErrorCode.backendPlayFailed,
+
       LiveStallKind.unexpectedPauseTimeout => PlayerErrorCode.playbackFailed,
+
       LiveStallKind.bufferingStallTimeout => PlayerErrorCode.insufficientBandwidth,
+
       LiveStallKind.videoFrameStallTimeout => PlayerErrorCode.decoderError,
     };
 

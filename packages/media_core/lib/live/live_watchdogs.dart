@@ -3,6 +3,25 @@ import 'live_playback_models.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
 
+/// Recovery action requested by [LiveWatchdogs].
+///
+/// The watchdog only reports what kind of recovery should be attempted.
+/// It never owns the player and never calls backend operations directly.
+///
+/// The actual recovery is executed by the playback owner, normally:
+///
+/// ```text
+/// LiveWatchdogs
+///      ↓
+/// LiveWatchdogRecoveryAction
+///      ↓
+/// LivePlaybackController
+///      ↓
+/// PlayerHandle
+///      ↓
+/// PlayerAdapter
+/// ```
+
 /// Watchdog-driven orchestration for live (non-seekable) streams.
 ///
 /// RxDart is used for watchdog scheduling while the actual live playback
@@ -46,6 +65,22 @@ import 'package:media_core/adapter/player_adapter_capabilities.dart';
 /// [setVideoExpected] with `false` keeps the frame watchdog disarmed for
 /// the whole session, because an audio-only source has no video track and
 /// therefore never produces the heartbeat it waits for.
+///
+/// This class intentionally does not execute player operations.
+///
+/// In particular, it does not:
+///
+/// - hold a PlayerHandle
+/// - call `play()`
+/// - call `pause()`
+/// - call adapter methods
+/// - await backend operations
+/// - own recovery Futures
+///
+/// When recovery is needed it emits [LiveWatchdogRecoveryAction] through
+/// [onRecoveryRequested]. The playback owner is responsible for executing
+/// that action through the lifecycle-safe PlayerHandle boundary and then
+/// reporting the result through [reportRecoveryResult].
 final class LiveWatchdogs {
   LiveWatchdogs({
     PlayerAdapterCapabilities? capabilities,
@@ -62,7 +97,7 @@ final class LiveWatchdogs {
   /// Zero disables this watchdog.
   final Duration sourceReadyTimeout;
 
-  /// Grace before an unexpected `playing=false` triggers a resume.
+  /// Grace before an unexpected `playing=false` triggers a resume request.
   final Duration unexpectedPauseGrace;
 
   /// Grace for resumed playback to actually start playing.
@@ -119,30 +154,61 @@ final class LiveWatchdogs {
   /// changes value.
   void updateCapabilities(PlayerAdapterCapabilities? capabilities) {
     if (_disposed) return;
-    if (_capabilities == capabilities) return;
+
+    if (_capabilities == capabilities) {
+      return;
+    }
 
     final wasSupported = _supportsVideoFrameProgress;
+
     _capabilities = capabilities;
+
     final nowSupported = _supportsVideoFrameProgress;
 
     // Only the frame-progress signal is capability-gated. Re-evaluate
     // it so a live subscription never outlives a change of declaration
     // in either direction. Other watchdogs derive from state
     // transitions and are not affected by capability changes.
-    if (wasSupported == nowSupported) return;
+    if (wasSupported == nowSupported) {
+      return;
+    }
 
     if (!nowSupported) {
       _cancelVideoFrameStall();
       return;
     }
 
-    if (_playing && !_buffering && _presentationVisible) {
+    if (_playing && !_buffering && _presentationVisible && _videoExpected) {
       _armVideoFrameStall();
     }
   }
 
   /// Whether the bound adapter declares a decoded-frame heartbeat.
   bool get _supportsVideoFrameProgress => _capabilities?.supportsVideoFrameProgress ?? false;
+
+  // ---------------------------------------------------------------------------
+  // Watchdog generation
+  // ---------------------------------------------------------------------------
+
+  /// Monotonically increasing watchdog lifecycle generation.
+  ///
+  /// Every source/generation reset invalidates all callbacks that were
+  /// scheduled for the previous observation window.
+  ///
+  /// This is intentionally local to the watchdog. It is not a replacement
+  /// for PlayerHandle's lifecycle generation or OperationCancelToken.
+  int _watchdogGeneration = 0;
+
+  /// Invalidates all pending watchdog callbacks.
+  int _invalidateWatchdogGeneration() {
+    return ++_watchdogGeneration;
+  }
+
+  /// Returns whether [generation] still belongs to the current watchdog
+  /// observation window.
+  bool _isWatchdogGenerationCurrent(int generation) {
+    return !_disposed && generation == _watchdogGeneration;
+  }
 
   // ---------------------------------------------------------------------------
   // RxDart event sources
@@ -173,17 +239,41 @@ final class LiveWatchdogs {
   bool _videoExpected = true;
   bool _disposed = false;
 
+  /// Whether a reassert-play request is currently waiting for the
+  /// playback owner to report its result.
+  ///
+  /// This replaces the old async `onReassertPlay` Future callback.
+  ///
+  /// The watchdog never awaits the recovery operation anymore.
+  bool _recoveryPending = false;
+
+  /// Generation of the currently pending recovery request.
+  ///
+  /// A recovery result from an older request must never settle a newer
+  /// request.
+  int? _recoveryGeneration;
+
   /// Called when a stall is inferred.
   ///
   /// May be invoked from an RxDart timer callback. The owner decides
   /// how recovery should be scheduled.
   void Function(LiveStallKind kind)? onStall;
 
-  /// Called when an unexpected pause should be reasserted.
+  /// Called when the watchdog wants the playback owner to perform
+  /// a lifecycle-safe recovery action.
   ///
-  /// Return `true` when the direct `play()` reassertion succeeded.
-  /// Returning `false` allows the watchdog to escalate.
-  Future<bool> Function()? onReassertPlay;
+  /// The callback must not directly manipulate a backend player.
+  /// The recommended implementation is:
+  ///
+  /// ```dart
+  /// onRecoveryRequested = (action) {
+  ///   switch (action) {
+  ///     case LiveWatchdogRecoveryAction.reassertPlay:
+  ///       controller.reassertPlay();
+  ///   }
+  /// };
+  /// ```
+  void Function(LiveWatchdogRecoveryAction action)? onRecoveryRequested;
 
   // ---------------------------------------------------------------------------
   // Source ready
@@ -193,12 +283,23 @@ final class LiveWatchdogs {
   void armSourceReady() {
     _cancelSourceReady();
 
+    if (_disposed) {
+      return;
+    }
+
+    _recoveryPending = false;
+    _recoveryGeneration = null;
+
     if (!_canWatch || sourceReadyTimeout <= Duration.zero || _playing) {
       return;
     }
 
+    final generation = _watchdogGeneration;
+
     _sourceReadySubscription = TimerStream<void>(null, sourceReadyTimeout).listen((_) {
-      if (_disposed) return;
+      if (!_isWatchdogGenerationCurrent(generation)) {
+        return;
+      }
 
       if (!_playing) {
         onStall?.call(LiveStallKind.sourceReadyTimeout);
@@ -211,13 +312,18 @@ final class LiveWatchdogs {
   // ---------------------------------------------------------------------------
 
   void onPlayingChanged(bool playing, {required bool fromUserIntent}) {
-    if (_disposed) return;
+    if (_disposed) {
+      return;
+    }
 
     _playing = playing;
 
     _cancelSourceReady();
 
     if (playing) {
+      _recoveryPending = false;
+      _recoveryGeneration = null;
+
       _cancelContinuity();
 
       if (_buffering) {
@@ -232,8 +338,12 @@ final class LiveWatchdogs {
     _cancelVideoFrameStall();
 
     if (fromUserIntent) {
+      _recoveryPending = false;
+      _recoveryGeneration = null;
+
       _cancelContinuity();
       _cancelBufferingStall();
+
       return;
     }
 
@@ -249,7 +359,9 @@ final class LiveWatchdogs {
   // ---------------------------------------------------------------------------
 
   void onBufferingChanged(bool buffering) {
-    if (_disposed) return;
+    if (_disposed) {
+      return;
+    }
 
     _buffering = buffering;
 
@@ -257,6 +369,7 @@ final class LiveWatchdogs {
       _cancelVideoFrameStall();
       _cancelContinuity();
       _armBufferingStall();
+
       return;
     }
 
@@ -280,7 +393,7 @@ final class LiveWatchdogs {
   /// Video-size changes, position changes, metadata changes, and other
   /// backend events must not be treated as decoded-frame progress.
   void onFrameProgress() {
-    if (_disposed || !_playing || !_presentationVisible || !_supportsVideoFrameProgress) {
+    if (_disposed || !_playing || !_presentationVisible || !_videoExpected || !_supportsVideoFrameProgress) {
       return;
     }
 
@@ -297,7 +410,9 @@ final class LiveWatchdogs {
   /// is checked by [armVideoFrameStall] itself, so this method does not
   /// need to duplicate it.
   void setPresentationVisible(bool visible) {
-    if (_disposed) return;
+    if (_disposed) {
+      return;
+    }
 
     _presentationVisible = visible;
 
@@ -319,8 +434,13 @@ final class LiveWatchdogs {
   /// This is a session-level mode rather than a per-source state, like
   /// [setPresentationVisible], so it survives source changes.
   void setVideoExpected(bool expected) {
-    if (_disposed) return;
-    if (_videoExpected == expected) return;
+    if (_disposed) {
+      return;
+    }
+
+    if (_videoExpected == expected) {
+      return;
+    }
 
     _videoExpected = expected;
 
@@ -337,34 +457,41 @@ final class LiveWatchdogs {
   bool get isPlaying => _playing;
 
   // ---------------------------------------------------------------------------
-  // Continuity watchdog
+  // Recovery result
   // ---------------------------------------------------------------------------
 
-  void _armContinuity() {
-    _cancelContinuity();
-
-    if (!_canWatch || unexpectedPauseGrace <= Duration.zero) {
+  /// Reports the result of a recovery action requested through
+  /// [onRecoveryRequested].
+  ///
+  /// This method is intentionally called by the playback owner after
+  /// it has executed the action through [PlayerHandle].
+  ///
+  /// The watchdog does not await that operation itself. This keeps
+  /// player lifecycle ownership outside the watchdog.
+  ///
+  /// `resumed` should indicate whether the recovery command was accepted
+  /// and the owner believes playback was successfully reasserted.
+  ///
+  /// If playback has not actually returned to a valid playing/buffering
+  /// state yet, the failure grace window remains available so the normal
+  /// playback-state callback can settle the result.
+  void reportRecoveryResult(bool resumed) {
+    if (_disposed) {
       return;
     }
 
-    _continuitySubscription = TimerStream<void>(null, unexpectedPauseGrace).listen((_) {
-      if (_disposed) return;
-
-      _reassertPlay();
-    });
-  }
-
-  Future<void> _reassertPlay() async {
-    final reassert = onReassertPlay;
-
-    if (reassert == null) {
-      onStall?.call(LiveStallKind.unexpectedPauseTimeout);
+    if (!_recoveryPending) {
       return;
     }
 
-    final resumed = await reassert();
+    final recoveryGeneration = _recoveryGeneration;
 
-    if (_disposed) return;
+    if (recoveryGeneration == null || !_isWatchdogGenerationCurrent(recoveryGeneration)) {
+      return;
+    }
+
+    _recoveryPending = false;
+    _recoveryGeneration = null;
 
     if (resumed && (_playing || _buffering)) {
       return;
@@ -372,18 +499,107 @@ final class LiveWatchdogs {
 
     if (!_canWatch || unexpectedPauseFailureGrace <= Duration.zero) {
       onStall?.call(LiveStallKind.unexpectedPauseResumeFailed);
+
       return;
     }
 
+    _armRecoveryFailureGrace(recoveryGeneration);
+  }
+
+  void _armRecoveryFailureGrace(int generation) {
     _cancelContinuity();
 
+    if (!_isWatchdogGenerationCurrent(generation)) {
+      return;
+    }
+
     _continuitySubscription = TimerStream<void>(null, unexpectedPauseFailureGrace).listen((_) {
-      if (_disposed) return;
+      if (!_isWatchdogGenerationCurrent(generation)) {
+        return;
+      }
 
       if (!_playing) {
         onStall?.call(LiveStallKind.unexpectedPauseTimeout);
       }
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Continuity watchdog
+  // ---------------------------------------------------------------------------
+
+  void _armContinuity() {
+    _cancelContinuity();
+
+    if (!_canWatch || unexpectedPauseGrace <= Duration.zero || _recoveryPending) {
+      return;
+    }
+
+    final generation = _watchdogGeneration;
+
+    _continuitySubscription = TimerStream<void>(null, unexpectedPauseGrace).listen((_) {
+      if (!_isWatchdogGenerationCurrent(generation)) {
+        return;
+      }
+
+      if (_playing || _buffering) {
+        return;
+      }
+
+      _requestReassertPlay(generation);
+    });
+  }
+
+  /// Requests a playback reassertion from the owner.
+  ///
+  /// This method intentionally contains no `Future` and no player call.
+  ///
+  /// The old implementation did:
+  ///
+  /// ```dart
+  /// final resumed = await onReassertPlay();
+  /// ```
+  ///
+  /// That allowed a `play()` Future to remain alive while the player
+  /// was being closed or replaced. The watchdog now only emits a
+  /// recovery action and lets [PlayerHandle] own the lifecycle.
+  void _requestReassertPlay(int generation) {
+    if (!_isWatchdogGenerationCurrent(generation) || _recoveryPending || !_canWatch || _playing || _buffering) {
+      return;
+    }
+
+    _recoveryPending = true;
+    _recoveryGeneration = generation;
+
+    _cancelContinuity();
+
+    final handler = onRecoveryRequested;
+
+    if (handler == null) {
+      _recoveryPending = false;
+      _recoveryGeneration = null;
+
+      if (!_isWatchdogGenerationCurrent(generation)) {
+        return;
+      }
+
+      onStall?.call(LiveStallKind.unexpectedPauseResumeFailed);
+
+      return;
+    }
+
+    try {
+      handler(LiveWatchdogRecoveryAction.reassertPlay);
+    } catch (_) {
+      if (!_isWatchdogGenerationCurrent(generation)) {
+        return;
+      }
+
+      _recoveryPending = false;
+      _recoveryGeneration = null;
+
+      onStall?.call(LiveStallKind.unexpectedPauseResumeFailed);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -397,8 +613,12 @@ final class LiveWatchdogs {
       return;
     }
 
+    final generation = _watchdogGeneration;
+
     _bufferingSubscription = TimerStream<void>(null, bufferingStallTimeout).listen((_) {
-      if (_disposed) return;
+      if (!_isWatchdogGenerationCurrent(generation)) {
+        return;
+      }
 
       if (_buffering) {
         onStall?.call(LiveStallKind.bufferingStallTimeout);
@@ -438,13 +658,17 @@ final class LiveWatchdogs {
       return;
     }
 
+    final generation = _watchdogGeneration;
+
     _videoFrameSubscription = _frameProgress
         .startWith(null)
         .switchMap<void>((_) => TimerStream<void>(null, videoFrameStallTimeout))
         .listen((_) {
-          if (_disposed) return;
+          if (!_isWatchdogGenerationCurrent(generation)) {
+            return;
+          }
 
-          if (!_presentationVisible || !_playing || !_videoExpected || !_supportsVideoFrameProgress) {
+          if (!_presentationVisible || !_playing || !_videoExpected || !_supportsVideoFrameProgress || _buffering) {
             return;
           }
 
@@ -465,23 +689,35 @@ final class LiveWatchdogs {
   // ---------------------------------------------------------------------------
 
   void _cancelSourceReady() {
-    _sourceReadySubscription?.cancel();
+    final subscription = _sourceReadySubscription;
+
     _sourceReadySubscription = null;
+
+    subscription?.cancel();
   }
 
   void _cancelContinuity() {
-    _continuitySubscription?.cancel();
+    final subscription = _continuitySubscription;
+
     _continuitySubscription = null;
+
+    subscription?.cancel();
   }
 
   void _cancelBufferingStall() {
-    _bufferingSubscription?.cancel();
+    final subscription = _bufferingSubscription;
+
     _bufferingSubscription = null;
+
+    subscription?.cancel();
   }
 
   void _cancelVideoFrameStall() {
-    _videoFrameSubscription?.cancel();
+    final subscription = _videoFrameSubscription;
+
     _videoFrameSubscription = null;
+
+    subscription?.cancel();
   }
 
   /// Cancels every watchdog and clears the observations behind them.
@@ -501,8 +737,19 @@ final class LiveWatchdogs {
   /// - recovery takes ownership
   /// - the controller closes the current source
   void cancelAll() {
+    if (_disposed) {
+      return;
+    }
+
+    // Invalidate every timer callback before cancelling subscriptions.
+    // StreamSubscription.cancel() alone cannot protect a callback that
+    // has already been queued by the event loop.
+    _invalidateWatchdogGeneration();
+
     _playing = false;
     _buffering = false;
+    _recoveryPending = false;
+    _recoveryGeneration = null;
 
     _cancelSourceReady();
     _cancelContinuity();
@@ -512,14 +759,28 @@ final class LiveWatchdogs {
 
   /// Releases the watchdog bundle.
   void dispose() {
-    if (_disposed) return;
+    if (_disposed) {
+      return;
+    }
+
+    // Invalidate callbacks before marking the object disposed so any
+    // already queued RxDart timer callback becomes stale immediately.
+    _invalidateWatchdogGeneration();
 
     _disposed = true;
 
-    cancelAll();
+    _playing = false;
+    _buffering = false;
+    _recoveryPending = false;
+    _recoveryGeneration = null;
+
+    _cancelSourceReady();
+    _cancelContinuity();
+    _cancelBufferingStall();
+    _cancelVideoFrameStall();
 
     onStall = null;
-    onReassertPlay = null;
+    onRecoveryRequested = null;
     _capabilities = null;
 
     _frameProgress.close();

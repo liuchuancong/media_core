@@ -26,3 +26,11 @@ enum LiveStallKind {
   /// Playing state held but no new video frame arrived.
   videoFrameStallTimeout,
 }
+
+enum LiveWatchdogRecoveryAction {
+  /// Reassert playback after an unexpected pause.
+  ///
+  /// The owner should forward this to [PlayerHandle.play] or the
+  /// equivalent lifecycle-safe playback command.
+  reassertPlay,
+}
