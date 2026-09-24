@@ -24,7 +24,19 @@ enum LiveStallKind {
   bufferingStallTimeout,
 
   /// Playing state held but no new video frame arrived.
+  ///
+  /// Only meaningful on engines that report a decoded-frame heartbeat; see
+  /// [PlayerAdapterCapabilities.supportsVideoFrameProgress].
   videoFrameStallTimeout,
+
+  /// Playing state held and the stream was not buffering, yet playback
+  /// position stopped advancing.
+  ///
+  /// The detector of last resort: it works on every engine, because every
+  /// adapter reports position, so a picture that freezes while the engine
+  /// still claims to be playing is caught here even when no frame
+  /// heartbeat and no buffering transition is available to catch it.
+  positionStallTimeout,
 }
 
 enum LiveWatchdogRecoveryAction {

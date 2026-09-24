@@ -52,7 +52,13 @@ final class RecoverySession extends Equatable {
   /// Playback position to restore after a successful step.
   final Duration position;
 
-  /// Whether playback was running when the failure was observed.
+  /// Whether playback should be running after a successful step.
+  ///
+  /// Taken from the caller's declared play intent when there is one, and
+  /// from the observed playback state otherwise. The distinction matters:
+  /// an engine that autoplays reports "paused" until something asks it to
+  /// play, so the observed state alone would bring a recovered live stream
+  /// back paused.
   final bool wasPlaying;
 
   /// Volume to restore after a successful step.

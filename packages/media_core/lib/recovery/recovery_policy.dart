@@ -39,6 +39,14 @@ abstract interface class RecoveryLadderPolicy {
 /// `fallback` skips the in-place reopen: the error module already
 /// decided the current path is not worth replaying, so the ladder
 /// starts at the next rung.
+///
+/// A source-level failure skips it as well, whatever the error module
+/// recommended. "The URL cannot be opened" is a verdict on the
+/// *source/engine pair*, not on the stream's current state, so reopening
+/// the same URL on the same engine reproduces it — and on live streams
+/// whose URLs carry a signed, short-lived token it cannot even succeed,
+/// because the token has already been spent. Escalation starts at the
+/// next line instead.
 final class DefaultRecoveryLadderPolicy implements RecoveryLadderPolicy {
   /// Creates the default policy.
   ///
@@ -75,13 +83,26 @@ final class DefaultRecoveryLadderPolicy implements RecoveryLadderPolicy {
     final action = errorPolicy.decide(failure.toFailure(), retryCount: session.attempt);
 
     return switch (action) {
-      ErrorPolicyAction.retry => retryPlan,
-      ErrorPolicyAction.recover => retryPlan,
+      ErrorPolicyAction.retry => _planFor(failure, retryPlan),
+      ErrorPolicyAction.recover => _planFor(failure, retryPlan),
       ErrorPolicyAction.fallback => fallbackPlan,
       ErrorPolicyAction.ignore => terminalPlan,
       ErrorPolicyAction.cancel => terminalPlan,
       ErrorPolicyAction.fail => terminalPlan,
     };
+  }
+
+  /// Drops the in-place reopen when the source itself is the problem.
+  ///
+  /// Kept separate from [ErrorPolicy] on purpose: the error module
+  /// answers "is this retryable in general", which is a coarser question
+  /// than "is replaying *this* URL on *this* engine worth an attempt".
+  List<RecoveryStepKind> _planFor(RecoveryFailure failure, List<RecoveryStepKind> plan) {
+    if (!failure.effectiveReason.isSource) {
+      return plan;
+    }
+
+    return fallbackPlan;
   }
 
   @override

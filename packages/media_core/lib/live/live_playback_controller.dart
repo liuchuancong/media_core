@@ -330,6 +330,8 @@ final class LivePlaybackController {
 
     watchdogs.cancelAll();
 
+    _handle?.declarePlayIntent(false);
+
     await _handle?.pause();
 
     _setState(_liveState(PlayerPlaybackState.paused));
@@ -340,6 +342,8 @@ final class LivePlaybackController {
     _playbackRequested = true;
 
     final handle = _handle;
+
+    handle?.declarePlayIntent(true);
 
     if (handle == null || handle.disposed) {
       return;
@@ -657,6 +661,12 @@ final class LivePlaybackController {
         return;
       }
 
+      // Live playback is requested, not commanded: the engine starts as
+      // soon as the source is accepted, so the handle has no play command
+      // to mirror. Declaring the intent is what lets recovery resume a
+      // stream instead of pausing the one it just reopened.
+      handle.declarePlayIntent(_playbackRequested);
+
       // Hand the whole line list to the handle before opening: the
       // recovery ladder can only fall back to another line if it was told
       // which ones exist, and it must know before the first line fails.
@@ -795,6 +805,7 @@ final class LivePlaybackController {
     _announceWatchdogCapabilities(handle.backendId, handle.adapter.capabilities);
 
     watchdogs.setVideoExpected(!_audioOnly);
+    watchdogs.resetPositionSignal();
 
     _adapterEventSub = handle.adapterEvents.listen(_onAdapterEvent, onError: _onAdapterEventError);
 
@@ -845,6 +856,7 @@ final class LivePlaybackController {
     _announceWatchdogCapabilities(change.to, change.adapter.capabilities);
 
     watchdogs.setVideoExpected(!_audioOnly);
+    watchdogs.resetPositionSignal();
   }
 
   /// Hands the watchdog bundle the capabilities of [backendId]'s adapter.
@@ -971,10 +983,13 @@ final class LivePlaybackController {
         // changed. It does not prove that a new frame was decoded.
         break;
 
-      case PlayerAdapterPositionChanged():
-        // Position changes are playback progress only.
-        // They are not proof that a video frame was decoded.
-        break;
+      case PlayerAdapterPositionChanged(position: final position):
+        // Position is progress, not proof of a decoded frame, so it must
+        // not feed the frame watchdog. It does feed the stall detector of
+        // last resort: an engine with no frame heartbeat can freeze with no
+        // buffering event and no error, and a position that stops
+        // advancing is the only remaining evidence.
+        watchdogs.onPositionProgress(position);
 
       case PlayerAdapterErrorEvent():
         // The handle reports adapter errors itself, so this branch is
@@ -1299,6 +1314,11 @@ final class LivePlaybackController {
       LiveStallKind.bufferingStallTimeout => PlayerErrorCode.insufficientBandwidth,
 
       LiveStallKind.videoFrameStallTimeout => PlayerErrorCode.decoderError,
+
+      // Not a decode failure: the engine kept decoding nothing at all, or
+      // stopped pulling segments. Reported as a playback failure so the
+      // ladder reopens the current line before escalating.
+      LiveStallKind.positionStallTimeout => PlayerErrorCode.playbackFailed,
     };
   }
 }

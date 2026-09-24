@@ -144,25 +144,39 @@ enum SourceFormat {
     }
   }
 
-  /// Infers a format from a URI's path.
+  /// Returns the file extension of a URI's path, lowercased and without
+  /// the dot, or `null` when the path carries none.
   ///
-  /// A URI that carries no usable extension — a bare host, a query-only
-  /// stream URL, `.../live/stream` — yields [SourceFormat.unknown].
-  static SourceFormat fromUri(Uri uri) {
+  /// The raw extension rather than a [SourceFormat] value, because the
+  /// enum models a subset of what a URI can name: `.rmvb`, `.ape`, `.nut`
+  /// and friends have no enum value, and a capability declaration that
+  /// lists them can only ever be matched against the extension itself.
+  ///
+  /// A URI with no usable extension — a bare host, a query-only stream
+  /// URL, `.../live/stream` — yields `null`.
+  static String? extensionOf(Uri uri) {
     final segments = uri.pathSegments;
 
     if (segments.isEmpty) {
-      return SourceFormat.unknown;
+      return null;
     }
 
     final last = segments.last;
     final dot = last.lastIndexOf('.');
 
     if (dot < 0 || dot == last.length - 1) {
-      return SourceFormat.unknown;
+      return null;
     }
 
-    return fromExtension(last.substring(dot + 1));
+    return last.substring(dot + 1).toLowerCase();
+  }
+
+  /// Infers a format from a URI's path.
+  ///
+  /// Yields [SourceFormat.unknown] when the path has no extension or names
+  /// a container [SourceFormat] does not model.
+  static SourceFormat fromUri(Uri uri) {
+    return fromExtension(extensionOf(uri));
   }
 }
 

@@ -91,6 +91,7 @@ final class LiveWatchdogs {
     this.unexpectedPauseFailureGrace = const Duration(seconds: 5),
     this.bufferingStallTimeout = const Duration(seconds: 12),
     this.videoFrameStallTimeout = const Duration(seconds: 10),
+    this.positionStallTimeout = const Duration(seconds: 15),
     this.enabled = true,
   }) : _capabilities = capabilities;
 
@@ -113,6 +114,16 @@ final class LiveWatchdogs {
   /// Only consulted when the bound capability snapshot declares
   /// [PlayerAdapterCapabilities.supportsVideoFrameProgress].
   final Duration videoFrameStallTimeout;
+
+  /// How long playback position may stand still before it counts as a
+  /// stall.
+  ///
+  /// Deliberately longer than [videoFrameStallTimeout]: a live stream may
+  /// legitimately hold its position for a moment while the engine swaps a
+  /// segment, and a false stall costs a full reopen. The watchdog also
+  /// only arms after the engine has proven it reports position at all, so
+  /// this timeout never judges an engine that does not.
+  final Duration positionStallTimeout;
 
   /// Master switch.
   ///
@@ -183,6 +194,11 @@ final class LiveWatchdogs {
     if (_playing && !_buffering && _presentationVisible && _videoExpected) {
       _armVideoFrameStall();
     }
+
+    // A different engine may or may not report position: wait for its first
+    // event before judging it.
+    _hasPositionSignal = false;
+    _cancelPositionStall();
   }
 
   /// Whether the bound adapter declares a decoded-frame heartbeat.
@@ -222,6 +238,21 @@ final class LiveWatchdogs {
   /// previous timeout and starts a fresh timeout window.
   final PublishSubject<void> _frameProgress = PublishSubject<void>();
 
+  /// Position heartbeats of the active source.
+  ///
+  /// Resets the position-stall timer on every event, exactly like
+  /// [_frameProgress] does for the frame watchdog.
+  final PublishSubject<void> _positionProgress = PublishSubject<void>();
+
+  /// Whether the current engine has reported position at least once.
+  ///
+  /// The position watchdog arms on this and not on a capability, because
+  /// there is no capability for "reports position" — every adapter does.
+  /// Waiting for the first event is what keeps the watchdog honest: an
+  /// engine that never reports position is never judged by it, instead of
+  /// looking stalled from the first second.
+  bool _hasPositionSignal = false;
+
   // ---------------------------------------------------------------------------
   // Active watchdog subscriptions
   // ---------------------------------------------------------------------------
@@ -230,6 +261,7 @@ final class LiveWatchdogs {
   StreamSubscription<void>? _continuitySubscription;
   StreamSubscription<void>? _bufferingSubscription;
   StreamSubscription<void>? _videoFrameSubscription;
+  StreamSubscription<void>? _positionStallSubscription;
 
   // ---------------------------------------------------------------------------
   // Current playback observations
@@ -400,6 +432,36 @@ final class LiveWatchdogs {
     }
 
     _frameProgress.add(null);
+  }
+
+  /// Feeds a playback-position update.
+  ///
+  /// Position is the one progress signal every engine reports, which makes
+  /// it the only stall detector that works everywhere — including on
+  /// engines that declare no frame heartbeat, where a frozen picture is
+  /// otherwise indistinguishable from a healthy stream.
+  void onPositionProgress(Duration position) {
+    if (_disposed) {
+      return;
+    }
+
+    if (!_hasPositionSignal) {
+      // First position of this source: the engine reports position, so the
+      // watchdog may start judging it.
+      _hasPositionSignal = true;
+
+      MediaCoreLog.debug(
+        LogCategory.recovery,
+        'position-stall watchdog enabled (${positionStallTimeout.inMilliseconds}ms)',
+        fields: <String, Object?>{'positionMs': position.inMilliseconds},
+      );
+
+      _armPositionStall();
+
+      return;
+    }
+
+    _positionProgress.add(null);
   }
 
   // ---------------------------------------------------------------------------
@@ -699,6 +761,90 @@ final class LiveWatchdogs {
         });
   }
 
+  /// Arms the position-stall watchdog.
+  ///
+  /// Mirrors [_armVideoFrameStall], with one difference in the gating: it
+  /// does not consult a capability and does not care whether video is
+  /// expected or the presentation is visible. A stream whose position
+  /// stops advancing is stuck for an audio-only session and for a
+  /// background session too.
+  void _armPositionStall() {
+    _cancelPositionStall();
+
+    final skipReason = _positionStallSkipReason();
+
+    if (skipReason != null) {
+      MediaCoreLog.debug(
+        LogCategory.recovery,
+        'position-stall watchdog not armed: $skipReason',
+        fields: <String, Object?>{
+          'hasPositionSignal': _hasPositionSignal,
+          'playing': _playing,
+          'buffering': _buffering,
+          'timeoutMs': positionStallTimeout.inMilliseconds,
+        },
+      );
+
+      return;
+    }
+
+    MediaCoreLog.debug(
+      LogCategory.recovery,
+      'position-stall watchdog armed (${positionStallTimeout.inMilliseconds}ms)',
+    );
+
+    final generation = _watchdogGeneration;
+
+    _positionStallSubscription = _positionProgress
+        .startWith(null)
+        .switchMap<void>((_) => TimerStream<void>(null, positionStallTimeout))
+        .listen((_) {
+          if (!_isWatchdogGenerationCurrent(generation)) {
+            return;
+          }
+
+          if (_positionStallSkipReason() != null) {
+            return;
+          }
+
+          _cancelPositionStall();
+
+          onStall?.call(LiveStallKind.positionStallTimeout);
+        });
+  }
+
+  /// Cancels the position-stall watchdog without deciding anything.
+  void _cancelPositionStall() {
+    _positionStallSubscription?.cancel();
+    _positionStallSubscription = null;
+  }
+
+  /// Forgets the position signal of the previous engine or source.
+  ///
+  /// Called when the adapter or the source changed: whether the new one
+  /// reports position is unknown until it does, and judging it by the
+  /// previous one's signal would either false-stall or false-clear.
+  void resetPositionSignal() {
+    if (_disposed) {
+      return;
+    }
+
+    _hasPositionSignal = false;
+
+    _cancelPositionStall();
+  }
+
+  /// Why the position-stall watchdog must not arm, or `null` when it may.
+  String? _positionStallSkipReason() {
+    if (!_canWatch) return 'watchdogs disabled';
+    if (!_hasPositionSignal) return 'engine has not reported position yet';
+    if (positionStallTimeout <= Duration.zero) return 'timeout disabled';
+    if (!_playing) return 'playback not running';
+    if (_buffering) return 'buffering in progress';
+
+    return null;
+  }
+
   /// Why the frame-stall watchdog must not arm, or `null` when it may.
   ///
   /// Returned as text rather than a bool so the reason reaches the log
@@ -775,6 +921,7 @@ final class LiveWatchdogs {
   /// - recovery takes ownership
   /// - the controller closes the current source
   void cancelAll() {
+    _cancelPositionStall();
     if (_disposed) {
       return;
     }
@@ -821,6 +968,7 @@ final class LiveWatchdogs {
     onRecoveryRequested = null;
     _capabilities = null;
 
+    _positionProgress.close();
     _frameProgress.close();
   }
 }

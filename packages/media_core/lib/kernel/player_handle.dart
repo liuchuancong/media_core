@@ -217,6 +217,20 @@ final class PlayerHandle implements RecoveryTarget {
 
   bool _disposed = false;
 
+  /// The caller's play intent, once it has declared one.
+  ///
+  /// Behaviour after a recovery step is decided by what the *caller* wants,
+  /// not by what the adapter last reported. The two disagree in practice:
+  /// an engine that autoplays (ExoPlayer on a live stream, mpv with a
+  /// stream that starts on its own) never emits a `Playing` event until
+  /// something asks it to play, so the playback mirror reads "paused"
+  /// while video is on screen. Restoring from that mirror paused the
+  /// stream after every recovery.
+  ///
+  /// `null` means the caller never declared an intent, in which case the
+  /// playback mirror is the best available answer.
+  bool? _playIntent;
+
   /// Track preference applied to whichever adapter is attached.
   ///
   /// Preserved by the handle for the same reason volume and rate are:
@@ -427,6 +441,25 @@ final class PlayerHandle implements RecoveryTarget {
   void setSourceCandidates(List<PlayerSource> candidates) {
     _sourceCandidates = List<PlayerSource>.unmodifiable(candidates);
   }
+
+  /// Declares whether the caller wants playback running.
+  ///
+  /// Recovery honours this value when it restores the session after a
+  /// step: `true` resumes playback, `false` leaves it paused. Declaring
+  /// an intent is not the same as commanding playback — [play] and
+  /// [pause] both declare their intent as a side effect, but a caller
+  /// whose engine autoplays (a live stream that starts as soon as it is
+  /// opened) must declare it explicitly, because nothing else in the
+  /// framework knows the stream is meant to be running.
+  ///
+  /// Pass `null` to stop declaring, falling back to the observed
+  /// playback state.
+  void declarePlayIntent(bool? playing) {
+    _playIntent = playing;
+  }
+
+  /// The declared play intent, if any.
+  bool? get playIntent => _playIntent;
 
   /// Restricts playback to the audio track on whichever adapter is
   /// attached.
@@ -917,6 +950,8 @@ final class PlayerHandle implements RecoveryTarget {
     _ensureNotDisposed();
     _ensureSource();
 
+    _playIntent = true;
+
     final operationGeneration = _captureOperationGeneration();
     final source = _currentSource!;
 
@@ -974,6 +1009,8 @@ final class PlayerHandle implements RecoveryTarget {
 
     final source = _currentSource!;
 
+    _playIntent = false;
+
     // A user pause is a recovery boundary: recovery for playback the user
     // just stopped is stale by definition.
     _ladder.suspend();
@@ -1011,6 +1048,8 @@ final class PlayerHandle implements RecoveryTarget {
     }
 
     final source = _currentSource;
+
+    _playIntent = false;
 
     _ladder.suspend();
     _cancelActiveOperation(StateError('Playback stop requested.'));
@@ -1179,6 +1218,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     _currentSource = null;
     _backendReady = false;
+    _playIntent = false;
     _ladder.reset();
     _announceSource(null);
 
@@ -1229,6 +1269,8 @@ final class PlayerHandle implements RecoveryTarget {
 
     final source = _currentSource;
 
+    _playIntent = false;
+
     _ladder.suspend();
     _cancelActiveOperation(StateError('Player deactivation requested.'));
 
@@ -1277,6 +1319,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     _currentSource = null;
     _backendReady = false;
+    _playIntent = false;
     _ladder.reset();
     _announceSource(null);
 
@@ -1315,6 +1358,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     _currentSource = null;
     _backendReady = false;
+    _playIntent = null;
 
     MediaCoreLog.debug(
       LogCategory.player,
@@ -1382,7 +1426,8 @@ final class PlayerHandle implements RecoveryTarget {
       sourceCandidates: candidates.sources,
       backendCandidates: candidates.backends,
       position: current.position,
-      wasPlaying: current.isPlaying,
+      // The caller's intent wins over the adapter mirror. See [_playIntent].
+      wasPlaying: _playIntent ?? current.isPlaying,
       volume: current.volume,
       rate: current.rate,
       backendId: _registration.id,

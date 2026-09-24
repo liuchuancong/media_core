@@ -15,7 +15,7 @@ final class RecoveryBudget extends Equatable {
     this.maxLineAttempts = 4,
     this.maxBackendAttempts = 3,
     this.maxBackoffAttempts = 2,
-    this.maxTotalAttempts = 12,
+    this.maxTotalAttempts = 0,
     this.initialBackoff = const Duration(seconds: 1),
     this.maxBackoff = const Duration(seconds: 8),
     this.backoffFactor = 2.0,
@@ -36,11 +36,18 @@ final class RecoveryBudget extends Equatable {
   /// bounds how often the escalation is retried from the top.
   final int maxBackoffAttempts;
 
-  /// Ceiling across every dimension.
+  /// Ceiling across every dimension, or `0` to derive one.
   ///
   /// The per-dimension limits alone do not bound the run: the ladder
-  /// rescans after each wait, so it needs one counter that only ever
-  /// grows. This is that counter.
+  /// rescans after each wait and restarts its sweep for every engine, so
+  /// it needs one counter that only ever grows. This is that counter.
+  ///
+  /// `0` — the default — derives it from the shape of the run instead:
+  /// every engine gets its reopens plus one sweep of every line, plus the
+  /// waits. A fixed number cannot know how many engines and lines a
+  /// deployment has, and a number that is too small silently cuts an
+  /// engine off before it has tried every line. Set it only to cap
+  /// recovery *below* what the shape would allow.
   final int maxTotalAttempts;
 
   /// Delay before the first backoff wait.
@@ -65,13 +72,16 @@ final class RecoveryBudget extends Equatable {
   );
 
   /// Whether this budget allows any physical recovery step.
+  ///
+  /// Deliberately independent of [maxTotalAttempts]: that field is a
+  /// ceiling, and `0` there means "derive", not "allow nothing". The
+  /// per-dimension limits are what switch a kind of step off.
   bool get allowsRecovery {
-    return maxTotalAttempts > 0 &&
-        (maxSameBackendAttempts > 0 || maxLineAttempts > 0 || maxBackendAttempts > 0);
+    return maxSameBackendAttempts > 0 || maxLineAttempts > 0 || maxBackendAttempts > 0;
   }
 
   /// Whether waiting is allowed at all.
-  bool get allowsBackoff => maxBackoffAttempts > 0 && maxTotalAttempts > 0;
+  bool get allowsBackoff => maxBackoffAttempts > 0;
 
   /// Attempt limit for [kind].
   int limitFor(RecoveryStepKind kind) {
@@ -158,7 +168,7 @@ final class RecoveryBudget extends Equatable {
       'maxLineAttempts': maxLineAttempts,
       'maxBackendAttempts': maxBackendAttempts,
       'maxBackoffAttempts': maxBackoffAttempts,
-      'maxTotalAttempts': maxTotalAttempts,
+      'maxTotalAttempts': maxTotalAttempts <= 0 ? 'derived' : maxTotalAttempts,
       'initialBackoffMs': initialBackoff.inMilliseconds,
       'maxBackoffMs': maxBackoff.inMilliseconds,
       'backoffFactor': backoffFactor,

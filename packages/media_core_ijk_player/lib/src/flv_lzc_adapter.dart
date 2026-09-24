@@ -344,7 +344,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportsPictureInPicture: false,
     supportsFullscreen: true,
     // Source matching.
-    supportedProtocols: MediaFormatConstants.supportedProtocols,
-    supportedFormats: MediaFormatConstants.supportedFormats,
+    supportedProtocols: IjkFormats.supportedProtocols,
+    supportedFormats: IjkFormats.supportedFormats,
   );
 }

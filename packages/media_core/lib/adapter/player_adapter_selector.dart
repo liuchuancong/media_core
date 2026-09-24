@@ -2,6 +2,7 @@ import '../source/player_source.dart';
 import '../source/source_protocol.dart';
 import '../source/source_format.dart';
 import 'player_adapter_registry.dart';
+import 'player_adapter_capabilities.dart';
 import '../diagnostics/log_category.dart';
 import '../diagnostics/media_core_log.dart';
 
@@ -154,9 +155,8 @@ final class PlayerAdapterSelector {
 
     for (final registration in registrations) {
       final capabilities = registration.capabilities;
-      final protocolMatch =
-          source.protocol != SourceProtocol.unknown && capabilities.supportsProtocol(source.protocol.name);
-      final formatMatch = source.format != SourceFormat.unknown && capabilities.supportsFormat(source.format.name);
+      final protocolMatch = protocolMatches(capabilities, source);
+      final formatMatch = formatMatches(capabilities, source);
       final liveMatch = source.isLive && capabilities.supportsLive;
 
       table.add(<String, Object?>{
@@ -187,11 +187,11 @@ final class PlayerAdapterSelector {
     var score = registration.priority;
     final capabilities = registration.capabilities;
 
-    if (source.protocol != SourceProtocol.unknown && capabilities.supportsProtocol(source.protocol.name)) {
+    if (protocolMatches(capabilities, source)) {
       score += 40;
     }
 
-    if (source.format != SourceFormat.unknown && capabilities.supportsFormat(source.format.name)) {
+    if (formatMatches(capabilities, source)) {
       score += 30;
     }
 
@@ -200,5 +200,50 @@ final class PlayerAdapterSelector {
     }
 
     return score;
+  }
+
+  /// Whether [capabilities] declares support for [source]'s protocol.
+  ///
+  /// Both spellings count: the [SourceProtocol] name and the URI scheme.
+  /// `SourceProtocol` has no value for every scheme an engine accepts
+  /// (`rtmps`, `srt`, `ftp`), and a declaration that lists those schemes
+  /// would otherwise never match anything.
+  bool protocolMatches(PlayerAdapterCapabilities capabilities, PlayerSource source) {
+    final protocol = source.protocol;
+
+    if (protocol.isKnown && capabilities.supportsProtocol(protocol.name)) {
+      return true;
+    }
+
+    final scheme = source.uri.scheme.trim().toLowerCase();
+
+    return scheme.isNotEmpty && capabilities.supportsProtocol(scheme);
+  }
+
+  /// Whether [capabilities] declares support for [source]'s container.
+  ///
+  /// Both spellings count: the [SourceFormat] name and the raw URI
+  /// extension. The enum and the extension disagree in places (`.ts` is
+  /// [SourceFormat.mpegTs]), and containers the enum does not model at all
+  /// (`rmvb`, `ape`, `nut`) can only be matched as extensions.
+  bool formatMatches(PlayerAdapterCapabilities capabilities, PlayerSource source) {
+    final format = source.format;
+
+    if (format.isKnown && capabilities.supportsFormat(format.name)) {
+      return true;
+    }
+
+    final extension = SourceFormat.extensionOf(source.uri);
+
+    if (extension != null && capabilities.supportsFormat(extension)) {
+      return true;
+    }
+
+    // The enum can be present while the URI has no extension (a source
+    // built by hand from a manifest URL): fall back to the enum's own
+    // conventional extension.
+    final conventional = format.extension;
+
+    return conventional != null && capabilities.supportsFormat(conventional);
   }
 }

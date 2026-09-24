@@ -955,7 +955,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     supportsFullscreen: true,
 
     // Source matching.
-    supportedProtocols: MediaFormatConstants.supportedProtocols,
-    supportedFormats: MediaFormatConstants.supportedFormats,
+    supportedProtocols: MediaKitFormats.supportedProtocols,
+    supportedFormats: MediaKitFormats.supportedFormats,
   );
 }

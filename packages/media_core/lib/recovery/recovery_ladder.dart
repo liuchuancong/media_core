@@ -59,6 +59,35 @@ enum RecoveryLadderStatus {
 /// completed | exhausted | cancelled
 /// ```
 ///
+/// ## Escalation shape
+///
+/// The sweep is **engine-major, line-minor**: every engine gets its own
+/// attempt on the current line, then its own pass over every remaining
+/// line, and only when an engine has nothing left does the ladder attach
+/// the next one.
+///
+/// ```text
+/// engine A  reopen(current line) · line 2 · line 3 · line 4
+/// engine B  reopen(current line) · line 2 · line 3 · line 4
+/// engine C  reopen(current line) · line 2 · line 3 · line 4
+///           → exhausted: nothing left to try
+/// ```
+///
+/// Both halves of that shape are load-bearing:
+///
+/// - **per engine line sweep** — a line that failed on engine A says
+///   nothing about engine B. They differ in demuxer, network stack and
+///   decoder, and sharing one "tried" set across engines would spend the
+///   entire line list on the first engine and leave the others with
+///   nothing to try;
+/// - **per engine budgets** — reopens, lines and waits are counted per
+///   engine, so an engine that burned its allowance cannot consume the
+///   next engine's.
+///
+/// The run ends in [RecoveryLadderExhausted] only after every engine has
+/// swept every line, which is what lets a caller report "cannot play" to
+/// the user with confidence that the framework really did try.
+///
 /// Design rules that keep it from becoming a fourth parallel path:
 ///
 /// - **One run at a time.** [report] refuses while a step is in flight;
@@ -102,7 +131,13 @@ final class RecoveryLadder {
   Completer<bool>? _waiting;
   Future<void>? _run;
 
-  final Map<RecoveryStepKind, int> _stepCounts = <RecoveryStepKind, int>{};
+  /// Steps spent per engine, per kind.
+  ///
+  /// Keyed by backend so each engine gets its own allowance: an engine
+  /// that burned its reopens must not consume the next engine's budget.
+  /// An empty key (`''`) holds the steps spent before any backend is
+  /// known — the first engine is the one already attached.
+  final Map<String, Map<RecoveryStepKind, int>> _stepCounts = <String, Map<RecoveryStepKind, int>>{};
 
   RecoveryLadderStatus _status = RecoveryLadderStatus.idle;
   RecoveryFailure? _failure;
@@ -138,8 +173,10 @@ final class RecoveryLadder {
   /// Number of steps executed in the current (or last) run.
   int get attempt => _attempts;
 
-  /// Steps executed per kind in the current (or last) run.
-  Map<RecoveryStepKind, int> get stepCounts => Map<RecoveryStepKind, int>.unmodifiable(_stepCounts);
+  /// Steps executed per engine and kind in the current (or last) run.
+  Map<String, Map<RecoveryStepKind, int>> get stepCounts {
+    return Map<String, Map<RecoveryStepKind, int>>.unmodifiable(_stepCounts);
+  }
 
   /// Completes when the current run settles.
   ///
@@ -160,7 +197,11 @@ final class RecoveryLadder {
               sourceId: current.sourceId,
               generationId: current.generationId,
               message: current.message,
-              metadata: <String, Object?>{'reporter': current.source.name, 'step': _stepCounts.toString()},
+              metadata: <String, Object?>{
+                'reporter': current.source.name,
+                'engines': _stepCounts.length,
+                'attempts': _attempts,
+              },
             ),
     );
   }
@@ -330,19 +371,36 @@ final class RecoveryLadder {
         return;
       }
 
-      final triedSources = <String>{
-        if (session.source != null) session.source!.id.value,
-      };
+      // The line sweep is per engine. A source that failed on one engine
+      // says nothing about the next one: engines differ in demuxer,
+      // network stack and decoder, and one of them may well play the
+      // stream the previous one refused. This is what makes the
+      // escalation engine-major:
+      //
+      //     engine A: line 1, line 2, line 3, line 4
+      //     engine B: line 1, line 2, line 3, line 4
+      //     engine C: ...
+      //
+      // A single shared set would spend every line on the first engine
+      // and leave the others with nothing to try.
+      final sweptSources = <String, Set<String>>{};
       final triedBackends = <String>{
         if (session.backendId != null) session.backendId!,
       };
 
       var backoffAttempt = 0;
       var previousFailure = failure;
+      final ceiling = _totalCeiling(session);
+
+      _ceiling = ceiling;
 
       while (_isCurrent(generation)) {
-        if (_attempts >= budget.maxTotalAttempts) {
-          _finishExhausted(generation, previousFailure, 'Recovery exhausted its total attempt budget.');
+        if (_attempts >= ceiling) {
+          _finishExhausted(
+            generation,
+            previousFailure,
+            'Recovery exhausted its total attempt budget ($ceiling attempts).',
+          );
 
           return;
         }
@@ -358,7 +416,8 @@ final class RecoveryLadder {
             continue;
           }
 
-          final step = _nextStep(kind, session, triedSources, triedBackends);
+          final engine = _currentEngine(session);
+          final step = _nextStep(kind, session, engine, sweptSources, triedBackends);
 
           if (step == null) {
             continue;
@@ -379,6 +438,15 @@ final class RecoveryLadder {
           }
 
           previousFailure = _lastStepFailure ?? previousFailure;
+
+          // A backend swap inside this pass changed the engine: adopt it
+          // and restart the plan from the top so the new engine gets its
+          // own reopen plus a full sweep of the line list.
+          if (step.kind == RecoveryStepKind.nextBackend) {
+            _adoptEngine(step.backendId ?? _currentEngine(session));
+
+            break;
+          }
         }
 
         if (!_isCurrent(generation)) {
@@ -407,7 +475,7 @@ final class RecoveryLadder {
 
         backoffAttempt++;
 
-        final continued = await _runBackoff(wait, generation);
+        final continued = await _runBackoff(wait, session, generation);
 
         if (!_isCurrent(generation)) {
           return;
@@ -427,17 +495,28 @@ final class RecoveryLadder {
     }
   }
 
-  /// Builds the next step of [kind], or `null` when none is available.
+  /// The engine recovery is currently working on.
   ///
-  /// A source or backend that was already tried is not offered twice, so
-  /// a candidate list of one cannot make the ladder spin.
+  /// Before the first swap this is the backend the failure came from;
+  /// afterwards it is whichever backend the last `nextBackend` attached.
+  String _currentEngine(RecoverySession session) => _engine ?? session.backendId ?? '';
+
+  /// Builds the next step of [kind] for [engine], or `null` when none is
+  /// available.
+  ///
+  /// Budgets are per engine: each engine gets its own reopens and its own
+  /// sweep of the line list. A source already tried *on this engine* is
+  /// not offered again, so a candidate list of one cannot make the ladder
+  /// spin — while the next engine still gets the full list.
   RecoveryStep? _nextStep(
     RecoveryStepKind kind,
     RecoverySession session,
-    Set<String> triedSources,
+    String engine,
+    Map<String, Set<String>> sweptSources,
     Set<String> triedBackends,
   ) {
-    final used = _stepCounts[kind] ?? 0;
+    final engineSteps = _stepCounts.putIfAbsent(engine, () => <RecoveryStepKind, int>{});
+    final used = engineSteps[kind] ?? 0;
 
     if (used >= budget.limitFor(kind)) {
       return null;
@@ -451,11 +530,17 @@ final class RecoveryLadder {
           return null;
         }
 
+        // The line this engine is on counts as tried as soon as it is
+        // reopened: the sweep must move on, not reopen it forever.
+        sweptSources.putIfAbsent(engine, () => <String>{}).add(source.id.value);
+
         return RecoveryStep.reopen(index: used, source: source);
 
       case RecoveryStepKind.nextLine:
+        final swept = sweptSources.putIfAbsent(engine, () => <String>{});
+
         for (final candidate in session.sourceCandidates) {
-          if (!triedSources.add(candidate.id.value)) {
+          if (!swept.add(candidate.id.value)) {
             continue;
           }
 
@@ -480,6 +565,30 @@ final class RecoveryLadder {
     }
   }
 
+  /// The engine the ladder is working on, once it has swapped.
+  ///
+  /// `null` means the engine is still the one the failure came from.
+  String? _engine;
+
+  /// Total attempts this run may spend.
+  ///
+  /// An explicit [RecoveryBudget.maxTotalAttempts] wins; otherwise the
+  /// ceiling is derived from the actual shape of the run — every engine
+  /// gets its reopens plus one sweep of every line, plus the waits — so a
+  /// budget cannot accidentally cut an engine off before it has tried
+  /// every line. The ceiling is a runaway guard, not the primary limit.
+  int _totalCeiling(RecoverySession session) {
+    if (budget.maxTotalAttempts > 0) {
+      return budget.maxTotalAttempts;
+    }
+
+    final engines = 1 + session.backendCandidates.length;
+    final lines = session.sourceCandidates.length + 1;
+    final perEngine = budget.maxSameBackendAttempts + lines + 1;
+
+    return perEngine * engines + budget.maxBackoffAttempts;
+  }
+
   RecoveryFailure? _lastStepFailure;
 
   Future<bool> _runStep(RecoveryStep step, RecoverySession session, int generation) async {
@@ -487,15 +596,23 @@ final class RecoveryLadder {
       return false;
     }
 
-    _stepCounts[step.kind] = (_stepCounts[step.kind] ?? 0) + 1;
+    final engine = _currentEngine(session);
+
+    _stepCounts.putIfAbsent(engine, () => <RecoveryStepKind, int>{})[step.kind] =
+        (_stepCounts[engine]![step.kind] ?? 0) + 1;
     _attempts++;
 
     _emit(RecoveryLadderStepStarted(step: step, attempt: _attempts, failure: _failure));
 
     MediaCoreLog.info(
       LogCategory.recovery,
-      'ladder step $_attempts/${budget.maxTotalAttempts}: ${step.label}',
-      fields: <String, Object?>{'kind': step.kind.name, 'backend': step.backendId, 'uri': step.source?.uri.toString()},
+      'ladder step $_attempts/$_ceilingLabel: ${step.label} [engine $engine]',
+      fields: <String, Object?>{
+        'kind': step.kind.name,
+        'engine': engine,
+        'targetBackend': step.backendId,
+        'uri': step.source?.uri.toString(),
+      },
     );
 
     try {
@@ -546,8 +663,11 @@ final class RecoveryLadder {
     }
   }
 
-  Future<bool> _runBackoff(RecoveryStep step, int generation) async {
-    _stepCounts[RecoveryStepKind.backoff] = (_stepCounts[RecoveryStepKind.backoff] ?? 0) + 1;
+  Future<bool> _runBackoff(RecoveryStep step, RecoverySession session, int generation) async {
+    final engine = _currentEngine(session);
+
+    _stepCounts.putIfAbsent(engine, () => <RecoveryStepKind, int>{})[RecoveryStepKind.backoff] =
+        (_stepCounts[engine]![RecoveryStepKind.backoff] ?? 0) + 1;
     _attempts++;
 
     _emit(RecoveryLadderStepStarted(step: step, attempt: _attempts, failure: _failure));
@@ -609,7 +729,7 @@ final class RecoveryLadder {
         'message': failure.message,
         'backend': failure.backendId,
         'label': failure.uri ?? failure.sourceId?.value,
-        'steps': _stepCounts.map((kind, count) => MapEntry(kind.name, count)),
+        'stepsByEngine': _stepCountsDescription,
         'budget': budget.toMap(),
       },
     );
@@ -633,7 +753,7 @@ final class RecoveryLadder {
       MediaCoreLog.debug(
         LogCategory.recovery,
         'ladder cancelled after $_attempts attempt(s): $reason',
-        fields: <String, Object?>{'steps': _stepCounts.map((kind, count) => MapEntry(kind.name, count))},
+        fields: <String, Object?>{'stepsByEngine': _stepCountsDescription},
       );
 
       _emit(RecoveryLadderCancelled(attempt: _attempts, message: reason, failure: _failure));
@@ -641,6 +761,8 @@ final class RecoveryLadder {
 
     _failure = null;
     _session = null;
+    _engine = null;
+    _ceiling = null;
     _attempts = 0;
     _lastStepFailure = null;
     _stepCounts.clear();
@@ -668,6 +790,28 @@ final class RecoveryLadder {
     // The target can no longer execute anything: stop escalating instead
     // of feeding steps into a handle that has already given up.
     _abort('Recovery target reported that it can no longer recover.');
+  }
+
+  /// Total attempts the current run may spend, for the step log line.
+  int? _ceiling;
+
+  String get _ceilingLabel => '${_ceiling ?? budget.maxTotalAttempts}';
+
+  /// Per-engine attempt summary for the terminal log line.
+  String get _stepCountsDescription {
+    return _stepCounts.entries
+        .map((entry) {
+          final counts = entry.value.entries.map((count) => '${count.key.name}:${count.value}').join(' ');
+
+          return '${entry.key.isEmpty ? '<initial>' : entry.key} [$counts]';
+        })
+        .join(' | ');
+  }
+
+  /// Records the engine a swap moved to, so its budgets and line sweep
+  /// start fresh.
+  void _adoptEngine(String backendId) {
+    _engine = backendId;
   }
 
   bool _isCurrent(int generation) {
