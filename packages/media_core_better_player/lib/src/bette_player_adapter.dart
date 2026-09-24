@@ -580,7 +580,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportsFullscreen: true,
 
     // Source matching.
-    supportedProtocols: {'http', 'https', 'hls', 'dash', 'file'},
-    supportedFormats: {'mp4', 'webm', 'm3u8', 'mpd', 'ts', 'mov', 'mkv'},
+    supportedProtocols: MediaFormatConstants.supportedProtocols,
+    supportedFormats: MediaFormatConstants.supportedFormats,
   );
 }

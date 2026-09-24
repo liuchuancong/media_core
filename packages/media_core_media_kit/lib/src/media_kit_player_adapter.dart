@@ -955,23 +955,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     supportsFullscreen: true,
 
     // Source matching.
-    supportedProtocols: {'http', 'https', 'hls', 'dash', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
-
-    supportedFormats: {
-      'mp4',
-      'mkv',
-      'webm',
-      'flv',
-      'm3u8',
-      'mpd',
-      'mov',
-      'avi',
-      'ts',
-      'mp3',
-      'aac',
-      'flac',
-      'h265',
-      'hevc',
-    },
+    supportedProtocols: MediaFormatConstants.supportedProtocols,
+    supportedFormats: MediaFormatConstants.supportedFormats,
   );
 }

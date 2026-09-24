@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'live_playback_models.dart';
+import '../diagnostics/log_category.dart';
+import '../diagnostics/media_core_log.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
 
@@ -648,15 +650,34 @@ final class LiveWatchdogs {
   void _armVideoFrameStall() {
     _cancelVideoFrameStall();
 
-    if (!_canWatch ||
-        !_supportsVideoFrameProgress ||
-        !_videoExpected ||
-        videoFrameStallTimeout <= Duration.zero ||
-        !_presentationVisible ||
-        !_playing ||
-        _buffering) {
+    final skipReason = _frameStallSkipReason();
+
+    if (skipReason != null) {
+      // "Why is the frame watchdog not watching?" is the first question
+      // both when a frozen stream goes unnoticed and when recovery keeps
+      // reopening a stream that was never stalled. Logging the decision
+      // inputs answers it without a debugger.
+      MediaCoreLog.debug(
+        LogCategory.recovery,
+        'frame-stall watchdog not armed: $skipReason',
+        fields: <String, Object?>{
+          'declaresFrameProgress': _capabilities?.supportsVideoFrameProgress,
+          'videoExpected': _videoExpected,
+          'presentationVisible': _presentationVisible,
+          'playing': _playing,
+          'buffering': _buffering,
+          'timeoutMs': videoFrameStallTimeout.inMilliseconds,
+        },
+      );
+
       return;
     }
+
+    MediaCoreLog.debug(
+      LogCategory.recovery,
+      'frame-stall watchdog armed (${videoFrameStallTimeout.inMilliseconds}ms)',
+      fields: <String, Object?>{'videoExpected': _videoExpected},
+    );
 
     final generation = _watchdogGeneration;
 
@@ -676,6 +697,23 @@ final class LiveWatchdogs {
 
           onStall?.call(LiveStallKind.videoFrameStallTimeout);
         });
+  }
+
+  /// Why the frame-stall watchdog must not arm, or `null` when it may.
+  ///
+  /// Returned as text rather than a bool so the reason reaches the log
+  /// verbatim: the interesting case is not "it did not arm" but *which*
+  /// condition stopped it.
+  String? _frameStallSkipReason() {
+    if (!_canWatch) return 'watchdogs disabled';
+    if (!_supportsVideoFrameProgress) return 'adapter does not declare frame progress';
+    if (!_videoExpected) return 'no video frames expected (audio-only)';
+    if (videoFrameStallTimeout <= Duration.zero) return 'timeout disabled';
+    if (!_presentationVisible) return 'presentation not visible';
+    if (!_playing) return 'playback not running';
+    if (_buffering) return 'buffering in progress';
+
+    return null;
   }
 
   // ---------------------------------------------------------------------------

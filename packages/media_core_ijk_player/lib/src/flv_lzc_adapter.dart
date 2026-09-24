@@ -343,7 +343,8 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportsSoftwareDecoder: true,
     supportsPictureInPicture: false,
     supportsFullscreen: true,
-    supportedProtocols: {'http', 'https', 'hls', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
-    supportedFormats: {'mp4', 'mkv', 'webm', 'flv', 'm3u8', 'mov', 'avi', 'ts', 'h265', 'hevc'},
+    // Source matching.
+    supportedProtocols: MediaFormatConstants.supportedProtocols,
+    supportedFormats: MediaFormatConstants.supportedFormats,
   );
 }

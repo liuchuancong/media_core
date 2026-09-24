@@ -25,6 +25,7 @@ import '../operation/operation_type.dart';
 import '../session/session_snapshot.dart';
 import '../operation/operation_tracker.dart';
 import '../adapter/player_adapter_event.dart';
+import '../adapter/player_adapter_capabilities.dart';
 import '../diagnostics/log_category.dart';
 import '../diagnostics/media_core_log.dart';
 import '../operation/operation_registry.dart';
@@ -184,6 +185,13 @@ final class LivePlaybackController {
   LiveSourceRequest? _request;
   String? _currentUrl;
 
+  /// Backend pinned by the caller for this playback, if any.
+  ///
+  /// Survives line switches and retries: an engine setting is a user
+  /// preference, not a per-attempt detail. Recovery ignores it — the
+  /// ladder must be free to escalate past an engine that keeps failing.
+  String? _preferredBackend;
+
   final _stateController = StreamController<PlayerState>.broadcast();
   final _failureController = StreamController<PlayerFailure>.broadcast();
 
@@ -229,8 +237,26 @@ final class LivePlaybackController {
   // ---------------------------------------------------------------------------
 
   /// Starts playing [request].
-  Future<void> play(LiveSourceRequest request) {
+  ///
+  /// [preferredBackend] pins the engine for this playback: a user-visible
+  /// engine setting must be able to say "use better_player", and it must
+  /// do so through the normal create/bind path — which is also what
+  /// refreshes the watchdog capability snapshot. Switching engines behind
+  /// the controller (releasing its handle externally, creating another
+  /// one) leaves the controller bound to a dead handle and the watchdogs
+  /// holding the previous engine's declarations.
+  ///
+  /// When omitted, the backend is chosen by scoring the actual source:
+  /// priority plus protocol, format and live support. See
+  /// [PlayerAdapterSelector.score].
+  ///
+  /// The pin applies when a player is created, which is the first [play]
+  /// after a [close]. An engine setting that changes mid-session must
+  /// therefore call [close] first — the controller cannot swap the engine
+  /// under a live stream without re-opening it.
+  Future<void> play(LiveSourceRequest request, {String? preferredBackend}) {
     _request = request;
+    _preferredBackend = preferredBackend;
     _playbackRequested = true;
 
     _watchdogRecoveryGeneration++;
@@ -602,17 +628,22 @@ final class LivePlaybackController {
         // an unknown one. `kernel.create()` without a source asks the
         // selector to rank backends against "nothing", where every
         // capability bonus is zero and priority alone decides.
-        final preferred = kernel.selector.select(source);
+        //
+        // An explicitly pinned backend wins over scoring: the caller owns
+        // that choice, and recovery remains free to escalate away from it.
+        final pinned = _preferredBackend;
+        final selected = pinned ?? kernel.selector.select(source)?.id;
 
         MediaCoreLog.info(
           LogCategory.fallback,
-          'live open: using backend ${preferred?.id ?? '<none>'} for '
+          'live open: using backend ${selected ?? '<none>'}'
+              '${pinned == null ? ' (selected by score)' : ' (pinned by the caller)'} for '
               '${source.protocol.name}/${source.format.name} '
               '${source.isLive ? 'live' : 'vod'} source',
           fields: <String, Object?>{'uri': source.uri.toString(), 'line': _lineIndexOf(request, url)},
         );
 
-        handle = await kernel.create(preferredBackend: preferred?.id);
+        handle = await kernel.create(preferredBackend: selected);
 
         if (!_isCurrent(generation)) {
           await _releaseStaleHandle(handle);
@@ -761,7 +792,7 @@ final class LivePlaybackController {
 
     await _unbindHandle();
 
-    watchdogs.updateCapabilities(handle.adapter.capabilities);
+    _announceWatchdogCapabilities(handle.backendId, handle.adapter.capabilities);
 
     watchdogs.setVideoExpected(!_audioOnly);
 
@@ -811,8 +842,27 @@ final class LivePlaybackController {
       fields: <String, Object?>{'currentLine': _currentUrl},
     );
 
-    watchdogs.updateCapabilities(change.adapter.capabilities);
+    _announceWatchdogCapabilities(change.to, change.adapter.capabilities);
+
     watchdogs.setVideoExpected(!_audioOnly);
+  }
+
+  /// Hands the watchdog bundle the capabilities of [backendId]'s adapter.
+  ///
+  /// There is exactly one watchdog bundle per controller and it holds one
+  /// capability snapshot at a time, so this call *is* the answer to "whose
+  /// watchdog is running?". It happens on binding and on a backend swap,
+  /// and nowhere else — if a backend changes without one of those two
+  /// events, the bundle keeps the previous backend's declaration.
+  void _announceWatchdogCapabilities(String backendId, PlayerAdapterCapabilities capabilities) {
+    MediaCoreLog.info(
+      LogCategory.recovery,
+      'watchdog capabilities <- $backendId '
+          '(frameProgress: ${capabilities.supportsVideoFrameProgress}, live: ${capabilities.supportsLive})',
+      fields: <String, Object?>{'backend': backendId, 'audioOnly': _audioOnly},
+    );
+
+    watchdogs.updateCapabilities(capabilities);
   }
 
   /// Follows the source the handle is actually playing.
