@@ -4,7 +4,7 @@ import 'package:media_core/media_core.dart';
 export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
 export 'media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
 
-const String kMediaKitPlayerBackendId = 'media_kit';
+const String kMediaKitPlayerBackendId = 'mpv';
 
 /// [PlayerAdapterFactory] that creates [MediaKitPlayerAdapter] instances.
 final class MediaKitAdapterFactory implements PlayerAdapterFactory {
