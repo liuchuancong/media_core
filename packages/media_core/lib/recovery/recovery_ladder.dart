@@ -183,9 +183,27 @@ final class RecoveryLadder {
   /// streak: the new combination has not been tried yet.
   final Map<String, ({int count, DateTime at})> _streaks = <String, ({int count, DateTime at})>{};
 
+  /// How often one ENGINE may stall (on any line) before the ladder
+  /// stops offering it lines and moves to the next engine.
+  ///
+  /// A per-setup streak alone cannot condemn an engine: soft-decode
+  /// starvation freezes *every* line, and each new line would start a
+  /// fresh streak, costing a full stall cycle each. The engine counter is
+  /// what turns "line 1 froze, line 2 froze" into "this engine cannot
+  /// play this stream" after two cycles instead of five.
+  static const int _engineStallLimit = 2;
+
   /// How long a recovery is considered to have "held" before it counts as
   /// a repeat rather than a new fault.
   static const Duration _repeatWindow = Duration(minutes: 2);
+
+  /// Stalls per engine, for the engine-level condemnation above.
+  final Map<String, ({int count, DateTime at})> _engineStalls = <String, ({int count, DateTime at})>{};
+
+  /// Stalls recorded per engine, for diagnostics.
+  Map<String, int> get engineStallCounts {
+    return Map<String, int>.unmodifiable(_engineStalls.map((key, value) => MapEntry(key, value.count)));
+  }
 
   /// Setups currently considered repeat offenders.
   Map<String, int> get repeatStreaks {
@@ -297,7 +315,35 @@ final class RecoveryLadder {
   }
 
   /// How many rungs this fault has already proven useless on.
+  ///
+  /// Two memories feed it: the per-setup streak (this engine froze on this
+  /// line before) and the per-engine count (this engine froze, wherever).
+  /// The engine count is the stronger verdict — reaching
+  /// [_engineStallLimit] skips the engine's remaining rungs entirely and
+  /// starts the plan at the next backend.
   int _escalationFor(RecoveryFailure failure) {
+    final engine = failure.backendId ?? '';
+    final engineStall = _engineStalls[engine];
+
+    if (engineStall != null && clock.now().difference(engineStall.at) <= _repeatWindow) {
+      if (engineStall.count >= _engineStallLimit) {
+        MediaCoreLog.warning(
+          LogCategory.recovery,
+          'engine "$engine" stalled ${engineStall.count} time(s) recently — '
+              'skipping its remaining rungs, escalating to the next backend',
+          fields: <String, Object?>{'engine': engine, 'windowSeconds': _repeatWindow.inSeconds},
+        );
+
+        // retryPlan is [reopen, nextLine, nextBackend, backoff]: skipping
+        // two rungs starts at the next backend. fallbackPlan (a source
+        // failure) already skips the reopen, so one more rung lands on
+        // the same rung.
+        return 2;
+      }
+    } else if (engineStall != null) {
+      _engineStalls.remove(engine);
+    }
+
     final streak = _streaks[_setupKeyOf(failure)];
 
     if (streak == null) {
@@ -429,7 +475,7 @@ final class RecoveryLadder {
       _session = session;
 
       final proposed = policy.plan(failure, session);
-      final plan = _effectivePlan(proposed, escalateFrom);
+      var plan = _effectivePlan(proposed, escalateFrom);
 
       _emit(RecoveryLadderStarted(failure: failure, plan: plan, budget: budget, superseded: escalateFrom > 0));
 
@@ -526,11 +572,18 @@ final class RecoveryLadder {
 
           previousFailure = _lastStepFailure ?? previousFailure;
 
-          // A backend swap inside this pass changed the engine: adopt it
-          // and restart the plan from the top so the new engine gets its
-          // own reopen plus a full sweep of the line list.
+          // A backend swap inside this pass changed the engine: adopt it,
+          // restore the FULL plan, and restart from the top so the new
+          // engine gets its own reopen plus a full sweep of the line list.
+          // The escalation that produced this swap condemned the previous
+          // engine — it says nothing about the new one, and inheriting the
+          // truncated plan would deny the new engine its reopen and lines.
           if (step.kind == RecoveryStepKind.nextBackend) {
             _adoptEngine(step.backendId ?? _currentEngine(session));
+
+            if (!identical(plan, proposed)) {
+              plan = proposed;
+            }
 
             break;
           }
@@ -844,12 +897,20 @@ final class RecoveryLadder {
 
     _streaks[key] = (count: expired ? 1 : previous.count + 1, at: now);
 
+    final engine = session.backendId ?? '';
+    final enginePrevious = _engineStalls[engine];
+    final engineExpired = enginePrevious == null || now.difference(enginePrevious.at) > _repeatWindow;
+
+    _engineStalls[engine] = (count: engineExpired ? 1 : enginePrevious.count + 1, at: now);
+
     MediaCoreLog.info(
       LogCategory.recovery,
-      'recovery streak for $key is now ${_streaks[key]!.count}',
+      'recovery streak for $key is now ${_streaks[key]!.count} '
+          '(engine $engine: ${_engineStalls[engine]!.count}/$_engineStallLimit stalls)',
       fields: <String, Object?>{
         'engine': session.backendId,
         'line': session.source?.id.value,
+        'engineStalls': _engineStalls[engine]!.count,
         'windowSeconds': _repeatWindow.inSeconds,
       },
     );
@@ -885,6 +946,7 @@ final class RecoveryLadder {
     _lastStepFailure = null;
     _stepCounts.clear();
     _streaks.clear();
+    _engineStalls.clear();
   }
 
   /// Completes a pending backoff wait, if there is one.
