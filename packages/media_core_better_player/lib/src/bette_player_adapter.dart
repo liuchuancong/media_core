@@ -22,6 +22,14 @@ export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSour
 /// - audio-output suppression starts the source muted, avoiding
 ///   an audible burst during initialization
 /// - live streams flagged through the data source
+/// - `play` / `pause` de-duplicated with a buffering guard: ExoPlayer's
+///   `onIsPlayingChanged` folds BUFFERING into `!isPlaying`, so a live
+///   stream that briefly stalls flips play/pause at buffer frequency.
+///   Those flips are not user-visible state changes, and forwarding
+///   them verbatim drove downstream observers (facade → wallpaper
+///   layer) into tearing down and rebuilding the background decoder
+///   on every tick. Buffering is expressed through
+///   [PlayerAdapterEvent.buffering] instead.
 /// - an honest capability declaration ([defaultCapabilities])
 final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   BetterPlayerAdapter({
@@ -72,6 +80,16 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // Prevents the same native exception from being reported through
   // both the BetterPlayer event stream and the open-failure state.
   String? _lastReportedError;
+
+  /// Last "actually playing" state reported by the engine.
+  ///
+  /// ExoPlayer's `onIsPlayingChanged` treats BUFFERING as not playing,
+  /// so a live stream that briefly stalls emits pause + play at buffer
+  /// frequency. Without de-duplication those events would be forwarded
+  /// 1:1 as [PlayerAdapterEvent.playing] / [PlayerAdapterEvent.paused]
+  /// transitions, which downstream consumers read as a real state
+  /// change. Mirrors the guard in [MediaKitPlayerAdapter].
+  bool _playingNow = false;
 
   /// The underlying [BetterPlayerController].
   ///
@@ -272,6 +290,10 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     if (isDisposed) return;
 
+    // The pause event above may have been filtered as buffering noise,
+    // so reset the latch explicitly instead of relying on event order.
+    _playingNow = false;
+
     await controller.seekTo(Duration.zero);
   }
 
@@ -293,6 +315,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     _lastPosition = Duration.zero;
     _lastDuration = null;
     _lastReportedError = null;
+    _playingNow = false;
 
     await controller.pause();
 
@@ -328,6 +351,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     _lastPosition = Duration.zero;
     _lastDuration = null;
     _lastReportedError = null;
+    _playingNow = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -398,9 +422,24 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         }
 
       case BetterPlayerEventType.play:
+        if (_playingNow) return;
+
+        _playingNow = true;
         emitPlaying();
 
       case BetterPlayerEventType.pause:
+        // A "pause" that lands while the player is buffering is not a
+        // user-visible pause: ExoPlayer reports !isPlaying during
+        // BUFFERING and replays a matching `play` once the buffer
+        // recovers. Dropping it here keeps the latch accurate and lets
+        // bufferingStart / bufferingEnd express the stall instead.
+        final buffering = _controller?.videoPlayerController?.value.isBuffering ?? false;
+
+        if (buffering) return;
+
+        if (!_playingNow) return;
+
+        _playingNow = false;
         emitPaused();
 
       case BetterPlayerEventType.bufferingStart:
