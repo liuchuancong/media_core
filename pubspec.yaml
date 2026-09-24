@@ -16,3 +16,14 @@ workspace:
 
 dependency_overrides:
   wakelock_plus: ^1.7.0
+  media_kit:
+    git:
+      url: https://github.com/Predidit/media-kit.git
+      ref: main
+      path: media_kit
+
+  media_kit_video:
+    git:
+      url: https://github.com/Predidit/media-kit.git
+      ref: main
+      path: media_kit_video
