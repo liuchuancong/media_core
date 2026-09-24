@@ -133,12 +133,20 @@ final class LivePlaybackController {
   int _sweepStart = 0;
 
   final StreamController<PlayerState> _stateController = StreamController<PlayerState>.broadcast();
+  final StreamController<PlayerHandle> _handleController = StreamController<PlayerHandle>.broadcast();
   final StreamController<PlayerFailure> _failureController = StreamController<PlayerFailure>.broadcast();
   StreamSubscription<PlayerAdapterEvent>? _adapterSub;
   StreamSubscription<PlayerBackendChange>? _backendSub;
 
   /// Playback state stream.
   Stream<PlayerState> get onStateChanged => _stateController.stream;
+
+  /// Emitted whenever the attached handle changes - an engine switch
+  /// committed a staged player, or the player was released. Consumers that
+  /// render the video surface must rebind on this and not on the old
+  /// handle's own streams: the old handle is disposed by the time the new
+  /// one is committed, so subscriptions taken from it go dead.
+  Stream<PlayerHandle> get onHandleChanged => _handleController.stream;
 
   /// Terminal failure stream. Emitted exactly once per exhausted sweep.
   Stream<PlayerFailure> get onError => _failureController.stream;
@@ -358,6 +366,7 @@ final class LivePlaybackController {
 
     _tasks.dispose();
     await _stateController.close();
+    await _handleController.close();
     await _failureController.close();
   }
 
@@ -489,26 +498,25 @@ final class LivePlaybackController {
 
   /// Opens [source] on [engine], starts playback and verifies it.
   ///
-  /// The handle is created per engine and kept while the engine stays the
-  /// same: line switches inside one engine re-open on the existing handle,
-  /// an engine switch releases and rebuilds it.
+  /// Line switches inside one engine re-open the existing handle. An
+  /// engine switch is **staged**: the replacement player is created,
+  /// opened and verified *alongside* the current one, and only a verified
+  /// player is committed. Committing after verification is what keeps the
+  /// engine-switch black flash short - the mounted surface is replaced at
+  /// the moment the new engine already has a decoded frame, instead of
+  /// showing a placeholder for the engine's whole time-to-first-frame.
   Future<void> _openOn(String engine, PlayerSource source) async {
     final generation = _playGeneration;
 
-    var handle = _handle;
+    final current = _handle;
+    final sameEngine = current != null && !current.disposed && current.backendId == engine;
 
-    if (handle == null || handle.disposed || handle.backendId != engine) {
-      await _releaseHandle();
-
-      MediaCoreLog.info(
-        LogCategory.fallback,
-        'attaching engine $engine for ${source.uri}',
-        fields: <String, Object?>{'line': _sourceIndex},
-      );
-
-      handle = await kernel.create(preferredBackend: engine);
-      _attach(handle);
+    if (!sameEngine) {
+      await _openOnStaged(engine, source, generation: generation, previous: current);
+      return;
     }
+
+    final handle = current;
 
     _setState(_liveState(PlayerPlaybackState.opening));
 
@@ -517,11 +525,8 @@ final class LivePlaybackController {
     handle.setRecoveryEnabled(false);
     handle.declarePlayIntent(true);
 
-    // Every watchdog armed for a previous candidate is stale now: its
-    // source is being torn down, and a timer firing during *this* open
-    // would queue a recovery sweep against a stream that is still being
-    // attached — the "switching even though it just started playing"
-    // behaviour. Cancel them; they are re-armed below on success.
+    // Every watchdog armed for a previous candidate is stale now: cancel
+    // them; they are re-armed below on success.
     watchdogs.cancelAll();
 
     _sweepAdapterError = null;
@@ -535,7 +540,7 @@ final class LivePlaybackController {
     await handle.play();
 
     // The step that separates "opened" from "playing": without it an
-    // engine that accepts the source but never delivers a frame reads as
+    // engine that accepts a source but never delivers a frame reads as
     // success and the sweep stops on a frozen player.
     await _verifyPlayback(handle, source);
 
@@ -550,6 +555,86 @@ final class LivePlaybackController {
 
     _setState(_liveState(PlayerPlaybackState.buffering));
   }
+
+  /// Builds the replacement player for [engine], proves it plays, then
+  /// commits it. Any failure disposes the staged player and rethrows - the
+  /// sweep moves on, and nothing already on screen is torn down for a
+  /// lost race.
+  Future<void> _openOnStaged(
+    String engine,
+    PlayerSource source, {
+    required int generation,
+    required PlayerHandle? previous,
+  }) async {
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'attaching engine \$engine for \${source.uri}',
+      fields: <String, Object?>{'line': _sourceIndex, 'staged': previous != null},
+    );
+
+    _setState(_liveState(PlayerPlaybackState.opening));
+
+    watchdogs.cancelAll();
+
+    _sweepAdapterError = null;
+
+    final staged = await kernel.create(preferredBackend: engine);
+
+    try {
+      staged.setRecoveryEnabled(false);
+      staged.declarePlayIntent(true);
+
+      if (_audioOnly) {
+        await staged.setAudioOnly(true);
+      }
+
+      await staged.open(source);
+
+      if (_abandoned(generation)) {
+        throw StateError('Staged engine \$engine was abandoned mid-open.');
+      }
+
+      await staged.play();
+      await _verifyPlayback(staged, source);
+
+      if (_abandoned(generation)) {
+        throw StateError('Staged engine \$engine was abandoned mid-verify.');
+      }
+
+      // Commit: the replacement has proven itself. Surface consumers see
+      // the new handle through onHandleChanged and rebind at this moment,
+      // when the first frame is already decoded.
+      _attach(staged);
+
+      if (previous != null && !previous.disposed) {
+        try {
+          await kernel.release(previous.id);
+        } catch (_) {
+          // Best-effort release of the retired engine.
+        }
+      }
+    } catch (error) {
+      try {
+        await kernel.release(staged.id);
+      } catch (_) {
+        // Best-effort cleanup of the failed staging.
+      }
+
+      rethrow;
+    }
+
+    if (_abandoned(generation)) {
+      return;
+    }
+
+    _currentSource = source;
+
+    watchdogs.armSourceReady();
+    watchdogs.resetPositionSignal();
+
+    _setState(_liveState(PlayerPlaybackState.buffering));
+  }
+
 
   /// Waits until [handle] shows any sign of real playback.
   ///
@@ -650,6 +735,10 @@ final class LivePlaybackController {
   void _attach(PlayerHandle handle) {
     _handle = handle;
 
+    if (!_handleController.isClosed) {
+      _handleController.add(handle);
+    }
+
     handle.setRecoveryEnabled(false);
 
     watchdogs.updateCapabilities(handle.adapter.capabilities);
@@ -678,6 +767,10 @@ final class LivePlaybackController {
     final handle = _handle;
     _handle = null;
     _currentSource = null;
+
+    if (handle != null && !_handleController.isClosed) {
+      _handleController.add(handle);
+    }
 
     watchdogs.updateCapabilities(null);
 
