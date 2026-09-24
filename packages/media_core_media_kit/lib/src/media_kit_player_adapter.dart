@@ -159,6 +159,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   String? _currentUrl;
 
+  /// Whether the current source is a live (non-seekable) stream.
+  ///
+  /// Rate changes are ignored for live sources: mpv would happily
+  /// pitch-shift a broadcast that has no meaningful playback speed.
+  bool _liveSource = false;
+
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _hasOpened = false;
@@ -328,6 +334,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   Future<void> onBeforeOpen(PlayerSource source) async {
     final url = source.uri.toString();
 
+    _liveSource = source.isLive;
+
     // A prepared software fallback belongs to the source it was
     // prepared for. `_currentUrl` is overwritten here, so the
     // comparison has to happen first.
@@ -391,7 +399,15 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   Future<void> onSetVolume(double volume) => player.setVolume(volume.clamp(0.0, 1.0) * 100.0);
 
   @override
-  Future<void> onSetRate(double rate) => player.setRate(rate);
+  Future<void> onSetRate(double rate) {
+    // Live streams have no meaningful playback speed; honouring the
+    // command would pitch-shift a broadcast.
+    if (_liveSource) {
+      return Future<void>.value();
+    }
+
+    return player.setRate(rate);
+  }
 
   @override
   Future<void> onClose() async {
@@ -457,6 +473,20 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         await player.setAudioTrack(mk.AudioTrack.no());
       } catch (_) {
         // Best-effort; some builds reject track selection before open.
+      }
+    }
+  }
+
+  @override
+  Future<void> onAfterOpen(PlayerSource source) async {
+    // The suppression flag belongs to the source lifecycle: a fresh open
+    // (including a recovery replay of the same source) rebuilds the audio
+    // pipeline, so it must be suppressed again or sound comes back.
+    if (_audioOutputSuppressed) {
+      try {
+        await player.setAudioTrack(mk.AudioTrack.no());
+      } catch (_) {
+        // Best-effort.
       }
     }
   }
@@ -842,10 +872,16 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   }
 
   void _onPosition(Duration position) {
+    // media_kit replays zeroed position/duration on stop(); without this
+    // guard the previous source's teardown leaks into the next generation.
+    if (!_hasOpened) return;
+
     emitPositionChanged(position);
   }
 
   void _onDuration(Duration duration) {
+    if (!_hasOpened) return;
+
     emitDurationChanged(duration);
   }
 
@@ -862,11 +898,15 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   }
 
   void _onWidth(int? w) {
+    if (!_hasOpened) return;
+
     _width = w;
     _maybeEmitSize();
   }
 
   void _onHeight(int? h) {
+    if (!_hasOpened) return;
+
     _height = h;
     _maybeEmitSize();
   }

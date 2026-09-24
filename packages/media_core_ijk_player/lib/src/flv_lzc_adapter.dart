@@ -59,6 +59,20 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   bool _sourceBuffering = false;
   bool _privateInput = false;
 
+  /// Whether the current source is live. Rate changes and seeks are
+  /// ignored for live streams — there is no rewindable timeline and no
+  /// meaningful playback speed for a broadcast.
+  bool _liveSource = false;
+
+  // State-change latches: the value listener fires on every tick, so
+  // without them `started` re-emits `playing` at tick frequency.
+  bool _playingNow = false;
+  bool _completedNow = false;
+
+  /// Dedup of repeated error reports: a tick in the error state would
+  /// otherwise re-fail the adapter on every listener callback.
+  String? _lastReportedError;
+
   Duration _lastDuration = Duration.zero;
   Duration _lastPosition = Duration.zero;
 
@@ -78,7 +92,16 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   }
 
   @override
-  bool get available => !audioOnly && !isDisposed;
+  bool get available {
+    // FijkView mounted on an idle player renders nothing; require at
+    // least an initialized player so MediaPlayerView does not surface
+    // an empty texture before any source exists.
+    if (audioOnly || isDisposed) return false;
+
+    final state = _player.value.state;
+
+    return state != FijkState.idle && state != FijkState.error;
+  }
 
   @override
   Widget build() {
@@ -127,6 +150,10 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     _lastPosition = Duration.zero;
     _lastDuration = Duration.zero;
     _sourceBuffering = false;
+    _playingNow = false;
+    _completedNow = false;
+    _lastReportedError = null;
+    _liveSource = source.isLive;
 
     if (_player.state != FijkState.idle) {
       await _player.reset();
@@ -172,19 +199,33 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   @override
   Future<void> onStop() async {
     _sourceBuffering = false;
+    _playingNow = false;
+    _completedNow = false;
     await _player.stop();
   }
 
   @override
-  Future<void> onSeek(Duration position) => _player.seekTo(position.inMilliseconds);
+  Future<void> onSeek(Duration position) {
+    // ijk stalls or errors seeking an FLV live source.
+    if (_liveSource) {
+      return Future<void>.value();
+    }
+
+    return _player.seekTo(position.inMilliseconds);
+  }
 
   @override
   Future<void> onSetVolume(double volume) => _player.setVolume(volume.clamp(0.0, 1.0));
 
   @override
   Future<void> onSetRate(double rate) async {
-    // soundtouch must land before setSpeed so the engine picks the
-    // correct audio pipeline on the first frame.
+    if (_liveSource) {
+      return;
+    }
+
+    // soundtouch only takes effect when the audio pipeline is built (the
+    // next setDataSource), and toggling it mid-stream is unreliable on
+    // some ijk builds — so only touch it here, before any playback.
     final wantsSoundTouch = rate != 1.0;
     if (_config.soundtouch != wantsSoundTouch) {
       await _player.setOption(FijkOption.playerCategory, 'soundtouch', wantsSoundTouch ? 1 : 0);
@@ -195,6 +236,9 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   @override
   Future<void> onClose() async {
     _sourceBuffering = false;
+    _playingNow = false;
+    _completedNow = false;
+    _lastReportedError = null;
     _lastPosition = Duration.zero;
     _lastDuration = Duration.zero;
     await _player.reset();
@@ -272,7 +316,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       emitDurationChanged(duration);
     }
 
-    final isBufferingState = state == FijkState.asyncPreparing || state == FijkState.prepared;
+    final isBufferingState = state == FijkState.asyncPreparing;
     if (isBufferingState) {
       if (!_sourceBuffering) {
         _sourceBuffering = true;
@@ -285,19 +329,30 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     switch (state) {
       case FijkState.started:
+        if (_playingNow) break;
+        _playingNow = true;
+        _completedNow = false;
         emitPlaying();
       case FijkState.paused:
+        if (!_playingNow) break;
+        _playingNow = false;
         emitPaused();
       case FijkState.completed:
       case FijkState.end:
+        if (_completedNow) break;
+        _completedNow = true;
+        _playingNow = false;
         emitCompleted();
       case FijkState.error:
         final native = value.exception;
-        reportEngineError(
-          message:
-              'fijk error ${native.code}: '
-              '${native.message ?? 'native playback failure'}',
-        );
+        final message =
+            'fijk error ${native.code}: '
+            '${native.message ?? 'native playback failure'}';
+
+        if (message == _lastReportedError) break;
+
+        _lastReportedError = message;
+        reportEngineError(message: message);
       case FijkState.stopped:
       case FijkState.idle:
       case FijkState.initialized:

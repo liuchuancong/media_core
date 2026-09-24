@@ -71,6 +71,10 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   bool _audioOutputSuppressed = false;
   BoxFit _videoFit = BoxFit.contain;
 
+  /// Whether the current source is live. Rate changes on a live stream
+  /// are ignored — there is no meaningful playback speed for a broadcast.
+  bool _liveSource = false;
+
   // Value-diff state. BetterPlayerEvent only carries *transitions*;
   // position / duration / buffered change silently between events and
   // are diffed off the wrapped controller's value below.
@@ -179,12 +183,21 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   }
 
   @override
-  bool get engineReportsOpenFailure => _controller?.videoPlayerController?.value.hasError == true;
+  bool get engineReportsOpenFailure {
+    if (_controller?.videoPlayerController?.value.hasError == true) {
+      return true;
+    }
+
+    // Some failures surface as an exception event while hasError is
+    // still false (source-type errors, for example).
+    return _lastReportedError != null;
+  }
 
   @override
   Future<void> onOpen(PlayerSource source) async {
     // A new source starts a new error reporting scope.
     _lastReportedError = null;
+    _liveSource = source.isLive;
 
     // A controller can be reused for multiple sources. Make sure the
     // value listener is registered exactly once for the current source.
@@ -266,12 +279,20 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   Future<void> onAfterOpen(PlayerSource source) async {
     // Audio suppression is intentionally applied after the source has
     // been created, so the native player never emits audible output
-    // during source initialization.
-    await setVolume(_audioOutputSuppressed ? 0.0 : 1.0);
+    // during source initialization. Otherwise the volume configured on
+    // the adapter context is restored — an unconditional 1.0 used to
+    // reset any non-default volume on every open.
+    final contextConfig = _context?.config ?? const PlayerAdapterConfig();
+
+    await setVolume(_audioOutputSuppressed ? 0.0 : contextConfig.volume);
 
     if (isDisposed) return;
 
-    if (_audioOutputSuppressed) {
+    // A suppressed open used to force autoplay, ignoring the caller's
+    // autoPlay: false. Start playback only when the caller asked for it.
+    final autoPlay = _context?.playerConfig?.autoPlay ?? true;
+
+    if (_audioOutputSuppressed && autoPlay) {
       await play();
     }
   }
@@ -291,6 +312,10 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // The pause event above may have been filtered as buffering noise,
     // so reset the latch explicitly instead of relying on event order.
     _playingNow = false;
+
+    // A live stream has no rewindable timeline: seeking to zero either
+    // restarts the DVR window or is rejected outright.
+    if (_liveSource) return;
 
     await controller.seekTo(Duration.zero);
   }

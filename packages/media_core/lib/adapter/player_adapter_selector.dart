@@ -43,7 +43,9 @@ final class PlayerAdapterSelector {
   /// When [preferredId] names a registered and enabled adapter it
   /// wins unconditionally.
   PlayerAdapterRegistration? select(PlayerSource source, {String? preferredId}) {
-    if (preferredId != null) {
+    // A blank preference is no preference: it must not match whichever
+    // backend happens to be consulted first.
+    if (preferredId != null && preferredId.trim().isNotEmpty) {
       final preferred = registry.get(preferredId);
 
       if (preferred != null && preferred.enabled) {

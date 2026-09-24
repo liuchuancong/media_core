@@ -28,7 +28,7 @@ final class IjkPlayerAdapterFactory implements PlayerAdapterFactory {
   }
 
   @override
-  bool supports(String id) => id == kIjkPlayerBackendId || id.isEmpty;
+  bool supports(String id) => id == kIjkPlayerBackendId;
 
   /// Builds a registration entry for `PlayerKernel.registerBackend`
   /// or a [PlayerAdapterRegistry]. That path carries [capabilities]

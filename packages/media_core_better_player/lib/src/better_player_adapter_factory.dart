@@ -27,7 +27,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   }
 
   @override
-  bool supports(String id) => id == kBetterPlayerBackendId || id.isEmpty;
+  bool supports(String id) => id == kBetterPlayerBackendId;
 
   /// Builds a registration entry for `PlayerKernel.registerBackend` or
   /// a [PlayerAdapterRegistry]. That path carries [capabilities] on the

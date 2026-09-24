@@ -30,8 +30,19 @@ final class PlayerAdapterRegistry {
   final Map<String, PlayerAdapterRegistration> _entries = {};
 
   /// Registers an adapter.
+  ///
+  /// Throws [ArgumentError] for a blank [PlayerAdapterRegistration.id]:
+  /// an empty id is ambiguous by nature — every factory would claim it —
+  /// so it is never allowed into the registry instead of being resolved
+  /// by consultation order.
   void register(PlayerAdapterRegistration registration) {
-    _entries[registration.id] = registration;
+    final id = registration.id;
+
+    if (id.trim().isEmpty) {
+      throw ArgumentError.value(id, 'registration.id', 'Backend id must not be blank.');
+    }
+
+    _entries[id] = registration;
   }
 
   /// Removes adapter registration.

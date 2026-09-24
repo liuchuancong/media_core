@@ -31,7 +31,7 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
   }
 
   @override
-  bool supports(String id) => id == kMediaKitPlayerBackendId || id.isEmpty;
+  bool supports(String id) => id == kMediaKitPlayerBackendId;
 
   /// Builds a registration entry for `PlayerKernel.registerBackend` or
   /// a [PlayerAdapterRegistry]. That path carries [capabilities] on the
