@@ -174,6 +174,21 @@ final class PlayerHandle {
   /// Player policy applied to this handle.
   final PlayerPolicy policy;
 
+  /// Volume queued by a caller before the source was ready.
+  ///
+  /// `setVolume` used to require an open source and throw otherwise.
+  /// That contract is wrong for callers that legitimately race the
+  /// source-open (engine switches, autoplay paths): they would fail
+  /// the whole switch with a `StateError` even though the adapter was
+  /// still opening. The value is now remembered here and applied at
+  /// the end of [open], after the adapter has accepted the source.
+  double? _pendingVolume;
+
+  /// Playback rate queued by a caller before the source was ready.
+  ///
+  /// See [_pendingVolume].
+  double? _pendingRate;
+
   // ---------------------------------------------------------------------------
   // Identity and state
   // ---------------------------------------------------------------------------
@@ -534,6 +549,48 @@ final class PlayerHandle {
         }
       }
 
+      // ---------------------------------------------------------------------
+      // Apply any volume / rate the caller queued while this source was
+      // still opening. The queued value is an explicit user choice and
+      // therefore wins over the config defaults applied above.
+      //
+      // This is what lets `setVolume` be safely called right after
+      // `play()` returned, before the adapter had actually accepted the
+      // source. Previously that path threw a `StateError` and tore down
+      // the whole engine switch.
+      // ---------------------------------------------------------------------
+      final queuedVolume = _pendingVolume;
+      if (queuedVolume != null && queuedVolume != config.volume) {
+        await _runtime.adapter.setVolume(queuedVolume);
+
+        if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
+          _backendReady = false;
+
+          try {
+            await _runtime.adapter.close();
+          } catch (_) {}
+
+          return;
+        }
+      }
+      _pendingVolume = null;
+
+      final queuedRate = _pendingRate;
+      if (queuedRate != null && queuedRate != config.playbackRate) {
+        await _runtime.adapter.setRate(queuedRate);
+
+        if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
+          _backendReady = false;
+
+          try {
+            await _runtime.adapter.close();
+          } catch (_) {}
+
+          return;
+        }
+      }
+      _pendingRate = null;
+
       _publish(PlayerEventType.source, <String, Object?>{
         'action': 'opened',
         'uri': source.uri.toString(),
@@ -709,11 +766,27 @@ final class PlayerHandle {
   }
 
   /// Sets the volume in the 0.0–1.0 range.
+  ///
+  /// This method may be called before the source has finished opening
+  /// (for example by an engine switch that calls it right after
+  /// `play()` returned). In that case the value is queued and applied
+  /// by [open] once the adapter has accepted the source. It never
+  /// throws merely because the source is not yet ready.
   Future<void> setVolume(double volume) {
     _ensureNotDisposed();
-    _ensureSource();
 
     final clamped = volume.clamp(0.0, 1.0);
+
+    // No source open yet: remember the value and let [open] apply it.
+    // The playback controller is updated immediately so consumers that
+    // read `playback.volume` (fallback re-attachment, snapshots) see the
+    // correct value even before the adapter accepts it.
+    if (_currentSource == null || !_backendReady) {
+      _pendingVolume = clamped;
+      _runtime.playback.apply(PlaybackCommand.volume(clamped));
+      return Future<void>.value();
+    }
+
     final operationGeneration = _captureOperationGeneration();
     final source = _currentSource!;
 
@@ -732,6 +805,7 @@ final class PlayerHandle {
         }
 
         _runtime.playback.apply(PlaybackCommand.volume(clamped));
+        _pendingVolume = null;
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -745,9 +819,17 @@ final class PlayerHandle {
   }
 
   /// Sets the playback rate.
+  ///
+  /// Mirrors [setVolume]: a rate set before the source is open is
+  /// queued and applied by [open].
   Future<void> setRate(double rate) {
     _ensureNotDisposed();
-    _ensureSource();
+
+    if (_currentSource == null || !_backendReady) {
+      _pendingRate = rate;
+      _runtime.playback.apply(PlaybackCommand.rate(rate));
+      return Future<void>.value();
+    }
 
     final operationGeneration = _captureOperationGeneration();
     final source = _currentSource!;
@@ -767,6 +849,7 @@ final class PlayerHandle {
         }
 
         _runtime.playback.apply(PlaybackCommand.rate(rate));
+        _pendingRate = null;
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
