@@ -22,7 +22,9 @@ import '../presentation/presentation_request.dart';
 import '../session/player_session.dart';
 import '../source/player_source.dart';
 import '../source/source_service.dart';
-import 'adapter_selector.dart';
+import '../diagnostics/log_category.dart';
+import '../diagnostics/media_core_log.dart';
+import '../adapter/player_adapter_selector.dart';
 import 'kernel_audio_driver.dart';
 import 'kernel_options.dart';
 import 'kernel_presentation_driver.dart';
@@ -45,8 +47,7 @@ import 'player_handle.dart';
 ///     ├── PlayerSession + SessionController
 ///     ├── PlaybackController
 ///     ├── LifecycleController
-///     ├── RecoveryManager (retry with backoff)
-///     ├── BackendFallback (switch backend on exhaust)
+///     ├── RecoveryLadder (report → escalate → reopen / next line / next backend)
 ///     ├── GlobalPlayerCoordinator (audio/page/resource/presentation)
 ///     ├── PlayerPool (instance reuse)
 ///     ├── PreloadManager (warm-up bookkeeping)
@@ -57,19 +58,21 @@ import 'player_handle.dart';
 ///
 /// - create and release players
 /// - select backends for sources
-/// - drive fallback across backends
+/// - provide the per-player recovery context (registry, selector, budget)
 /// - expose a global event stream
 ///
 /// It does not:
 ///
 /// - decode media
 /// - own per-player playback state
+/// - drive recovery across backends
 /// - render video
 ///
 /// Those belong to:
 ///
 /// - PlayerAdapter
 /// - PlayerHandle / PlaybackController
+/// - RecoveryLadder
 /// - presentation widgets
 ///
 /// Example:
@@ -155,13 +158,35 @@ final class PlayerKernel {
   // ---------------------------------------------------------------------------
 
   /// Registers a backend.
+  ///
+  /// Logged at info: which backends exist and with what priority is the
+  /// first question behind "why is this engine playing?", and the answer
+  /// has to be visible without reading the application's setup code.
   void registerBackend(PlayerAdapterRegistration registration) {
     registry.register(registration);
+
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'backend registered: ${registration.id} (priority ${registration.priority}'
+          '${registration.enabled ? '' : ', disabled'})',
+      fields: <String, Object?>{
+        'registered': registry.ids.toList(),
+        'live': registration.capabilities.supportsLive,
+        'protocols': registration.capabilities.supportedProtocols.toList(),
+        'formats': registration.capabilities.supportedFormats.toList(),
+      },
+    );
   }
 
   /// Removes a backend registration.
   void unregisterBackend(String id) {
     registry.unregister(id);
+
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'backend unregistered: $id',
+      fields: <String, Object?>{'registered': registry.ids.toList()},
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -189,6 +214,20 @@ final class PlayerKernel {
       preferredId: preferredBackend,
     );
 
+    MediaCoreLog.info(
+      LogCategory.player,
+      'create: backend "${registration.id}"'
+          '${preferredBackend == null ? ' (selected by score)' : ' (requested: $preferredBackend)'}'
+          ' for ${effectiveSource?.uri ?? '<no source>'}',
+      fields: <String, Object?>{
+        'backend': registration.id,
+        'preferredBackend': preferredBackend,
+        'registered': registry.ids.toList(),
+        'autoPlay': config.autoPlay,
+        'scores': selector.scoreTable(effectiveSource ?? PlayerSource.unknown()),
+      },
+    );
+
     final player = Player.create();
     final sessionId = SessionId.generate();
     final adapter = registration.factory.create(registration.id);
@@ -212,7 +251,9 @@ final class PlayerKernel {
       eventBus: _eventBus,
       options: options,
       config: config,
-      onFallbackRequested: _onFallbackRequested,
+      registry: registry,
+      selector: selector,
+      recoveryPolicy: options.recoveryPolicy,
     );
 
     await handle.initialize();
@@ -470,76 +511,16 @@ final class PlayerKernel {
   }
 
   // ---------------------------------------------------------------------------
-  // Fallback
+  // Recovery
+  //
+  // The kernel no longer runs a fallback loop. It used to: when a handle
+  // exhausted its own recovery, the kernel walked the registry and called
+  // `handle.attachAdapter` in a while loop, invalidating whatever
+  // recovery the handle was still running. Backend switching is now the
+  // ladder's `nextBackend` rung, executed by the handle that owns the
+  // backend — the kernel only supplies the registry and selector the
+  // handle draws candidates from.
   // ---------------------------------------------------------------------------
-
-  Future<void> _onFallbackRequested(PlayerHandle handle, String message) async {
-    final config = handle.config;
-    final maxAttempts = config.maxFallbackAttempts;
-
-    if (!options.enableFallback || !config.enableFallback || maxAttempts <= 0) {
-      _publishFatal(handle, message);
-      return;
-    }
-
-    final candidates = registry.registrations
-        .where((registration) => registration.enabled && registration.id != handle.backendId)
-        .toList()
-      ..sort((a, b) => b.priority.compareTo(a.priority));
-
-    if (candidates.isEmpty) {
-      _publishFatal(handle, message);
-      return;
-    }
-
-    handle.backendFallback.start(
-      candidates.map((registration) => registration.id).toList(),
-      currentBackend: handle.backendId,
-    );
-
-    var attempts = 0;
-    while (handle.backendFallback.canFallback && attempts < maxAttempts) {
-      final nextId = handle.backendFallback.next();
-      if (nextId == null) {
-        break;
-      }
-
-      final registration = registry.get(nextId);
-      if (registration == null) {
-        handle.markBackendFailed();
-        continue;
-      }
-
-      attempts++;
-      try {
-        await handle.attachAdapter(registration);
-        handle.backendFallback.complete();
-        return;
-      } catch (_) {
-        handle.markBackendFailed();
-      }
-    }
-
-    _publishFatal(handle, message);
-  }
-
-  void _publishFatal(PlayerHandle handle, String message) {
-    _eventBus.publish(
-      PlayerErrorEvent(
-        error: message,
-        priority: EventPriority.critical,
-        context: EventContext(playerId: handle.id, sessionId: handle.sessionId),
-      ),
-    );
-    _eventBus.publish(
-      GenericPlayerEvent(
-        type: PlayerEventType.fallback,
-        data: const <String, Object?>{'action': 'exhausted'},
-        priority: EventPriority.critical,
-        context: EventContext(playerId: handle.id, sessionId: handle.sessionId),
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Internals

@@ -47,7 +47,53 @@ enum SourceProtocol {
   asset,
 
   /// Application-defined protocol.
-  custom,
+  custom;
+
+  /// Attempts to infer a protocol from a URI scheme.
+  ///
+  /// Lives on the enum rather than in the extension so callers reach it as
+  /// `SourceProtocol.fromScheme(...)` — a source builder has to be able to
+  /// declare a protocol without importing an extension by name.
+  static SourceProtocol fromScheme(String? scheme) {
+    final value = scheme?.trim().toLowerCase();
+
+    switch (value) {
+      case 'http':
+        return SourceProtocol.http;
+
+      case 'https':
+        return SourceProtocol.https;
+
+      case 'hls':
+        return SourceProtocol.hls;
+
+      case 'dash':
+        return SourceProtocol.dash;
+
+      case 'rtmp':
+      case 'rtmps':
+        return SourceProtocol.rtmp;
+
+      case 'rtsp':
+      case 'rtsps':
+        return SourceProtocol.rtsp;
+
+      case 'webrtc':
+        return SourceProtocol.webrtc;
+
+      case 'udp':
+        return SourceProtocol.udp;
+
+      case 'file':
+        return SourceProtocol.file;
+
+      case 'asset':
+        return SourceProtocol.asset;
+
+      default:
+        return SourceProtocol.unknown;
+    }
+  }
 }
 
 /// Extensions for [SourceProtocol].
@@ -208,45 +254,4 @@ extension SourceProtocolX on SourceProtocol {
   /// Returns the stable string representation of this protocol.
   String get value => name;
 
-  /// Attempts to infer a protocol from a URI scheme.
-  static SourceProtocol fromScheme(String? scheme) {
-    final value = scheme?.trim().toLowerCase();
-
-    switch (value) {
-      case 'http':
-        return SourceProtocol.http;
-
-      case 'https':
-        return SourceProtocol.https;
-
-      case 'hls':
-        return SourceProtocol.hls;
-
-      case 'dash':
-        return SourceProtocol.dash;
-
-      case 'rtmp':
-      case 'rtmps':
-        return SourceProtocol.rtmp;
-
-      case 'rtsp':
-      case 'rtsps':
-        return SourceProtocol.rtsp;
-
-      case 'webrtc':
-        return SourceProtocol.webrtc;
-
-      case 'udp':
-        return SourceProtocol.udp;
-
-      case 'file':
-        return SourceProtocol.file;
-
-      case 'asset':
-        return SourceProtocol.asset;
-
-      default:
-        return SourceProtocol.unknown;
-    }
-  }
 }

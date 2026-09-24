@@ -4,7 +4,6 @@
 /// into one working player framework.
 library;
 
-export 'adapter_selector.dart';
 export 'kernel_audio_driver.dart';
 export 'kernel_options.dart';
 export 'kernel_presentation_driver.dart';

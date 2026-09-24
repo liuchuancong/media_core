@@ -21,6 +21,8 @@ export 'diagnostics_event.dart';
 export 'diagnostics_manager.dart';
 export 'log_category.dart';
 export 'log_level.dart';
+export 'log_console_sink.dart';
+export 'media_core_log.dart';
 export 'memory_monitor.dart';
 export 'memory_snapshot.dart';
 export 'network_diagnostics.dart';

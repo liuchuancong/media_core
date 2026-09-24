@@ -2,7 +2,17 @@
 
 /// Public library for the `recovery` module.
 ///
-/// Playback recovery, retry scheduling and recovery state..
+/// Playback recovery: one escalation ladder per failure.
+///
+/// The ladder owns the decision (reopen, next line, next backend,
+/// backoff, give up) and drives a `RecoveryTarget` for execution, so the
+/// physical operations stay in the layer that owns the backend.
+///
+/// Retry scheduling and `RecoveryManager` are gone: they were a second,
+/// parallel decision path that raced the ladder's. Historical shapes that
+/// are still useful for diagnostics (`RecoveryState`,
+/// `RecoverySnapshot`, `RecoveryAction`, `RecoveryReason`,
+/// `RecoveryContext`) are kept below.
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/recovery/`.
@@ -16,11 +26,24 @@ library;
 // Public exports
 // ============================================================================
 
+// The ladder: one decision point per failure.
+export 'recovery_ladder.dart';
+export 'recovery_ladder_event.dart';
+export 'recovery_policy.dart';
+
+// What the ladder decides with.
+export 'recovery_budget.dart';
+export 'recovery_candidate_provider.dart';
+export 'recovery_failure.dart';
+export 'recovery_session.dart';
+export 'recovery_step.dart';
+
+// What the ladder drives.
+export 'recovery_target.dart';
+
+// Diagnostics. Not part of the decision path.
 export 'recovery_action.dart';
 export 'recovery_context.dart';
-export 'recovery_manager.dart';
 export 'recovery_reason.dart';
 export 'recovery_snapshot.dart';
 export 'recovery_state.dart';
-export 'retry_scheduler.dart';
-export 'retry_state.dart';

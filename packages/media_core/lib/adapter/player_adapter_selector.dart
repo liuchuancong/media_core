@@ -1,7 +1,9 @@
 import '../source/player_source.dart';
 import '../source/source_protocol.dart';
 import '../source/source_format.dart';
-import '../adapter/player_adapter_registry.dart';
+import 'player_adapter_registry.dart';
+import '../diagnostics/log_category.dart';
+import '../diagnostics/media_core_log.dart';
 
 /// Selects the best adapter registration for a media source.
 ///
@@ -42,13 +44,37 @@ final class PlayerAdapterSelector {
   PlayerAdapterRegistration? select(PlayerSource source, {String? preferredId}) {
     if (preferredId != null) {
       final preferred = registry.get(preferredId);
+
       if (preferred != null && preferred.enabled) {
+        // A preference is not a hint: it wins without consulting scores.
+        // Logged because "why is this backend playing?" is otherwise
+        // unanswerable from the outside.
+        MediaCoreLog.info(
+          LogCategory.fallback,
+          'backend selection: preferred backend "$preferredId" selected',
+          fields: <String, Object?>{'uri': source.uri.toString(), 'preferred': preferredId},
+        );
+
         return preferred;
       }
+
+      MediaCoreLog.warning(
+        LogCategory.fallback,
+        'backend selection: preferred backend "$preferredId" is '
+            '${preferred == null ? 'not registered' : 'disabled'} — falling back to scoring',
+        fields: <String, Object?>{'uri': source.uri.toString(), 'registered': registry.ids.toList()},
+      );
     }
 
     final candidates = candidatesFor(source);
+
     if (candidates.isEmpty) {
+      MediaCoreLog.error(
+        LogCategory.fallback,
+        'backend selection: no enabled backend can handle the source',
+        fields: <String, Object?>{'uri': source.uri.toString(), 'registered': registry.ids.toList()},
+      );
+
       return null;
     }
 
@@ -62,6 +88,18 @@ final class PlayerAdapterSelector {
         best = candidate;
       }
     }
+
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'backend selection: ${best?.id} selected (score $bestScore)',
+      fields: <String, Object?>{
+        'uri': source.uri.toString(),
+        'protocol': source.protocol.name,
+        'format': source.format.name,
+        'live': source.isLive,
+        'scores': _scoreTable(candidates, source),
+      },
+    );
 
     return best;
   }
@@ -89,7 +127,52 @@ final class PlayerAdapterSelector {
         if (byScore != 0) return byScore;
         return b.priority.compareTo(a.priority);
       });
+
+    final table = capable
+        .map((registration) => '${registration.id}:${score(registration, source)}')
+        .join(', ');
+
+    MediaCoreLog.debug(
+      LogCategory.fallback,
+      'backend candidates: $table',
+      fields: <String, Object?>{'uri': source.uri.toString(), 'live': source.isLive},
+    );
+
     return capable;
+  }
+
+  /// Renders every candidate with its score breakdown.
+  ///
+  /// The breakdown is what turns "why this backend?" into an answer: it
+  /// shows the priority each registration carries and which capability
+  /// bonuses it earned, so a surprising winner is visible as a number
+  /// rather than as a mystery.
+  List<Map<String, Object?>> scoreTable(PlayerSource source) => _scoreTable(registry.registrations, source);
+
+  List<Map<String, Object?>> _scoreTable(Iterable<PlayerAdapterRegistration> registrations, PlayerSource source) {
+    final table = <Map<String, Object?>>[];
+
+    for (final registration in registrations) {
+      final capabilities = registration.capabilities;
+      final protocolMatch =
+          source.protocol != SourceProtocol.unknown && capabilities.supportsProtocol(source.protocol.name);
+      final formatMatch = source.format != SourceFormat.unknown && capabilities.supportsFormat(source.format.name);
+      final liveMatch = source.isLive && capabilities.supportsLive;
+
+      table.add(<String, Object?>{
+        'id': registration.id,
+        'enabled': registration.enabled,
+        'priority': registration.priority,
+        'protocolMatch': protocolMatch,
+        'formatMatch': formatMatch,
+        'liveMatch': liveMatch,
+        'score': score(registration, source),
+      });
+    }
+
+    table.sort((a, b) => (b['score']! as int).compareTo(a['score']! as int));
+
+    return table;
   }
 
   /// Scores one registration against [source].

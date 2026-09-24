@@ -7,6 +7,7 @@ import '../core/player_config.dart';
 import '../event/player_event.dart';
 import '../identity/player_id.dart';
 import '../event/event_context.dart';
+import '../identity/source_id.dart';
 import '../identity/session_id.dart';
 import '../event/event_priority.dart';
 import '../policy/player_policy.dart';
@@ -20,12 +21,15 @@ import '../session/player_session.dart';
 import '../event/player_event_type.dart';
 import '../playback/playback_state.dart';
 import '../session/session_context.dart';
-import '../recovery/recovery_reason.dart';
+import '../recovery/recovery_step.dart';
 import '../session/session_snapshot.dart';
-import '../fallback/backend_fallback.dart';
 import '../playback/playback_command.dart';
-import '../recovery/recovery_context.dart';
-import '../recovery/recovery_manager.dart';
+import '../recovery/recovery_budget.dart';
+import '../recovery/recovery_policy.dart';
+import '../recovery/recovery_target.dart';
+import '../recovery/recovery_failure.dart';
+import '../recovery/recovery_ladder.dart';
+import '../recovery/recovery_session.dart';
 import '../recovery/recovery_snapshot.dart';
 import '../session/session_controller.dart';
 import '../geometry/geometry_controller.dart';
@@ -38,12 +42,38 @@ import '../lifecycle/lifecycle_controller.dart';
 import '../platform/platform_capabilities.dart';
 import '../adapter/player_adapter_registry.dart';
 import '../operation/operation_cancel_token.dart';
+import '../diagnostics/log_level.dart';
+import '../diagnostics/log_category.dart';
+import '../diagnostics/media_core_log.dart';
 import '../adapter/player_adapter_capabilities.dart';
+import '../recovery/recovery_ladder_event.dart';
+import '../recovery/recovery_candidate_provider.dart';
+import '../adapter/player_adapter_selector.dart';
 import 'package:media_core/kernel/player_handle_snapshot.dart';
 
-/// Callback invoked when a handle exhausted recovery and wants
-/// the kernel to attempt a backend fallback.
-typedef PlayerFallbackRequest = void Function(PlayerHandle handle, String message);
+/// Describes the backend a handle just switched to.
+///
+/// Emitted on [PlayerHandle.backendChanges] when the recovery ladder
+/// attaches another backend. Consumers that keep per-adapter state
+/// (watchdog capability snapshots, custom overlays) re-read it from
+/// [adapter] instead of holding on to the previous adapter instance,
+/// which is already disposed by the time the change is published.
+final class PlayerBackendChange {
+  /// Creates a backend change record.
+  const PlayerBackendChange({required this.from, required this.to, required this.adapter});
+
+  /// Backend that was attached before the change.
+  final String from;
+
+  /// Backend that is attached now.
+  final String to;
+
+  /// The newly attached adapter.
+  final PlayerAdapter adapter;
+
+  @override
+  String toString() => 'PlayerBackendChange($from → $to)';
+}
 
 /// Runtime facade for one logical player.
 ///
@@ -56,15 +86,14 @@ typedef PlayerFallbackRequest = void Function(PlayerHandle handle, String messag
 ///       │                        └──▶ (adapter-scoped bindings)
 ///       │
 ///       └── PlayerHandle ────────▶ LifecycleController
-///                                  RecoveryManager
-///                                  BackendFallback
+///                                  RecoveryLadder
 ///                                  PlayerEventBus
 /// ```
 ///
 /// Responsibilities:
 ///
 /// - forward playback commands to the runtime's adapter
-/// - own the per-player recovery / fallback lifecycle
+/// - execute the recovery ladder's steps
 /// - publish normalized events
 /// - serialize backend operations
 /// - protect backend operations with lifecycle generations
@@ -73,15 +102,31 @@ typedef PlayerFallbackRequest = void Function(PlayerHandle handle, String messag
 ///
 /// - own the adapter, session or per-runtime controllers
 ///   (those belong to [PlayerRuntime])
+/// - decide when to reopen, switch source or switch backend
+///   (that belongs to [RecoveryLadder] and [RecoveryLadderPolicy])
 /// - select or create adapters
-/// - choose fallback candidates
 ///
 /// Those belong to:
 ///
 /// - PlayerRuntime
+/// - RecoveryLadder
 /// - PlayerAdapterSelector
 /// - PlayerKernel
-final class PlayerHandle {
+///
+/// ## Recovery boundary
+///
+/// The handle is the *execution* side of recovery: it implements
+/// [RecoveryTarget] and owns the [RecoveryLadder] that decides. Nothing
+/// else may start a recovery — consumers report a failure through
+/// [reportFailure] and observe what the ladder decided through
+/// [recoveryEvents].
+///
+/// This is deliberate. One failure used to be handled by the handle's
+/// own retry loop, the kernel's fallback loop and the live controller's
+/// ladder at the same time, and each of the three invalidated the
+/// others' operations, so a single fault produced a storm of adapter
+/// create/dispose cycles. One decision point, many reporters.
+final class PlayerHandle implements RecoveryTarget {
   /// Creates a handle. Prefer [PlayerKernel.create] over calling
   /// this directly.
   PlayerHandle({
@@ -93,13 +138,18 @@ final class PlayerHandle {
     required KernelOptions options,
     this.config = PlayerConfig.defaults,
     this.policy = const PlayerPolicy(),
-    PlayerFallbackRequest? onFallbackRequested,
+    PlayerAdapterRegistry? registry,
+    PlayerAdapterSelector? selector,
+    RecoveryLadderPolicy? recoveryPolicy,
+    RecoveryBudget? recoveryBudget,
   }) : _player = player,
        _registration = registration,
        _adapterContext = adapterContext,
        _eventBus = eventBus,
        _options = options,
-       _onFallbackRequested = onFallbackRequested,
+       _registry = registry,
+       _selector = selector,
+       _budget = recoveryBudget ?? _budgetFor(options, config),
        _runtime = PlayerRuntime(
          adapter: adapter,
          session: PlayerSession(
@@ -114,6 +164,15 @@ final class PlayerHandle {
            ),
          ),
        ) {
+    _ladder = RecoveryLadder(
+      target: this,
+      candidates: _HandleRecoveryCandidates(this),
+      policy: recoveryPolicy ?? const DefaultRecoveryLadderPolicy(),
+      budget: _budget,
+    );
+
+    _ladderEvents = _ladder.events.listen(_onLadderEvent);
+
     _subscribeAdapter(_runtime.adapter);
   }
 
@@ -121,7 +180,9 @@ final class PlayerHandle {
   final PlayerAdapterContext _adapterContext;
   final PlayerEventBus _eventBus;
   final KernelOptions _options;
-  final PlayerFallbackRequest? _onFallbackRequested;
+  final PlayerAdapterRegistry? _registry;
+  final PlayerAdapterSelector? _selector;
+  final RecoveryBudget _budget;
 
   final PlayerRuntime _runtime;
 
@@ -129,12 +190,40 @@ final class PlayerHandle {
   PlayerSource? _currentSource;
 
   final LifecycleController _lifecycle = LifecycleController();
-  final RecoveryManager _recovery = RecoveryManager();
-  final BackendFallback _backendFallback = BackendFallback();
+
+  /// The single decision point for recovery on this player.
+  late final RecoveryLadder _ladder;
+
+  late final StreamSubscription<RecoveryLadderEvent> _ladderEvents;
+
+  final StreamController<PlayerBackendChange> _backendChanges = StreamController<PlayerBackendChange>.broadcast();
+  final StreamController<PlayerSource?> _sourceChanges = StreamController<PlayerSource?>.broadcast();
+
+  /// Adapter events of whichever adapter is currently attached.
+  ///
+  /// Broadcast, so several consumers can listen, and — unlike
+  /// `adapter.events` — stable across backend swaps: a listener stays
+  /// bound to this handle and therefore keeps receiving events after
+  /// recovery swapped the backend underneath it.
+  final StreamController<PlayerAdapterEvent> _adapterEvents = StreamController<PlayerAdapterEvent>.broadcast();
+
+  /// Alternative sources the caller allows recovery to fall back to.
+  ///
+  /// Set through [setSourceCandidates]: the handle cannot know that a
+  /// live stream carries several lines unless the caller says so.
+  List<PlayerSource> _sourceCandidates = const <PlayerSource>[];
 
   StreamSubscription<PlayerAdapterEvent>? _adapterSubscription;
 
   bool _disposed = false;
+
+  /// Track preference applied to whichever adapter is attached.
+  ///
+  /// Preserved by the handle for the same reason volume and rate are:
+  /// recovery can replace the adapter without the owner of the
+  /// preference being involved, and a freshly attached engine would
+  /// otherwise come back with video enabled.
+  bool _audioOnly = false;
 
   /// Whether the currently attached adapter has an opened source.
   ///
@@ -250,7 +339,7 @@ final class PlayerHandle {
     playback: _runtime.playback.snapshot,
     geometry: _runtime.geometry.snapshot,
     lifecycle: _lifecycle.snapshot,
-    recovery: _recovery.snapshot,
+    recovery: _ladder.snapshot,
     disposed: _disposed,
   );
 
@@ -258,10 +347,10 @@ final class PlayerHandle {
   LifecycleSnapshot get lifecycle => _lifecycle.snapshot;
 
   /// Recovery snapshot.
-  RecoverySnapshot get recovery => _recovery.snapshot;
-
-  /// Backend fallback coordinator owned by this handle.
-  BackendFallback get backendFallback => _backendFallback;
+  ///
+  /// Diagnostic view of the ladder: what it is working on, how far it
+  /// got, and whether it gave up. Decisions are not driven from here.
+  RecoverySnapshot get recovery => _ladder.snapshot;
 
   /// Whether this handle has been disposed.
   bool get disposed => _disposed;
@@ -281,11 +370,126 @@ final class PlayerHandle {
   /// The lifecycle controller owned by this handle.
   LifecycleController get lifecycleController => _lifecycle;
 
-  /// The recovery manager owned by this handle.
-  RecoveryManager get recoveryManager => _recovery;
+  /// The recovery ladder owned by this handle.
+  ///
+  /// Exposed for diagnostics and for tests that want to await
+  /// [RecoveryLadder.settled]. Recovery is driven by reporting failures
+  /// through [reportFailure], not by calling the ladder directly.
+  RecoveryLadder get recoveryLadder => _ladder;
 
   /// The runtime composition root owned by this handle.
   PlayerRuntime get runtime => _runtime;
+
+  // ---------------------------------------------------------------------------
+  // Recovery boundary
+  // ---------------------------------------------------------------------------
+
+  /// Decision events of the recovery ladder.
+  ///
+  /// The observability contract of recovery: one event per rung the
+  /// ladder climbs, plus a terminal event. A consumer that needs to know
+  /// whether recovery gave up subscribes here.
+  Stream<RecoveryLadderEvent> get recoveryEvents => _ladder.events;
+
+  /// Adapter events of the currently attached adapter.
+  ///
+  /// Stays valid across backend swaps, unlike `adapter.events`.
+  Stream<PlayerAdapterEvent> get adapterEvents => _adapterEvents.stream;
+
+  /// Emitted whenever a different backend is attached.
+  Stream<PlayerBackendChange> get backendChanges => _backendChanges.stream;
+
+  /// Emitted whenever the open source changes.
+  ///
+  /// A recovery step that switches to another line changes the source
+  /// without the caller asking, so callers that display or reference the
+  /// current source must follow this stream instead of remembering what
+  /// they passed to [open].
+  Stream<PlayerSource?> get sourceChanges => _sourceChanges.stream;
+
+  /// Failure the ladder is currently working on, if any.
+  RecoveryFailure? get recoveryFailure => _ladder.failure;
+
+  /// Decision context of the current recovery, if any.
+  RecoverySession? get recoverySession => _ladder.session;
+
+  /// Budget the ladder runs with.
+  RecoveryBudget get recoveryBudget => _budget;
+
+  /// Whether playback is restricted to the audio track.
+  bool get audioOnly => _audioOnly;
+
+  /// Declares the alternative sources recovery may fall back to.
+  ///
+  /// The caller owns this list — for live playback it is the line list of
+  /// the current request. Passing an empty list disables the next-line
+  /// rung, which is the correct behaviour for a single-URL source.
+  void setSourceCandidates(List<PlayerSource> candidates) {
+    _sourceCandidates = List<PlayerSource>.unmodifiable(candidates);
+  }
+
+  /// Restricts playback to the audio track on whichever adapter is
+  /// attached.
+  ///
+  /// Remembered by the handle, not by the caller: the ladder can attach
+  /// another adapter without the caller being involved, and a fresh
+  /// engine must not silently restore video. Applied again by [open] and
+  /// after every backend swap.
+  Future<void> setAudioOnly(bool audioOnly) {
+    _ensureNotDisposed();
+
+    _audioOnly = audioOnly;
+
+    return _applyAudioOnly(_runtime.adapter);
+  }
+
+  /// Reports a failure for recovery.
+  ///
+  /// This is the only entry point into recovery. Returns `true` when the
+  /// ladder accepted the report — a run started, or it was already
+  /// escalating and the report was folded into it. Returns `false` when
+  /// the ladder refused it (already running, suspended, or out of
+  /// budget), which is not an error: a second recovery for a failure
+  /// that is already being recovered is exactly the duplicate work this
+  /// design removes.
+  bool reportFailure(RecoveryFailure failure, {RecoveryFailureSource source = RecoveryFailureSource.unknown}) {
+    _ensureNotDisposed();
+
+    final report = failure
+        .copyWith(source: failure.source == RecoveryFailureSource.unknown ? source : failure.source)
+        .enriched(
+          sourceId: _currentSource?.id,
+          backendId: _registration.id,
+          generationId: _runtime.session.generation.id,
+          uri: _currentSource?.uri.toString(),
+        );
+
+    final accepted = _ladder.report(report);
+
+    MediaCoreLog.log(
+      accepted ? LogLevel.info : LogLevel.debug,
+      LogCategory.recovery,
+      'failure reported by ${report.source.name}: ${report.code.value} '
+          '(${report.effectiveReason})${accepted ? ' -> recovery started' : ' -> no recovery (see preceding reason)'}',
+      fields: <String, Object?>{
+        'message': report.message,
+        'backend': report.backendId,
+        'uri': report.uri,
+        'stableKey': report.stableKey,
+        'accepted': accepted,
+      },
+    );
+
+    _publish(PlayerEventType.recovery, <String, Object?>{
+      'action': accepted ? 'reported' : 'ignored',
+      'code': report.code.value,
+      'reason': report.effectiveReason.toString(),
+      'reporter': report.source.name,
+      'stableKey': report.stableKey,
+    });
+
+    return accepted;
+  }
 
   // ---------------------------------------------------------------------------
   // Operation lifecycle
@@ -428,16 +632,79 @@ final class PlayerHandle {
   /// [PlayerRuntime]: the adapter's event stream is broadcast, so all
   /// three consumers receive events independently. This subscription
   /// handles only handle-level concerns — session transitions,
-  /// recovery, fallback, event bus publication and completion. The
-  /// bindings handle playback and geometry state.
+  /// recovery, event bus publication and completion. The bindings
+  /// handle playback and geometry state.
+  ///
+  /// It also feeds [adapterEvents], which is how consumers survive a
+  /// backend swap: they listen to the handle once, and the handle is the
+  /// only place that re-subscribes when the adapter instance is
+  /// replaced.
   void _subscribeAdapter(PlayerAdapter adapter) {
     _adapterSubscription = adapter.events.listen((event) {
       if (_disposed || !identical(adapter, _runtime.adapter)) {
         return;
       }
 
+      if (!_adapterEvents.isClosed) {
+        _adapterEvents.add(event);
+      }
+
       _onAdapterEvent(event);
     }, onError: (_) {});
+  }
+
+  /// Replaces the active adapter and moves the handle's own subscription
+  /// to it.
+  ///
+  /// The runtime swaps its bindings; this covers the handle's
+  /// subscription, the registration record and the consumers of
+  /// [adapterEvents] and [backendChanges].
+  Future<void> _installAdapter(PlayerAdapter next, PlayerAdapterRegistration registration) async {
+    final previous = _runtime.adapter;
+    final previousSubscription = _adapterSubscription;
+
+    _adapterSubscription = null;
+    _registration = registration;
+
+    // Detach the handle's listener before the runtime drops its
+    // bindings, so no event from the outgoing adapter reaches a
+    // half-swapped runtime.
+    await previousSubscription?.cancel();
+
+    await _runtime.replaceAdapter(next);
+
+    _subscribeAdapter(next);
+
+    if (!_backendChanges.isClosed) {
+      _backendChanges.add(PlayerBackendChange(from: previous.id, to: registration.id, adapter: next));
+    }
+  }
+
+  /// Applies the audio-only preference to [adapter] when it declares
+  /// the capability.
+  ///
+  /// Best effort: a track switch that fails does not invalidate the
+  /// playback that is already running, and the next open or swap applies
+  /// the preference again.
+  Future<void> _applyAudioOnly(PlayerAdapter adapter) async {
+    if (!adapter.capabilities.supportsAudioOnly) {
+      return;
+    }
+
+    try {
+      await adapter.setAudioOnly(_audioOnly);
+    } catch (_) {
+      // See above: the preference is re-applied on the next open/swap.
+    }
+  }
+
+  /// Publishes the source the handle is now playing.
+  void _announceSource(PlayerSource? source) {
+    if (_sourceChanges.isClosed) {
+      return;
+    }
+
+    _sourceChanges.add(source);
   }
 
   // ---------------------------------------------------------------------------
@@ -468,13 +735,25 @@ final class PlayerHandle {
 
     final operationGeneration = _invalidateOperations();
 
+    final sourceChanged = _currentSource?.id != source.id;
+
     _currentSource = source;
     _backendReady = false;
+
+    if (sourceChanged) {
+      _announceSource(source);
+    }
 
     return _enqueue(() async {
       if (!_isOperationCurrent(operationGeneration) || _disposed) {
         return;
       }
+
+      // A new source is a new recovery story: whatever the ladder was
+      // doing for the previous one is stale. This is also what makes the
+      // ladder safe to leave running — every lifecycle boundary resets it
+      // instead of racing it.
+      _ladder.reset();
 
       final generationId = _runtime.sessionController.recreateGeneration();
 
@@ -496,7 +775,9 @@ final class PlayerHandle {
         return;
       }
 
-      _recovery.reset();
+      // The ladder was already reset before the session generation was
+      // recreated, so it cannot be mid-step here.
+      _ladder.resume();
 
       try {
         await _runtime.adapter.open(source);
@@ -591,6 +872,28 @@ final class PlayerHandle {
       }
       _pendingRate = null;
 
+      // A fresh adapter starts with video enabled; re-assert the track
+      // preference so a recovering engine cannot turn video back on.
+      await _applyAudioOnly(_runtime.adapter);
+
+      if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
+        _backendReady = false;
+        return;
+      }
+
+      MediaCoreLog.info(
+        LogCategory.source,
+        'opened ${source.uri} on ${_registration.id}',
+        fields: <String, Object?>{
+          'player': _player.id.value,
+          'protocol': source.protocol.name,
+          'format': source.format.name,
+          'live': source.isLive,
+          'volume': config.volume,
+          'rate': config.playbackRate,
+        },
+      );
+
       _publish(PlayerEventType.source, <String, Object?>{
         'action': 'opened',
         'uri': source.uri.toString(),
@@ -621,6 +924,10 @@ final class PlayerHandle {
 
     return _enqueue(() async {
       try {
+        // An explicit play is a fresh recovery opportunity: it cancels a
+        // previous suspend (see [pause]).
+        _ladder.resume();
+
         await _playInternal(operationGeneration, token: token, source: source);
       } finally {
         _releaseOperationToken(token);
@@ -667,7 +974,9 @@ final class PlayerHandle {
 
     final source = _currentSource!;
 
-    _recovery.cancel();
+    // A user pause is a recovery boundary: recovery for playback the user
+    // just stopped is stale by definition.
+    _ladder.suspend();
     _cancelActiveOperation(StateError('Playback pause requested.'));
 
     return _enqueue(() async {
@@ -703,7 +1012,7 @@ final class PlayerHandle {
 
     final source = _currentSource;
 
-    _recovery.cancel();
+    _ladder.suspend();
     _cancelActiveOperation(StateError('Playback stop requested.'));
 
     return _enqueue(() async {
@@ -870,7 +1179,8 @@ final class PlayerHandle {
 
     _currentSource = null;
     _backendReady = false;
-    _recovery.cancel();
+    _ladder.reset();
+    _announceSource(null);
 
     _cancelActiveOperation(StateError('Player close requested.'));
 
@@ -919,7 +1229,7 @@ final class PlayerHandle {
 
     final source = _currentSource;
 
-    _recovery.cancel();
+    _ladder.suspend();
     _cancelActiveOperation(StateError('Player deactivation requested.'));
 
     return _enqueue(() async {
@@ -967,8 +1277,8 @@ final class PlayerHandle {
 
     _currentSource = null;
     _backendReady = false;
-    _recovery.cancel();
-    _backendFallback.reset();
+    _ladder.reset();
+    _announceSource(null);
 
     return _enqueue(() async {
       if (_disposed) return;
@@ -1006,9 +1316,14 @@ final class PlayerHandle {
     _currentSource = null;
     _backendReady = false;
 
+    MediaCoreLog.debug(
+      LogCategory.player,
+      'disposing player ${_player.id.value} (backend ${_registration.id})',
+    );
+
     _cancelActiveOperation(StateError('PlayerHandle for ${_player.id} is being disposed.'));
 
-    _recovery.cancel();
+    _ladder.suspend();
 
     // Stop handle-level adapter events first, then tear down the
     // runtime (which detaches its own bindings).
@@ -1027,8 +1342,11 @@ final class PlayerHandle {
       }
 
       // Handle-scoped modules.
-      await _recovery.dispose();
-      await _backendFallback.dispose();
+      await _ladderEvents.cancel();
+      await _ladder.dispose();
+      await _backendChanges.close();
+      await _sourceChanges.close();
+      await _adapterEvents.close();
 
       _lifecycle.dispose();
     }, allowDisposed: true);
@@ -1037,140 +1355,263 @@ final class PlayerHandle {
   }
 
   // ---------------------------------------------------------------------------
-  // Fallback
+  // Recovery execution (RecoveryTarget)
+  //
+  // The ladder decides; this section performs. Every physical recovery
+  // operation in the framework goes through one of these two methods, so
+  // there is exactly one place where a backend is reopened or replaced.
   // ---------------------------------------------------------------------------
 
-  /// Swaps the backend adapter to [registration].
-  ///
-  /// Called by the kernel during fallback. Preserves the current
-  /// source, position, volume, rate and play state.
-  Future<void> attachAdapter(PlayerAdapterRegistration registration) {
+  @override
+  bool get isRecoveryAvailable {
+    return !_disposed && _currentSource != null;
+  }
+
+  @override
+  Stream<RecoveryTargetEvent> get executionEvents => _targetEvents.stream;
+
+  final StreamController<RecoveryTargetEvent> _targetEvents = StreamController<RecoveryTargetEvent>.broadcast();
+
+  @override
+  RecoverySession buildRecoverySession(RecoveryFailure failure, RecoveryCandidates candidates) {
+    final current = _runtime.playback.current;
+
+    return RecoverySession(
+      failure: failure,
+      source: _currentSource,
+      sourceCandidates: candidates.sources,
+      backendCandidates: candidates.backends,
+      position: current.position,
+      wasPlaying: current.isPlaying,
+      volume: current.volume,
+      rate: current.rate,
+      backendId: _registration.id,
+      generationId: _runtime.session.generation.id,
+      attempt: _ladder.attempt,
+    );
+  }
+
+  @override
+  Future<void> reopenForRecovery(RecoveryStep step, RecoverySession session) {
     _ensureNotDisposed();
 
+    final source = step.source ?? session.source ?? _currentSource;
+
+    if (source == null) {
+      throw StateError('Recovery step ${step.label} has no source to open.');
+    }
+
+    return _reopenOnCurrentBackend(step, source, session);
+  }
+
+  @override
+  Future<void> swapToForRecovery(RecoveryStep step, RecoverySession session) {
+    _ensureNotDisposed();
+
+    final backendId = step.backendId;
+
+    if (backendId == null) {
+      throw StateError('Recovery step ${step.label} names no backend.');
+    }
+
+    final registration = _registry?.get(backendId);
+
+    if (registration == null) {
+      throw StateError('Backend "$backendId" is no longer registered.');
+    }
+
+    return _swapTo(step, registration, session);
+  }
+
+  /// Reopens a source on the currently attached backend.
+  ///
+  /// Serves both [RecoveryStepKind.sameBackendReopen] and
+  /// [RecoveryStepKind.nextLine]: the only difference is which source is
+  /// opened. A different source advances the session generation, because
+  /// a generation identifies one source lifecycle.
+  Future<void> _reopenOnCurrentBackend(RecoveryStep step, PlayerSource source, RecoverySession session) {
     final operationGeneration = _invalidateOperations();
+    final changedSource = _currentSource?.id != source.id;
 
-    _recovery.cancel();
+    _currentSource = source;
+    _backendReady = false;
 
-    final previous = _runtime.adapter;
-    final previousId = previous.id;
-    final wasPlaying = _runtime.playback.current.isPlaying;
-    final position = _runtime.playback.current.position;
-    final volume = _runtime.playback.current.volume;
-    final rate = _runtime.playback.current.rate;
-    final source = _currentSource;
+    if (changedSource) {
+      final generationId = _runtime.sessionController.recreateGeneration();
+
+      _runtime.session.updateContext(
+        SessionContext(
+          playerId: _player.id,
+          sessionId: _runtime.session.context.sessionId,
+          generationId: generationId,
+          sourceId: source.id,
+          source: source,
+          policy: policy,
+          platform: _runtime.session.context.platform,
+        ),
+      );
+
+      _announceSource(source);
+    }
 
     return _enqueue(() async {
+      if (!_isOperationCurrent(operationGeneration) || _disposed) {
+        throw StateError('Recovery reopen of ${source.uri} was superseded.');
+      }
+
+      _emitTargetEvent(RecoveryTargetEventKind.stepStarted, step, sourceId: source.id);
+
+      MediaCoreLog.info(
+        LogCategory.recovery,
+        'reopen on ${_registration.id}: ${source.uri}'
+            '${changedSource ? ' (new source)' : ' (same source)'}',
+        fields: <String, Object?>{
+          'step': step.label,
+          'wasPlaying': session.wasPlaying,
+          'positionMs': session.position.inMilliseconds,
+        },
+      );
+
+      try {
+        // A reopen starts from a clean backend: closing first is what
+        // makes this a recovery rather than a second open on a backend
+        // that is still holding the broken stream.
+        try {
+          await _runtime.adapter.close();
+        } catch (_) {
+          // Releasing an already released backend is not a reason to abort.
+        }
+
+        _backendReady = false;
+
+        if (!_isOperationCurrent(operationGeneration) || _disposed) {
+          throw StateError('Recovery reopen of ${source.uri} was superseded.');
+        }
+
+        await _runtime.sessionController.open();
+        await _runtime.adapter.open(source);
+
+        _backendReady = true;
+
+        await _restoreSession(session, source: source);
+        await _applyAudioOnly(_runtime.adapter);
+
+        _emitTargetEvent(
+          RecoveryTargetEventKind.stepSucceeded,
+          step,
+          sourceId: source.id,
+          position: session.position,
+        );
+
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'reopened',
+          'step': step.label,
+          'uri': source.uri.toString(),
+          'backend': _registration.id,
+        });
+      } catch (error, stackTrace) {
+        _backendReady = false;
+
+        _emitTargetEvent(
+          RecoveryTargetEventKind.stepFailed,
+          step,
+          sourceId: source.id,
+          message: '$error',
+          error: error,
+          stackTrace: stackTrace,
+        );
+
+        rethrow;
+      }
+    });
+  }
+
+  /// Attaches [registration] and opens the session's source on it.
+  ///
+  /// The previous backend is left untouched until the replacement has
+  /// proven itself: it is initialized, opened, positioned and playing
+  /// before the runtime is told to swap. A backend that fails to attach
+  /// therefore costs one adapter, not the playback.
+  Future<void> _swapTo(RecoveryStep step, PlayerAdapterRegistration registration, RecoverySession session) {
+    final operationGeneration = _invalidateOperations();
+    final source = step.source ?? session.source ?? _currentSource;
+    final previousId = _registration.id;
+
+    return _enqueue(() async {
+      if (!_isOperationCurrent(operationGeneration) || _disposed) {
+        throw StateError('Recovery backend swap to ${registration.id} was superseded.');
+      }
+
+      if (registration.id == previousId) {
+        throw StateError('Backend ${registration.id} is already attached.');
+      }
+
+      _emitTargetEvent(RecoveryTargetEventKind.stepStarted, step, backendId: registration.id, sourceId: source?.id);
+
+      MediaCoreLog.warning(
+        LogCategory.fallback,
+        'switching backend: $previousId -> ${registration.id}'
+            '${source == null ? ' (no source open)' : ' for ${source.uri}'}',
+        fields: <String, Object?>{
+          'step': step.label,
+          'reason': session.failure.code.value,
+          'reasonDetail': session.failure.message,
+          'reportedBy': session.failure.source.name,
+          'wasPlaying': session.wasPlaying,
+          'positionMs': session.position.inMilliseconds,
+        },
+      );
+
       final nextAdapter = registration.factory.create(registration.id);
 
       bool committed = false;
 
       try {
-        if (!_isOperationCurrent(operationGeneration) || _disposed) {
-          await nextAdapter.dispose();
-          return;
-        }
-
         await nextAdapter.initialize(_adapterContext);
 
         if (!_isOperationCurrent(operationGeneration) || _disposed) {
-          await nextAdapter.dispose();
-          return;
+          throw StateError('Recovery backend swap to ${registration.id} was superseded.');
         }
 
         if (source != null) {
           await nextAdapter.open(source);
-
-          if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
-            await nextAdapter.dispose();
-            return;
-          }
-
-          if (position > Duration.zero) {
-            await nextAdapter.seek(position);
-
-            if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
-              await nextAdapter.dispose();
-              return;
-            }
-          }
-
-          if (volume != 1.0) {
-            await nextAdapter.setVolume(volume);
-
-            if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
-              await nextAdapter.dispose();
-              return;
-            }
-          }
-
-          if (rate != 1.0) {
-            await nextAdapter.setRate(rate);
-
-            if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
-              await nextAdapter.dispose();
-              return;
-            }
-          }
-
-          if (wasPlaying) {
-            await nextAdapter.play();
-
-            if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
-              await nextAdapter.dispose();
-              return;
-            }
-          }
+          await _prepareStagedAdapter(nextAdapter, session);
         }
 
         if (!_isOperationCurrent(operationGeneration) || _disposed) {
-          await nextAdapter.dispose();
-          return;
+          throw StateError('Recovery backend swap to ${registration.id} was superseded.');
         }
 
-        if (source != null && !_isSourceCurrent(source)) {
-          await nextAdapter.dispose();
-          return;
-        }
-
-        // The replacement is fully prepared. Hand it to the runtime,
-        // which detaches the old bindings, swaps the adapter, and
-        // rebuilds the bindings against the new backend.
-        final previousSubscription = _adapterSubscription;
-
-        _registration = registration;
-
-        await _runtime.replaceAdapter(nextAdapter);
-
-        _backendReady = source != null;
-
-        // The handle's own adapter subscription also needs to move to
-        // the new adapter.
-        _adapterSubscription = null;
-
-        await previousSubscription?.cancel();
-
-        _subscribeAdapter(_runtime.adapter);
+        // The replacement is fully prepared: hand it to the runtime,
+        // which detaches the old bindings, swaps the adapter and rebuilds
+        // the bindings against the new backend.
+        await _installAdapter(nextAdapter, registration);
 
         committed = true;
 
-        try {
-          await previous.dispose();
-        } catch (_) {
-          // The new backend is already active. A failure while
-          // releasing the previous backend must not invalidate the
-          // replacement.
-        }
+        _currentSource = source;
+        _backendReady = source != null;
 
-        if (_disposed) return;
-        if (!_isOperationCurrent(operationGeneration)) return;
+        await _applyAudioOnly(nextAdapter);
+
+        _emitTargetEvent(
+          RecoveryTargetEventKind.stepSucceeded,
+          step,
+          backendId: registration.id,
+          sourceId: source?.id,
+          position: session.position,
+        );
 
         _publish(PlayerEventType.fallback, <String, Object?>{
           'action': 'backendAttached',
+          'step': step.label,
           'from': previousId,
           'to': registration.id,
         });
-      } catch (_) {
+      } catch (error, stackTrace) {
         if (!committed) {
+          // The previous backend is still attached and still owns its
+          // subscription: there is nothing to roll back.
           try {
             await nextAdapter.dispose();
           } catch (_) {
@@ -1178,14 +1619,205 @@ final class PlayerHandle {
           }
         }
 
+        _emitTargetEvent(
+          RecoveryTargetEventKind.stepFailed,
+          step,
+          backendId: registration.id,
+          sourceId: source?.id,
+          message: '$error',
+          error: error,
+          stackTrace: stackTrace,
+        );
+
         rethrow;
       }
     });
   }
 
-  /// Records that the current fallback target failed.
-  void markBackendFailed() {
-    _backendFallback.markFailed();
+  /// Sends the session state to a staged adapter before it goes live.
+  Future<void> _prepareStagedAdapter(PlayerAdapter adapter, RecoverySession session) async {
+    await _applyAudioOnly(adapter);
+
+    if (session.volume != 1.0) {
+      await adapter.setVolume(session.volume);
+    }
+
+    if (session.rate != 1.0) {
+      await adapter.setRate(session.rate);
+    }
+
+    if (session.position > Duration.zero) {
+      await adapter.seek(session.position);
+    }
+
+    if (session.wasPlaying) {
+      await adapter.play();
+    }
+  }
+
+  /// Restores the session state on the currently attached adapter.
+  ///
+  /// The runtime's own bindings mirror adapter events into the playback
+  /// and session controllers, but they never re-issue commands: after a
+  /// reopen the playback controller still reports whatever the user last
+  /// asked for, and it must be told to seek and resume again.
+  Future<void> _restoreSession(RecoverySession session, {required PlayerSource? source}) async {
+    final adapter = _runtime.adapter;
+
+    if (session.volume != 1.0) {
+      await adapter.setVolume(session.volume);
+    }
+
+    if (session.rate != 1.0) {
+      await adapter.setRate(session.rate);
+    }
+
+    if (session.position > Duration.zero) {
+      await adapter.seek(session.position);
+
+      await _runtime.playback.seek(session.position);
+    }
+
+    if (session.wasPlaying) {
+      await adapter.play();
+
+      await _runtime.playback.play();
+      await _runtime.sessionController.play();
+    } else {
+      await adapter.pause();
+
+      await _runtime.playback.pause();
+      await _runtime.sessionController.pause();
+    }
+  }
+
+  void _emitTargetEvent(
+    RecoveryTargetEventKind kind,
+    RecoveryStep step, {
+    SourceId? sourceId,
+    String? backendId,
+    String? message,
+    Object? error,
+    StackTrace? stackTrace,
+    Duration position = Duration.zero,
+  }) {
+    if (_targetEvents.isClosed) {
+      return;
+    }
+
+    _targetEvents.add(
+      RecoveryTargetEvent(
+        kind: kind,
+        step: step,
+        message: message,
+        error: error,
+        stackTrace: stackTrace,
+        sourceId: sourceId,
+        backendId: backendId,
+        position: position,
+      ),
+    );
+  }
+
+  /// Projects a ladder decision onto the event bus.
+  ///
+  /// The ladder stream is recovery's own diagnostic surface; the event
+  /// bus is the framework-wide one. Both are fed, because a consumer that
+  /// already tracks player events should not have to subscribe twice.
+  void _onLadderEvent(RecoveryLadderEvent event) {
+    if (_disposed) {
+      return;
+    }
+
+    switch (event) {
+      case RecoveryLadderStarted(failure: final failure, plan: final plan):
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'started',
+          'code': failure?.code.value,
+          'reason': failure?.effectiveReason.toString(),
+          'reporter': failure?.source.name,
+          'plan': plan.map((kind) => kind.name).toList(),
+          'budget': _budget.toMap(),
+        });
+
+      case RecoveryLadderStepStarted(step: final step, attempt: final attempt):
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'step',
+          'step': step?.label,
+          'kind': step?.kind.name,
+          'attempt': attempt,
+        });
+
+      case RecoveryLadderStepFailed(step: final step, failure: final failure, attempt: final attempt):
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'stepFailed',
+          'step': step?.label,
+          'attempt': attempt,
+          'code': failure?.code.value,
+          'message': failure?.message,
+        });
+
+      case RecoveryLadderCompleted(step: final step, attempt: final attempt):
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'completed',
+          'step': step?.label,
+          'attempt': attempt,
+        });
+
+      case RecoveryLadderExhausted(failure: final failure, attempt: final attempt, message: final message):
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'exhausted',
+          'attempts': attempt,
+          'reason': message,
+        });
+
+        _publishFatal(failure);
+
+      case RecoveryLadderCancelled(attempt: final attempt, message: final message):
+        _publish(PlayerEventType.recovery, <String, Object?>{
+          'action': 'cancelled',
+          'attempt': attempt,
+          'reason': message,
+        });
+    }
+  }
+
+  /// Publishes the terminal error of a player whose recovery gave up.
+  ///
+  /// This used to live in the kernel, which meant the kernel had to know
+  /// per-player recovery outcomes. The ladder reports it where it
+  /// happens; the kernel only aggregates the event bus.
+  void _publishFatal(RecoveryFailure? failure) {
+    MediaCoreLog.error(
+      LogCategory.recovery,
+      'recovery exhausted: playback is terminal'
+          '${failure == null ? '' : ' (${failure.code.value}: ${failure.message})'}',
+      fields: <String, Object?>{'backend': _registration.id, 'uri': _currentSource?.uri.toString()},
+    );
+
+    if (!_options.enableEventBus) {
+      return;
+    }
+
+    final message = failure?.message ?? 'Playback failed and recovery was exhausted.';
+
+    _eventBus.publish(
+      PlayerErrorEvent(
+        error: failure?.cause ?? message,
+        stackTrace: failure?.stackTrace,
+        priority: EventPriority.critical,
+        context: _buildContext(),
+      ),
+    );
+
+    _eventBus.publish(
+      GenericPlayerEvent(
+        type: PlayerEventType.fallback,
+        data: <String, Object?>{'action': 'exhausted', 'code': failure?.code.value, 'backend': _registration.id},
+        priority: EventPriority.critical,
+        context: _buildContext(),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1367,21 +1999,22 @@ final class PlayerHandle {
   }
 
   // ---------------------------------------------------------------------------
-  // Recovery
+  // Recovery reporting
   // ---------------------------------------------------------------------------
 
-  Future<void> _handleAdapterError(String message, Object? error, StackTrace? stackTrace) async {
+  /// Normalizes an adapter error into a recovery report.
+  ///
+  /// The handle does not decide anything here. It classifies the message
+  /// (recovery owns that normalization), publishes the error for the
+  /// event bus, and hands the failure to the ladder. Whether the player
+  /// reopens, switches line, switches backend or gives up is the ladder's
+  /// decision and nobody else's.
+  void _handleAdapterError(String message, Object? error, StackTrace? stackTrace) {
     if (_disposed) {
       return;
     }
 
-    final operationGeneration = _operationGeneration;
-    final source = _currentSource;
-
     _runtime.sessionController.error(message);
-    _recovery.cancel();
-
-    _cancelActiveOperation(StateError('Backend error: $message'));
 
     _eventBus.publish(
       PlayerErrorEvent(
@@ -1392,317 +2025,26 @@ final class PlayerHandle {
       ),
     );
 
-    final maxAttempts = config.maxRecoveryAttempts;
+    MediaCoreLog.warning(
+      LogCategory.error,
+      'adapter error on ${_registration.id}: $message',
+      error: error,
+      stackTrace: stackTrace,
+      fields: <String, Object?>{'recoveryEnabled': _options.enableRecovery && config.enableRecovery},
+    );
 
-    final canRecover =
-        _options.enableRecovery && config.enableRecovery && source != null && _backendReady && maxAttempts > 0;
-
-    final canFallback = _options.enableFallback && config.enableFallback;
-
-    if (!canRecover) {
-      if (canFallback && _isOperationCurrent(operationGeneration)) {
-        _onFallbackRequested?.call(this, message);
-      }
-
+    if (!_options.enableRecovery || !config.enableRecovery) {
       return;
     }
 
-    final generation = _runtime.session.generation.id;
-    final resumePosition = _runtime.playback.current.position;
-    final wasPlaying = _runtime.playback.current.isPlaying;
-
-    _recovery.start(
-      RecoveryContext(reason: _reasonFor(message), sourceId: source.id, generationId: generation, message: message),
+    reportFailure(
+      RecoveryFailure.fromMessage(
+        message,
+        error: error,
+        stackTrace: stackTrace,
+        source: RecoveryFailureSource.adapter,
+      ),
     );
-
-    _publish(PlayerEventType.recovery, <String, Object?>{
-      'action': 'started',
-      'attempt': 0,
-      'maxAttempts': maxAttempts,
-    });
-
-    _scheduleRecoveryRetry(
-      operationGeneration: operationGeneration,
-      generation: generation,
-      source: source,
-      resumePosition: resumePosition,
-      wasPlaying: wasPlaying,
-      message: message,
-      maxAttempts: maxAttempts,
-      delay: _options.retryBaseDelay,
-    );
-  }
-
-  void _scheduleRecoveryRetry({
-    required int operationGeneration,
-    required GenerationId generation,
-    required PlayerSource source,
-    required Duration resumePosition,
-    required bool wasPlaying,
-    required String message,
-    required int maxAttempts,
-    required Duration delay,
-  }) {
-    if (_disposed) {
-      return;
-    }
-
-    final retryToken = _createOperationToken();
-
-    _recovery.scheduleRetry(delay, () async {
-      try {
-        if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-          return;
-        }
-
-        if (!_runtime.session.isCurrentGeneration(generation)) {
-          return;
-        }
-
-        if (!_isSourceCurrent(source)) {
-          return;
-        }
-
-        if (!_backendReady) {
-          return;
-        }
-
-        await _enqueue(() async {
-          try {
-            if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-              return;
-            }
-
-            if (!_runtime.session.isCurrentGeneration(generation)) {
-              return;
-            }
-
-            if (!_isSourceCurrent(source)) {
-              return;
-            }
-
-            if (!_backendReady) {
-              return;
-            }
-
-            _publish(PlayerEventType.recovery, <String, Object?>{
-              'action': 'retry',
-              'attempt': _recovery.state.attempt,
-              'maxAttempts': maxAttempts,
-            });
-
-            _backendReady = false;
-
-            await retryToken.runChecked(() => _runtime.adapter.close());
-
-            if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-              return;
-            }
-
-            if (!_runtime.session.isCurrentGeneration(generation)) {
-              return;
-            }
-
-            if (!_isSourceCurrent(source)) {
-              return;
-            }
-
-            await retryToken.runChecked(() => _runtime.adapter.open(source));
-
-            if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-              _backendReady = false;
-              return;
-            }
-
-            if (!_runtime.session.isCurrentGeneration(generation)) {
-              _backendReady = false;
-              return;
-            }
-
-            if (!_isSourceCurrent(source)) {
-              _backendReady = false;
-              return;
-            }
-
-            _backendReady = true;
-
-            if (resumePosition > Duration.zero) {
-              await retryToken.runChecked(() => _runtime.adapter.seek(resumePosition));
-
-              if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_runtime.session.isCurrentGeneration(generation)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_isSourceCurrent(source)) {
-                _backendReady = false;
-                return;
-              }
-            }
-
-            if (config.volume != 1.0) {
-              await retryToken.runChecked(() => _runtime.adapter.setVolume(config.volume));
-
-              if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_runtime.session.isCurrentGeneration(generation)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_isSourceCurrent(source)) {
-                _backendReady = false;
-                return;
-              }
-            }
-
-            if (config.playbackRate != 1.0) {
-              await retryToken.runChecked(() => _runtime.adapter.setRate(config.playbackRate));
-
-              if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_runtime.session.isCurrentGeneration(generation)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_isSourceCurrent(source)) {
-                _backendReady = false;
-                return;
-              }
-            }
-
-            if (wasPlaying) {
-              await retryToken.runChecked(() => _runtime.adapter.play());
-
-              if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_runtime.session.isCurrentGeneration(generation)) {
-                _backendReady = false;
-                return;
-              }
-
-              if (!_isSourceCurrent(source)) {
-                _backendReady = false;
-                return;
-              }
-            }
-
-            if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-              _backendReady = false;
-              return;
-            }
-
-            if (!_runtime.session.isCurrentGeneration(generation)) {
-              _backendReady = false;
-              return;
-            }
-
-            if (!_isSourceCurrent(source)) {
-              _backendReady = false;
-              return;
-            }
-
-            _recovery.complete();
-            _runtime.session.updateState(const SessionState.ready());
-
-            _publish(PlayerEventType.recovery, const <String, Object?>{'action': 'completed'});
-          } finally {
-            _releaseOperationToken(retryToken);
-          }
-        });
-      } catch (_) {
-        if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
-          return;
-        }
-
-        if (!_runtime.session.isCurrentGeneration(generation)) {
-          return;
-        }
-
-        if (!_isSourceCurrent(source)) {
-          return;
-        }
-
-        _backendReady = false;
-
-        if (_recovery.state.attempt >= maxAttempts) {
-          _recovery.exhaust();
-
-          _publish(PlayerEventType.recovery, <String, Object?>{
-            'action': 'exhausted',
-            'attempts': _recovery.state.attempt,
-          });
-
-          if (_options.enableFallback && config.enableFallback) {
-            _onFallbackRequested?.call(this, message);
-          }
-
-          return;
-        }
-
-        final nextDelay = Duration(
-          milliseconds: (delay.inMilliseconds * 2).clamp(0, _options.retryMaxDelay.inMilliseconds),
-        );
-
-        _scheduleRecoveryRetry(
-          operationGeneration: operationGeneration,
-          generation: generation,
-          source: source,
-          resumePosition: resumePosition,
-          wasPlaying: wasPlaying,
-          message: message,
-          maxAttempts: maxAttempts,
-          delay: nextDelay,
-        );
-      } finally {
-        if (identical(_activeCancelToken, retryToken)) {
-          _activeCancelToken = null;
-        }
-
-        retryToken.dispose();
-      }
-    });
-  }
-
-  RecoveryReason _reasonFor(String message) {
-    final text = message.toLowerCase();
-
-    if (text.contains('network') || text.contains('socket') || text.contains('connection')) {
-      return RecoveryReason.network();
-    }
-
-    if (text.contains('timeout') || text.contains('timed out')) {
-      return RecoveryReason.timeout();
-    }
-
-    if (text.contains('decode') || text.contains('decoder') || text.contains('codec')) {
-      return RecoveryReason.decoder();
-    }
-
-    if (text.contains('render') || text.contains('surface') || text.contains('texture')) {
-      return RecoveryReason.renderer();
-    }
-
-    if (text.contains('source') || text.contains('format') || text.contains('404')) {
-      return RecoveryReason.source();
-    }
-
-    return RecoveryReason.unknown();
   }
 
   // ---------------------------------------------------------------------------
@@ -1725,4 +2067,107 @@ final class PlayerHandle {
 
     _eventBus.publish(GenericPlayerEvent(type: type, data: data, priority: priority, context: _buildContext()));
   }
+}
+
+/// Supplies the ladder with the alternatives this handle may fall back to.
+///
+/// Two very different sources feed one candidate set: the caller owns the
+/// list of playable sources (a live request knows its lines, the handle
+/// does not), and the adapter registry owns the list of backends. Both
+/// are filtered against what is currently in use, because the ladder must
+/// never be offered the failing source or backend as its own alternative.
+final class _HandleRecoveryCandidates implements RecoveryCandidateProvider {
+  _HandleRecoveryCandidates(this._handle);
+
+  final PlayerHandle _handle;
+
+  @override
+  RecoveryCandidates candidatesFor(RecoveryFailure failure) {
+    final currentSourceId = _handle._currentSource?.id;
+    final currentBackendId = _handle._registration.id;
+    final source = _handle._currentSource;
+
+    final sources = _handle._sourceCandidates
+        .where((candidate) => candidate.id != currentSourceId)
+        .toList(growable: false);
+
+    final registry = _handle._registry;
+
+    if (registry == null) {
+      return RecoveryCandidates(sources: sources);
+    }
+
+    final selector = _handle._selector ?? PlayerAdapterSelector(registry);
+
+    // Ordering is the selector's job: it already scores protocol, format
+    // and live support, so recovery does not re-implement "which backend
+    // is most likely to play this".
+    final backends = selector
+        .candidatesFor(source ?? PlayerSource.unknown())
+        .where((registration) => registration.id != currentBackendId)
+        .where((registration) => registration.enabled)
+        .toList(growable: false);
+
+    return RecoveryCandidates(sources: sources, backends: backends);
+  }
+}
+
+/// Resolves the ladder budget for one player.
+///
+/// Three layers express limits, and the narrowest one wins:
+///
+/// - [KernelOptions.recoveryBudget] — the kernel-wide base;
+/// - [KernelOptions.maxRecoveryAttempts] / `maxFallbackAttempts` — the
+///   kernel-wide defaults those two dimensions used to be driven by;
+/// - [PlayerConfig] — the per-player cap, which may ask for less
+///   recovery than the kernel allows but never for more.
+///
+/// A player that disables recovery or fallback gets a budget that cannot
+/// spend the corresponding rung, which is what makes the config flags
+/// effective without the ladder having to know about them.
+RecoveryBudget _budgetFor(KernelOptions options, PlayerConfig config) {
+  var budget = options.recoveryBudget;
+
+  if (!options.enableRecovery || !config.enableRecovery) {
+    budget = budget.withoutSameBackend();
+  }
+
+  if (!options.enableFallback || !config.enableFallback) {
+    budget = budget.withoutLines().withoutBackends();
+  }
+
+  return budget.copyWith(
+    maxSameBackendAttempts: _narrowest(<int>[
+      budget.maxSameBackendAttempts,
+      options.maxRecoveryAttempts,
+      config.maxRecoveryAttempts,
+    ]),
+    maxBackendAttempts: _narrowest(<int>[
+      budget.maxBackendAttempts,
+      options.maxFallbackAttempts,
+      config.maxFallbackAttempts,
+    ]),
+    initialBackoff: options.retryBaseDelay,
+    maxBackoff: options.retryMaxDelay,
+  );
+}
+
+/// Returns the smallest positive limit, or `0` when any limit is zero.
+///
+/// Zero is a deliberate "never do this" rather than a small number, so it
+/// short-circuits instead of losing the comparison.
+int _narrowest(List<int> limits) {
+  var result = 0;
+
+  for (final limit in limits) {
+    if (limit <= 0) {
+      return 0;
+    }
+
+    if (result == 0 || limit < result) {
+      result = limit;
+    }
+  }
+
+  return result;
 }

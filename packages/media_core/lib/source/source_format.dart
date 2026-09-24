@@ -62,7 +62,108 @@ enum SourceFormat {
   opus,
 
   /// Application-defined custom format.
-  custom,
+  custom;
+
+  /// Infers a format from a file extension (with or without the dot).
+  ///
+  /// Returns [SourceFormat.unknown] when the extension says nothing, which
+  /// is the honest answer: a wrong guess would silently change which
+  /// backend the selector picks.
+  static SourceFormat fromExtension(String? extension) {
+    var normalized = extension?.trim().toLowerCase() ?? '';
+
+    if (normalized.startsWith('.')) {
+      normalized = normalized.substring(1);
+    }
+
+    switch (normalized) {
+      case 'mp4':
+      case 'm4v':
+        return SourceFormat.mp4;
+
+      case 'ts':
+      case 'm2ts':
+      case 'mts':
+        return SourceFormat.mpegTs;
+
+      case 'mkv':
+        return SourceFormat.mkv;
+
+      case 'webm':
+        return SourceFormat.webm;
+
+      case 'avi':
+        return SourceFormat.avi;
+
+      case 'mov':
+        return SourceFormat.mov;
+
+      case 'flv':
+        return SourceFormat.flv;
+
+      case 'ogv':
+      case 'oga':
+      case 'ogg':
+        return SourceFormat.ogg;
+
+      case 'vtt':
+        return SourceFormat.webVtt;
+
+      case 'srt':
+        return SourceFormat.srt;
+
+      case 'ass':
+      case 'ssa':
+        return SourceFormat.ass;
+
+      case 'mpd':
+        return SourceFormat.mpd;
+
+      case 'm3u':
+      case 'm3u8':
+        return SourceFormat.m3u8;
+
+      case 'mp3':
+        return SourceFormat.mp3;
+
+      case 'aac':
+      case 'm4a':
+        return SourceFormat.aac;
+
+      case 'flac':
+        return SourceFormat.flac;
+
+      case 'wav':
+        return SourceFormat.wav;
+
+      case 'opus':
+        return SourceFormat.opus;
+
+      default:
+        return SourceFormat.unknown;
+    }
+  }
+
+  /// Infers a format from a URI's path.
+  ///
+  /// A URI that carries no usable extension — a bare host, a query-only
+  /// stream URL, `.../live/stream` — yields [SourceFormat.unknown].
+  static SourceFormat fromUri(Uri uri) {
+    final segments = uri.pathSegments;
+
+    if (segments.isEmpty) {
+      return SourceFormat.unknown;
+    }
+
+    final last = segments.last;
+    final dot = last.lastIndexOf('.');
+
+    if (dot < 0 || dot == last.length - 1) {
+      return SourceFormat.unknown;
+    }
+
+    return fromExtension(last.substring(dot + 1));
+  }
 }
 
 /// Extensions for [SourceFormat].
@@ -209,6 +310,7 @@ extension SourceFormatX on SourceFormat {
         return null;
     }
   }
+
 
   /// Returns the stable string representation of this format.
   String get value => name;
