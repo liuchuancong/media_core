@@ -1,94 +1,72 @@
 import 'package:flutter/widgets.dart';
-import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'media_kit_player_adapter.dart';
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
-/// A widget that renders video from a [MediaKitPlayerAdapter].
+/// Renders the surface owned by [MediaKitPlayerAdapter].
 ///
-/// Creates a media_kit [VideoController] internally and drives
-/// a [Video] widget. The controller is disposed when the widget
-/// is removed from the tree.
+/// This is the reference implementation of a *custom* surface: it does
+/// not call `adapter.build()`, it reads `adapter.videoController` and
+/// `adapter.fitListenable` directly. That keeps the adapter as the
+/// single owner of the mpv surface while letting the app own the widget
+/// tree, controls and fullscreen behaviour.
 ///
 /// ```dart
 /// MediaKitVideoView(adapter: myAdapter)
 /// ```
-class MediaKitVideoView extends StatefulWidget {
-  /// Creates the view.
-  const MediaKitVideoView({
-    super.key,
-    required this.adapter,
-    this.fit = BoxFit.contain,
-    this.controls,
-    this.width,
-    this.height,
-  });
+class MediaKitVideoView extends StatelessWidget {
+  const MediaKitVideoView({super.key, required this.adapter, this.controls});
 
-  /// The adapter whose underlying player is rendered.
+  /// The adapter whose surface is rendered.
   final MediaKitPlayerAdapter adapter;
 
-  /// How the video frames are inscribed into the allocated space.
-  final BoxFit fit;
-
-  /// Optional video controls builder passed to the underlying [Video] widget.
-  ///
-  /// When null the default (no controls) is used.
+  /// Controls builder. `null` falls back to the adapter config's own
+  /// controls (which is "no controls" unless configured otherwise).
   final mkv.VideoControlsBuilder? controls;
-
-  /// Optional fixed width for the video texture.
-  final double? width;
-
-  /// Optional fixed height for the video texture.
-  final double? height;
-
-  @override
-  State<MediaKitVideoView> createState() => _MediaKitVideoViewState();
-}
-
-class _MediaKitVideoViewState extends State<MediaKitVideoView> {
-  mkv.VideoController? _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _attachController();
-  }
-
-  @override
-  void didUpdateWidget(covariant MediaKitVideoView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.adapter != widget.adapter) {
-      _controller = null;
-      _attachController();
-    }
-  }
-
-  @override
-  void dispose() {
-    // VideoController is disposed by the underlying Player.
-    _controller = null;
-    super.dispose();
-  }
-
-  void _attachController() {
-    if (!widget.adapter.initialized) return;
-    _controller = mkv.VideoController(
-      widget.adapter.player,
-      configuration: const mkv.VideoControllerConfiguration(),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    final controller = _controller;
-    if (controller == null || !widget.adapter.initialized) {
-      return const SizedBox.expand();
+    final controller = adapter.videoController;
+
+    // The adapter owns the controller; before onInitialize there is no
+    // surface to render, so collapse to nothing.
+    if (controller == null) {
+      return const SizedBox.shrink();
     }
 
-    return mkv.Video(
-      controller: controller,
-      controls: widget.controls,
-      width: widget.width,
-      height: widget.height,
-      fit: widget.fit,
+    final cfg = adapter.videoConfig;
+
+    // fitListenable is the exact same notifier that `adapter.build()`
+    // uses, so `adapter.setVideoFit(...)` re-renders this widget too.
+    return ValueListenableBuilder<BoxFit>(
+      valueListenable: adapter.fitListenable,
+      builder: (context, fit, _) {
+        return mkv.Video(
+          controller: controller,
+
+          // fit is adapter-driven (setVideoFit writes the notifier).
+          fit: fit,
+
+          // controls: prefer the widget's own override, else the
+          // adapter config, else the plugin default.
+          controls: controls ?? cfg.controls ?? mkv.NoVideoControls,
+
+          // Everything else reads straight from the adapter's
+          // MediaKitVideoConfig so the call site keeps one place to
+          // configure the surface.
+          width: cfg.width,
+          height: cfg.height,
+          fill: cfg.fill,
+          alignment: cfg.alignment,
+          aspectRatio: cfg.aspectRatio,
+          filterQuality: cfg.filterQuality,
+          wakelock: cfg.wakelock,
+          pauseUponEnteringBackgroundMode: cfg.pauseUponEnteringBackgroundMode,
+          resumeUponEnteringForegroundMode: cfg.resumeUponEnteringForegroundMode,
+          subtitleViewConfiguration: cfg.subtitleViewConfiguration,
+          onEnterFullscreen: cfg.onEnterFullscreen ?? mkv.defaultEnterNativeFullscreen,
+          onExitFullscreen: cfg.onExitFullscreen ?? mkv.defaultExitNativeFullscreen,
+        );
+      },
     );
   }
 }

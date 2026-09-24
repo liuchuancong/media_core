@@ -139,3 +139,6 @@ export 'util/library.dart';
 
 /// Player visibility observation, state and management..
 export 'visibility/library.dart';
+
+// Composition root: owns adapter + session + per-session controllers.
+export 'runtime/library.dart';

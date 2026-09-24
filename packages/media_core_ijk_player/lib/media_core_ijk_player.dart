@@ -4,6 +4,7 @@
 /// Android and iOS only.
 library;
 
-export 'src/ijk_player_adapter.dart';
-export 'src/ijk_player_adapter_factory.dart';
-export 'src/ijk_player_view.dart';
+export 'src/fijk_helper.dart';
+export 'src/fijk_player_config.dart';
+export 'src/flv_lzc_adapter.dart';
+export 'src/flv_lzc_player_adapter_factory.dart';

@@ -28,3 +28,4 @@ export 'player_adapter_factory.dart';
 export 'player_adapter_metrics.dart';
 export 'player_adapter_registry.dart';
 export 'player_adapter_state.dart';
+export 'player_video_output.dart';

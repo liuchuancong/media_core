@@ -14,6 +14,15 @@
 /// app-level pubspec so the native libraries are bundled.
 library;
 
+// Adapter, configs, factory, view.
 export 'src/media_kit_player_adapter.dart';
+export 'src/media_kit_player_config.dart';
+export 'src/media_kit_video_config.dart';
 export 'src/media_kit_adapter_factory.dart';
 export 'src/media_kit_video_view.dart';
+
+// Public utils: settings UIs, diagnostics, tuning.
+export 'src/utils/player_consts.dart' show PlayerConsts;
+export 'src/utils/mpv_platform_profile.dart' show MpvPlatformProfile;
+export 'src/utils/device_playback_profile.dart' show DevicePlaybackProfile;
+export 'src/utils/live_buffer_policy.dart' show LiveBufferPolicy;

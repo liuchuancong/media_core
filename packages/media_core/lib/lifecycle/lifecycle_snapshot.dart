@@ -1,6 +1,7 @@
 import 'lifecycle_state.dart';
 import 'package:equatable/equatable.dart';
 
+
 /// Immutable lifecycle snapshot.
 final class LifecycleSnapshot extends Equatable {
   const LifecycleSnapshot({required this.state, this.updatedAt});
@@ -27,4 +28,9 @@ final class LifecycleSnapshot extends Equatable {
 
   @override
   List<Object?> get props => [state, updatedAt];
+}
+
+/// Serialization helpers for [LifecycleSnapshot].
+extension LifecycleSnapshotSerialization on LifecycleSnapshot {
+  Map<String, Object?> toMap() => {'state': state.toString(), 'updatedAt': updatedAt?.toIso8601String()};
 }

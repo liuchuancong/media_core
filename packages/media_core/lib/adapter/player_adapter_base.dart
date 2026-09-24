@@ -88,6 +88,9 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   PlayerState _state = PlayerState.idle;
   PlayerAdapterMetrics _metrics = const PlayerAdapterMetrics();
 
+  Duration _position = Duration.zero;
+  Duration? _duration;
+
   bool _initialized = false;
   bool _disposed = false;
   bool _audioOnly = false;
@@ -112,6 +115,12 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   @override
   PlayerState get state => _state;
+
+  @override
+  Duration get position => _position;
+
+  @override
+  Duration? get duration => _duration;
 
   @override
   PlayerAdapterMetrics get metrics => _metrics;
@@ -168,6 +177,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     if (_initialized) return;
 
     await onInitialize(context);
+
     _state = _state.initializingState().readyState();
     _initialized = true;
   }
@@ -182,6 +192,8 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     _deferredEngineError = null;
     _lastReportedWidth = null;
     _lastReportedHeight = null;
+    _position = Duration.zero;
+    _duration = null;
 
     try {
       await onBeforeOpen(source);
@@ -191,6 +203,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       // dropping the only event before the gate opens.
       _sourceOpening = true;
       _acceptSourceEvents = true;
+
       try {
         await onOpen(source);
       } finally {
@@ -199,6 +212,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
       final deferred = _deferredEngineError;
       _deferredEngineError = null;
+
       if (deferred != null && engineReportsOpenFailure) {
         _acceptSourceEvents = false;
         _fail(deferred);
@@ -206,12 +220,14 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       }
 
       _state = _state.openingState().withSource(true).readyState();
+
       _addEvent(PlayerAdapterEvent.opened(source: source.id.value));
 
       await onAfterOpen(source);
     } catch (error, stackTrace) {
       _sourceOpening = false;
       _acceptSourceEvents = false;
+
       if (error is! PlayerAdapterOpenException) {
         _fail(
           PlayerError(
@@ -222,6 +238,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
           ),
         );
       }
+
       rethrow;
     }
   }
@@ -241,17 +258,31 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @override
   Future<void> stop() async {
     requireReady();
+
     _acceptSourceEvents = false;
+
     await onStop();
+
+    _position = Duration.zero;
+    _duration = null;
+
     _state = _state.stoppedState().withSource(false);
+
     _addEvent(const PlayerAdapterEvent.stopped());
   }
 
   @override
   Future<void> seek(Duration position) async {
     requireReady();
+
     await onSeek(position);
-    _addEvent(PlayerAdapterEvent.positionChanged(position: position));
+
+    // Do not emit positionChanged here.
+    //
+    // Completing the seek command only means that the backend accepted
+    // the command. It does not guarantee that playback has actually
+    // reached the requested position yet. The concrete backend should
+    // report the real position through emitPositionChanged().
   }
 
   @override
@@ -263,8 +294,11 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @override
   Future<void> setRate(double rate) async {
     requireReady();
+
     await onSetRate(rate);
-    _addEvent(PlayerAdapterEvent.rateChanged(rate: rate));
+
+    // The rateChanged event should normally be emitted by the engine
+    // callback after the backend has actually applied the new rate.
   }
 
   /// Restricts playback to the audio track.
@@ -285,29 +319,41 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       '$runtimeType received setAudioOnly but '
       'capabilities.supportsAudioOnly is false.',
     );
+
     if (!_capabilities.supportsAudioOnly) return;
     if (_audioOnly == audioOnly) return;
 
     _audioOnly = audioOnly;
+
     await onSetAudioOnly(audioOnly);
   }
 
   @override
   Future<void> close() async {
     if (!_initialized || _disposed) return;
+
     _acceptSourceEvents = false;
+
     await onClose();
+
+    _position = Duration.zero;
+    _duration = null;
+
     _state = _state.stoppedState().withSource(false);
+
     _addEvent(const PlayerAdapterEvent.stopped());
   }
 
   @override
   Future<void> dispose() async {
     if (_disposed) return;
+
     _disposed = true;
 
     _state = _state.disposingState();
+
     await onDispose();
+
     _state = _state.disposedState();
 
     if (!_eventController.isClosed) {
@@ -397,7 +443,9 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @protected
   void emitPlaying() {
     if (!acceptsEngineEvents) return;
+
     _state = _state.playingState();
+
     _addEvent(const PlayerAdapterEvent.playing());
   }
 
@@ -405,7 +453,9 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @protected
   void emitPaused() {
     if (!acceptsEngineEvents) return;
+
     _state = _state.pausedState();
+
     _addEvent(const PlayerAdapterEvent.paused());
   }
 
@@ -413,7 +463,9 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @protected
   void emitCompleted() {
     if (!acceptsEngineEvents) return;
+
     _state = _state.completedState();
+
     _addEvent(const PlayerAdapterEvent.completed());
   }
 
@@ -439,6 +491,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
         '$runtimeType emitted buffering progress but '
         'capabilities.supportsBufferingProgress is false.',
       );
+
       if (!_capabilities.supportsBufferingProgress) {
         progress = null;
       }
@@ -485,6 +538,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       '$runtimeType emitted videoSizeChanged but '
       'capabilities.supportsVideoSizeChanged is false.',
     );
+
     if (!_capabilities.supportsVideoSizeChanged) return;
 
     _addEvent(PlayerAdapterEvent.videoSizeChanged(width: width, height: height));
@@ -499,9 +553,14 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   void emitVideoSizeChangedIfChanged(int width, int height) {
     if (!acceptsEngineEvents) return;
     if (width <= 0 || height <= 0) return;
-    if (width == _lastReportedWidth && height == _lastReportedHeight) return;
+
+    if (width == _lastReportedWidth && height == _lastReportedHeight) {
+      return;
+    }
+
     _lastReportedWidth = width;
     _lastReportedHeight = height;
+
     emitVideoSizeChanged(width, height);
   }
 
@@ -512,8 +571,8 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// video dimensions describe geometry and do not prove that frames
   /// are still being decoded.
   ///
-  /// The capability is read directly from [_capabilities]; this base
-  /// does not re-expose it as a getter, field, or constructor
+  /// The capability is read directly from [_capabilities];
+  /// this base does not re-expose it as a getter, field, or constructor
   /// parameter. A call here without
   /// [PlayerAdapterCapabilities.supportsVideoFrameProgress] is a
   /// producer contract violation, so it is asserted in debug builds
@@ -525,22 +584,36 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       '$runtimeType emitted videoFrameProgress but '
       'capabilities.supportsVideoFrameProgress is false.',
     );
+
     if (!_capabilities.supportsVideoFrameProgress) return;
     if (!acceptsEngineEvents) return;
+
     _addEvent(const PlayerAdapterEvent.videoFrameProgress());
   }
 
   /// Reports the playback position.
+  ///
+  /// The value is stored as the adapter's current playback position
+  /// and published as an adapter event.
   @protected
   void emitPositionChanged(Duration position) {
     if (!acceptsEngineEvents) return;
+
+    _position = position;
+
     _addEvent(PlayerAdapterEvent.positionChanged(position: position));
   }
 
   /// Reports the media duration.
+  ///
+  /// The value is stored as the adapter's current media duration
+  /// and published as an adapter event.
   @protected
   void emitDurationChanged(Duration duration) {
     if (!acceptsEngineEvents) return;
+
+    _duration = duration;
+
     _addEvent(PlayerAdapterEvent.durationChanged(duration: duration));
   }
 
@@ -548,6 +621,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @protected
   void emitVolumeChanged(double volume) {
     if (!acceptsEngineEvents) return;
+
     _addEvent(PlayerAdapterEvent.volumeChanged(volume: volume));
   }
 
@@ -564,13 +638,16 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     StackTrace? stackTrace,
   }) {
     if (_disposed) return;
+
     if (gatesSourceEvents && !_acceptSourceEvents) return;
 
     final error = PlayerError(code: code, message: message, cause: cause, stackTrace: stackTrace);
+
     if (_sourceOpening && gatesSourceEvents) {
       _deferredEngineError = error;
       return;
     }
+
     _fail(error);
   }
 
@@ -605,6 +682,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
   void _fail(PlayerError error) {
     _state = _state.errorState();
+
     _addEvent(PlayerAdapterEvent.error(message: error.message, error: error, stackTrace: error.stackTrace));
   }
 }

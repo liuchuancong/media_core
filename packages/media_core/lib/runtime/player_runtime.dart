@@ -1,0 +1,143 @@
+import 'player_geometry_binding.dart';
+import 'player_playback_binding.dart';
+import 'package:media_core/adapter/player_adapter.dart';
+import 'package:media_core/session/player_session.dart';
+import 'package:media_core/session/session_controller.dart';
+import 'package:media_core/geometry/geometry_controller.dart';
+import 'package:media_core/playback/playback_controller.dart';
+
+/// Runtime container for one logical player.
+///
+/// Owns the backend adapter and the per-player state modules that
+/// directly describe the current playback runtime.
+///
+/// Responsibilities:
+///
+/// - own the active [PlayerAdapter]
+/// - own the [PlayerSession] and its [SessionController]
+/// - own the [PlaybackController] and [GeometryController]
+/// - bridge adapter events into playback and geometry state
+/// - swap the adapter when the handle performs a backend fallback
+///
+/// It does not:
+///
+/// - select adapters
+/// - perform backend fallback
+/// - perform recovery
+/// - serialize public player operations
+/// - publish kernel-level events
+///
+/// Those belong to `PlayerHandle`.
+final class PlayerRuntime {
+  /// Creates a runtime around an already-constructed [adapter] and
+  /// [session].
+  ///
+  /// The bindings are attached immediately and stay alive for the
+  /// runtime's whole lifetime — except across [replaceAdapter], which
+  /// rebinds them to the new backend.
+  PlayerRuntime({required PlayerAdapter adapter, required PlayerSession session})
+    : _adapter = adapter,
+      _session = session,
+      _sessionController = SessionController(session),
+      _playback = PlaybackController(),
+      _geometry = GeometryController() {
+    _geometryBinding = PlayerGeometryBinding(adapter: adapter, geometry: _geometry);
+
+    _playbackBinding = PlayerPlaybackBinding(adapter: adapter, playback: _playback);
+  }
+
+  /// Mutable: [replaceAdapter] swaps it during backend fallback.
+  PlayerAdapter _adapter;
+
+  final PlayerSession _session;
+  final SessionController _sessionController;
+
+  final PlaybackController _playback;
+  final GeometryController _geometry;
+
+  // Mutable: replaceAdapter disposes the old pair and rebuilds them
+  // against the new adapter.
+  late PlayerGeometryBinding _geometryBinding;
+  late PlayerPlaybackBinding _playbackBinding;
+
+  bool _disposed = false;
+
+  /// The backend adapter.
+  PlayerAdapter get adapter => _adapter;
+
+  /// The player session.
+  PlayerSession get session => _session;
+
+  /// The session controller.
+  SessionController get sessionController => _sessionController;
+
+  /// Playback state controller.
+  PlaybackController get playback => _playback;
+
+  /// Geometry state controller.
+  GeometryController get geometry => _geometry;
+
+  /// Whether this runtime has been disposed.
+  bool get disposed => _disposed;
+
+  /// Swaps the backend adapter.
+  ///
+  /// Called by `PlayerHandle.attachAdapter` *after* the new adapter
+  /// has been initialized and, when a source is present, opened. This
+  /// method only handles the switch: it detaches both bindings from the
+  /// old adapter, replaces the reference, and rebuilds both bindings
+  /// against the new adapter.
+  ///
+  /// It does not initialize, open, seek, or play the new adapter —
+  /// those are the caller's responsibility, because they involve
+  /// lifecycle state the runtime does not own.
+  ///
+  /// The old adapter is *not* disposed here. The caller disposes it,
+  /// because it may still be observing the runtime's own events until
+  /// the swap settles.
+  Future<void> replaceAdapter(PlayerAdapter nextAdapter) async {
+    if (_disposed) {
+      throw StateError('PlayerRuntime has been disposed.');
+    }
+
+    if (identical(_adapter, nextAdapter)) {
+      return;
+    }
+
+    // Detach old bindings first so no further events from the old
+    // adapter reach the controllers.
+    await _geometryBinding.dispose();
+    await _playbackBinding.dispose();
+
+    _adapter = nextAdapter;
+
+    // Rebuild bindings against the new adapter. The controllers
+    // themselves are preserved — they describe *this* player, not the
+    // backend behind it.
+    _geometryBinding = PlayerGeometryBinding(adapter: nextAdapter, geometry: _geometry);
+
+    _playbackBinding = PlayerPlaybackBinding(adapter: nextAdapter, playback: _playback);
+  }
+
+  /// Releases all runtime-owned resources.
+  ///
+  /// Bindings are detached first so no further adapter events can
+  /// reach the controllers, then the controllers are disposed, then
+  /// the session controller, then the adapter itself.
+  Future<void> dispose() async {
+    if (_disposed) {
+      return;
+    }
+
+    _disposed = true;
+
+    await _geometryBinding.dispose();
+    await _playbackBinding.dispose();
+
+    await _playback.dispose();
+    await _geometry.dispose();
+
+    await _sessionController.dispose();
+    await _adapter.dispose();
+  }
+}

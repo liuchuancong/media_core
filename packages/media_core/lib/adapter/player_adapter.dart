@@ -44,6 +44,14 @@ abstract interface class PlayerAdapter {
   /// Current adapter state.
   PlayerState get state;
 
+  /// Current playback position.
+  Duration get position;
+
+  /// Current media duration.
+  ///
+  /// Returns null when the duration is unknown or not available.
+  Duration? get duration;
+
   /// Current metrics.
   PlayerAdapterMetrics get metrics;
 

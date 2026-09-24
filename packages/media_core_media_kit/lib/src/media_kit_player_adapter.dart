@@ -1,202 +1,696 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
+import 'package:media_core_media_kit/src/media_kit_video_config.dart';
+import 'package:media_core_media_kit/src/media_kit_player_config.dart';
+import 'package:media_core_media_kit/src/utils/live_buffer_policy.dart';
+import 'package:media_core_media_kit/src/utils/mpv_platform_profile.dart';
+import 'package:media_core_media_kit/src/utils/device_playback_profile.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint, TargetPlatform, ValueListenable;
 
-/// [PlayerAdapter] implementation backed by media_kit.
+export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
+export 'media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
+
+/// [PlayerAdapter] implementation backed by the local media_kit
+/// snapshot — the MPV engine.
 ///
-/// Volume is normalised between media_core (0.0–1.0) and
-/// media_kit (0.0–100.0) automatically.
-final class MediaKitPlayerAdapter implements PlayerAdapter {
-  /// Creates a media_kit adapter.
+/// This adapter also owns its video surface: it implements
+/// [PlayerVideo] directly, so there is exactly one place that knows
+/// how the texture is produced.
+///
+/// **Platform-specific settings:**
+///
+/// Two switches are meaningful on one platform only, and are ignored
+/// everywhere else so a setting that was persisted on one device
+/// cannot corrupt the picture on another:
+///
+/// - [MediaKitPlayerConfig.playerCompatMode] — Android only. Forces
+///   `vo=mediacodec_embed` and `hwdec=mediacodec`, bypassing the
+///   SurfaceProducer path.
+/// - [MediaKitPlayerConfig.enableRtxVsr] — Windows only. Enables the
+///   RTX Video Super Resolution filter through `d3d11vpp`.
+///
+/// Additionally, macOS unconditionally forces `hwdec=no` because the
+/// bundled libmpv's VideoToolbox path is unstable with the Flutter
+/// texture surface, and iOS normalisation pins the video output driver
+/// to `libmpv` (see [MpvPlatformProfile]).
+final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
+  /// Creates the adapter.
   ///
-  /// Supply [player] to reuse an existing instance; otherwise one
-  /// is created lazily inside [initialize].
-  MediaKitPlayerAdapter({String id = 'media_kit', mk.Player? player}) : _id = id, _injectedPlayer = player;
+  /// [config] carries open-time mpv options; [videoConfig] carries
+  /// surface options. Both are reachable at any time through the
+  /// matching getters / setters.
+  MediaKitPlayerAdapter({
+    super.id = 'mpv',
+    super.capabilities = defaultCapabilities,
+    mk.Player? player,
+    this.config = const MediaKitPlayerConfig(),
+    MediaKitVideoConfig videoConfig = const MediaKitVideoConfig(),
+  }) : _injectedPlayer = player,
+       _videoConfig = videoConfig {
+    _fitNotifier.value = videoConfig.fit;
+  }
 
-  final String _id;
   final mk.Player? _injectedPlayer;
 
+  // ---------------------------------------------------------------------------
+  // Configuration
+  // ---------------------------------------------------------------------------
+
+  /// Open-time mpv options.
+  ///
+  /// Assigning a new value takes effect on the next open. Tweak
+  /// individual entries through the convenience setters below
+  /// (`enableCodec`, `playerCompatMode`, ...).
+  MediaKitPlayerConfig config;
+
+  MediaKitVideoConfig _videoConfig;
+  MediaKitVideoConfig get videoConfig => _videoConfig;
+  set videoConfig(MediaKitVideoConfig value) {
+    _videoConfig = value;
+    if (_fitNotifier.value != value.fit) {
+      _fitNotifier.value = value.fit;
+    }
+  }
+
+  // Convenience accessors — kept for callers that used the old fields.
+  MediaKitProxyUrlResolver? get proxyUrlResolver => config.proxyUrlResolver;
+  set proxyUrlResolver(MediaKitProxyUrlResolver? value) => config = config.copyWith(proxyUrlResolver: value);
+
+  bool get enableCodec => config.enableCodec;
+  set enableCodec(bool v) => config = config.copyWith(enableCodec: v);
+
+  bool get playerCompatMode => config.playerCompatMode;
+  set playerCompatMode(bool v) => config = config.copyWith(playerCompatMode: v);
+
+  bool get customPlayerOutput => config.customPlayerOutput;
+  set customPlayerOutput(bool v) => config = config.copyWith(customPlayerOutput: v);
+
+  String get videoHardwareDecoder => config.videoHardwareDecoder;
+  set videoHardwareDecoder(String v) => config = config.copyWith(videoHardwareDecoder: v);
+
+  String get videoOutputDriver => config.videoOutputDriver;
+  set videoOutputDriver(String v) => config = config.copyWith(videoOutputDriver: v);
+
+  String? get audioOutputDriver => config.audioOutputDriver;
+  set audioOutputDriver(String? v) => config = config.copyWith(audioOutputDriver: v);
+
+  bool get enableRtxVsr => config.enableRtxVsr;
+  set enableRtxVsr(bool v) => config = config.copyWith(enableRtxVsr: v);
+
+  // VideoControllerConfiguration passthrough convenience accessors.
+  double get videoScale => config.videoScale;
+  set videoScale(double v) => config = config.copyWith(videoScale: v);
+
+  int? get videoOutputWidth => config.videoOutputWidth;
+  set videoOutputWidth(int? v) => config = config.copyWith(videoOutputWidth: v);
+
+  int? get videoOutputHeight => config.videoOutputHeight;
+  set videoOutputHeight(int? v) => config = config.copyWith(videoOutputHeight: v);
+
+  bool get enableAndroidSurfaceProducer => config.enableAndroidSurfaceProducer;
+  set enableAndroidSurfaceProducer(bool v) => config = config.copyWith(enableAndroidSurfaceProducer: v);
+
+  bool get androidAttachSurfaceAfterVideoParameters => config.androidAttachSurfaceAfterVideoParameters;
+  set androidAttachSurfaceAfterVideoParameters(bool v) =>
+      config = config.copyWith(androidAttachSurfaceAfterVideoParameters: v);
+
+  // ---------------------------------------------------------------------------
+  // Internal state
+  // ---------------------------------------------------------------------------
+
   mk.Player? _player;
-  final _eventController = StreamController<PlayerAdapterEvent>.broadcast();
+  mkv.VideoController? _videoController;
+
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
-  PlayerState _state = PlayerState.idle;
-  PlayerAdapterMetrics _metrics = const PlayerAdapterMetrics();
+  bool _privateInput = false;
+  bool _softwareDecoderNextOpen = false;
 
-  bool _initialized = false;
-  bool _disposed = false;
+  // ignore: unused_field
+  bool _audioOutputSuppressed = false;
+
+  String? _currentUrl;
+
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _hasOpened = false;
-  bool _audioOnly = false;
 
   int? _width;
   int? _height;
-  int? _lastEmittedWidth;
-  int? _lastEmittedHeight;
+
   double _lastEmittedVolume = -1.0;
-  double _lastEmittedRate = -1.0;
 
+  BoxFit _videoFit = BoxFit.contain;
+
+  /// Fit as a listenable, so a custom [build] implementation can react
+  /// to [setVideoFit] without owning the notifier.
+  ValueListenable<BoxFit> get fitListenable => _fitNotifier;
+
+  /// mpv events are consumed through subscriptions bound once for the
+  /// whole adapter lifetime, so the base's source gate stays open.
   @override
-  String get id => _id;
+  bool get gatesSourceEvents => false;
 
+  // ---------------------------------------------------------------------------
+  // PlayerVideo
+  // ---------------------------------------------------------------------------
+
+  final ValueNotifier<BoxFit> _fitNotifier = ValueNotifier<BoxFit>(BoxFit.contain);
+
+  /// The current viewport fit.
+  BoxFit get videoFit => _videoFit;
+
+  /// Applies the viewport fit through the surface.
+  void setVideoFit(BoxFit fit) {
+    if (_fitNotifier.value == fit && _videoConfig.fit == fit) return;
+    _videoFit = fit;
+    _fitNotifier.value = fit;
+    _videoConfig = _videoConfig.copyWith(fit: fit);
+  }
+
+  /// Whether this adapter currently owns a video surface.
   @override
-  PlayerAdapterCapabilities get capabilities => defaultCapabilities;
+  bool get available => !isDisposed && !audioOnly && _videoController != null;
 
+  /// Builds the video output widget.
   @override
-  PlayerState get state => _state;
+  Widget build() {
+    final controller = _videoController;
 
+    if (controller == null) {
+      return const SizedBox.shrink();
+    }
+
+    return ValueListenableBuilder<BoxFit>(
+      valueListenable: _fitNotifier,
+      builder: (context, fit, _) {
+        final cfg = _videoConfig;
+
+        return mkv.Video(
+          controller: controller,
+          width: cfg.width,
+          height: cfg.height,
+          fit: fit,
+          fill: cfg.fill,
+          alignment: cfg.alignment,
+          aspectRatio: cfg.aspectRatio,
+          filterQuality: cfg.filterQuality,
+          controls: cfg.controls ?? MediaKitVideoControls.none,
+          wakelock: cfg.wakelock,
+          pauseUponEnteringBackgroundMode: cfg.pauseUponEnteringBackgroundMode,
+          resumeUponEnteringForegroundMode: cfg.resumeUponEnteringForegroundMode,
+          subtitleViewConfiguration: cfg.subtitleViewConfiguration,
+          onEnterFullscreen: cfg.onEnterFullscreen ?? mkv.defaultEnterNativeFullscreen,
+          onExitFullscreen: cfg.onExitFullscreen ?? mkv.defaultExitNativeFullscreen,
+        );
+      },
+    );
+  }
+
+  /// No-op: [mkv.Video] owns its own surface lifecycle.
   @override
-  PlayerAdapterMetrics get metrics => _metrics;
+  Future<void> attach() async {}
 
+  /// Symmetric no-op for [attach].
   @override
-  Stream<PlayerAdapterEvent> get events => _eventController.stream;
+  Future<void> detach() async {}
 
-  @override
-  bool get initialized => _initialized;
+  // ---------------------------------------------------------------------------
+  // Accessors
+  // ---------------------------------------------------------------------------
 
-  /// The underlying media_kit [Player].
+  /// The underlying media_kit player.
   ///
-  /// Throws [StateError] before [initialize] is called.
+  /// Throws [StateError] before [onInitialize].
   mk.Player get player {
     final p = _player;
+
     if (p == null) {
       throw StateError('MediaKitPlayerAdapter has not been initialized.');
     }
+
     return p;
   }
 
-  /// Ensures the media_kit native libraries are loaded.
+  /// The video controller surface widgets bind to.
+  mkv.VideoController? get videoController => _videoController;
+
+  /// Whether decoded video frames have been observed for the current
+  /// source.
+  bool get hasDecodedVideoFrame => _hasDecodedVideoFrame;
+
+  bool _hasDecodedVideoFrame = false;
+
+  /// Minimum spacing between published decoded-frame heartbeats.
+  static const int frameHeartbeatIntervalMs = 1000;
+
+  final Stopwatch _frameHeartbeatClock = Stopwatch();
+
+  int _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
+
+  /// The resolved hardware decoder preference (already normalised for
+  /// the current platform).
+  String get preferredHardwareDecoder => _preferredHardwareDecoder;
+
+  String _preferredHardwareDecoder = 'auto-safe';
+
+  /// Whether the current platform drives the compat-mode surface.
+  bool get _isCompatMode => playerCompatMode && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Whether the current platform supports the video frame progress
+  /// heartbeat implementation.
   ///
-  /// Call once before `runApp`, typically in `main`.
+  /// The native `estimated-vf-fps` observation is intentionally limited
+  /// to Windows. Other platforms do not start the observer and do not
+  /// emit video frame progress events.
+  bool get _supportsVideoFrameProgress => defaultTargetPlatform == TargetPlatform.windows;
+
+  /// Ensures the media_kit native libraries are loaded.
   static void ensureInitialized() {
     mk.MediaKit.ensureInitialized();
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle
+  // Engine contract
   // ---------------------------------------------------------------------------
 
   @override
-  Future<void> initialize(PlayerAdapterContext context) async {
-    if (_initialized) return;
+  Future<void> onInitialize(PlayerAdapterContext context) async {
+    _player = _injectedPlayer ?? mk.Player();
 
-    _player = _injectedPlayer ?? mk.Player(configuration: _buildConfiguration(context));
-    _state = PlayerState.idle.initializingState().readyState();
+    // The device budget must be known before the video controller and
+    // the native property contract are built, because both branch on it.
+    await DevicePlaybackProfile.ensureLoaded();
+
+    _resolvePreferredHardwareDecoder();
+
+    _videoController = _buildVideoController();
 
     _subscribeStreams();
-    _initialized = true;
-  }
 
-  @override
-  Future<void> open(PlayerSource source) async {
-    _requireReady();
-
-    final uri = source.uri.toString();
-    final headers = source.hasHeaders ? source.headers!.values : null;
-
-    await player.open(mk.Media(uri, httpHeaders: headers), play: false);
-
-    // `vid` is an option default, not a sticky property: loading a new
-    // file resets the track selection, so the audio-only preference has
-    // to be re-applied for every source, including the replays this
-    // adapter never hears about from the application.
-    if (_audioOnly) {
-      await player.setVideoTrack(mk.VideoTrack.no());
+    // Video frame progress is intentionally Windows-only.
+    if (_supportsVideoFrameProgress) {
+      _observeDecodedFrames();
     }
 
+    await _applyNativeLiveProperties();
+  }
+
+  @override
+  Future<void> onBeforeOpen(PlayerSource source) async {
+    final url = source.uri.toString();
+
+    // A prepared software fallback belongs to the source it was
+    // prepared for. `_currentUrl` is overwritten here, so the
+    // comparison has to happen first.
+    final sameSource = _softwareDecoderNextOpen && url == _currentUrl;
+
+    _currentUrl = url;
+
+    _hasDecodedVideoFrame = false;
+    _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
+
+    _softwareDecoderNextOpen = sameSource;
+
+    await _applyDecoderPolicy();
+    await _applyProxy();
+  }
+
+  @override
+  Future<void> onOpen(PlayerSource source) async {
+    final headers = source.hasHeaders ? source.headers!.values : null;
+
+    await player.open(mk.Media(source.uri.toString(), httpHeaders: headers), play: true);
+
     _hasOpened = true;
-    _state = _state.withSource(true);
-    _emit(PlayerAdapterEvent.opened(source: source.id.value));
+
+    if (audioOnly) {
+      await _applyAudioOnly(true);
+    }
   }
 
   @override
-  Future<void> play() async {
-    _requireReady();
+  Future<void> onPlay() async {
     await player.play();
-    _state = _state.playingState();
-    _emit(const PlayerAdapterEvent.playing());
+    emitPlaying();
   }
 
   @override
-  Future<void> pause() async {
-    _requireReady();
+  Future<void> onPause() async {
     await player.pause();
-    _state = _state.pausedState();
-    _emit(const PlayerAdapterEvent.paused());
+    emitPaused();
   }
 
   @override
-  Future<void> stop() async {
-    _requireReady();
+  Future<void> onStop() async {
     await player.stop();
+
     _playingNow = false;
     _bufferingNow = false;
     _hasOpened = false;
-    _state = _state.stoppedState().withSource(false);
-    _emit(const PlayerAdapterEvent.stopped());
+
+    _hasDecodedVideoFrame = false;
+    _width = null;
+    _height = null;
+
+    _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
   }
 
   @override
-  Future<void> seek(Duration position) async {
-    _requireReady();
-    await player.seek(position);
-    _emit(PlayerAdapterEvent.positionChanged(position: position));
+  Future<void> onSeek(Duration position) => player.seek(position);
+
+  @override
+  Future<void> onSetVolume(double volume) => player.setVolume(volume.clamp(0.0, 1.0) * 100.0);
+
+  @override
+  Future<void> onSetRate(double rate) => player.setRate(rate);
+
+  @override
+  Future<void> onClose() async {
+    await player.stop();
+
+    _hasOpened = false;
+    _playingNow = false;
+    _bufferingNow = false;
+
+    // Reset all source-scoped presentation state so the next source
+    // cannot inherit the previous source's frame / geometry state.
+    _hasDecodedVideoFrame = false;
+    _width = null;
+    _height = null;
+
+    _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
   }
 
   @override
-  Future<void> setVolume(double volume) async {
-    _requireReady();
-    final clamped = volume.clamp(0.0, 1.0);
-    await player.setVolume(clamped * 100.0);
+  Future<void> onDispose() async {
+    await Future.wait(_subscriptions.map((subscription) => subscription.cancel()));
+
+    _subscriptions.clear();
+
+    // Stop the frame heartbeat clock before tearing down the player.
+    if (_frameHeartbeatClock.isRunning) {
+      _frameHeartbeatClock.stop();
+    }
+
+    _fitNotifier.dispose();
+
+    // A player supplied through the constructor may be owned by the
+    // caller. Only dispose players that were created by this adapter.
+    if (_injectedPlayer == null) {
+      await _player?.dispose();
+    }
+
+    _player = null;
+    _videoController = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Extensions
+  // ---------------------------------------------------------------------------
+
+  /// Whether the next open bypasses the native proxy.
+  void setPrivateInput(bool value) {
+    _privateInput = value;
+  }
+
+  /// Marks that the next open of the current source should use software
+  /// decoding.
+  void prepareSoftwareDecoderFallback() {
+    _softwareDecoderNextOpen = true;
+  }
+
+  /// Suppresses audio output for the next open.
+  Future<void> setAudioOutputSuppressed(bool suppressed) async {
+    _audioOutputSuppressed = suppressed;
+
+    if (suppressed) {
+      try {
+        await player.setAudioTrack(mk.AudioTrack.no());
+      } catch (_) {
+        // Best-effort; some builds reject track selection before open.
+      }
+    }
   }
 
   @override
-  Future<void> setRate(double rate) async {
-    _requireReady();
-    await player.setRate(rate);
-  }
+  Future<void> onSetAudioOnly(bool audioOnly) => _applyAudioOnly(audioOnly);
 
-  /// Restricts playback to the audio track.
-  ///
-  /// libmpv owns this through the `vid` property, so the video decoder
-  /// stops instead of the picture merely being hidden.
-  @override
-  Future<void> setAudioOnly(bool audioOnly) async {
-    _requireReady();
-    if (_audioOnly == audioOnly) return;
-
-    _audioOnly = audioOnly;
+  Future<void> _applyAudioOnly(bool audioOnly) async {
     await player.setVideoTrack(audioOnly ? mk.VideoTrack.no() : mk.VideoTrack.auto());
   }
 
-  @override
-  Future<void> close() async {
-    if (!_initialized || _player == null) return;
-    await player.stop();
-    _hasOpened = false;
-    _playingNow = false;
-    _bufferingNow = false;
-    _state = _state.stoppedState().withSource(false);
-    _emit(const PlayerAdapterEvent.stopped());
+  // ---------------------------------------------------------------------------
+  // Platform-aware engine configuration
+  // ---------------------------------------------------------------------------
+
+  /// Resolves the hardware decoder preference.
+  ///
+  /// Precedence, top to bottom:
+  ///
+  /// 1. **macOS** — always `no`. The bundled libmpv's VideoToolbox path
+  ///    is unstable with the Flutter texture surface, and the platform
+  ///    profile pins this regardless of what was persisted on another
+  ///    device.
+  /// 2. **Android compat mode** — `mediacodec` (see [_isCompatMode]).
+  /// 3. **Windows RTX VSR** — `d3d11va`, required by the filter chain.
+  /// 4. **Expert output** — the user-picked decoder, normalised for
+  ///    the current platform.
+  /// 5. **Default** — `auto-safe` when [enableCodec] is on, else `no`.
+  void _resolvePreferredHardwareDecoder() {
+    final platform = defaultTargetPlatform;
+
+    if (platform == TargetPlatform.macOS) {
+      _preferredHardwareDecoder = 'no';
+      return;
+    }
+
+    if (_isCompatMode) {
+      _preferredHardwareDecoder = 'mediacodec';
+      return;
+    }
+
+    // RTX VSR requires the D3D11VA decode path; it takes precedence
+    // over a user pick because the filter chain cannot run otherwise.
+    if (platform == TargetPlatform.windows && enableRtxVsr) {
+      _preferredHardwareDecoder = 'd3d11va';
+      return;
+    }
+
+    if (customPlayerOutput) {
+      _preferredHardwareDecoder = MpvPlatformProfile.normalizeHardwareDecoderForPlatform(
+        videoHardwareDecoder,
+        platform,
+      );
+      return;
+    }
+
+    _preferredHardwareDecoder = enableCodec ? 'auto-safe' : 'no';
   }
 
-  @override
-  Future<void> dispose() async {
-    if (_disposed) return;
-    _disposed = true;
+  /// Builds the video controller.
+  ///
+  /// The three-way branch is platform-gated: compat mode only ever
+  /// fires on Android, RTX VSR only ever fires on Windows, and the
+  /// driver / decoder strings always pass through the platform
+  /// normaliser so a persisted Android choice cannot leak into an
+  /// iOS build.
+  ///
+  /// The `scale` / `width` / `height` / `SurfaceProducer` fields come
+  /// straight from [MediaKitPlayerConfig]; they are ignored by the
+  /// compat-mode branch, which intentionally pins the legacy surface
+  /// path.
+  mkv.VideoController _buildVideoController() {
+    final platform = defaultTargetPlatform;
 
-    _state = _state.disposingState();
+    if (_isCompatMode) {
+      return mkv.VideoController(
+        player,
+        configuration: const mkv.VideoControllerConfiguration(
+          vo: 'mediacodec_embed',
+          hwdec: 'mediacodec',
+          enableAndroidSurfaceProducer: false,
+          androidAttachSurfaceAfterVideoParameters: false,
+        ),
+      );
+    }
 
-    await Future.wait(_subscriptions.map((s) => s.cancel()));
-    _subscriptions.clear();
+    final isMacOS = platform == TargetPlatform.macOS;
 
-    await _player?.dispose();
-    _player = null;
+    if (customPlayerOutput) {
+      final normalizedVideoOutput = MpvPlatformProfile.normalizeVideoOutputDriverForPlatform(
+        videoOutputDriver,
+        platform,
+      );
 
-    _state = _state.disposedState();
-    if (!_eventController.isClosed) {
-      await _eventController.close();
+      final normalizedHardwareDecoder = isMacOS
+          ? 'no'
+          : MpvPlatformProfile.normalizeHardwareDecoderForPlatform(videoHardwareDecoder, platform);
+
+      return mkv.VideoController(
+        player,
+        configuration: mkv.VideoControllerConfiguration(
+          vo: normalizedVideoOutput,
+          hwdec: normalizedHardwareDecoder,
+          scale: config.videoScale,
+          width: config.videoOutputWidth,
+          height: config.videoOutputHeight,
+          enableHardwareAcceleration: !isMacOS && normalizedHardwareDecoder != 'no',
+          enableAndroidSurfaceProducer: config.enableAndroidSurfaceProducer,
+          androidAttachSurfaceAfterVideoParameters: config.androidAttachSurfaceAfterVideoParameters,
+        ),
+      );
+    }
+
+    return mkv.VideoController(
+      player,
+      configuration: mkv.VideoControllerConfiguration(
+        scale: config.videoScale,
+        width: config.videoOutputWidth,
+        height: config.videoOutputHeight,
+        enableHardwareAcceleration: isMacOS ? false : enableCodec,
+        hwdec: isMacOS ? 'no' : null,
+        enableAndroidSurfaceProducer: config.enableAndroidSurfaceProducer,
+        androidAttachSurfaceAfterVideoParameters: config.androidAttachSurfaceAfterVideoParameters,
+      ),
+    );
+  }
+
+  /// Applies the native live-stream property contract to mpv.
+  ///
+  /// Platform-specific blocks are fenced by explicit
+  /// [defaultTargetPlatform] checks so cross-platform settings never
+  /// bleed.
+  Future<void> _applyNativeLiveProperties() async {
+    if (_player?.platform == null) return;
+
+    final platform = defaultTargetPlatform;
+    final profile = DevicePlaybackProfile.current;
+
+    await _setNativeProperty(
+      'protocol_whitelist',
+      'httpproxy,udp,rtp,tcp,tls,data,file,http,https,crypto,rtmp,rtmps,rtsp,srt',
+    );
+
+    await _setNativeProperty('demuxer-lavf-probesize', '2097152');
+
+    await _setNativeProperty('demuxer-lavf-analyzeduration', '2');
+
+    await LiveBufferPolicy.apply(_setNativeProperty, profile: profile);
+
+    await _setNativeProperty('network-timeout', '15');
+
+    // Drop a failing hw decoder after one bad frame.
+    await _setNativeProperty('hwdec-software-fallback', '1');
+
+    await _applyDecodeCostPolicy(profile, software: _preferredHardwareDecoder == 'no');
+
+    if (profile.lowEnd) {
+      await _setNativeProperty('audio-buffer', '0.4');
+
+      await _setNativeProperty(
+        'stream-lavf-o',
+        'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,'
+            'reconnect_delay_max=2',
+      );
+    }
+
+    // --- Android-only: mediacodec direct surface rendering ---------------
+    if (platform == TargetPlatform.android) {
+      await _setNativeProperty('mediacodec-surface-iostream', 'yes');
+
+      await _setNativeProperty('mediacodec-embed-surface-landscape', 'yes');
+    }
+
+    // --- macOS-only: force software decoding -----------------------------
+    if (platform == TargetPlatform.macOS) {
+      await _setNativeProperty('hwdec', 'no');
+    }
+
+    // --- Windows-only: optional RTX Video Super Resolution ---------------
+    if (platform == TargetPlatform.windows && enableRtxVsr) {
+      await _setNativeProperty('hwdec', 'd3d11va');
+
+      await _setNativeProperty('vf', 'd3d11vpp=scale=2:scaling-mode=nvidia');
+    }
+
+    // --- Audio output driver (per-platform default) ----------------------
+    final audioOutput = MpvPlatformProfile.effectiveAudioOutputDriverForPlatform(
+      customOutput: customPlayerOutput,
+      configuredDriver: audioOutputDriver ?? 'auto',
+      platform: platform,
+    );
+
+    if (audioOutput != null) {
+      await _setNativeProperty('ao', audioOutput);
+    }
+
+    // --- Escape hatch: user-supplied properties applied last -------------
+    for (final entry in config.extraProperties.entries) {
+      await _setNativeProperty(entry.key, entry.value);
+    }
+  }
+
+  Future<void> _applyDecodeCostPolicy(DevicePlaybackProfile profile, {required bool software}) async {
+    if (!profile.lowEnd) return;
+
+    if (software) {
+      await _setNativeProperty('vd-lavc-threads', profile.softwareDecodeThreads.toString());
+
+      await _setNativeProperty('vd-lavc-o', 'lowres=1');
+
+      await _setNativeProperty('vd-lavc-skiploopfilter', 'nonref');
+
+      return;
+    }
+
+    await _setNativeProperty('vd-lavc-o', 'lowres=0');
+
+    await _setNativeProperty('vd-lavc-skiploopfilter', 'default');
+  }
+
+  Future<void> _setNativeProperty(String name, String value) async {
+    final native = _player?.platform;
+
+    if (native == null) return;
+
+    try {
+      // ignore: avoid_dynamic_calls
+      await (native as dynamic).setProperty(name, value);
+    } catch (_) {
+      // Best-effort.
+    }
+  }
+
+  Future<void> _applyDecoderPolicy() async {
+    final decoder = _softwareDecoderNextOpen ? 'no' : _preferredHardwareDecoder;
+
+    _softwareDecoderNextOpen = false;
+
+    await _setNativeProperty('hwdec', decoder);
+
+    await _applyDecodeCostPolicy(DevicePlaybackProfile.current, software: decoder == 'no');
+  }
+
+  Future<void> _applyProxy() async {
+    final native = _player?.platform;
+
+    if (native == null) return;
+
+    try {
+      final url = proxyUrlResolver?.call(privateInput: _privateInput) ?? '';
+
+      // Explicitly writing an empty proxy clears a previous
+      // source's proxy state instead of allowing it to persist.
+      // ignore: avoid_dynamic_calls
+      await (native as dynamic).setProperty('http-proxy', url);
+
+      _privateInput = false;
+    } catch (_) {
+      // Best-effort.
     }
   }
 
@@ -208,70 +702,138 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
     final s = player.stream;
 
     _subscriptions.add(s.playing.listen(_onPlaying));
+
     _subscriptions.add(s.completed.listen(_onCompleted));
+
     _subscriptions.add(s.buffering.listen(_onBuffering));
+
     _subscriptions.add(s.position.listen(_onPosition));
+
     _subscriptions.add(s.duration.listen(_onDuration));
+
     _subscriptions.add(s.volume.listen(_onVolume));
-    _subscriptions.add(s.rate.listen(_onRate));
+
     _subscriptions.add(s.width.listen(_onWidth));
+
     _subscriptions.add(s.height.listen(_onHeight));
+
     _subscriptions.add(s.error.listen(_onError));
+
     _subscriptions.add(s.buffer.listen(_onBuffer));
-    _subscriptions.add(s.audioBitrate.listen(_onAudioBitrate));
+  }
+
+  /// Starts the decoded-video heartbeat observer.
+  ///
+  /// This functionality is intentionally Windows-only.
+  ///
+  /// `estimated-vf-fps` is used as a video-output heartbeat. It is not
+  /// treated as an exact decoded-frame counter.
+  void _observeDecodedFrames() {
+    if (!_supportsVideoFrameProgress) {
+      return;
+    }
+
+    if (_frameHeartbeatClock.isRunning) {
+      return;
+    }
+
+    _frameHeartbeatClock.start();
+
+    const property = 'estimated-vf-fps';
+
+    try {
+      final native = player.platform;
+
+      // `estimated-vf-fps` is used only as a video-output heartbeat.
+      // It is not treated as an exact decoded-frame counter.
+      //
+      // Do not replace this with position / width / height changes:
+      // those signals do not prove that video frames are progressing.
+      // ignore: avoid_dynamic_calls
+      (native as dynamic).observeProperty?.call(property, (dynamic value) async {
+        _onNativeFrameSignal(property, value?.toString() ?? '');
+      });
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[MPV FRAME] observeProperty failed: '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
+  void _onNativeFrameSignal(String property, String value) {
+    // Frame progress is Windows-only.
+    if (!_supportsVideoFrameProgress) {
+      return;
+    }
+
+    if (isDisposed) return;
+    if (!_hasOpened || !_playingNow) return;
+    if (property != 'estimated-vf-fps') return;
+
+    final fps = double.tryParse(value.trim());
+
+    if (fps == null || fps <= 0) return;
+
+    final now = _frameHeartbeatClock.elapsedMilliseconds;
+
+    if (now - _lastFrameHeartbeatMs < frameHeartbeatIntervalMs) {
+      return;
+    }
+
+    _lastFrameHeartbeatMs = now;
+
+    _hasDecodedVideoFrame = true;
+
+    emitVideoFrameProgress();
   }
 
   void _onPlaying(bool playing) {
     if (_playingNow == playing) return;
+
     _playingNow = playing;
 
     if (playing) {
-      _state = _state.withSource(true).playingState();
-      _emit(const PlayerAdapterEvent.playing());
-    } else if (_hasOpened && !_state.stopped && !_state.completed) {
-      _state = _state.pausedState();
-      _emit(const PlayerAdapterEvent.paused());
+      emitPlaying();
+    } else if (_hasOpened && !state.stopped && !state.completed) {
+      emitPaused();
     }
   }
 
   void _onCompleted(bool completed) {
     if (!completed) return;
+
     _playingNow = false;
-    _state = _state.completedState();
-    _emit(const PlayerAdapterEvent.completed());
+
+    emitCompleted();
   }
 
   void _onBuffering(bool buffering) {
     if (_bufferingNow == buffering) return;
+
     _bufferingNow = buffering;
 
-    if (buffering) {
-      _state = _state.bufferingState();
-    } else {
-      _state = _playingNow ? _state.playingState() : _state.pausedState();
-    }
-    _emit(PlayerAdapterEvent.buffering(buffering: buffering));
+    emitBuffering(buffering, resumePlaying: buffering ? null : _playingNow);
   }
 
   void _onPosition(Duration position) {
-    _emit(PlayerAdapterEvent.positionChanged(position: position));
+    emitPositionChanged(position);
   }
 
   void _onDuration(Duration duration) {
-    _emit(PlayerAdapterEvent.durationChanged(duration: duration));
+    emitDurationChanged(duration);
   }
 
   void _onVolume(double v) {
     final normalised = (v / 100.0).clamp(0.0, 1.0);
-    if (normalised == _lastEmittedVolume) return;
-    _lastEmittedVolume = normalised;
-    _emit(PlayerAdapterEvent.volumeChanged(volume: normalised));
-  }
 
-  void _onRate(double rate) {
-    if (rate == _lastEmittedRate) return;
-    _lastEmittedRate = rate;
-    _emit(PlayerAdapterEvent.rateChanged(rate: rate));
+    if (normalised == _lastEmittedVolume) {
+      return;
+    }
+
+    _lastEmittedVolume = normalised;
+
+    emitVolumeChanged(normalised);
   }
 
   void _onWidth(int? w) {
@@ -287,84 +849,30 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
   void _maybeEmitSize() {
     final w = _width;
     final h = _height;
-    if (w == null || h == null || w <= 0 || h <= 0) return;
-    if (w == _lastEmittedWidth && h == _lastEmittedHeight) return;
-    _lastEmittedWidth = w;
-    _lastEmittedHeight = h;
-    _emit(PlayerAdapterEvent.videoSizeChanged(width: w, height: h));
+
+    if (w == null || h == null || w <= 0 || h <= 0) {
+      return;
+    }
+
+    emitVideoSizeChangedIfChanged(w, h);
   }
 
   void _onError(String message) {
-    _state = _state.errorState();
-    _emit(PlayerAdapterEvent.error(message: message));
+    debugPrint(message);
+
+    reportEngineError(message: message);
   }
 
   void _onBuffer(Duration buffered) {
-    _metrics = _metrics.copyWith(buffered: buffered);
-  }
-
-  void _onAudioBitrate(double? bitrate) {
-    _metrics = _metrics.copyWith(bitrate: bitrate?.toInt());
+    updateMetrics((m) => m.copyWith(buffered: buffered));
   }
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Capabilities
   // ---------------------------------------------------------------------------
 
-  void _emit(PlayerAdapterEvent event) {
-    if (!_eventController.isClosed) {
-      _eventController.add(event);
-    }
-  }
-
-  void _requireReady() {
-    if (!_initialized || _disposed) {
-      throw StateError('MediaKitPlayerAdapter is not initialized or has been disposed.');
-    }
-  }
-
-  mk.PlayerConfiguration _buildConfiguration(PlayerAdapterContext context) {
-    final config = context.config;
-    return mk.PlayerConfiguration(
-      bufferSize: config.maxBufferBytes ?? 32 * 1024 * 1024,
-      muted: context.playerConfig?.muted ?? false,
-      logLevel: mk.MPVLogLevel.error,
-    );
-  }
-
-  /// Capabilities of the MPV engine, as exposed by this adapter.
-  ///
-  /// The declaration is scoped to what the adapter actually produces
-  /// or accepts today, not to what libmpv exposes in the abstract.
-  /// Backend events the adapter does not yet subscribe to
-  /// (`MPV_EVENT_VIDEO_RECONFIG`, `MPV_EVENT_AUDIO_RECONFIG`,
-  /// `metadata`, track lists, …) stay false; they can be flipped on
-  /// the same line as the subscription that makes them real.
-  ///
-  /// Signal emits and their capability flags:
-  ///
-  /// - [PlayerAdapterEvent.videoSizeChanged] is produced by
-  ///   [_onWidth] / [_onHeight] from the media_kit width and height
-  ///   streams.
-  ///
-  /// There is no decoded-frame heartbeat: this adapter subscribes to
-  /// the width, height, position, duration, volume, rate, playing,
-  /// completed, buffering, buffer, error and audio-bitrate streams,
-  /// and none of them proves that a frame is being decoded right now.
-  /// `estimated-vf-fps` would be that signal, but this adapter does not
-  /// observe it, so `supportsVideoFrameProgress` stays false and the
-  /// live frame watchdog remains off for this backend instead of waiting
-  /// for a heartbeat that never arrives.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
     // Core playback.
-    //
-    // The adapter implements every command hook
-    // (onPlay/onPause/onStop/onSeek/onSetVolume/onSetRate) and
-    // forwards them to media_kit, so all of these are true.
-    // `supportsMuteControl` stays false: muting is done by routing
-    // through `setAudioTrack(no)` for the current source, not by a
-    // dedicated mute command the adapter accepts for the lifetime
-    // of the session.
     supportsLive: true,
     supportsSeek: true,
     supportsPause: true,
@@ -372,20 +880,10 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
     supportsRateControl: true,
     supportsVolumeControl: true,
     supportsMuteControl: false,
-
-    // `supportsAudioOnly` is true: the adapter drives mpv's `vid`
-    // property, so the video track is switched off rather than hidden.
     supportsAudioOnly: true,
 
     // Video and rendering.
-    //
-    // Only `videoSizeChanged` is declared. Reconfig / hwdec info /
-    // filters / screenshot are backend capabilities that are not
-    // surfaced through the adapter yet, so they stay false until a
-    // corresponding subscription or command is added, and
-    // `supportsVideoFrameProgress` is false because this adapter
-    // produces no frame heartbeat (see the class comment above).
-    supportsVideoFrameProgress: false,
+    supportsVideoFrameProgress: true,
     supportsVideoSizeChanged: true,
     supportsVideoReconfig: false,
     supportsHwdecInfo: false,
@@ -398,19 +896,11 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
     supportsAudioFilters: false,
 
     // Tracks and subtitles.
-    //
-    // `setAudioOnly` and `setAudioOutputSuppressed` exist, but they
-    // are adapter-specific toggles, not the general "list and pick a
-    // track" surface the capability describes.
     supportsTrackSelection: false,
     supportsSubtitleTrack: false,
     supportsExternalSubtitle: false,
 
     // Playback state and buffering.
-    //
-    // `_onBuffer` updates metrics but does not emit a buffering
-    // progress ratio, so `supportsBufferingProgress` stays false
-    // until `emitBuffering(progress: …)` is actually wired.
     supportsCacheState: false,
     supportsBufferingProgress: false,
     supportsChapterControl: false,
@@ -430,14 +920,12 @@ final class MediaKitPlayerAdapter implements PlayerAdapter {
     supportsSoftwareDecoder: true,
 
     // Presentation.
-    //
-    // PiP is not provided by mpv; fullscreen is a widget-level
-    // decision the adapter does not veto.
     supportsPictureInPicture: false,
     supportsFullscreen: true,
 
     // Source matching.
     supportedProtocols: {'http', 'https', 'hls', 'dash', 'rtmp', 'rtsp', 'udp', 'file', 'asset'},
+
     supportedFormats: {
       'mp4',
       'mkv',

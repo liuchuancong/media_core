@@ -12,6 +12,7 @@ import '../event/event_priority.dart';
 import '../policy/player_policy.dart';
 import '../source/player_source.dart';
 import '../session/session_state.dart';
+import '../runtime/player_runtime.dart';
 import '../adapter/player_adapter.dart';
 import '../event/player_event_bus.dart';
 import '../identity/generation_id.dart';
@@ -27,6 +28,7 @@ import '../recovery/recovery_context.dart';
 import '../recovery/recovery_manager.dart';
 import '../recovery/recovery_snapshot.dart';
 import '../session/session_controller.dart';
+import '../geometry/geometry_controller.dart';
 import '../adapter/player_adapter_event.dart';
 import '../lifecycle/lifecycle_snapshot.dart';
 import '../playback/playback_controller.dart';
@@ -37,6 +39,7 @@ import '../platform/platform_capabilities.dart';
 import '../adapter/player_adapter_registry.dart';
 import '../operation/operation_cancel_token.dart';
 import '../adapter/player_adapter_capabilities.dart';
+import 'package:media_core/kernel/player_handle_snapshot.dart';
 
 /// Callback invoked when a handle exhausted recovery and wants
 /// the kernel to attempt a backend fallback.
@@ -47,30 +50,35 @@ typedef PlayerFallbackRequest = void Function(PlayerHandle handle, String messag
 /// [PlayerHandle] wires the per-player modules together:
 ///
 /// ```text
-/// PlayerAdapter ──events──▶ PlayerHandle ──▶ PlaybackController
-///                                   ├──▶ SessionController / PlayerSession
-///                                   ├──▶ LifecycleController
-///                                   ├──▶ RecoveryManager ──▶ BackendFallback
-///                                   └──▶ PlayerEventBus
+/// PlayerRuntime ──adapter events──▶ PlaybackController
+///       │                        ├──▶ SessionController
+///       │                        ├──▶ GeometryController
+///       │                        └──▶ (adapter-scoped bindings)
+///       │
+///       └── PlayerHandle ────────▶ LifecycleController
+///                                  RecoveryManager
+///                                  BackendFallback
+///                                  PlayerEventBus
 /// ```
 ///
 /// Responsibilities:
 ///
-/// - translate adapter events into core state
-/// - forward playback commands to the adapter
-/// - own the per-player recovery lifecycle
+/// - forward playback commands to the runtime's adapter
+/// - own the per-player recovery / fallback lifecycle
 /// - publish normalized events
 /// - serialize backend operations
 /// - protect backend operations with lifecycle generations
 ///
 /// It does not:
 ///
+/// - own the adapter, session or per-runtime controllers
+///   (those belong to [PlayerRuntime])
 /// - select or create adapters
 /// - choose fallback candidates
-/// - coordinate multiple players
 ///
 /// Those belong to:
 ///
+/// - PlayerRuntime
 /// - PlayerAdapterSelector
 /// - PlayerKernel
 final class PlayerHandle {
@@ -87,25 +95,26 @@ final class PlayerHandle {
     this.policy = const PlayerPolicy(),
     PlayerFallbackRequest? onFallbackRequested,
   }) : _player = player,
-       _adapter = adapter,
        _registration = registration,
        _adapterContext = adapterContext,
        _eventBus = eventBus,
        _options = options,
        _onFallbackRequested = onFallbackRequested,
-       _session = PlayerSession(
-         context: SessionContext(
-           playerId: player.id,
-           sessionId: adapterContext.sessionId,
-           generationId: GenerationId.generate(),
-           sourceId: PlayerSource.unknown().id,
-           source: PlayerSource.unknown(),
-           policy: policy,
-           platform: const PlatformCapabilities(),
+       _runtime = PlayerRuntime(
+         adapter: adapter,
+         session: PlayerSession(
+           context: SessionContext(
+             playerId: player.id,
+             sessionId: adapterContext.sessionId,
+             generationId: GenerationId.generate(),
+             sourceId: PlayerSource.unknown().id,
+             source: PlayerSource.unknown(),
+             policy: policy,
+             platform: const PlatformCapabilities(),
+           ),
          ),
        ) {
-    _sessionController = SessionController(_session);
-    _subscribeAdapter(_adapter);
+    _subscribeAdapter(_runtime.adapter);
   }
 
   final Player _player;
@@ -114,13 +123,11 @@ final class PlayerHandle {
   final KernelOptions _options;
   final PlayerFallbackRequest? _onFallbackRequested;
 
-  PlayerAdapter _adapter;
+  final PlayerRuntime _runtime;
+
   PlayerAdapterRegistration _registration;
   PlayerSource? _currentSource;
 
-  late final PlayerSession _session;
-  late final SessionController _sessionController;
-  final PlaybackController _playback = PlaybackController();
   final LifecycleController _lifecycle = LifecycleController();
   final RecoveryManager _recovery = RecoveryManager();
   final BackendFallback _backendFallback = BackendFallback();
@@ -131,48 +138,34 @@ final class PlayerHandle {
 
   /// Whether the currently attached adapter has an opened source.
   ///
-  /// This is deliberately maintained by [PlayerHandle] instead of relying
-  /// only on [PlayerAdapter.initialized]. An initialized adapter may have
-  /// already been closed and therefore must not receive playback commands.
+  /// This is deliberately maintained by [PlayerHandle] instead of
+  /// relying only on `PlayerAdapter.initialized`. An initialized
+  /// adapter may have already been closed and therefore must not
+  /// receive playback commands.
   bool _backendReady = false;
 
   /// Monotonically increasing lifecycle generation owned by this handle.
   ///
-  /// Every destructive lifecycle transition invalidates older operations:
-  ///
-  /// ```text
-  /// open A
-  ///   generation = 1
-  ///
-  /// close
-  ///   generation = 2
-  ///
-  /// old open/play/recovery
-  ///   generation = 1
-  ///   => stale, cannot commit
-  /// ```
-  ///
-  /// This is intentionally separate from [PlayerSession]'s
-  /// [GenerationId]. The session generation describes playback
-  /// identity, while this integer protects asynchronous backend
-  /// operations crossing lifecycle boundaries.
+  /// Every destructive lifecycle transition invalidates older
+  /// operations. See the class comment for the full description.
   int _operationGeneration = 0;
 
   /// Serializes all backend operations owned by this handle.
   ///
-  /// Cancellation of a Dart [Future] cannot forcibly interrupt a
-  /// native player call. Serializing operations ensures that backend
-  /// mutations happen in a deterministic order, while
-  /// [_operationGeneration] prevents stale operations from committing
-  /// state after a newer lifecycle transition.
+  /// Cancellation of a Dart [Future] cannot forcibly interrupt a native
+  /// player call. Serializing operations ensures backend mutations
+  /// happen in a deterministic order, while [_operationGeneration]
+  /// prevents stale operations from committing state after a newer
+  /// lifecycle transition.
   Future<void> _operation = Future<void>.value();
 
   /// Cancellation token for the currently active recovery/playback
   /// continuation.
   ///
-  /// Lifecycle operations such as open/close use the operation generation
-  /// instead of sharing this token. This prevents pause/stop from
-  /// accidentally cancelling a source-opening lifecycle operation.
+  /// Lifecycle operations such as open/close use the operation
+  /// generation instead of sharing this token. This prevents
+  /// pause/stop from accidentally cancelling a source-opening
+  /// lifecycle operation.
   OperationCancelToken? _activeCancelToken;
 
   /// Player configuration applied to this handle.
@@ -192,10 +185,10 @@ final class PlayerHandle {
   PlayerId get id => _player.id;
 
   /// Current session identifier.
-  SessionId get sessionId => _session.context.sessionId;
+  SessionId get sessionId => _runtime.session.context.sessionId;
 
   /// Current playback generation identifier.
-  GenerationId get generationId => _session.generation.id;
+  GenerationId get generationId => _runtime.session.generation.id;
 
   /// Identifier of the backend currently attached.
   String get backendId => _registration.id;
@@ -204,28 +197,47 @@ final class PlayerHandle {
   PlayerAdapterCapabilities get backendCapabilities => _registration.capabilities;
 
   /// The attached adapter.
-  PlayerAdapter get adapter => _adapter;
+  PlayerAdapter get adapter => _runtime.adapter;
 
   /// Semantic state reported by the adapter.
-  PlayerState get state => _adapter.state;
+  PlayerState get state => _runtime.adapter.state;
 
   /// Metrics reported by the adapter.
-  PlayerAdapterMetrics get metrics => _adapter.metrics;
+  PlayerAdapterMetrics get metrics => _runtime.adapter.metrics;
 
   /// Currently open source, if any.
   PlayerSource? get source => _currentSource;
 
   /// Current playback state.
-  PlaybackState get playback => _playback.current;
+  PlaybackState get playback => _runtime.playback.current;
 
   /// Playback state stream.
-  ValueStream<PlaybackState> get playbackStream => _playback.state;
+  ValueStream<PlaybackState> get playbackStream => _runtime.playback.state;
 
   /// Session snapshots stream.
-  Stream<SessionSnapshot> get snapshots => _session.snapshots;
+  Stream<SessionSnapshot> get snapshots => _runtime.session.snapshots;
 
   /// Latest session snapshot.
-  SessionSnapshot get snapshot => _session.snapshot;
+  SessionSnapshot get snapshot => _runtime.session.snapshot;
+
+  /// A transient aggregate snapshot of this handle.
+  ///
+  /// Aggregates the handle's own modules (lifecycle, recovery) and the
+  /// runtime's controllers (session, playback, geometry) into a single
+  /// immutable view. Constructed on every access; nothing is cached.
+  PlayerHandleSnapshot get combinedSnapshot => PlayerHandleSnapshot(
+    playerId: _player.id,
+    sessionId: _runtime.session.context.sessionId,
+    generationId: _runtime.session.generation.id,
+    backendId: _registration.id,
+    source: _currentSource,
+    session: _runtime.session.snapshot,
+    playback: _runtime.playback.snapshot,
+    geometry: _runtime.geometry.snapshot,
+    lifecycle: _lifecycle.snapshot,
+    recovery: _recovery.snapshot,
+    disposed: _disposed,
+  );
 
   /// Lifecycle snapshot.
   LifecycleSnapshot get lifecycle => _lifecycle.snapshot;
@@ -239,20 +251,26 @@ final class PlayerHandle {
   /// Whether this handle has been disposed.
   bool get disposed => _disposed;
 
-  /// The player session owned by this handle.
-  PlayerSession get session => _session;
+  /// The player session owned by the runtime.
+  PlayerSession get session => _runtime.session;
 
-  /// The session controller owned by this handle.
-  SessionController get sessionController => _sessionController;
+  /// The session controller owned by the runtime.
+  SessionController get sessionController => _runtime.sessionController;
 
-  /// The playback controller owned by this handle.
-  PlaybackController get playbackController => _playback;
+  /// The playback controller owned by the runtime.
+  PlaybackController get playbackController => _runtime.playback;
+
+  /// The geometry controller owned by the runtime.
+  GeometryController get geometryController => _runtime.geometry;
 
   /// The lifecycle controller owned by this handle.
   LifecycleController get lifecycleController => _lifecycle;
 
   /// The recovery manager owned by this handle.
   RecoveryManager get recoveryManager => _recovery;
+
+  /// The runtime composition root owned by this handle.
+  PlayerRuntime get runtime => _runtime;
 
   // ---------------------------------------------------------------------------
   // Operation lifecycle
@@ -261,8 +279,9 @@ final class PlayerHandle {
   /// Invalidates all currently running and queued lifecycle operations.
   ///
   /// This does not attempt to cancel an already running native Future.
-  /// Instead, it makes the operation stale so it cannot commit any state
-  /// or continue with a follow-up backend command after it returns.
+  /// Instead, it makes the operation stale so it cannot commit any
+  /// state or continue with a follow-up backend command after it
+  /// returns.
   int _invalidateOperations() {
     final generation = ++_operationGeneration;
 
@@ -286,10 +305,6 @@ final class PlayerHandle {
   }
 
   /// Creates a new cancellation token for a playback/recovery operation.
-  ///
-  /// This token is deliberately not used by lifecycle barriers such as
-  /// open/close/recycle. Those operations are protected by
-  /// [_operationGeneration].
   OperationCancelToken _createOperationToken() {
     _cancelActiveOperation(StateError('Previous player continuation was superseded.'));
 
@@ -331,8 +346,8 @@ final class PlayerHandle {
 
   /// Runs [action] after all previously queued operations complete.
   ///
-  /// Errors are preserved for the caller while the internal queue remains
-  /// usable for subsequent operations.
+  /// Errors are preserved for the caller while the internal queue
+  /// remains usable for subsequent operations.
   Future<T> _enqueue<T>(Future<T> Function() action, {bool allowDisposed = false}) {
     final next = _operation.then<T>((_) async {
       if (!allowDisposed) {
@@ -348,8 +363,6 @@ final class PlayerHandle {
   }
 
   /// Waits until all currently queued backend operations have settled.
-  ///
-  /// This is mainly useful for disposal and lifecycle barriers.
   Future<void> _drainOperations() async {
     try {
       await _operation;
@@ -395,9 +408,16 @@ final class PlayerHandle {
 
   /// Subscribes to one adapter and rejects events from an adapter that
   /// is no longer active.
+  ///
+  /// This subscription coexists with the two bindings inside
+  /// [PlayerRuntime]: the adapter's event stream is broadcast, so all
+  /// three consumers receive events independently. This subscription
+  /// handles only handle-level concerns — session transitions,
+  /// recovery, fallback, event bus publication and completion. The
+  /// bindings handle playback and geometry state.
   void _subscribeAdapter(PlayerAdapter adapter) {
     _adapterSubscription = adapter.events.listen((event) {
-      if (_disposed || !identical(adapter, _adapter)) {
+      if (_disposed || !identical(adapter, _runtime.adapter)) {
         return;
       }
 
@@ -414,7 +434,7 @@ final class PlayerHandle {
   /// Called by the kernel after construction.
   Future<void> initialize() {
     return _enqueue(() async {
-      await _adapter.initialize(_adapterContext);
+      await _runtime.adapter.initialize(_adapterContext);
 
       if (_disposed) {
         return;
@@ -428,21 +448,12 @@ final class PlayerHandle {
   }
 
   /// Opens [source] on the adapter.
-  ///
-  /// A new playback generation is created first so stale results
-  /// from a previous open are ignored.
   Future<void> open(PlayerSource source, {bool? autoPlay}) {
     _ensureNotDisposed();
 
-    // Opening a new source invalidates every previous backend operation
-    // immediately, before the new operation enters the queue.
     final operationGeneration = _invalidateOperations();
 
-    // Make the requested source visible immediately so commands queued
-    // after open() can target the new source.
     _currentSource = source;
-
-    // The adapter is not considered ready until open() completes.
     _backendReady = false;
 
     return _enqueue(() async {
@@ -450,21 +461,21 @@ final class PlayerHandle {
         return;
       }
 
-      final generationId = _sessionController.recreateGeneration();
+      final generationId = _runtime.sessionController.recreateGeneration();
 
-      _session.updateContext(
+      _runtime.session.updateContext(
         SessionContext(
           playerId: _player.id,
-          sessionId: _session.context.sessionId,
+          sessionId: _runtime.session.context.sessionId,
           generationId: generationId,
           sourceId: source.id,
           source: source,
           policy: policy,
-          platform: _session.context.platform,
+          platform: _runtime.session.context.platform,
         ),
       );
 
-      await _sessionController.open();
+      await _runtime.sessionController.open();
 
       if (!_isOperationCurrent(operationGeneration) || _disposed) {
         return;
@@ -473,7 +484,7 @@ final class PlayerHandle {
       _recovery.reset();
 
       try {
-        await _adapter.open(source);
+        await _runtime.adapter.open(source);
       } catch (_) {
         if (_isOperationCurrent(operationGeneration) && _isSourceCurrent(source)) {
           _backendReady = false;
@@ -483,11 +494,8 @@ final class PlayerHandle {
       }
 
       if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
-        // A newer lifecycle operation took ownership while open() was
-        // executing. Close the source that was just opened so the next
-        // queued lifecycle operation starts from a clean backend state.
         try {
-          await _adapter.close();
+          await _runtime.adapter.close();
         } catch (_) {
           // Best-effort cleanup of the stale open.
         }
@@ -499,32 +507,28 @@ final class PlayerHandle {
       _backendReady = true;
 
       if (config.volume != 1.0) {
-        await _adapter.setVolume(config.volume);
+        await _runtime.adapter.setVolume(config.volume);
 
         if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
           _backendReady = false;
 
           try {
-            await _adapter.close();
-          } catch (_) {
-            // Best-effort cleanup of a stale open.
-          }
+            await _runtime.adapter.close();
+          } catch (_) {}
 
           return;
         }
       }
 
       if (config.playbackRate != 1.0) {
-        await _adapter.setRate(config.playbackRate);
+        await _runtime.adapter.setRate(config.playbackRate);
 
         if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
           _backendReady = false;
 
           try {
-            await _adapter.close();
-          } catch (_) {
-            // Best-effort cleanup of a stale open.
-          }
+            await _runtime.adapter.close();
+          } catch (_) {}
 
           return;
         }
@@ -567,11 +571,6 @@ final class PlayerHandle {
     });
   }
 
-  /// Performs the actual play operation inside the serialized queue.
-  ///
-  /// This private method is required because calling the public [play]
-  /// method from another queued operation would enqueue behind itself
-  /// and create a deadlock.
   Future<void> _playInternal(
     int operationGeneration, {
     required OperationCancelToken token,
@@ -581,19 +580,19 @@ final class PlayerHandle {
       return;
     }
 
-    await token.runChecked(() => _adapter.play());
+    await token.runChecked(() => _runtime.adapter.play());
 
     if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
       return;
     }
 
-    await token.runChecked(() => _playback.play());
+    await token.runChecked(() => _runtime.playback.play());
 
     if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
       return;
     }
 
-    await token.runChecked(() => _sessionController.play());
+    await token.runChecked(() => _runtime.sessionController.play());
 
     if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
       return;
@@ -605,61 +604,31 @@ final class PlayerHandle {
   }
 
   /// Pauses playback.
-  ///
-  /// Pause is a lifecycle intent. It cancels older recovery/play
-  /// continuations, then executes itself as a queue barrier.
-  ///
-  /// It intentionally does not invalidate the lifecycle generation.
-  /// This means:
-  ///
-  /// ```text
-  /// open()
-  /// pause()
-  ///
-  /// open -> pause
-  /// ```
-  ///
-  /// remains correctly serialized instead of pause cancelling open().
   Future<void> pause() {
     _ensureNotDisposed();
     _ensureSource();
 
     final source = _currentSource!;
 
-    // A user pause should cancel pending recovery/play continuations.
     _recovery.cancel();
     _cancelActiveOperation(StateError('Playback pause requested.'));
 
     return _enqueue(() async {
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
+      if (!_isSourceCurrent(source)) return;
+      if (!_backendReady) return;
 
-      if (!_isSourceCurrent(source)) {
-        return;
-      }
+      await _runtime.adapter.pause();
 
-      if (!_backendReady) {
-        return;
-      }
+      if (_disposed || !_isSourceCurrent(source)) return;
 
-      await _adapter.pause();
+      await _runtime.playback.pause();
 
-      if (_disposed || !_isSourceCurrent(source)) {
-        return;
-      }
+      if (_disposed || !_isSourceCurrent(source)) return;
 
-      await _playback.pause();
+      await _runtime.sessionController.pause();
 
-      if (_disposed || !_isSourceCurrent(source)) {
-        return;
-      }
-
-      await _sessionController.pause();
-
-      if (_disposed || !_isSourceCurrent(source)) {
-        return;
-      }
+      if (_disposed || !_isSourceCurrent(source)) return;
 
       _lifecycle.pause();
 
@@ -668,10 +637,6 @@ final class PlayerHandle {
   }
 
   /// Stops playback and clears the session state.
-  ///
-  /// Stop is a lifecycle barrier. Older recovery/play operations are
-  /// cancelled, while this stop operation itself remains serialized
-  /// behind any already running backend call.
   Future<void> stop() {
     _ensureNotDisposed();
 
@@ -685,47 +650,24 @@ final class PlayerHandle {
     _cancelActiveOperation(StateError('Playback stop requested.'));
 
     return _enqueue(() async {
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
+      if (source != null && !_isSourceCurrent(source)) return;
+      if (!_backendReady) return;
 
-      if (source != null && !_isSourceCurrent(source)) {
-        return;
-      }
+      await _runtime.adapter.stop();
 
-      if (!_backendReady) {
-        return;
-      }
+      if (_disposed) return;
+      if (source != null && !_isSourceCurrent(source)) return;
 
-      await _adapter.stop();
+      await _runtime.playback.stop();
 
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
+      if (source != null && !_isSourceCurrent(source)) return;
 
-      if (source != null && !_isSourceCurrent(source)) {
-        return;
-      }
+      await _runtime.sessionController.stop();
 
-      await _playback.stop();
-
-      if (_disposed) {
-        return;
-      }
-
-      if (source != null && !_isSourceCurrent(source)) {
-        return;
-      }
-
-      await _sessionController.stop();
-
-      if (_disposed) {
-        return;
-      }
-
-      if (source != null && !_isSourceCurrent(source)) {
-        return;
-      }
+      if (_disposed) return;
+      if (source != null && !_isSourceCurrent(source)) return;
 
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'stop'});
     });
@@ -747,13 +689,13 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _adapter.seek(position));
+        await token.runChecked(() => _runtime.adapter.seek(position));
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
         }
 
-        await token.runChecked(() => _playback.seek(position));
+        await token.runChecked(() => _runtime.playback.seek(position));
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -783,13 +725,13 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _adapter.setVolume(clamped));
+        await token.runChecked(() => _runtime.adapter.setVolume(clamped));
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
         }
 
-        _playback.apply(PlaybackCommand.volume(clamped));
+        _runtime.playback.apply(PlaybackCommand.volume(clamped));
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -818,13 +760,13 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _adapter.setRate(rate));
+        await token.runChecked(() => _runtime.adapter.setRate(rate));
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
         }
 
-        _playback.apply(PlaybackCommand.rate(rate));
+        _runtime.playback.apply(PlaybackCommand.rate(rate));
 
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -838,65 +780,37 @@ final class PlayerHandle {
   }
 
   /// Closes the current source without disposing the player.
-  ///
-  /// Close is a lifecycle barrier:
-  ///
-  /// 1. invalidate old operations immediately
-  /// 2. remove the current source immediately
-  /// 3. cancel pending recovery/play continuations
-  /// 4. wait for currently running backend work
-  /// 5. close the backend
-  /// 6. clear playback/session state
-  ///
-  /// The close operation itself is never cancelled merely because a
-  /// newer operation generation appears. Queue ordering guarantees
-  /// that a following open runs after close.
   Future<void> close() {
     _ensureNotDisposed();
 
-    // Close is a lifecycle barrier. Invalidate first so every old
-    // play/open/recovery operation immediately becomes stale.
     _invalidateOperations();
 
     _currentSource = null;
     _backendReady = false;
     _recovery.cancel();
 
-    // Close must cancel recovery/play continuations, but the close
-    // operation itself is protected by the lifecycle generation.
     _cancelActiveOperation(StateError('Player close requested.'));
 
     return _enqueue(() async {
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
-      // Close is intentionally not guarded by operationGeneration.
-      // A later open() may already have incremented the generation,
-      // but queue ordering requires this close to finish first.
       try {
-        await _adapter.close();
+        await _runtime.adapter.close();
       } catch (_) {
         // Closing an already released backend is harmless here.
       }
 
       _backendReady = false;
 
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
-      await _playback.stop();
+      await _runtime.playback.stop();
 
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
-      await _sessionController.stop();
+      await _runtime.sessionController.stop();
 
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'stop'});
     });
@@ -909,13 +823,10 @@ final class PlayerHandle {
   }
 
   /// Deactivates the player and pauses playback when active.
-  ///
-  /// This is the hook used by visibility and page lifecycle
-  /// coordination: background players stop consuming resources.
   Future<void> deactivate() {
     _ensureNotDisposed();
 
-    if (!_playback.current.isPlaying) {
+    if (!_runtime.playback.current.isPlaying) {
       _lifecycle.pause();
 
       _publish(PlayerEventType.lifecycle, const <String, Object?>{'action': 'deactivated'});
@@ -925,19 +836,12 @@ final class PlayerHandle {
 
     final source = _currentSource;
 
-    // Deactivation cancels recovery/play continuations but does not
-    // invalidate the source-opening lifecycle itself.
     _recovery.cancel();
     _cancelActiveOperation(StateError('Player deactivation requested.'));
 
     return _enqueue(() async {
-      if (_disposed) {
-        return;
-      }
-
-      if (source != null && !_isSourceCurrent(source)) {
-        return;
-      }
+      if (_disposed) return;
+      if (source != null && !_isSourceCurrent(source)) return;
 
       if (!_backendReady) {
         _lifecycle.pause();
@@ -948,38 +852,23 @@ final class PlayerHandle {
       }
 
       try {
-        await _adapter.pause();
+        await _runtime.adapter.pause();
 
-        if (_disposed) {
-          return;
-        }
+        if (_disposed) return;
+        if (source != null && !_isSourceCurrent(source)) return;
 
-        if (source != null && !_isSourceCurrent(source)) {
-          return;
-        }
+        await _runtime.playback.pause();
 
-        await _playback.pause();
+        if (_disposed) return;
+        if (source != null && !_isSourceCurrent(source)) return;
 
-        if (_disposed) {
-          return;
-        }
-
-        if (source != null && !_isSourceCurrent(source)) {
-          return;
-        }
-
-        await _sessionController.pause();
+        await _runtime.sessionController.pause();
       } catch (_) {
         // Backend may already be releasing; deactivation continues.
       }
 
-      if (_disposed) {
-        return;
-      }
-
-      if (source != null && !_isSourceCurrent(source)) {
-        return;
-      }
+      if (_disposed) return;
+      if (source != null && !_isSourceCurrent(source)) return;
 
       _lifecycle.pause();
 
@@ -988,9 +877,6 @@ final class PlayerHandle {
   }
 
   /// Resets this handle for pool reuse.
-  ///
-  /// Closes the source, resets recovery and fallback state and
-  /// rolls the session into a new generation.
   Future<void> recycle() {
     _ensureNotDisposed();
 
@@ -1002,32 +888,24 @@ final class PlayerHandle {
     _backendFallback.reset();
 
     return _enqueue(() async {
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
       try {
-        // Recycling is a lifecycle barrier. This close must not be
-        // skipped because another operation changed the generation.
-        await _adapter.close();
+        await _runtime.adapter.close();
       } catch (_) {
         // Recycling must not fail on a broken backend.
       }
 
       _backendReady = false;
 
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
-      _sessionController.recreateGeneration();
-      _session.updateState(const SessionState.idle());
+      _runtime.sessionController.recreateGeneration();
+      _runtime.session.updateState(const SessionState.idle());
 
-      await _playback.stop();
+      await _runtime.playback.stop();
 
-      if (_disposed) {
-        return;
-      }
+      if (_disposed) return;
 
       _lifecycle.pause();
     });
@@ -1039,8 +917,6 @@ final class PlayerHandle {
       return;
     }
 
-    // Invalidate old operations before marking the handle disposed.
-    // Any running operation will be unable to commit state when it returns.
     _disposed = true;
     _operationGeneration++;
 
@@ -1051,31 +927,29 @@ final class PlayerHandle {
 
     _recovery.cancel();
 
-    // Prevent any further adapter events from entering the handle while
-    // the final lifecycle barrier waits for currently running operations.
+    // Stop handle-level adapter events first, then tear down the
+    // runtime (which detaches its own bindings).
     await _adapterSubscription?.cancel();
     _adapterSubscription = null;
 
     _lifecycle.detach();
 
-    // Dispose must be allowed through the operation queue even though
-    // the handle is already marked disposed.
     await _enqueue(() async {
+      // Runtime owns the adapter, session controller, playback
+      // controller, geometry controller and both bindings.
       try {
-        await _adapter.dispose();
+        await _runtime.dispose();
       } catch (_) {
         // Disposal continues even when the backend refuses.
       }
 
+      // Handle-scoped modules.
       await _recovery.dispose();
       await _backendFallback.dispose();
-      await _playback.dispose();
-      await _sessionController.dispose();
 
       _lifecycle.dispose();
     }, allowDisposed: true);
 
-    // Drain anything that was already queued before dispose.
     await _drainOperations();
   }
 
@@ -1090,18 +964,16 @@ final class PlayerHandle {
   Future<void> attachAdapter(PlayerAdapterRegistration registration) {
     _ensureNotDisposed();
 
-    // Backend replacement is a lifecycle boundary. Every operation
-    // targeting the previous adapter becomes stale immediately.
     final operationGeneration = _invalidateOperations();
 
     _recovery.cancel();
 
-    final previous = _adapter;
+    final previous = _runtime.adapter;
     final previousId = previous.id;
-    final wasPlaying = _playback.current.isPlaying;
-    final position = _playback.current.position;
-    final volume = _playback.current.volume;
-    final rate = _playback.current.rate;
+    final wasPlaying = _runtime.playback.current.isPlaying;
+    final position = _runtime.playback.current.position;
+    final volume = _runtime.playback.current.volume;
+    final rate = _runtime.playback.current.rate;
     final source = _currentSource;
 
     return _enqueue(() async {
@@ -1115,8 +987,6 @@ final class PlayerHandle {
           return;
         }
 
-        // Keep the existing adapter as the active adapter until the new
-        // adapter has been completely initialized and opened successfully.
         await nextAdapter.initialize(_adapterContext);
 
         if (!_isOperationCurrent(operationGeneration) || _disposed) {
@@ -1179,36 +1049,37 @@ final class PlayerHandle {
           return;
         }
 
-        // The replacement is now fully prepared. Only at this point
-        // does it become the active adapter.
+        // The replacement is fully prepared. Hand it to the runtime,
+        // which detaches the old bindings, swaps the adapter, and
+        // rebuilds the bindings against the new backend.
         final previousSubscription = _adapterSubscription;
 
         _registration = registration;
-        _adapter = nextAdapter;
+
+        await _runtime.replaceAdapter(nextAdapter);
+
         _backendReady = source != null;
 
+        // The handle's own adapter subscription also needs to move to
+        // the new adapter.
         _adapterSubscription = null;
 
         await previousSubscription?.cancel();
 
-        _subscribeAdapter(nextAdapter);
+        _subscribeAdapter(_runtime.adapter);
 
         committed = true;
 
         try {
           await previous.dispose();
         } catch (_) {
-          // The new backend is already active. A failure while releasing
-          // the previous backend must not invalidate the replacement.
+          // The new backend is already active. A failure while
+          // releasing the previous backend must not invalidate the
+          // replacement.
         }
 
-        if (_disposed) {
-          return;
-        }
-
-        if (!_isOperationCurrent(operationGeneration)) {
-          return;
-        }
+        if (_disposed) return;
+        if (!_isOperationCurrent(operationGeneration)) return;
 
         _publish(PlayerEventType.fallback, <String, Object?>{
           'action': 'backendAttached',
@@ -1236,6 +1107,17 @@ final class PlayerHandle {
 
   // ---------------------------------------------------------------------------
   // Adapter event bridge
+  //
+  // Only handles what the runtime does not:
+  //
+  // - session transitions
+  // - recovery / fallback triggers
+  // - lifecycle transitions
+  // - event bus publication
+  // - completion restarts (config.loop)
+  //
+  // Playback state is updated by PlayerPlaybackBinding.
+  // Geometry state is updated by PlayerGeometryBinding.
   // ---------------------------------------------------------------------------
 
   void _onAdapterEvent(PlayerAdapterEvent event) {
@@ -1248,37 +1130,37 @@ final class PlayerHandle {
         _publish(PlayerEventType.source, const <String, Object?>{'action': 'adapterOpened'});
 
       case PlayerAdapterPlaying():
-        _playback.apply(const PlaybackCommand.play());
-        _sessionController.play();
+        // PlaybackController updated by PlayerPlaybackBinding.
+        _runtime.sessionController.play();
 
       case PlayerAdapterPaused():
-        _playback.apply(const PlaybackCommand.pause());
-        _sessionController.pause();
+        _runtime.sessionController.pause();
 
       case PlayerAdapterStopped():
-        _playback.apply(const PlaybackCommand.stop());
-        _sessionController.stop();
+        _runtime.sessionController.stop();
 
       case PlayerAdapterBuffering(buffering: final buffering, progress: final progress):
-        _playback.setBuffering(buffering);
-        _sessionController.buffering();
+        // PlaybackController updated by PlayerPlaybackBinding.
+        _runtime.sessionController.buffering();
 
         _publish(PlayerEventType.buffering, <String, Object?>{'buffering': buffering, 'progress': progress});
 
       case PlayerAdapterCompleted():
-        _sessionController.complete();
+        _runtime.sessionController.complete();
 
         _publish(PlayerEventType.playback, const <String, Object?>{'action': 'completed'});
 
         _handleCompletion();
 
-      case PlayerAdapterPositionChanged(position: final position):
-        _playback.updatePosition(position);
-
-      case PlayerAdapterDurationChanged(duration: final duration):
-        _playback.updateDuration(duration);
+      case PlayerAdapterPositionChanged():
+      case PlayerAdapterDurationChanged():
+      case PlayerAdapterVolumeChanged():
+      case PlayerAdapterRateChanged():
+        // Handled by PlayerPlaybackBinding.
+        break;
 
       case PlayerAdapterVideoSizeChanged(width: final width, height: final height):
+        // GeometryController updated by PlayerGeometryBinding.
         _publish(PlayerEventType.renderer, <String, Object?>{'width': width, 'height': height});
 
       case PlayerAdapterVideoFrameProgress():
@@ -1333,21 +1215,12 @@ final class PlayerHandle {
           'text': text,
         });
 
-      case PlayerAdapterVolumeChanged(volume: final volume):
-        _playback.apply(PlaybackCommand.volume(volume));
-
-      case PlayerAdapterRateChanged(rate: final rate):
-        _playback.apply(PlaybackCommand.rate(rate));
-
       case PlayerAdapterErrorEvent(message: final message, error: final error, stackTrace: final stackTrace):
         _handleAdapterError(message, error, stackTrace);
     }
   }
 
   /// Restarts a looping source after completion.
-  ///
-  /// Completion recovery is treated as a normal serialized backend
-  /// operation so close/open/dispose cannot race it.
   Future<void> _handleCompletion() async {
     if (!_isCurrentPlaybackContext()) {
       return;
@@ -1372,7 +1245,7 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _adapter.seek(Duration.zero));
+        await token.runChecked(() => _runtime.adapter.seek(Duration.zero));
 
         if (!_isOperationCurrent(operationGeneration) ||
             token.isCancelled ||
@@ -1381,7 +1254,7 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _adapter.play());
+        await token.runChecked(() => _runtime.adapter.play());
 
         if (!_isOperationCurrent(operationGeneration) ||
             token.isCancelled ||
@@ -1390,7 +1263,7 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _playback.play());
+        await token.runChecked(() => _runtime.playback.play());
 
         if (!_isOperationCurrent(operationGeneration) ||
             token.isCancelled ||
@@ -1399,7 +1272,7 @@ final class PlayerHandle {
           return;
         }
 
-        await token.runChecked(() => _sessionController.play());
+        await token.runChecked(() => _runtime.sessionController.play());
       } finally {
         _releaseOperationToken(token);
       }
@@ -1422,7 +1295,7 @@ final class PlayerHandle {
     final operationGeneration = _operationGeneration;
     final source = _currentSource;
 
-    _sessionController.error(message);
+    _runtime.sessionController.error(message);
     _recovery.cancel();
 
     _cancelActiveOperation(StateError('Backend error: $message'));
@@ -1451,9 +1324,9 @@ final class PlayerHandle {
       return;
     }
 
-    final generation = _session.generation.id;
-    final resumePosition = _playback.current.position;
-    final wasPlaying = _playback.current.isPlaying;
+    final generation = _runtime.session.generation.id;
+    final resumePosition = _runtime.playback.current.position;
+    final wasPlaying = _runtime.playback.current.isPlaying;
 
     _recovery.start(
       RecoveryContext(reason: _reasonFor(message), sourceId: source.id, generationId: generation, message: message),
@@ -1491,8 +1364,6 @@ final class PlayerHandle {
       return;
     }
 
-    // The retry owns the generation from the moment it is scheduled.
-    // Never read _operationGeneration again as a replacement for this value.
     final retryToken = _createOperationToken();
 
     _recovery.scheduleRetry(delay, () async {
@@ -1501,9 +1372,7 @@ final class PlayerHandle {
           return;
         }
 
-        // The retry belongs to the lifecycle generation that created it.
-        // Any pause/stop/close/open/backend-switch invalidates it.
-        if (!_session.isCurrentGeneration(generation)) {
+        if (!_runtime.session.isCurrentGeneration(generation)) {
           return;
         }
 
@@ -1521,7 +1390,7 @@ final class PlayerHandle {
               return;
             }
 
-            if (!_session.isCurrentGeneration(generation)) {
+            if (!_runtime.session.isCurrentGeneration(generation)) {
               return;
             }
 
@@ -1539,17 +1408,15 @@ final class PlayerHandle {
               'maxAttempts': maxAttempts,
             });
 
-            // Recovery owns the backend while this retry is running.
-            // The backend remains logically attached to the same source.
             _backendReady = false;
 
-            await retryToken.runChecked(() => _adapter.close());
+            await retryToken.runChecked(() => _runtime.adapter.close());
 
             if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
               return;
             }
 
-            if (!_session.isCurrentGeneration(generation)) {
+            if (!_runtime.session.isCurrentGeneration(generation)) {
               return;
             }
 
@@ -1557,14 +1424,14 @@ final class PlayerHandle {
               return;
             }
 
-            await retryToken.runChecked(() => _adapter.open(source));
+            await retryToken.runChecked(() => _runtime.adapter.open(source));
 
             if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
               _backendReady = false;
               return;
             }
 
-            if (!_session.isCurrentGeneration(generation)) {
+            if (!_runtime.session.isCurrentGeneration(generation)) {
               _backendReady = false;
               return;
             }
@@ -1577,14 +1444,14 @@ final class PlayerHandle {
             _backendReady = true;
 
             if (resumePosition > Duration.zero) {
-              await retryToken.runChecked(() => _adapter.seek(resumePosition));
+              await retryToken.runChecked(() => _runtime.adapter.seek(resumePosition));
 
               if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
                 _backendReady = false;
                 return;
               }
 
-              if (!_session.isCurrentGeneration(generation)) {
+              if (!_runtime.session.isCurrentGeneration(generation)) {
                 _backendReady = false;
                 return;
               }
@@ -1596,14 +1463,14 @@ final class PlayerHandle {
             }
 
             if (config.volume != 1.0) {
-              await retryToken.runChecked(() => _adapter.setVolume(config.volume));
+              await retryToken.runChecked(() => _runtime.adapter.setVolume(config.volume));
 
               if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
                 _backendReady = false;
                 return;
               }
 
-              if (!_session.isCurrentGeneration(generation)) {
+              if (!_runtime.session.isCurrentGeneration(generation)) {
                 _backendReady = false;
                 return;
               }
@@ -1615,14 +1482,14 @@ final class PlayerHandle {
             }
 
             if (config.playbackRate != 1.0) {
-              await retryToken.runChecked(() => _adapter.setRate(config.playbackRate));
+              await retryToken.runChecked(() => _runtime.adapter.setRate(config.playbackRate));
 
               if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
                 _backendReady = false;
                 return;
               }
 
-              if (!_session.isCurrentGeneration(generation)) {
+              if (!_runtime.session.isCurrentGeneration(generation)) {
                 _backendReady = false;
                 return;
               }
@@ -1634,14 +1501,14 @@ final class PlayerHandle {
             }
 
             if (wasPlaying) {
-              await retryToken.runChecked(() => _adapter.play());
+              await retryToken.runChecked(() => _runtime.adapter.play());
 
               if (_disposed || retryToken.isCancelled || !_isOperationCurrent(operationGeneration)) {
                 _backendReady = false;
                 return;
               }
 
-              if (!_session.isCurrentGeneration(generation)) {
+              if (!_runtime.session.isCurrentGeneration(generation)) {
                 _backendReady = false;
                 return;
               }
@@ -1657,7 +1524,7 @@ final class PlayerHandle {
               return;
             }
 
-            if (!_session.isCurrentGeneration(generation)) {
+            if (!_runtime.session.isCurrentGeneration(generation)) {
               _backendReady = false;
               return;
             }
@@ -1668,7 +1535,7 @@ final class PlayerHandle {
             }
 
             _recovery.complete();
-            _session.updateState(const SessionState.ready());
+            _runtime.session.updateState(const SessionState.ready());
 
             _publish(PlayerEventType.recovery, const <String, Object?>{'action': 'completed'});
           } finally {
@@ -1680,7 +1547,7 @@ final class PlayerHandle {
           return;
         }
 
-        if (!_session.isCurrentGeneration(generation)) {
+        if (!_runtime.session.isCurrentGeneration(generation)) {
           return;
         }
 
@@ -1762,9 +1629,9 @@ final class PlayerHandle {
   EventContext _buildContext() {
     return EventContext(
       playerId: _player.id,
-      sessionId: _session.context.sessionId,
+      sessionId: _runtime.session.context.sessionId,
       sourceId: _currentSource?.id,
-      generationId: _session.generation.id,
+      generationId: _runtime.session.generation.id,
     );
   }
 

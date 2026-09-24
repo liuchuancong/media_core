@@ -7,9 +7,12 @@ environment:
 workspace:
   - packages/media_core
   - packages/media_core_media_kit
-  - packages/media_core_video_player
+  - packages/media_core_better_player
   - packages/media_core_native
   - packages/media_core_ijk_player
   - packages/media_core_audio
   - packages/media_core_presentation
   - examples/example
+
+dependency_overrides:
+  wakelock_plus: ^1.7.0

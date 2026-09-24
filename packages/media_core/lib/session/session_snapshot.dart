@@ -63,3 +63,20 @@ abstract class SessionSnapshot with _$SessionSnapshot {
     required DateTime timestamp,
   }) = _SessionSnapshot;
 }
+
+/// Serialization helpers for [SessionSnapshot].
+extension SessionSnapshotSerialization on SessionSnapshot {
+  Map<String, Object?> toMap() => {
+    'playerId': playerId.value,
+    'sessionId': sessionId.value,
+    'generationId': generationId.value,
+    'sourceId': sourceId?.value,
+    'state': state.toString(),
+    'positionMs': position.inMilliseconds,
+    'durationMs': duration?.inMilliseconds,
+    'buffering': buffering,
+    'hasError': hasError,
+    'errorMessage': errorMessage,
+    'timestamp': timestamp.toIso8601String(),
+  };
+}
