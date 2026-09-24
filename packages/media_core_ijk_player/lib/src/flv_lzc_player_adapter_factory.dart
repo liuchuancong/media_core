@@ -3,6 +3,8 @@ import 'package:media_core/media_core.dart';
 
 export 'fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
 
+const String kIjkPlayerBackendId = 'ijk';
+
 /// [PlayerAdapterFactory] that creates [FlvLzcPlayerAdapter] instances.
 final class IjkPlayerAdapterFactory implements PlayerAdapterFactory {
   /// [capabilities] and [config] are shared by every adapter this
@@ -26,21 +28,26 @@ final class IjkPlayerAdapterFactory implements PlayerAdapterFactory {
   }
 
   @override
-  bool supports(String id) => id == 'ijk' || id.isEmpty;
+  bool supports(String id) => id == kIjkPlayerBackendId || id.isEmpty;
 
   /// Builds a registration entry for `PlayerKernel.registerBackend`
   /// or a [PlayerAdapterRegistry]. That path carries [capabilities]
   /// on the registration entry itself, so capability-based selection
   /// works before an adapter is ever instantiated.
   PlayerAdapterRegistration registration({int priority = 90}) {
-    return PlayerAdapterRegistration(id: 'ijk', factory: this, capabilities: capabilities, priority: priority);
+    return PlayerAdapterRegistration(
+      id: kIjkPlayerBackendId,
+      factory: this,
+      capabilities: capabilities,
+      priority: priority,
+    );
   }
 }
 
 /// Registers the ijkplayer adapter in a [DefaultPlayerAdapterFactory].
 void registerIjkFactory(
   DefaultPlayerAdapterFactory factory, {
-  String id = 'ijk',
+  String id = kIjkPlayerBackendId,
   PlayerAdapterCapabilities capabilities = FlvLzcPlayerAdapter.defaultCapabilities,
   FijkPlayerConfig config = const FijkPlayerConfig(),
   void Function(FlvLzcPlayerAdapter adapter)? configure,

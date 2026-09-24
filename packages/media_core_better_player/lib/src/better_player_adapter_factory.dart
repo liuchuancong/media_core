@@ -2,6 +2,8 @@ import 'bette_player_adapter.dart';
 import 'package:media_core/media_core.dart';
 export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
 
+const String kBetterPlayerBackendId = 'better_player';
+
 /// [PlayerAdapterFactory] that creates [BetterPlayerAdapter] instances.
 final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   /// [capabilities] and [config] are shared by every adapter this
@@ -25,7 +27,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   }
 
   @override
-  bool supports(String id) => id == 'better_player' || id.isEmpty;
+  bool supports(String id) => id == kBetterPlayerBackendId || id.isEmpty;
 
   /// Builds a registration entry for `PlayerKernel.registerBackend` or
   /// a [PlayerAdapterRegistry]. That path carries [capabilities] on the
@@ -33,7 +35,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   /// before an adapter is ever instantiated.
   PlayerAdapterRegistration registration({int priority = 80}) {
     return PlayerAdapterRegistration(
-      id: 'better_player',
+      id: kBetterPlayerBackendId,
       factory: this,
       capabilities: capabilities,
       priority: priority,
@@ -44,7 +46,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
 /// Registers the better_player adapter in a [DefaultPlayerAdapterFactory].
 void registerBetterPlayerFactory(
   DefaultPlayerAdapterFactory factory, {
-  String id = 'better_player',
+  String id = kBetterPlayerBackendId,
   PlayerAdapterCapabilities capabilities = BetterPlayerAdapter.defaultCapabilities,
   BetterPlayerConfig config = const BetterPlayerConfig(),
   void Function(BetterPlayerAdapter adapter)? configure,

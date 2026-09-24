@@ -1,13 +1,13 @@
 import 'dart:async';
-import 'better_player_config.dart';
 import 'package:flutter/material.dart';
+import '../media_core_video_player.dart';
 import 'package:media_core/media_core.dart';
 import 'package:better_player_plus/better_player_plus.dart';
 
 export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
 
 /// [PlayerAdapter] implementation backed by better_player_plus —
-/// the ExoPlayer engine.
+/// the  BetterPlayer engine.
 ///
 /// This adapter also owns its video surface: it implements
 /// [PlayerVideo] directly, so there is exactly one place that knows
@@ -16,13 +16,13 @@ export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSour
 /// Engine semantics:
 ///
 /// - source-scoped event acceptance with deferred errors
-///   (ExoPlayer can emit an exception synchronously while
+///   ( BetterPlayer can emit an exception synchronously while
 ///   setupDataSource is still pending) — provided by the base
 /// - fit applied through `setOverriddenFit`, never a wrapper widget
 /// - audio-output suppression starts the source muted, avoiding
 ///   an audible burst during initialization
 /// - live streams flagged through the data source
-/// - `play` / `pause` de-duplicated with a buffering guard: ExoPlayer's
+/// - `play` / `pause` de-duplicated with a buffering guard:  BetterPlayer's
 ///   `onIsPlayingChanged` folds BUFFERING into `!isPlaying`, so a live
 ///   stream that briefly stalls flips play/pause at buffer frequency.
 ///   Those flips are not user-visible state changes, and forwarding
@@ -33,7 +33,7 @@ export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSour
 /// - an honest capability declaration ([defaultCapabilities])
 final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   BetterPlayerAdapter({
-    super.id = 'exo',
+    super.id = kBetterPlayerBackendId,
     super.capabilities = defaultCapabilities,
     BetterPlayerController? controller,
     BetterPlayerConfig playerConfig = const BetterPlayerConfig(),
@@ -83,7 +83,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   /// Last "actually playing" state reported by the engine.
   ///
-  /// ExoPlayer's `onIsPlayingChanged` treats BUFFERING as not playing,
+  ///  BetterPlayer's `onIsPlayingChanged` treats BUFFERING as not playing,
   /// so a live stream that briefly stalls emits pause + play at buffer
   /// frequency. Without de-duplication those events would be forwarded
   /// 1:1 as [PlayerAdapterEvent.playing] / [PlayerAdapterEvent.paused]
@@ -335,7 +335,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   Future<void> onDispose() async {
     // better_player returns early from dispose() when autoDispose is false,
     // and this adapter sets it false to own the lifecycle itself. Without
-    // forceDispose the native ExoPlayer survives — decoder, surface and
+    // forceDispose the native  BetterPlayer survives — decoder, surface and
     // audio included — so the next engine switch fights it for the hardware
     // decoder and a closed room keeps playing behind the UI.
     final controller = _controller;
@@ -379,7 +379,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// Maps a [PlayerSource] onto a better_player data-source type + URI.
   ///
   /// Returns `null` for unsupported schemes so [onOpen] can fail
-  /// loudly instead of handing garbage to ExoPlayer.
+  /// loudly instead of handing garbage to  BetterPlayer.
   (BetterPlayerDataSourceType, String)? _resolveSource(PlayerSource source) {
     if (source.isFile) {
       return (BetterPlayerDataSourceType.file, source.uri.toFilePath());
@@ -429,7 +429,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       case BetterPlayerEventType.pause:
         // A "pause" that lands while the player is buffering is not a
-        // user-visible pause: ExoPlayer reports !isPlaying during
+        // user-visible pause:  BetterPlayer reports !isPlaying during
         // BUFFERING and replays a matching `play` once the buffer
         // recovers. Dropping it here keeps the latch accurate and lets
         // bufferingStart / bufferingEnd express the stall instead.
@@ -524,7 +524,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // Capabilities
   // ---------------------------------------------------------------------------
 
-  /// Capabilities of the ExoPlayer engine, as exposed by this adapter.
+  /// Capabilities of the  BetterPlayer engine, as exposed by this adapter.
   static const PlayerAdapterCapabilities defaultCapabilities = PlayerAdapterCapabilities(
     // Core playback.
     supportsLive: true,

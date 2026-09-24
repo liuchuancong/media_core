@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
-import 'package:media_core_media_kit/src/media_kit_video_config.dart';
-import 'package:media_core_media_kit/src/media_kit_player_config.dart';
-import 'package:media_core_media_kit/src/utils/live_buffer_policy.dart';
-import 'package:media_core_media_kit/src/utils/mpv_platform_profile.dart';
-import 'package:media_core_media_kit/src/utils/device_playback_profile.dart';
+import 'package:media_core_media_kit/media_core_media_kit.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint, TargetPlatform, ValueListenable;
 
 export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
@@ -43,7 +39,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// surface options. Both are reachable at any time through the
   /// matching getters / setters.
   MediaKitPlayerAdapter({
-    super.id = 'mpv',
+    super.id = kMediaKitPlayerBackendId,
     super.capabilities = defaultCapabilities,
     mk.Player? player,
     this.config = const MediaKitPlayerConfig(),

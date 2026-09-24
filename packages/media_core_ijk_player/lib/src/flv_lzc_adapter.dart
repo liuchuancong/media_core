@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'fijk_helper.dart';
-import 'fijk_player_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flv_lzc/fijkplayer.dart';
 import 'package:media_core/media_core.dart';
+import 'package:media_core_ijk_player/media_core_ijk_player.dart';
 
 export 'fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
 
 final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   FlvLzcPlayerAdapter({
-    super.id = 'ijk',
+    super.id = kIjkPlayerBackendId,
     super.capabilities = defaultCapabilities,
     FijkPlayer? player,
     FijkPlayerConfig config = const FijkPlayerConfig(),

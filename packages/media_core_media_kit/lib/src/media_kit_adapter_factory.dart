@@ -4,6 +4,8 @@ import 'package:media_core/media_core.dart';
 export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
 export 'media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
 
+const String kMediaKitPlayerBackendId = 'media_kit';
+
 /// [PlayerAdapterFactory] that creates [MediaKitPlayerAdapter] instances.
 final class MediaKitAdapterFactory implements PlayerAdapterFactory {
   /// [capabilities], [config] and [videoConfig] are shared by every
@@ -29,21 +31,26 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
   }
 
   @override
-  bool supports(String id) => id == 'media_kit' || id.isEmpty;
+  bool supports(String id) => id == kMediaKitPlayerBackendId || id.isEmpty;
 
   /// Builds a registration entry for `PlayerKernel.registerBackend` or
   /// a [PlayerAdapterRegistry]. That path carries [capabilities] on the
   /// registration entry itself, so capability-based selection works
   /// before an adapter is ever instantiated.
   PlayerAdapterRegistration registration({int priority = 100}) {
-    return PlayerAdapterRegistration(id: 'media_kit', factory: this, capabilities: capabilities, priority: priority);
+    return PlayerAdapterRegistration(
+      id: kMediaKitPlayerBackendId,
+      factory: this,
+      capabilities: capabilities,
+      priority: priority,
+    );
   }
 }
 
 /// Registers the media_kit adapter in a [DefaultPlayerAdapterFactory].
 void registerMediaKitFactory(
   DefaultPlayerAdapterFactory factory, {
-  String id = 'media_kit',
+  String id = kMediaKitPlayerBackendId,
   PlayerAdapterCapabilities capabilities = MediaKitPlayerAdapter.defaultCapabilities,
   MediaKitPlayerConfig config = const MediaKitPlayerConfig(),
   MediaKitVideoConfig videoConfig = const MediaKitVideoConfig(),
