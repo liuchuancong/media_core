@@ -1,5 +1,4 @@
 import 'recovery_step.dart';
-import 'recovery_budget.dart';
 import 'recovery_failure.dart';
 import 'package:equatable/equatable.dart';
 
@@ -91,28 +90,16 @@ final class RecoveryLadderStarted extends RecoveryLadderEvent {
   const RecoveryLadderStarted({
     required RecoveryFailure failure,
     required this.plan,
-    required this.budget,
-    this.superseded = false,
   }) : super(kind: RecoveryLadderEventKind.started, failure: failure);
 
   /// Escalation order the ladder will follow.
   final List<RecoveryStepKind> plan;
 
-  /// Budget the run will spend.
-  final RecoveryBudget budget;
-
-  /// Whether this run replaced an earlier one for the same failure.
-  ///
-  /// True when the ladder escalated past rungs that already failed on this
-  /// engine/source pair, so [plan] is the remainder of the escalation
-  /// rather than the full one.
-  final bool superseded;
-
   /// The plan as a readable chain.
   String get planLabel => plan.map((kind) => kind.name).join(' → ');
 
   @override
-  List<Object?> get props => <Object?>[...super.props, plan, budget, superseded];
+  List<Object?> get props => <Object?>[...super.props, plan];
 
   @override
   String toString() => 'RecoveryLadderStarted(plan: $planLabel, failure: $failure)';

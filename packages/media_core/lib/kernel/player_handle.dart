@@ -24,8 +24,6 @@ import '../session/session_context.dart';
 import '../recovery/recovery_step.dart';
 import '../session/session_snapshot.dart';
 import '../playback/playback_command.dart';
-import '../recovery/recovery_budget.dart';
-import '../recovery/recovery_policy.dart';
 import '../recovery/recovery_target.dart';
 import '../recovery/recovery_failure.dart';
 import '../recovery/recovery_ladder.dart';
@@ -42,6 +40,11 @@ import '../lifecycle/lifecycle_controller.dart';
 import '../platform/platform_capabilities.dart';
 import '../adapter/player_adapter_registry.dart';
 import '../operation/operation_cancel_token.dart';
+import '../operation/operation.dart';
+import '../identity/operation_id.dart';
+import '../operation/operation_registry.dart';
+import '../operation/operation_tracker.dart';
+import '../operation/operation_type.dart';
 import '../diagnostics/log_level.dart';
 import '../diagnostics/log_category.dart';
 import '../diagnostics/media_core_log.dart';
@@ -140,8 +143,6 @@ final class PlayerHandle implements RecoveryTarget {
     this.policy = const PlayerPolicy(),
     PlayerAdapterRegistry? registry,
     PlayerAdapterSelector? selector,
-    RecoveryLadderPolicy? recoveryPolicy,
-    RecoveryBudget? recoveryBudget,
   }) : _player = player,
        _registration = registration,
        _adapterContext = adapterContext,
@@ -149,7 +150,7 @@ final class PlayerHandle implements RecoveryTarget {
        _options = options,
        _registry = registry,
        _selector = selector,
-       _budget = recoveryBudget ?? _budgetFor(options, config),
+       _loop = config.loop,
        _runtime = PlayerRuntime(
          adapter: adapter,
          session: PlayerSession(
@@ -164,12 +165,7 @@ final class PlayerHandle implements RecoveryTarget {
            ),
          ),
        ) {
-    _ladder = RecoveryLadder(
-      target: this,
-      candidates: _HandleRecoveryCandidates(this),
-      policy: recoveryPolicy ?? const DefaultRecoveryLadderPolicy(),
-      budget: _budget,
-    );
+    _ladder = RecoveryLadder(target: this, candidates: _HandleRecoveryCandidates(this));
 
     _ladderEvents = _ladder.events.listen(_onLadderEvent);
 
@@ -182,7 +178,6 @@ final class PlayerHandle implements RecoveryTarget {
   final KernelOptions _options;
   final PlayerAdapterRegistry? _registry;
   final PlayerAdapterSelector? _selector;
-  final RecoveryBudget _budget;
 
   final PlayerRuntime _runtime;
 
@@ -230,6 +225,120 @@ final class PlayerHandle implements RecoveryTarget {
   /// `null` means the caller never declared an intent, in which case the
   /// playback mirror is the best available answer.
   bool? _playIntent;
+
+  /// Whether output is currently muted.
+  ///
+  /// Mute is implemented by the handle, not the adapter: every engine
+  /// understands volume, so muting stores the previous volume and drives
+  /// the adapter to 0. A fresh adapter attached by recovery is re-muted
+  /// by [_applyTrackPreferences] instead of coming back audible.
+  bool _muted = false;
+
+  /// Volume to restore on unmute.
+  double _unmutedVolume = 1.0;
+
+  /// Whether playback restarts after completion.
+  ///
+  /// Mutable at runtime; [config.loop] only seeds the initial value.
+  bool _loop;
+
+  // ---------------------------------------------------------------------------
+  // Operation record
+  //
+  // Every stateful backend operation this handle performs is recorded here,
+  // on the handle, because the handle is the one layer every consumer
+  // already holds. Streams of these records are the diagnostic surface for
+  // "what did the player actually do, in what order, and what failed" —
+  // readable without touching the modules underneath.
+  // ---------------------------------------------------------------------------
+
+  final OperationRegistry _operationRegistry = OperationRegistry();
+  final OperationTracker _operationTracker = OperationTracker();
+  Operation? _currentOperation;
+
+  /// Live stream of recorded operations.
+  Stream<Operation> get onOperation => _operationTracker.operations;
+
+  /// The operation currently in flight, if any.
+  Operation? get currentOperation => _currentOperation;
+
+  /// Records the start of an operation of [type].
+  ///
+  /// A still-running previous operation is cancelled, not abandoned: two
+  /// overlapping records would leave one permanently in flight.
+  void beginOperation(OperationType type) {
+    final previous = _currentOperation;
+
+    if (previous != null && !previous.isTerminal) {
+      final cancelled = previous.cancel();
+
+      _operationRegistry.update(cancelled);
+      _operationTracker.update(cancelled);
+    }
+
+    final operation = Operation.created(id: OperationId.generate(), type: type);
+
+    _operationRegistry.register(operation);
+    _operationTracker.track(operation);
+
+    final started = operation.start();
+
+    _operationRegistry.update(started);
+    _operationTracker.update(started);
+
+    _currentOperation = started;
+  }
+
+  /// Records the current operation as completed.
+  void completeOperation() {
+    final operation = _currentOperation;
+
+    if (operation == null || operation.isTerminal) {
+      return;
+    }
+
+    final completed = operation.complete();
+
+    _operationRegistry.update(completed);
+    _operationTracker.update(completed);
+
+    _currentOperation = null;
+  }
+
+  /// Records the current operation as failed.
+  void failOperation() {
+    final operation = _currentOperation;
+
+    if (operation == null || operation.isTerminal) {
+      return;
+    }
+
+    final failed = operation.fail();
+
+    _operationRegistry.update(failed);
+    _operationTracker.update(failed);
+
+    _currentOperation = null;
+  }
+
+  /// Wraps [future] as a recorded operation of [type].
+  ///
+  /// The operation opens when [future] starts and closes when it settles,
+  /// so consumers listening to [onOperation] see exactly the lifecycle
+  /// methods the handle executed, in order, with their outcome.
+  Future<T> _record<T>(OperationType type, Future<T> future) {
+    beginOperation(type);
+
+    return future.then((value) {
+      completeOperation();
+
+      return value;
+    }, onError: (Object error, StackTrace stackTrace) {
+      failOperation();
+
+      throw Error.throwWithStackTrace(error, stackTrace);
+    });
+  }
 
   /// Track preference applied to whichever adapter is attached.
   ///
@@ -427,11 +536,127 @@ final class PlayerHandle implements RecoveryTarget {
   /// Decision context of the current recovery, if any.
   RecoverySession? get recoverySession => _ladder.session;
 
-  /// Budget the ladder runs with.
-  RecoveryBudget get recoveryBudget => _budget;
-
   /// Whether playback is restricted to the audio track.
   bool get audioOnly => _audioOnly;
+
+  /// Current playback position, `Duration.zero` before any position event.
+  Duration get position => _runtime.playback.current.position;
+
+  /// Stream duration, `Duration.zero` while unknown.
+  Duration get duration => _runtime.playback.current.duration;
+
+  /// Buffered position, approximated by the current position on engines
+  /// that do not report a separate buffer window.
+  Duration get buffered => _runtime.playback.current.position;
+
+  /// Current volume (0.0–1.0) as last commanded or mirrored.
+  double get volume => _runtime.playback.current.volume;
+
+  /// Current playback rate.
+  double get rate => _runtime.playback.current.rate;
+
+  /// Progress through the stream, 0.0–1.0 (0.0 when duration is unknown).
+  double get progress => _runtime.playback.current.progress;
+
+  /// Whether the playback mirror currently reads "playing".
+  bool get isPlaying => _runtime.playback.current.isPlaying;
+
+  /// Whether output is muted.
+  bool get muted => _muted;
+
+  /// Whether playback restarts after completion.
+  bool get loop => _loop;
+
+  /// Typed playback-state stream. Identical to [playbackStream]; kept as
+  /// the conventional name consumers reach for first.
+  ValueStream<PlaybackState> get stateChanges => _runtime.playback.state;
+
+  /// Sets whether audio output is muted.
+  ///
+  /// Implemented as volume bookkeeping: muting remembers the current
+  /// volume and drives the adapter to 0, unmuting restores it. Safe to
+  /// call before a source is open — the value is applied by [open] and
+  /// re-asserted after every backend swap.
+  Future<void> setMute(bool muted) {
+    _ensureNotDisposed();
+
+    if (muted == _muted) {
+      return Future<void>.value();
+    }
+
+    if (muted) {
+      _unmutedVolume = _pendingVolume ?? (_currentSource != null && _backendReady ? volume : config.volume);
+      _muted = true;
+
+      return setVolume(0.0);
+    }
+
+    _muted = false;
+
+    return setVolume(_unmutedVolume <= 0.0 ? 1.0 : _unmutedVolume);
+  }
+
+  /// Sets whether playback restarts after completion.
+  ///
+  /// Affects the next completion event; a stream that has already
+  /// completed must be replayed with [play] or [seek].
+  Future<void> setLoop(bool loop) {
+    _ensureNotDisposed();
+
+    _loop = loop;
+
+    return Future<void>.value();
+  }
+
+  /// Applies mute on [adapter] after open, recovery and engine swap.
+  ///
+  /// Separate from [setVolume] because the mute preference must survive
+  /// operations that do not go through the caller ([_restoreSession],
+  /// [_prepareStagedAdapter]).
+  Future<void> _applyMute(PlayerAdapter adapter) async {
+    if (!_muted) {
+      return;
+    }
+
+    try {
+      await adapter.setVolume(0.0);
+    } catch (_) {
+      // Best effort: re-applied on the next open/swap.
+    }
+  }
+
+  /// Whether this handle's own recovery ladder reacts to failures.
+  ///
+  /// On by default. A playback owner that runs its own recovery loop (the
+  /// live controller's task-queue sweep) turns it off, so adapter errors
+  /// are reported as events only and there is exactly one recovery path
+  /// for the player. Without this, two loops would race — the exact
+  /// multiply-driven recovery this framework once suffered from.
+  bool _recoveryEnabled = true;
+
+  /// Enables or disables this handle's recovery ladder.
+  void setRecoveryEnabled(bool enabled) {
+    _recoveryEnabled = enabled;
+  }
+
+  /// Whether recovery may attach another engine when every line failed.
+  ///
+  /// Enabled by default. The caller turns it off for the "single line,
+  /// and *I* decide what happens next" contract: with it off, the ladder's
+  /// candidate list simply contains no backends, so once the line rungs
+  /// are spent the run terminates and the failure is reported instead of
+  /// being answered by a silent engine swap.
+  bool _engineFallbackEnabled = true;
+
+  /// Declares whether recovery may escalate to another engine.
+  ///
+  /// See [_engineFallbackEnabled] for the semantics.
+  void setEngineFallbackEnabled(bool enabled) {
+    _engineFallbackEnabled = enabled;
+  }
+
+  /// Whether engine escalation is currently allowed.
+  bool get engineFallbackEnabled => _engineFallbackEnabled;
 
   /// Declares the alternative sources recovery may fall back to.
   ///
@@ -487,6 +712,10 @@ final class PlayerHandle implements RecoveryTarget {
   /// design removes.
   bool reportFailure(RecoveryFailure failure, {RecoveryFailureSource source = RecoveryFailureSource.unknown}) {
     _ensureNotDisposed();
+
+    if (!_recoveryEnabled) {
+      return false;
+    }
 
     final report = failure
         .copyWith(source: failure.source == RecoveryFailureSource.unknown ? source : failure.source)
@@ -720,6 +949,8 @@ final class PlayerHandle implements RecoveryTarget {
   /// playback that is already running, and the next open or swap applies
   /// the preference again.
   Future<void> _applyAudioOnly(PlayerAdapter adapter) async {
+    await _applyMute(adapter);
+
     if (!adapter.capabilities.supportsAudioOnly) {
       return;
     }
@@ -748,7 +979,7 @@ final class PlayerHandle implements RecoveryTarget {
   ///
   /// Called by the kernel after construction.
   Future<void> initialize() {
-    return _enqueue(() async {
+    return _record(OperationType.initialize, _enqueue(() async {
       await _runtime.adapter.initialize(_adapterContext);
 
       if (_disposed) {
@@ -759,7 +990,7 @@ final class PlayerHandle implements RecoveryTarget {
       _lifecycle.initialize();
 
       _publish(PlayerEventType.player, const <String, Object?>{'action': 'initialized'});
-    });
+    }));
   }
 
   /// Opens [source] on the adapter.
@@ -777,7 +1008,7 @@ final class PlayerHandle implements RecoveryTarget {
       _announceSource(source);
     }
 
-    return _enqueue(() async {
+    return _record(OperationType.load, _enqueue(() async {
       if (!_isOperationCurrent(operationGeneration) || _disposed) {
         return;
       }
@@ -942,7 +1173,7 @@ final class PlayerHandle implements RecoveryTarget {
           _releaseOperationToken(token);
         }
       }
-    });
+    }));
   }
 
   /// Starts playback.
@@ -957,7 +1188,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     final token = _createOperationToken();
 
-    return _enqueue(() async {
+    return _record(OperationType.play, _enqueue(() async {
       try {
         // An explicit play is a fresh recovery opportunity: it cancels a
         // previous suspend (see [pause]).
@@ -967,7 +1198,7 @@ final class PlayerHandle implements RecoveryTarget {
       } finally {
         _releaseOperationToken(token);
       }
-    });
+    }));
   }
 
   Future<void> _playInternal(
@@ -1016,7 +1247,7 @@ final class PlayerHandle implements RecoveryTarget {
     _ladder.suspend();
     _cancelActiveOperation(StateError('Playback pause requested.'));
 
-    return _enqueue(() async {
+    return _record(OperationType.pause, _enqueue(() async {
       if (_disposed) return;
       if (!_isSourceCurrent(source)) return;
       if (!_backendReady) return;
@@ -1036,7 +1267,7 @@ final class PlayerHandle implements RecoveryTarget {
       _lifecycle.pause();
 
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'pause'});
-    });
+    }));
   }
 
   /// Stops playback and clears the session state.
@@ -1054,7 +1285,7 @@ final class PlayerHandle implements RecoveryTarget {
     _ladder.suspend();
     _cancelActiveOperation(StateError('Playback stop requested.'));
 
-    return _enqueue(() async {
+    return _record(OperationType.stop, _enqueue(() async {
       if (_disposed) return;
       if (source != null && !_isSourceCurrent(source)) return;
       if (!_backendReady) return;
@@ -1075,7 +1306,7 @@ final class PlayerHandle implements RecoveryTarget {
       if (source != null && !_isSourceCurrent(source)) return;
 
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'stop'});
-    });
+    }));
   }
 
   /// Seeks to [position].
@@ -1088,7 +1319,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     final token = _createOperationToken();
 
-    return _enqueue(() async {
+    return _record(OperationType.seek, _enqueue(() async {
       try {
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -1110,7 +1341,7 @@ final class PlayerHandle implements RecoveryTarget {
       } finally {
         _releaseOperationToken(token);
       }
-    });
+    }));
   }
 
   /// Sets the volume in the 0.0–1.0 range.
@@ -1140,7 +1371,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     final token = _createOperationToken();
 
-    return _enqueue(() async {
+    return _record(OperationType.setVolume, _enqueue(() async {
       try {
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -1163,7 +1394,7 @@ final class PlayerHandle implements RecoveryTarget {
       } finally {
         _releaseOperationToken(token);
       }
-    });
+    }));
   }
 
   /// Sets the playback rate.
@@ -1184,7 +1415,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     final token = _createOperationToken();
 
-    return _enqueue(() async {
+    return _record(OperationType.setPlaybackRate, _enqueue(() async {
       try {
         if (!_canUseBackend(operationGeneration: operationGeneration, source: source) || token.isCancelled) {
           return;
@@ -1207,7 +1438,7 @@ final class PlayerHandle implements RecoveryTarget {
       } finally {
         _releaseOperationToken(token);
       }
-    });
+    }));
   }
 
   /// Closes the current source without disposing the player.
@@ -1224,7 +1455,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     _cancelActiveOperation(StateError('Player close requested.'));
 
-    return _enqueue(() async {
+    return _record(OperationType.close, _enqueue(() async {
       if (_disposed) return;
 
       try {
@@ -1246,7 +1477,7 @@ final class PlayerHandle implements RecoveryTarget {
       if (_disposed) return;
 
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'stop'});
-    });
+    }));
   }
 
   /// Marks the player active. Paired with [deactivate].
@@ -1376,7 +1607,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     _lifecycle.detach();
 
-    await _enqueue(() async {
+    await _record(OperationType.dispose, _enqueue(() async {
       // Runtime owns the adapter, session controller, playback
       // controller, geometry controller and both bindings.
       try {
@@ -1393,7 +1624,7 @@ final class PlayerHandle implements RecoveryTarget {
       await _adapterEvents.close();
 
       _lifecycle.dispose();
-    }, allowDisposed: true);
+    }, allowDisposed: true));
 
     await _drainOperations();
   }
@@ -1468,6 +1699,62 @@ final class PlayerHandle implements RecoveryTarget {
     return _swapTo(step, registration, session);
   }
 
+  /// Proves a recovery step actually produced playback.
+  ///
+  /// "open() returned" is not success. A broken live stream opens cleanly
+  /// and then never delivers a frame: no error event, no position events,
+  /// nothing. If the ladder took the clean open as success, the run would
+  /// end on a stream that never plays — the watchdogs that could catch it
+  /// later arm only from the first position event, which never comes, and
+  /// the player looks frozen forever with recovery believing it has
+  /// already fixed everything.
+  ///
+  /// So every recovery step that intends to play is verified: within the
+  /// grace window the playback position must actually advance. If it does
+  /// not, the step throws like any other failure and the ladder escalates.
+  /// This one check is what makes the ladder's "all engines failed" verdict
+  /// trustworthy.
+  Future<void> _verifyPlayback(RecoveryStep step, RecoverySession session) async {
+    if (!session.wasPlaying) {
+      // The caller wants the stream paused; there is no progress to
+      // expect, and a clean open is the whole contract.
+      return;
+    }
+
+    const grace = Duration(seconds: 8);
+    var last = _runtime.playback.current.position;
+    final until = DateTime.now().add(grace);
+
+    while (DateTime.now().isBefore(until)) {
+      if (_disposed) {
+        throw StateError('Recovery step ${step.label} was interrupted by disposal.');
+      }
+
+      final current = _runtime.playback.current;
+
+      if (current.position > last + const Duration(milliseconds: 400)) {
+        MediaCoreLog.debug(
+          LogCategory.recovery,
+          'recovery step verified: position advancing (${current.position.inMilliseconds}ms)',
+          fields: <String, Object?>{'step': step.label, 'backend': _registration.id},
+        );
+
+        return;
+      }
+
+      if (current.position > last) {
+        last = current.position;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+
+    throw StateError(
+      'Recovery step ${step.label} opened ${session.source?.uri} on ${_registration.id} '
+          'but playback did not progress within ${grace.inSeconds}s.',
+    );
+  }
+
   /// Reopens a source on the currently attached backend.
   ///
   /// Serves both [RecoveryStepKind.sameBackendReopen] and
@@ -1540,6 +1827,9 @@ final class PlayerHandle implements RecoveryTarget {
 
         await _restoreSession(session, source: source);
         await _applyAudioOnly(_runtime.adapter);
+
+        // Not done until playback is real: see [_verifyPlayback].
+        await _verifyPlayback(step, session);
 
         _emitTargetEvent(
           RecoveryTargetEventKind.stepSucceeded,
@@ -1638,6 +1928,10 @@ final class PlayerHandle implements RecoveryTarget {
         _backendReady = source != null;
 
         await _applyAudioOnly(nextAdapter);
+
+        // Not done until playback is real: see [_verifyPlayback]. The
+        // staged adapter was already told to play; this waits for evidence.
+        await _verifyPlayback(step, session);
 
         _emitTargetEvent(
           RecoveryTargetEventKind.stepSucceeded,
@@ -1782,7 +2076,6 @@ final class PlayerHandle implements RecoveryTarget {
           'reason': failure?.effectiveReason.toString(),
           'reporter': failure?.source.name,
           'plan': plan.map((kind) => kind.name).toList(),
-          'budget': _budget.toMap(),
         });
 
       case RecoveryLadderStepStarted(step: final step, attempt: final attempt):
@@ -1988,7 +2281,7 @@ final class PlayerHandle implements RecoveryTarget {
 
     final source = _currentSource;
 
-    if (!config.loop || source == null || _disposed || !_backendReady) {
+    if (!_loop || source == null || _disposed || !_backendReady) {
       return;
     }
 
@@ -2078,7 +2371,7 @@ final class PlayerHandle implements RecoveryTarget {
       fields: <String, Object?>{'recoveryEnabled': _options.enableRecovery && config.enableRecovery},
     );
 
-    if (!_options.enableRecovery || !config.enableRecovery) {
+    if (!_recoveryEnabled || !_options.enableRecovery || !config.enableRecovery) {
       return;
     }
 
@@ -2142,6 +2435,10 @@ final class _HandleRecoveryCandidates implements RecoveryCandidateProvider {
       return RecoveryCandidates(sources: sources);
     }
 
+    if (!_handle._engineFallbackEnabled) {
+      return RecoveryCandidates(sources: sources);
+    }
+
     final selector = _handle._selector ?? PlayerAdapterSelector(registry);
 
     // Ordering is the selector's job: it already scores protocol, format
@@ -2155,64 +2452,4 @@ final class _HandleRecoveryCandidates implements RecoveryCandidateProvider {
 
     return RecoveryCandidates(sources: sources, backends: backends);
   }
-}
-
-/// Resolves the ladder budget for one player.
-///
-/// Three layers express limits, and the narrowest one wins:
-///
-/// - [KernelOptions.recoveryBudget] — the kernel-wide base;
-/// - [KernelOptions.maxRecoveryAttempts] / `maxFallbackAttempts` — the
-///   kernel-wide defaults those two dimensions used to be driven by;
-/// - [PlayerConfig] — the per-player cap, which may ask for less
-///   recovery than the kernel allows but never for more.
-///
-/// A player that disables recovery or fallback gets a budget that cannot
-/// spend the corresponding rung, which is what makes the config flags
-/// effective without the ladder having to know about them.
-RecoveryBudget _budgetFor(KernelOptions options, PlayerConfig config) {
-  var budget = options.recoveryBudget;
-
-  if (!options.enableRecovery || !config.enableRecovery) {
-    budget = budget.withoutSameBackend();
-  }
-
-  if (!options.enableFallback || !config.enableFallback) {
-    budget = budget.withoutLines().withoutBackends();
-  }
-
-  return budget.copyWith(
-    maxSameBackendAttempts: _narrowest(<int>[
-      budget.maxSameBackendAttempts,
-      options.maxRecoveryAttempts,
-      config.maxRecoveryAttempts,
-    ]),
-    maxBackendAttempts: _narrowest(<int>[
-      budget.maxBackendAttempts,
-      options.maxFallbackAttempts,
-      config.maxFallbackAttempts,
-    ]),
-    initialBackoff: options.retryBaseDelay,
-    maxBackoff: options.retryMaxDelay,
-  );
-}
-
-/// Returns the smallest positive limit, or `0` when any limit is zero.
-///
-/// Zero is a deliberate "never do this" rather than a small number, so it
-/// short-circuits instead of losing the comparison.
-int _narrowest(List<int> limits) {
-  var result = 0;
-
-  for (final limit in limits) {
-    if (limit <= 0) {
-      return 0;
-    }
-
-    if (result == 0 || limit < result) {
-      result = limit;
-    }
-  }
-
-  return result;
 }

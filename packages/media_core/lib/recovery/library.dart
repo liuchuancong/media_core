@@ -29,10 +29,8 @@ library;
 // The ladder: one decision point per failure.
 export 'recovery_ladder.dart';
 export 'recovery_ladder_event.dart';
-export 'recovery_policy.dart';
 
 // What the ladder decides with.
-export 'recovery_budget.dart';
 export 'recovery_candidate_provider.dart';
 export 'recovery_failure.dart';
 export 'recovery_session.dart';

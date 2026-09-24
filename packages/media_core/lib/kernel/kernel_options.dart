@@ -1,6 +1,4 @@
 import '../core/player_constants.dart';
-import '../recovery/recovery_budget.dart';
-import '../recovery/recovery_policy.dart';
 
 /// Global options for the player kernel.
 ///
@@ -30,8 +28,6 @@ final class KernelOptions {
     this.maxFallbackAttempts = PlayerConstants.maxFallbackAttempts,
     this.retryBaseDelay = const Duration(seconds: 1),
     this.retryMaxDelay = const Duration(seconds: 8),
-    this.recoveryBudget = RecoveryBudget.defaults,
-    this.recoveryPolicy = const DefaultRecoveryLadderPolicy(),
   });
 
   /// Whether automatic error recovery is enabled.
@@ -64,20 +60,6 @@ final class KernelOptions {
   /// Upper bound for a single recovery retry delay.
   final Duration retryMaxDelay;
 
-  /// Base attempt budget for every player's recovery ladder.
-  ///
-  /// Per-player [PlayerConfig] values narrow this budget; they never
-  /// widen it. See [PlayerHandle.recoveryBudget] for the resolved value.
-  final RecoveryBudget recoveryBudget;
-
-  /// Policy the recovery ladder consults for the entry decision.
-  ///
-  /// Defaults to the error-policy-backed policy, which classifies the
-  /// failure through the error module and maps its recommendation onto an
-  /// escalation. Override it to change recovery behaviour kernel-wide
-  /// without editing the ladder.
-  final RecoveryLadderPolicy recoveryPolicy;
-
   /// Creates a copy with modifications.
   KernelOptions copyWith({
     bool? enableRecovery,
@@ -88,8 +70,6 @@ final class KernelOptions {
     int? maxFallbackAttempts,
     Duration? retryBaseDelay,
     Duration? retryMaxDelay,
-    RecoveryBudget? recoveryBudget,
-    RecoveryLadderPolicy? recoveryPolicy,
   }) {
     return KernelOptions(
       enableRecovery: enableRecovery ?? this.enableRecovery,
@@ -100,8 +80,6 @@ final class KernelOptions {
       maxFallbackAttempts: maxFallbackAttempts ?? this.maxFallbackAttempts,
       retryBaseDelay: retryBaseDelay ?? this.retryBaseDelay,
       retryMaxDelay: retryMaxDelay ?? this.retryMaxDelay,
-      recoveryBudget: recoveryBudget ?? this.recoveryBudget,
-      recoveryPolicy: recoveryPolicy ?? this.recoveryPolicy,
     );
   }
 }

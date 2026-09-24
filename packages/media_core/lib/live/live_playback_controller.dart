@@ -1,117 +1,67 @@
 import 'dart:async';
+
+import 'live_request.dart';
 import 'live_watchdogs.dart';
 import '../core/player_state.dart';
-import 'live_playback_models.dart';
-import '../identity/player_id.dart';
-import '../error/error_context.dart';
-import '../identity/session_id.dart';
-import '../operation/operation.dart';
-import '../error/player_failure.dart';
-import '../kernel/player_handle.dart';
-import '../kernel/player_kernel.dart';
-import '../source/source_type.dart';
-import '../source/source_format.dart';
-import '../source/source_protocol.dart';
-import '../source/player_source.dart';
-import '../identity/operation_id.dart';
-import '../session/session_state.dart';
-import '../source/source_headers.dart';
-import '../identity/generation_id.dart';
-import '../session/player_session.dart';
-import '../error/player_error_code.dart';
-import '../session/session_context.dart';
-import '../session/session_manager.dart';
-import '../operation/operation_type.dart';
-import '../session/session_snapshot.dart';
-import '../operation/operation_tracker.dart';
-import '../adapter/player_adapter_event.dart';
-import '../adapter/player_adapter_capabilities.dart';
 import '../diagnostics/log_category.dart';
 import '../diagnostics/media_core_log.dart';
-import '../operation/operation_registry.dart';
-import '../recovery/recovery_failure.dart';
-import '../operation/operation_cancel_token.dart';
-import '../recovery/recovery_ladder_event.dart';
-import 'package:media_core/identity/source_id.dart';
+import '../error/player_error_code.dart';
+import '../error/player_failure.dart';
+import '../identity/player_id.dart';
+import '../operation/operation_type.dart';
+import '../session/session_snapshot.dart';
+import '../session/session_state.dart';
+import '../identity/generation_id.dart';
+import '../task/task_id.dart';
+import '../adapter/player_adapter_event.dart';
+import '../kernel/player_handle.dart';
+import '../kernel/player_kernel.dart';
+import '../source/player_source.dart';
+import '../task/task_cancel_token.dart';
+import '../task/task_manager.dart';
+import '../task/task_type.dart';
 
-/// A live playback request: primary URL plus fallback lines.
-final class LiveSourceRequest {
-  const LiveSourceRequest({required this.urls, this.headers = const <String, String>{}, this.title});
-
-  /// Candidate URLs, best first. [urls].first is opened first.
-  final List<String> urls;
-
-  /// Optional HTTP headers applied to every line.
-  final Map<String, String> headers;
-
-  /// Optional display title for events.
-  final String? title;
-}
+/// How long a freshly opened source has to prove that playback is real.
+const Duration _verificationWindow = Duration(seconds: 8);
 
 /// Orchestrates live playback on top of a [PlayerKernel].
 ///
-/// Three layers cooperate:
+/// One structural idea holds the module together: **every action is a task
+/// on a single-slot [TaskManager]** — play, switch line, retry, pause,
+/// resume, close, recover. The queue serializes them, so none of the
+/// classic live-playback races can exist by construction:
 ///
-/// * **core** — [PlayerState] (observable playback state) and
-///   [PlayerFailure] (terminal errors); this is what the app consumes.
-/// * **session** — [PlayerSession] / [SessionManager] track the logical
-///   playback lifecycle and generation counter. Each open() advances the
-///   session generation, which is exactly the "throw away stale async work"
-///   guard that used to be a bare int.
-/// * **operation** — [Operation] / [OperationTracker] record every
-///   user-triggered high-level action (play / retry / switch line / close)
-///   plus each recovery report. This is diagnostic metadata, not control
-///   flow.
+/// - a recovery task and a user action cannot interleave — the user's task
+///   runs first, and queued recovery work is cancelled when the user takes
+///   over ([pause], [close], [play], [retry], [switchLine]);
+/// - two rapid `play()` calls cannot double-open — the first is cancelled
+///   out of the queue before the second starts;
+/// - an engine switch cannot replay a stale request over a newer one —
+///   there is no delayed replay anywhere; a switch is just the next task.
 ///
-/// ## What this class is not
+/// Recovery is a plain function of the caller's declarations, not a
+/// subsystem:
 ///
-/// It is not a recovery engine. It used to be one — a second ladder with
-/// its own same-engine retries, line cycling, engine switching and
-/// backoff, racing the handle's retry loop and the kernel's fallback loop
-/// — and the three of them invalidated each other's operations, so one
-/// fault produced a burst of adapter create/dispose cycles.
+/// ```text
+/// attempt(source, engine) fails
+///   → next source on the same engine           (the lines the caller gave)
+///   → sources exhausted → next engine, sweep again    (if the caller allowed)
+///   → nothing left → PlayerFailure on [onError]
+/// ```
 ///
-/// Recovery now belongs to one place, the [PlayerHandle]'s recovery
-/// ladder, and this controller has exactly two responsibilities towards
-/// it:
+/// "Fails" means one of: the open threw, the engine could not be attached,
+/// or — the case that used to look like a freeze — the source opened
+/// cleanly but playback position never advanced within
+/// [_verificationWindow]. Verification is what makes the sweep honest.
 ///
-/// 1. **Report what only it can see.** Watchdog stalls and failed
-///    playback commands are evidence the handle cannot produce itself;
-///    they are handed over through [PlayerHandle.reportFailure].
-/// 2. **Observe the outcome.** Line switches and staged backend swaps
-///    happen inside the handle, so the controller follows
-///    [PlayerHandle.sourceChanges] to learn which URL is playing, and
-///    [PlayerHandle.recoveryEvents] to learn when recovery gave up and
-///    the failure is terminal for the application.
-///
-/// Everything else is UI state and plumbing.
-///
-/// ## Binding across backend swaps
-///
-/// The controller binds to [PlayerHandle.adapterEvents], not to
-/// `handle.adapter.events`. The handle replaces its adapter during a
-/// backend swap, and a subscription taken from the adapter instance would
-/// silently go dead at that moment. Binding to the handle keeps the
-/// watchdog capability snapshot and the event stream correct for whatever
-/// backend is attached; [PlayerHandle.backendChanges] signals when that
-/// happened so the capabilities can be re-read.
-///
-/// The audio-only preference is the one session mode the controller keeps
-/// on behalf of the application. It forwards it to the handle, which
-/// remembers it and re-applies it to every adapter it attaches — so a
-/// backend swap inside the handle cannot silently restore video.
-///
-/// That preference is also why the frame watchdog is disabled at the
-/// session level rather than by capability: an audio-only source has no
-/// video track, and whether the adapter *could* report a frame heartbeat
-/// says nothing about whether one will ever arrive.
+/// Watchdogs stay pure detectors: a stall or an adapter error becomes a
+/// recover task — reopen the current source once, then join the same
+/// sweep. The kernel-side recovery ladder is disabled for live players, so
+/// there is exactly one recovery path and the caller can read all of it
+/// here.
 final class LivePlaybackController {
   LivePlaybackController(this.kernel, {LiveWatchdogs? watchdogs})
-    : watchdogs = watchdogs ?? LiveWatchdogs(),
-      _playerId = PlayerId.generate(),
-      _sessionManager = SessionManager(),
-      _operationRegistry = OperationRegistry(),
-      _operationTracker = OperationTracker() {
+    : watchdogs = watchdogs ?? LiveWatchdogs() {
     _wireWatchdogs();
   }
 
@@ -121,100 +71,47 @@ final class LivePlaybackController {
   /// Watchdog bundle inferring stalls.
   final LiveWatchdogs watchdogs;
 
-  // ---------------------------------------------------------------------------
-  // Session / operation infrastructure
-  // ---------------------------------------------------------------------------
+  /// Single-slot queue. Every user action and every recovery step is a
+  /// task here; capacity one makes the controller sequential by design.
+  final TaskManager _tasks = TaskManager(maxConcurrentTasks: 1);
 
-  /// Stable identity of the logical player owned by this controller.
-  final PlayerId _playerId;
+  final Map<TaskId, _PendingTask> _pending = <TaskId, _PendingTask>{};
 
-  /// Registry of sessions owned by this controller. Today there is exactly
-  /// one active session; the manager exists so the shape matches the module
-  /// contract and so future multi-session use does not reshape the class.
-  final SessionManager _sessionManager;
-
-  /// Authoritative registry of operations known to this controller.
-  final OperationRegistry _operationRegistry;
-
-  /// Lifecycle observer for those operations.
-  final OperationTracker _operationTracker;
-
-  PlayerSession? _session;
-
-  /// The operation currently in flight, if any.
-  Operation? _currentOperation;
-
-  /// Cancellation token paired with [_currentOperation].
-  OperationCancelToken? _currentCancelToken;
-
-  // ---------------------------------------------------------------------------
-  // Handle + streams
-  // ---------------------------------------------------------------------------
-
-  PlayerHandle? _handle;
-
-  /// Events of whichever adapter the bound handle currently holds.
-  StreamSubscription<PlayerAdapterEvent>? _adapterEventSub;
-
-  /// Backend swaps performed by the handle's recovery ladder.
-  StreamSubscription<PlayerBackendChange>? _backendChangeSub;
-
-  /// Line switches performed by the handle's recovery ladder.
-  StreamSubscription<PlayerSource?>? _sourceChangeSub;
-
-  /// Recovery decisions, observed to detect a terminal failure.
-  StreamSubscription<RecoveryLadderEvent>? _recoverySub;
-
-  int _generation = 0;
-  bool _playbackRequested = false;
-  bool _audioOnly = false;
+  bool _draining = false;
   bool _disposed = false;
 
-  /// Generation of the watchdog recovery request currently being executed.
-  ///
-  /// This is separate from [_generation]:
-  ///
-  /// - [_generation] identifies the logical playback/source lifecycle.
-  /// - [_watchdogRecoveryGeneration] identifies one watchdog recovery
-  ///   command.
-  ///
-  /// A recovery result from an older request must never settle a newer
-  /// watchdog recovery request.
-  int _watchdogRecoveryGeneration = 0;
+  /// Bumped by [play] and [close]. A sweep captures it when it starts and
+  /// abandons itself if it moved meanwhile.
+  int _playGeneration = 0;
 
   LiveSourceRequest? _request;
-  String? _currentUrl;
-
-  /// Backend pinned by the caller for this playback, if any.
-  ///
-  /// Survives line switches and retries: an engine setting is a user
-  /// preference, not a per-attempt detail. Recovery ignores it — the
-  /// ladder must be free to escalate past an engine that keeps failing.
+  List<PlayerSource> _sources = const <PlayerSource>[];
+  List<String> _engines = const <String>[];
+  int _engineIndex = 0;
+  int _sourceIndex = 0;
+  PlayerHandle? _handle;
+  PlayerSource? _currentSource;
   String? _preferredBackend;
+  bool _engineFallbackAllowed = true;
+  bool _playbackRequested = false;
+  bool _audioOnly = false;
+  PlayerState state = PlayerState.idle;
 
-  final _stateController = StreamController<PlayerState>.broadcast();
-  final _failureController = StreamController<PlayerFailure>.broadcast();
+  /// Line each engine's sweep starts from: the line that was being played
+  /// when the previous engine failed, so a fresh engine first retries the
+  /// line the user was watching.
+  int _sweepStart = 0;
+
+  final StreamController<PlayerState> _stateController = StreamController<PlayerState>.broadcast();
+  final StreamController<PlayerFailure> _failureController = StreamController<PlayerFailure>.broadcast();
+  StreamSubscription<PlayerAdapterEvent>? _adapterSub;
+  StreamSubscription<PlayerBackendChange>? _backendSub;
 
   /// Playback state stream.
   Stream<PlayerState> get onStateChanged => _stateController.stream;
 
-  /// Terminal failure stream.
+  /// Terminal failure stream. Emitted exactly once per exhausted sweep.
   Stream<PlayerFailure> get onError => _failureController.stream;
-
-  /// Live stream of tracked operations.
-  ///
-  /// Diagnostic surface: emitted for every operation the controller opens,
-  /// advances, or closes. Not used for control flow.
-  Stream<Operation> get onOperation => _operationTracker.operations;
-
-  /// The operation currently in flight, if any.
-  Operation? get currentOperation => _currentOperation;
-
-  /// Latest session snapshot, if a session has been created.
-  SessionSnapshot? get sessionSnapshot => _session?.snapshot;
-
-  /// Current playback state.
-  PlayerState state = PlayerState.idle;
 
   /// The active player handle, when one exists.
   PlayerHandle? get handle => _handle;
@@ -222,159 +119,108 @@ final class LivePlaybackController {
   /// Current backend id, when a handle exists.
   String? get backendId => _handle?.backendId;
 
-  /// Candidate URLs of the active request.
-  List<String> get lines => _request?.urls ?? const <String>[];
+  /// Identity of the logical player, when a handle exists.
+  ///
+  /// One identity per player, owned by the handle — the controller does
+  /// not mint its own.
+  PlayerId? get playerId => _handle?.id;
 
-  /// Index of the line currently played.
-  int get lineIndex {
-    final urls = lines;
-    final index = urls.indexOf(_currentUrl ?? '');
-    return index < 0 ? 0 : index;
-  }
+  /// Latest session snapshot of the player.
+  ///
+  /// The session is the handle's; this is a passthrough, not a second one.
+  SessionSnapshot? get sessionSnapshot => _handle?.snapshot;
+
+  /// Candidate sources of the active request.
+  List<PlayerSource> get sources => _sources;
+
+  /// Index of the source currently being played.
+  int get sourceIndex => _sourceIndex;
+
+  /// Whether playback is restricted to the audio track.
+  bool get audioOnly => _audioOnly;
 
   // ---------------------------------------------------------------------------
-  // Lifecycle
+  // Public actions — every one of them a queued task
   // ---------------------------------------------------------------------------
 
   /// Starts playing [request].
   ///
-  /// [preferredBackend] pins the engine for this playback: a user-visible
-  /// engine setting must be able to say "use better_player", and it must
-  /// do so through the normal create/bind path — which is also what
-  /// refreshes the watchdog capability snapshot. Switching engines behind
-  /// the controller (releasing its handle externally, creating another
-  /// one) leaves the controller bound to a dead handle and the watchdogs
-  /// holding the previous engine's declarations.
-  ///
-  /// When omitted, the backend is chosen by scoring the actual source:
-  /// priority plus protocol, format and live support. See
-  /// [PlayerAdapterSelector.score].
-  ///
-  /// The pin applies when a player is created, which is the first [play]
-  /// after a [close]. An engine setting that changes mid-session must
-  /// therefore call [close] first — the controller cannot swap the engine
-  /// under a live stream without re-opening it.
+  /// [preferredBackend] pins the engine for this playback; when omitted the
+  /// engine order is the selector's scored order for the primary source.
   Future<void> play(LiveSourceRequest request, {String? preferredBackend}) {
     _request = request;
+    _sources = request.sources;
     _preferredBackend = preferredBackend;
+    _engineFallbackAllowed = request.allowEngineFallback ?? request.hasAlternatives;
     _playbackRequested = true;
+    _playGeneration++;
+    _sweepStart = 0;
 
-    _watchdogRecoveryGeneration++;
+    _supersedeQueued('superseded by play');
 
-    final generation = ++_generation;
-
-    _beginOperation(OperationType.open);
-
-    MediaCoreLog.info(
-      LogCategory.player,
-      'live play: ${request.urls.length} line(s) starting with ${request.urls.first}',
-      fields: <String, Object?>{'title': request.title, 'headers': request.headers.keys.toList()},
-    );
-
-    return _open(generation, request.urls.first);
+    return _enqueue(TaskType.open, (_) => _startPlayback());
   }
 
-  /// Switches to line [index] of the current request.
-  ///
-  /// A user action, not recovery: recovery picks its own lines through the
-  /// handle's ladder and reports back on [PlayerHandle.sourceChanges].
+  /// Switches to the source at [index].
   Future<void> switchLine(int index) {
-    final urls = lines;
-
-    if (index < 0 || index >= urls.length) {
+    if (index < 0 || index >= _sources.length) {
       return Future<void>.value();
     }
 
-    _watchdogRecoveryGeneration++;
+    _sourceIndex = index;
+    _sweepStart = index;
+    _playbackRequested = true;
+    _playGeneration++;
 
-    final generation = _generation;
+    _supersedeQueued('superseded by line switch');
 
-    _beginOperation(OperationType.load);
-
-    MediaCoreLog.info(
-      LogCategory.source,
-      'user switched to line $index: ${urls[index]}',
-      fields: <String, Object?>{'lines': urls.length},
-    );
-
-    return _open(generation, urls[index]);
+    return _enqueue(TaskType.load, (_) => _openCurrentSource());
   }
 
   /// Replays the current source from scratch.
   Future<void> retry() {
-    final url = _currentUrl;
-
-    if (url == null || _request == null) {
+    if (_request == null || _sources.isEmpty) {
       return Future<void>.value();
     }
 
     _playbackRequested = true;
+    _playGeneration++;
 
-    _watchdogRecoveryGeneration++;
+    _supersedeQueued('superseded by retry');
 
-    final generation = ++_generation;
-
-    _beginOperation(OperationType.retry);
-
-    return _open(generation, url);
+    return _enqueue(TaskType.retry, (_) => _openCurrentSource());
   }
 
-  /// Pauses playback (a user intent — watchdogs stand down).
-  ///
-  /// The handle suspends its recovery ladder; a user pause is a recovery
-  /// boundary, and this controller does not have to say so explicitly.
+  /// Pauses playback. Cancels queued recovery: a user pause is a recovery
+  /// boundary, not a recovery opportunity.
   Future<void> pause() async {
     _playbackRequested = false;
+    _playGeneration++;
 
-    _watchdogRecoveryGeneration++;
+    _supersedeQueued('superseded by pause');
 
     watchdogs.cancelAll();
 
-    _handle?.declarePlayIntent(false);
-
-    await _handle?.pause();
-
-    _setState(_liveState(PlayerPlaybackState.paused));
+    await _enqueue(TaskType.pause, (token) async {
+      await _handle?.pause();
+      _setState(_liveState(PlayerPlaybackState.paused));
+    });
   }
 
   /// Resumes playback.
   Future<void> resume() async {
     _playbackRequested = true;
 
-    final handle = _handle;
+    await _enqueue(TaskType.play, (token) async {
+      final handle = _handle;
 
-    handle?.declarePlayIntent(true);
+      if (handle == null || handle.disposed) {
+        return;
+      }
 
-    if (handle == null || handle.disposed) {
-      return;
-    }
-
-    try {
       await handle.play();
-
-      if (!_playbackRequested || _handle != handle || handle.disposed) {
-        return;
-      }
-
       _setState(_liveState(PlayerPlaybackState.playing));
-    } catch (error) {
-      if (!_playbackRequested || _handle != handle || handle.disposed) {
-        return;
-      }
-
-      // A failed resume is evidence the stream is gone, and only this
-      // controller has it. Report it; the handle's ladder decides what to
-      // do — replay, switch line, switch backend or give up.
-      handle.reportFailure(
-        RecoveryFailure.fromMessage(
-          'resume failed: $error',
-          error: error,
-          code: PlayerErrorCode.backendPlayFailed,
-          source: RecoveryFailureSource.playback,
-          uri: _currentUrl,
-        ),
-      );
-    }
+    });
   }
 
   /// Toggles pause/resume.
@@ -387,577 +233,430 @@ final class LivePlaybackController {
   }
 
   /// Sets volume (0.0–1.0).
-  Future<void> setVolume(double volume) async {
-    await _handle?.setVolume(volume.clamp(0.0, 1.0).toDouble());
+  Future<void> setVolume(double volume) {
+    return _handle?.setVolume(volume.clamp(0.0, 1.0).toDouble()) ?? Future<void>.value();
   }
 
-  /// Whether playback is restricted to the audio track.
-  bool get audioOnly => _audioOnly;
+  /// Mutes or unmutes audio output.
+  Future<void> setMute(bool muted) {
+    return _handle?.setMute(muted) ?? Future<void>.value();
+  }
+
+  /// Whether audio output is muted.
+  bool get muted => _handle?.muted ?? false;
+
+  /// Sets whether playback restarts after completion.
+  Future<void> setLoop(bool loop) {
+    return _handle?.setLoop(loop) ?? Future<void>.value();
+  }
+
+  /// Current playback position on the attached engine.
+  Duration get position => _handle?.position ?? Duration.zero;
+
+  /// Stream duration on the attached engine (zero for live streams).
+  Duration get duration => _handle?.duration ?? Duration.zero;
 
   /// Restricts playback to the audio track.
-  ///
-  /// The preference outlives the current source: the handle remembers it
-  /// and re-applies it to whichever adapter it attaches, because recovery
-  /// can replace the adapter without the application being involved. The
-  /// controller keeps its own copy only to drive the watchdog side.
-  ///
-  /// Adapters that do not declare
-  /// [PlayerAdapterCapabilities.supportsAudioOnly] are left untouched —
-  /// their video track cannot be switched off — but the watchdog side is
-  /// updated either way, so a session that expects no video never reports
-  /// a frame stall.
   Future<void> setAudioOnly(bool audioOnly) async {
-    if (_audioOnly == audioOnly) {
-      return;
-    }
-
     _audioOnly = audioOnly;
 
     watchdogs.setVideoExpected(!audioOnly);
 
-    final handle = _handle;
-
-    if (handle != null && !handle.disposed) {
-      await handle.setAudioOnly(audioOnly);
-    }
+    await _handle?.setAudioOnly(audioOnly);
   }
 
-  /// Marks whether the current route owns the mounted video
-  /// presentation.
+  /// Marks whether the current route owns the mounted video presentation.
   void setPresentationVisible(bool visible) {
     watchdogs.setPresentationVisible(visible);
   }
 
+  /// Records that the app was backgrounded and the player was auto-paused.
+  ///
+  /// Without this, the unexpected-pause watchdog reads the background
+  /// auto-pause as a network fault and silently resumes playback the user
+  /// cannot see. A background pause is a system intent: playback is no
+  /// longer requested until the user resumes.
+  void noteBackgrounded() {
+    _playbackRequested = false;
+
+    watchdogs.cancelAll();
+  }
+
   /// Stops playback and releases the player.
   Future<void> close() async {
-    _beginOperation(OperationType.close);
-
     _playbackRequested = false;
-    _generation++;
-    _watchdogRecoveryGeneration++;
+    _playGeneration++;
+
+    _supersedeQueued('superseded by close');
 
     watchdogs.cancelAll();
 
-    await _unbindHandle();
-
-    final handle = _handle;
-
-    _handle = null;
-    _currentUrl = null;
-
-    // Drop the capability snapshot with the handle so the next source
-    // cannot inherit the previous adapter's declarations.
-    watchdogs.updateCapabilities(null);
-
-    if (handle != null) {
-      await kernel.release(handle.id);
-    }
-
-    _setState(PlayerState.idle);
-
-    _completeCurrentOperation();
+    await _enqueue(TaskType.close, (token) async {
+      await _releaseHandle();
+      _setState(PlayerState.idle);
+    });
   }
 
   /// Disposes the controller.
   Future<void> dispose() async {
-    await close();
+    if (_disposed) {
+      return;
+    }
 
     _disposed = true;
 
-    _cancelCurrentOperation();
+    _playbackRequested = false;
+    _playGeneration++;
 
-    _operationTracker.dispose();
-    _operationRegistry.dispose();
+    _supersedeQueued('superseded by dispose');
+    watchdogs.cancelAll();
 
-    await _sessionManager.dispose();
+    await _adapterSub?.cancel();
+    _adapterSub = null;
+    await _backendSub?.cancel();
+    _backendSub = null;
 
-    _session = null;
+    await _releaseHandle();
 
     watchdogs.dispose();
 
+    _tasks.dispose();
     await _stateController.close();
     await _failureController.close();
   }
 
   // ---------------------------------------------------------------------------
-  // Session plumbing
+  // The sweep: engine × source, verified
   // ---------------------------------------------------------------------------
 
-  /// Ensures a session exists, creating one if needed.
-  PlayerSession _ensureSession(PlayerSource source) {
-    final existing = _session;
+  Future<void> _startPlayback() async {
+    _engines = _engineOrder();
+    _engineIndex = 0;
+    _sourceIndex = 0;
 
-    if (existing != null) {
-      return existing;
+    await _sweep();
+  }
+
+  Future<void> _openCurrentSource() async {
+    if (_engines.isEmpty || _engineIndex >= _engines.length) {
+      _engines = _engineOrder();
+      _engineIndex = 0;
     }
 
-    final session = _sessionManager.create(
-      SessionContext(
-        playerId: _playerId,
-        sessionId: SessionId.generate(),
-        generationId: GenerationId.generate(),
-        sourceId: source.id,
-        source: source,
-      ),
+    await _sweep(startAtCurrent: true);
+  }
+
+  /// Tries candidates in order until one verifies, then reports failure.
+  ///
+  /// The whole sweep runs inside one queued task, so the only things that
+  /// can interrupt it are a user action taking the queue or the task being
+  /// cancelled — never another recovery path.
+  Future<void> _sweep({bool startAtCurrent = false}) async {
+    final generation = _playGeneration;
+    var first = true;
+
+    while (!_disposed && _playbackRequested && generation == _playGeneration) {
+      final source = _sources[_sourceIndex];
+      final engine = _engines[_engineIndex];
+
+      try {
+        await _openOn(engine, source);
+
+        return;
+      } catch (error) {
+        MediaCoreLog.warning(
+          LogCategory.recovery,
+          'candidate failed: ${source.uri} on $engine'
+              '${first && startAtCurrent ? ' (reopen of the playing line)' : ''}',
+          error: error,
+          fields: <String, Object?>{'sourceIndex': _sourceIndex, 'engineIndex': _engineIndex},
+        );
+
+        first = false;
+      }
+
+      if (!_nextCandidate()) {
+        await _reportExhausted(source, engine);
+
+        return;
+      }
+    }
+  }
+
+  /// Moves to the next candidate: next source, else next engine (when
+  /// allowed) restarting its sweep at the line the user was watching.
+  bool _nextCandidate() {
+    if (_sourceIndex + 1 < _sources.length) {
+      _sourceIndex++;
+
+      return true;
+    }
+
+    if (!_engineFallbackAllowed || _engineIndex + 1 >= _engines.length) {
+      return false;
+    }
+
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'all sources failed on ${_engines[_engineIndex]} — switching to ${_engines[_engineIndex + 1]}',
+      fields: <String, Object?>{
+        'from': _engines[_engineIndex],
+        'to': _engines[_engineIndex + 1],
+        'resumeAtLine': _sweepStart,
+      },
     );
 
-    _session = session;
+    _engineIndex++;
+    _sourceIndex = _sweepStart;
 
-    return session;
+    return true;
   }
 
-  /// Advances the session generation and refreshes its source context.
-  void _advanceSession(PlayerSource source) {
-    final session = _session;
+  /// Opens [source] on [engine], starts playback and verifies it.
+  ///
+  /// The handle is created per engine and kept while the engine stays the
+  /// same: line switches inside one engine re-open on the existing handle,
+  /// an engine switch releases and rebuilds it.
+  Future<void> _openOn(String engine, PlayerSource source) async {
+    final generation = _playGeneration;
 
-    if (session == null) {
-      return;
+    var handle = _handle;
+
+    if (handle == null || handle.disposed || handle.backendId != engine) {
+      await _releaseHandle();
+
+      MediaCoreLog.info(
+        LogCategory.fallback,
+        'attaching engine $engine for ${source.uri}',
+        fields: <String, Object?>{'line': _sourceIndex},
+      );
+
+      handle = await kernel.create(preferredBackend: engine);
+      _attach(handle);
     }
-
-    session.updateContext(
-      session.context.copyWith(sourceId: source.id, source: source, generationId: session.generation.id),
-    );
-
-    session.nextGeneration();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Operation plumbing
-  // ---------------------------------------------------------------------------
-
-  /// Opens a new operation, cancelling whichever one was in flight.
-  void _beginOperation(OperationType type) {
-    _cancelCurrentOperation();
-
-    final created = Operation.created(id: OperationId.generate(), type: type);
-
-    _operationRegistry.register(created);
-    _operationTracker.track(created);
-
-    final started = created.start();
-
-    _operationRegistry.update(started);
-    _operationTracker.update(started);
-
-    _currentOperation = started;
-    _currentCancelToken = OperationCancelToken();
-  }
-
-  /// Marks the current operation complete.
-  void _completeCurrentOperation() {
-    final operation = _currentOperation;
-
-    if (operation == null || operation.isTerminal) {
-      return;
-    }
-
-    final completed = operation.complete();
-
-    _operationRegistry.update(completed);
-    _operationTracker.update(completed);
-
-    _currentCancelToken?.dispose();
-    _currentCancelToken = null;
-    _currentOperation = null;
-  }
-
-  /// Marks the current operation failed.
-  void _failCurrentOperation() {
-    final operation = _currentOperation;
-
-    if (operation == null || operation.isTerminal) {
-      return;
-    }
-
-    final failed = operation.fail();
-
-    _operationRegistry.update(failed);
-    _operationTracker.update(failed);
-
-    _currentCancelToken?.dispose();
-    _currentCancelToken = null;
-    _currentOperation = null;
-  }
-
-  /// Cancels the current operation.
-  void _cancelCurrentOperation() {
-    final operation = _currentOperation;
-
-    if (operation == null || operation.isTerminal) {
-      _currentCancelToken?.dispose();
-      _currentCancelToken = null;
-      _currentOperation = null;
-      return;
-    }
-
-    _currentCancelToken?.cancel('superseded');
-
-    final cancelled = operation.cancel();
-
-    _operationRegistry.update(cancelled);
-    _operationTracker.update(cancelled);
-
-    _currentCancelToken?.dispose();
-    _currentCancelToken = null;
-    _currentOperation = null;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Opening
-  // ---------------------------------------------------------------------------
-
-  Future<void> _open(int generation, String url) async {
-    if (!_isCurrent(generation)) {
-      return;
-    }
-
-    final request = _request;
-
-    if (request == null) {
-      return;
-    }
-
-    _currentUrl = url;
 
     _setState(_liveState(PlayerPlaybackState.opening));
 
-    watchdogs.cancelAll();
+    // Recovery is this module's job; the handle's own ladder stays
+    // dormant so there is exactly one recovery path.
+    handle.setRecoveryEnabled(false);
+    handle.declarePlayIntent(true);
 
-    try {
-      final source = _sourceFor(url, request);
-      var handle = _handle;
+    await handle.open(source);
 
-      if (handle == null || handle.disposed) {
-        // Select the backend for the source we are about to open, not for
-        // an unknown one. `kernel.create()` without a source asks the
-        // selector to rank backends against "nothing", where every
-        // capability bonus is zero and priority alone decides.
-        //
-        // An explicitly pinned backend wins over scoring: the caller owns
-        // that choice, and recovery remains free to escalate away from it.
-        final pinned = _preferredBackend;
-        final selected = pinned ?? kernel.selector.select(source)?.id;
-
-        MediaCoreLog.info(
-          LogCategory.fallback,
-          'live open: using backend ${selected ?? '<none>'}'
-              '${pinned == null ? ' (selected by score)' : ' (pinned by the caller)'} for '
-              '${source.protocol.name}/${source.format.name} '
-              '${source.isLive ? 'live' : 'vod'} source',
-          fields: <String, Object?>{'uri': source.uri.toString(), 'line': _lineIndexOf(request, url)},
-        );
-
-        handle = await kernel.create(preferredBackend: selected);
-
-        if (!_isCurrent(generation)) {
-          await _releaseStaleHandle(handle);
-          return;
-        }
-
-        await _bindHandle(handle);
-      }
-
-      if (!_isCurrent(generation)) {
-        return;
-      }
-
-      // Live playback is requested, not commanded: the engine starts as
-      // soon as the source is accepted, so the handle has no play command
-      // to mirror. Declaring the intent is what lets recovery resume a
-      // stream instead of pausing the one it just reopened.
-      handle.declarePlayIntent(_playbackRequested);
-
-      // Hand the whole line list to the handle before opening: the
-      // recovery ladder can only fall back to another line if it was told
-      // which ones exist, and it must know before the first line fails.
-      handle.setSourceCandidates(_sourcesFor(request));
-
-      _ensureSession(source);
-      _advanceSession(source);
-
-      await handle.open(source);
-
-      if (!_isCurrent(generation)) {
-        return;
-      }
-
-      watchdogs.armSourceReady();
-
-      _setState(_liveState(PlayerPlaybackState.buffering));
-
-      _completeCurrentOperation();
-    } catch (error) {
-      if (!_isCurrent(generation)) {
-        return;
-      }
-
-      _failCurrentOperation();
-
-      // The open failed. Report it rather than recovering here: the
-      // handle's ladder reopens this URL, tries the next line, attaches
-      // another backend, or decides the failure is terminal — and this
-      // controller hears about the outcome through [handle.recoveryEvents].
-      final failed = handle;
-
-      if (failed != null) {
-        failed.reportFailure(
-          RecoveryFailure.fromMessage(
-            'open failed: $error',
-            error: error,
-            code: PlayerErrorCode.backendOpenFailed,
-            source: RecoveryFailureSource.playback,
-            uri: url,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _releaseStaleHandle(PlayerHandle handle) async {
-    if (_handle == handle) {
-      _handle = null;
-    }
-
-    try {
-      await kernel.release(handle.id);
-    } catch (_) {
-      // Best-effort cleanup of a handle created for an already-retired
-      // controller generation.
-    }
-  }
-
-  /// Index of [url] within [request]'s line list.
-  int _lineIndexOf(LiveSourceRequest request, String url) {
-    final index = request.urls.indexOf(url);
-
-    return index < 0 ? 0 : index;
-  }
-
-  /// Builds the source for [url], identifying it by its line index.
-  ///
-  /// The identifier is derived from the line index rather than the current
-  /// playback state: recovery switches lines inside the handle, so every
-  /// candidate has to be identified before it is opened, not when it
-  /// becomes current.
-  ///
-  /// The type, protocol and format are declared here because they are what
-  /// backend selection scores against. Leaving them unknown does not make
-  /// selection "neutral": it makes every capability bonus worth zero, so
-  /// the highest-priority backend wins even when it cannot play the
-  /// stream — which is how a `.flv` stream ends up on a backend whose
-  /// declared formats do not include `flv`.
-  PlayerSource _sourceFor(String url, LiveSourceRequest request) {
-    final headers = request.headers;
-    final uri = Uri.parse(url);
-
-    return PlayerSource(
-      id: SourceId('live_${_generation}_${_lineIndexOf(request, url)}'),
-      uri: uri,
-      type: SourceType.live,
-      protocol: SourceProtocol.fromScheme(uri.scheme),
-      format: SourceFormat.fromUri(uri),
-      headers: headers.isEmpty ? null : SourceHeaders(headers),
-      title: request.title,
-    );
-  }
-
-  /// Builds the recovery candidate list of [request], best line first.
-  List<PlayerSource> _sourcesFor(LiveSourceRequest request) {
-    return request.urls.map((url) => _sourceFor(url, request)).toList(growable: false);
-  }
-
-  ErrorContext _contextFor(String? url) {
-    return ErrorContext(
-      uri: url,
-      backend: backendId,
-      lineId: lineIndex.toString(),
-      state: state.playback.name,
-      metadata: <String, Object?>{'generation': _generation},
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Handle binding
-  // ---------------------------------------------------------------------------
-
-  /// Binds the controller to [handle].
-  ///
-  /// Every subscription is taken from the *handle*, never from
-  /// `handle.adapter`. The handle replaces its adapter instance when
-  /// recovery attaches another backend, and a subscription taken from the
-  /// adapter would go silently dead at that moment — the controller would
-  /// keep watching a closed stream while a new backend played. Binding to
-  /// the handle means the handle owns re-subscription, which is the one
-  /// place that knows a swap happened.
-  ///
-  /// Four things move together here:
-  ///
-  /// - the watchdog capability snapshot, re-read on
-  ///   [PlayerHandle.backendChanges]
-  /// - the adapter event stream
-  /// - the source stream, because recovery can switch lines
-  /// - the recovery event stream, because recovery can give up
-  Future<void> _bindHandle(PlayerHandle handle) async {
-    _handle = handle;
-
-    await _unbindHandle();
-
-    _announceWatchdogCapabilities(handle.backendId, handle.adapter.capabilities);
-
-    watchdogs.setVideoExpected(!_audioOnly);
-    watchdogs.resetPositionSignal();
-
-    _adapterEventSub = handle.adapterEvents.listen(_onAdapterEvent, onError: _onAdapterEventError);
-
-    _backendChangeSub = handle.backendChanges.listen(_onBackendChanged);
-
-    _sourceChangeSub = handle.sourceChanges.listen(_onSourceChanged);
-
-    _recoverySub = handle.recoveryEvents.listen(_onRecoveryEvent);
-
-    // A freshly created adapter starts with its video track enabled, so
-    // only the audio-only preference has to be pushed onto it.
-    if (_audioOnly) {
-      await handle.setAudioOnly(true);
-    }
-  }
-
-  /// Releases every subscription taken by [_bindHandle].
-  Future<void> _unbindHandle() async {
-    await _adapterEventSub?.cancel();
-    _adapterEventSub = null;
-
-    await _backendChangeSub?.cancel();
-    _backendChangeSub = null;
-
-    await _sourceChangeSub?.cancel();
-    _sourceChangeSub = null;
-
-    await _recoverySub?.cancel();
-    _recoverySub = null;
-  }
-
-  /// Re-reads the watchdog capabilities after a backend swap.
-  ///
-  /// The capabilities belong to the adapter *instance*, so a swap makes
-  /// the snapshot the watchdog bundle holds stale. Without this the frame
-  /// watchdog would keep arming itself from the old engine's declarations.
-  void _onBackendChanged(PlayerBackendChange change) {
-    if (_disposed) {
+    if (_abandoned(generation)) {
       return;
     }
 
-    MediaCoreLog.warning(
-      LogCategory.fallback,
-      'live controller observed a backend swap: ${change.from} -> ${change.to}',
-      fields: <String, Object?>{'currentLine': _currentUrl},
-    );
+    await handle.play();
 
-    _announceWatchdogCapabilities(change.to, change.adapter.capabilities);
+    // The step that separates "opened" from "playing": without it an
+    // engine that accepts the source but never delivers a frame reads as
+    // success and the sweep stops on a frozen player.
+    await _verifyPlayback(handle, source);
 
-    watchdogs.setVideoExpected(!_audioOnly);
+    if (_abandoned(generation)) {
+      return;
+    }
+
+    _currentSource = source;
+
+    watchdogs.armSourceReady();
     watchdogs.resetPositionSignal();
+
+    _setState(_liveState(PlayerPlaybackState.buffering));
   }
 
-  /// Hands the watchdog bundle the capabilities of [backendId]'s adapter.
+  /// Waits until [handle]'s playback position actually advances.
   ///
-  /// There is exactly one watchdog bundle per controller and it holds one
-  /// capability snapshot at a time, so this call *is* the answer to "whose
-  /// watchdog is running?". It happens on binding and on a backend swap,
-  /// and nowhere else — if a backend changes without one of those two
-  /// events, the bundle keeps the previous backend's declaration.
-  void _announceWatchdogCapabilities(String backendId, PlayerAdapterCapabilities capabilities) {
-    MediaCoreLog.info(
+  /// An engine that accepts a source but never delivers a frame — the
+  /// "freeze that looks like success" — fails here instead of ending the
+  /// sweep on a silent player.
+  Future<void> _verifyPlayback(PlayerHandle handle, PlayerSource source) async {
+    final until = DateTime.now().add(_verificationWindow);
+    var last = handle.playbackStream.value.position;
+
+    while (DateTime.now().isBefore(until)) {
+      if (_disposed || !_playbackRequested) {
+        throw StateError('Playback verification abandoned: playback was stopped.');
+      }
+
+      final position = handle.playbackStream.value.position;
+
+      if (position > last + const Duration(milliseconds: 400)) {
+        return;
+      }
+
+      if (position > last) {
+        last = position;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+
+    throw StateError(
+      '${source.uri} on ${handle.backendId} opened but never played '
+      '(no position progress in ${_verificationWindow.inSeconds}s).',
+    );
+  }
+
+  /// Terminal: every allowed candidate failed. Exactly one failure per
+  /// sweep — the caller decides what happens next.
+  Future<void> _reportExhausted(PlayerSource source, String engine) async {
+    MediaCoreLog.error(
       LogCategory.recovery,
-      'watchdog capabilities <- $backendId '
-          '(frameProgress: ${capabilities.supportsVideoFrameProgress}, live: ${capabilities.supportsLive})',
-      fields: <String, Object?>{'backend': backendId, 'audioOnly': _audioOnly},
+      'live sweep exhausted — reporting to the caller',
+      fields: <String, Object?>{
+        'sources': _sources.length,
+        'enginesTried': _engineFallbackAllowed ? _engineIndex + 1 : 1,
+        'lastEngine': engine,
+        'lastLine': source.uri.toString(),
+      },
     );
 
-    watchdogs.updateCapabilities(capabilities);
-  }
+    _setState(_liveState(PlayerPlaybackState.error));
 
-  /// Follows the source the handle is actually playing.
-  ///
-  /// Recovery can switch to another line on its own, so the controller
-  /// cannot assume the URL it passed to `_open` is still the one playing.
-  void _onSourceChanged(PlayerSource? source) {
-    if (_disposed) {
-      return;
-    }
-
-    final uri = source?.uri.toString();
-
-    if (uri != _currentUrl) {
-      MediaCoreLog.info(
-        LogCategory.source,
-        'live controller observed a source change: ${_currentUrl ?? '<none>'} -> ${uri ?? '<none>'}',
+    if (!_failureController.isClosed) {
+      _failureController.add(
+        PlayerFailure(
+          code: PlayerErrorCode.noPlayableStream,
+          message: 'Live playback failed after trying ${_sources.length} source(s)'
+              '${_engineFallbackAllowed ? ' across ${_engineIndex + 1} engine(s)' : ''}. '
+              'Last attempt: ${source.uri} on $engine.',
+        ),
       );
     }
-
-    _currentUrl = uri;
   }
 
-  /// Observes recovery decisions, and reacts to the terminal one.
-  ///
-  /// This is the whole of the controller's recovery involvement: it does
-  /// not decide, it learns. Only two events matter to it — a run starting,
-  /// which is playback the application should see as buffering, and a run
-  /// exhausting, which turns into a terminal [PlayerFailure] on [onError].
-  void _onRecoveryEvent(RecoveryLadderEvent event) {
+  // ---------------------------------------------------------------------------
+  // Engine order and handle lifecycle
+  // ---------------------------------------------------------------------------
+
+  /// Backend ids to try, best first: the pinned engine (if any), then the
+  /// selector's scored order for the primary source.
+  List<String> _engineOrder() {
+    final primary = _sources.isNotEmpty ? _sources.first : _request?.primary;
+    final scored = kernel.selector
+        .candidatesFor(primary ?? _request!.primary)
+        .where((registration) => registration.enabled)
+        .map((registration) => registration.id)
+        .toList(growable: false);
+
+    final pinned = _preferredBackend;
+
+    if (pinned == null || !scored.contains(pinned)) {
+      return scored;
+    }
+
+    return <String>[pinned, ...scored.where((id) => id != pinned)];
+  }
+
+  void _attach(PlayerHandle handle) {
+    _handle = handle;
+
+    handle.setRecoveryEnabled(false);
+
+    watchdogs.updateCapabilities(handle.adapter.capabilities);
+    watchdogs.setVideoExpected(!_audioOnly);
+
+    _adapterSub?.cancel();
+    _adapterSub = handle.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
+
+    _backendSub?.cancel();
+    _backendSub = handle.backendChanges.listen((change) {
+      watchdogs.updateCapabilities(change.adapter.capabilities);
+      watchdogs.setVideoExpected(!_audioOnly);
+    });
+
+    if (_audioOnly) {
+      unawaited(handle.setAudioOnly(true));
+    }
+  }
+
+  Future<void> _releaseHandle() async {
+    _adapterSub?.cancel();
+    _adapterSub = null;
+    _backendSub?.cancel();
+    _backendSub = null;
+
+    final handle = _handle;
+    _handle = null;
+    _currentSource = null;
+
+    watchdogs.updateCapabilities(null);
+
+    if (handle != null) {
+      try {
+        await kernel.release(handle.id);
+      } catch (_) {
+        // Best-effort release of an engine that may already be gone.
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Watchdogs and adapter events → recover tasks
+  // ---------------------------------------------------------------------------
+
+  void _wireWatchdogs() {
+    watchdogs.onStall = (kind) {
+      if (!_playbackRequested || _disposed) {
+        return;
+      }
+
+      MediaCoreLog.warning(
+        LogCategory.recovery,
+        'watchdog stall: ${kind.name}',
+        fields: <String, Object?>{'line': _currentSource?.uri.toString(), 'backend': backendId},
+      );
+
+      // A stall is a failure like any other: reopen the playing line
+      // first, then let the sweep decide. Queued behind whatever is in
+      // flight; superseded by the next user action.
+      _supersedeQueued('superseded by stall recovery');
+      _sweepStart = _sourceIndex;
+
+      unawaited(_enqueue(TaskType.recover, _runRecoverTask));
+    };
+
+    watchdogs.onRecoveryRequested = (action) {
+      if (!_playbackRequested || _disposed) {
+        watchdogs.reportRecoveryResult(false);
+        return;
+      }
+
+      // reassertPlay is a command, not a recovery: it goes through the
+      // handle directly so the watchdog gets its answer immediately.
+      final handle = _handle;
+
+      if (handle == null || handle.disposed) {
+        watchdogs.reportRecoveryResult(false);
+        return;
+      }
+
+      unawaited(
+        handle.play().then((_) {
+          watchdogs.reportRecoveryResult(true);
+        }, onError: (Object _) {
+          watchdogs.reportRecoveryResult(false);
+        }),
+      );
+    };
+  }
+
+  Future<void> _runRecoverTask(TaskCancelToken token) {
+    return _sweep(startAtCurrent: true);
+  }
+
+  void _onAdapterEvent(PlayerAdapterEvent event) {
     if (_disposed) {
       return;
     }
 
     switch (event) {
-      case RecoveryLadderStarted():
-        _setState(_liveState(PlayerPlaybackState.buffering));
-
-      case RecoveryLadderCompleted():
-        // The adapter's own Playing event is the authoritative signal that
-        // playback resumed; nothing to do here.
-        break;
-
-      case RecoveryLadderExhausted(failure: final failure, message: final message):
-        unawaited(_terminate(_failureFrom(failure, message)));
-
-      case RecoveryLadderCancelled():
-      case RecoveryLadderStepStarted():
-      case RecoveryLadderStepFailed():
-        break;
-    }
-  }
-
-  /// Converts a ladder failure into the error model the application reads.
-  PlayerFailure _failureFrom(RecoveryFailure? failure, String? message) {
-    if (failure == null) {
-      return PlayerFailure(
-        code: PlayerErrorCode.playbackFailed,
-        message: message ?? 'Live playback failed.',
-        context: _contextFor(_currentUrl),
-      );
-    }
-
-    return PlayerFailure(
-      code: failure.code,
-      message: failure.message,
-      cause: failure.cause,
-      stackTrace: failure.stackTrace,
-      context: _contextFor(_currentUrl),
-    );
-  }
-
-  void _onAdapterEvent(PlayerAdapterEvent adapterEvent) {
-    switch (adapterEvent) {
       case PlayerAdapterPlaying():
         _setState(_liveState(PlayerPlaybackState.playing));
-
         watchdogs.onPlayingChanged(true, fromUserIntent: false);
-
-        // Playback is running: the handle's ladder has already reset its
-        // own counters on the recovered step, so there is nothing to
-        // rewind here.
-        _completeCurrentOperation();
 
       case PlayerAdapterPaused():
         watchdogs.onPlayingChanged(false, fromUserIntent: !_playbackRequested);
@@ -968,158 +667,163 @@ final class LivePlaybackController {
 
       case PlayerAdapterBuffering(buffering: final buffering):
         _setState(_liveState(buffering ? PlayerPlaybackState.buffering : PlayerPlaybackState.playing));
-
         watchdogs.onBufferingChanged(buffering);
 
-      case PlayerAdapterVideoFrameProgress():
-        // Only a real decoded-frame heartbeat feeds the
-        // video-frame stall watchdog.
-        watchdogs.onFrameProgress();
-
-      case PlayerAdapterVideoSizeChanged():
-        // Video geometry is not decoded-frame progress.
-        //
-        // A size change only tells us that the video dimensions
-        // changed. It does not prove that a new frame was decoded.
-        break;
-
       case PlayerAdapterPositionChanged(position: final position):
-        // Position is progress, not proof of a decoded frame, so it must
-        // not feed the frame watchdog. It does feed the stall detector of
-        // last resort: an engine with no frame heartbeat can freeze with no
-        // buffering event and no error, and a position that stops
-        // advancing is the only remaining evidence.
         watchdogs.onPositionProgress(position);
 
-      case PlayerAdapterErrorEvent():
-        // The handle reports adapter errors itself, so this branch is
-        // informational: the failure is already on its way to the ladder.
-        // Re-reporting it here would create the second recovery path this
-        // refactor removed.
-        break;
+      case PlayerAdapterVideoFrameProgress():
+        watchdogs.onFrameProgress();
 
-      case PlayerAdapterOpened():
-        // PlayerHandle already translates the opened event
-        // into the core/session event pipeline.
-        break;
+      case PlayerAdapterErrorEvent(message: final message):
+        MediaCoreLog.warning(
+          LogCategory.error,
+          'adapter error: $message',
+          fields: <String, Object?>{'backend': backendId, 'line': _currentSource?.uri.toString()},
+        );
 
+        if (_playbackRequested) {
+          _supersedeQueued('superseded by adapter error');
+          _sweepStart = _sourceIndex;
+
+          unawaited(_enqueue(TaskType.recover, _runRecoverTask));
+        }
+
+      case PlayerAdapterVideoSizeChanged():
       case PlayerAdapterStopped():
-        // Stop is controlled by the live controller itself.
-        break;
-
       case PlayerAdapterCompleted():
-        // Live playback normally does not complete naturally.
-        // Recovery is driven by watchdog/error events instead.
-        break;
-
+      case PlayerAdapterOpened():
       case PlayerAdapterDurationChanged():
-        // Duration is not used by live playback recovery.
-        break;
-
       case PlayerAdapterVideoReconfigured():
-        // Video output reconfiguration does not prove frame progress.
-        break;
-
       case PlayerAdapterHwdecChanged():
-        // Decoder information is diagnostic/runtime information.
-        // It does not directly trigger recovery.
-        break;
-
       case PlayerAdapterAudioReconfigured():
-        // Audio output reconfiguration does not affect the
-        // video-frame watchdog.
-        break;
-
       case PlayerAdapterAudioDeviceChanged():
-        // Audio device changes do not affect live video recovery.
-        break;
-
       case PlayerAdapterSubtitleChanged():
-        // Subtitle changes are presentation information only.
-        break;
-
       case PlayerAdapterCacheChanged():
-        // Cache state is informational here.
-        // Buffering recovery is driven by PlayerAdapterBuffering
-        // and the buffering watchdog.
-        break;
-
       case PlayerAdapterMetadataChanged():
-        // Metadata is not part of live recovery control flow.
-        break;
-
       case PlayerAdapterPlaylistChanged():
-        // Playlist changes are not used by this live controller.
-        break;
-
       case PlayerAdapterClientMessage():
-        // Backend client messages are diagnostic information.
-        break;
-
       case PlayerAdapterLogMessage():
-        // Backend log messages are diagnostic information.
-        break;
-
       case PlayerAdapterVolumeChanged():
-        // Volume changes do not affect live recovery.
-        break;
-
       case PlayerAdapterRateChanged():
-        // Playback rate changes do not affect live recovery.
         break;
     }
   }
 
-  void _onAdapterEventError(Object error) {
-    // A stream error is not a playback failure: the adapter's own error
-    // events carry the recoverable evidence, and the handle reports those.
-    // Surface it for diagnostics only.
-    if (_disposed) {
+  // ---------------------------------------------------------------------------
+  // Task queue plumbing
+  // ---------------------------------------------------------------------------
+
+  /// Queues [action] as a task and starts draining.
+  ///
+  /// The action travels with its task: the drain handler dispatches by
+  /// task id, so the order actions were enqueued in is the order they run
+  /// in, regardless of which enqueue happened to start the drain.
+  Future<void> _enqueue(TaskType type, Future<void> Function(TaskCancelToken token) action) {
+    final pending = _PendingTask(action);
+    final task = _tasks.createAndQueue(
+      id: TaskId.generate(),
+      type: type,
+      playerId: _handle?.id,
+      generationId: GenerationId.generate(),
+    );
+
+    _pending[task.id] = pending;
+
+    unawaited(_drain());
+
+    return pending.completer.future;
+  }
+
+  /// Runs queued tasks one at a time. Capacity is one; this loop is what
+  /// turns the queue into the controller's serialization spine.
+  Future<void> _drain() async {
+    if (_draining) {
       return;
     }
 
-    _setState(_liveState(PlayerPlaybackState.error));
-  }
+    _draining = true;
 
-  /// Marks playback as terminally failed and publishes the failure.
-  ///
-  /// Reached from two places only: the ladder reporting that it ran out of
-  /// steps, and a watchdog declaring the stream unrecoverable. Both mean
-  /// the same thing to the application.
-  Future<void> _terminate(PlayerFailure failure) async {
-    _playbackRequested = false;
+    try {
+      while (!_disposed && _tasks.hasQueuedTasks) {
+        try {
+          await _tasks.executeAvailable((task) async {
+            final pending = _pending.remove(task.id);
 
-    _watchdogRecoveryGeneration++;
+            if (pending == null) {
+              return null;
+            }
 
-    watchdogs.cancelAll();
+            final token = _tasks.cancelToken(task.id);
 
-    _setState(_liveState(PlayerPlaybackState.error));
+            // The operation record lives on the handle (the anchor every
+            // consumer holds). A task that creates the handle records from
+            // the moment it exists; earlier there is simply nothing to
+            // record on.
+            _handle?.beginOperation(_operationTypeOf(task.type));
 
-    _session?.updateState(const SessionState.error());
+            try {
+              if (token == null || !token.isCancelled) {
+                await pending.action(token ?? TaskCancelToken());
+              }
 
-    if (!_failureController.isClosed) {
-      _failureController.add(failure);
+              pending.completer.complete();
+              _handle?.completeOperation();
+            } catch (error, stackTrace) {
+              pending.completer.completeError(error, stackTrace);
+              _handle?.failOperation();
+              rethrow;
+            }
+
+            return null;
+          });
+        } catch (error) {
+          // A task that threw after its own completer was already settled
+          // (or a manager-level failure) ends here; the task record keeps
+          // the failure for diagnostics.
+          MediaCoreLog.debug(LogCategory.player, 'live task ended: $error');
+        }
+      }
+    } finally {
+      _draining = false;
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Internals
-  // ---------------------------------------------------------------------------
+  /// Cancels every queued (not yet started) task and releases its waiter.
+  void _supersedeQueued(String reason) {
+    final cancelled = _tasks.cancelQueuedTasks(reason);
 
-  /// Whether [generation] still identifies the logical playback the
-  /// controller is running.
-  bool _isCurrent(int generation) {
-    return generation == _generation && _request != null && _playbackRequested;
+    for (final task in cancelled) {
+      _pending.remove(task.id)?.completer.complete();
+    }
   }
 
-  bool _isWatchdogRecoveryCurrent(int generation) {
-    final handle = _handle;
-
-    return generation == _watchdogRecoveryGeneration && _playbackRequested && handle != null && !handle.disposed;
+  /// Task types and operation types describe the same actions; the record
+  /// is written in the operation module's vocabulary.
+  OperationType _operationTypeOf(TaskType type) {
+    return switch (type) {
+      TaskType.open => OperationType.open,
+      TaskType.load => OperationType.load,
+      TaskType.retry => OperationType.retry,
+      TaskType.pause => OperationType.pause,
+      TaskType.play => OperationType.play,
+      TaskType.close => OperationType.close,
+      TaskType.recover => OperationType.recover,
+      TaskType.fallback => OperationType.fallback,
+      _ => OperationType.load,
+    };
   }
+
+  bool _abandoned(int generation) {
+    return _disposed || !_playbackRequested || generation != _playGeneration;
+  }
+
+  // ---------------------------------------------------------------------------
+  // State mirroring
+  // ---------------------------------------------------------------------------
 
   PlayerState _liveState(PlayerPlaybackState playback) {
-    return PlayerState(lifecycle: PlayerLifecycleState.ready, playback: playback, hasSource: true);
+    return PlayerState(lifecycle: PlayerLifecycleState.ready, playback: playback, hasSource: _sources.isNotEmpty);
   }
 
   void _setState(PlayerState next) {
@@ -1129,9 +833,10 @@ final class LivePlaybackController {
 
     state = next;
 
-    // Mirror into the session so the session's SessionSnapshot stream
-    // carries the same lifecycle information the app already consumes.
-    _session?.updateState(_toSessionState(next));
+    // Mirror into the handle's session — the one session this player has.
+    // Consumers reading SessionSnapshot from the handle see the same
+    // lifecycle the controller reports on [onStateChanged].
+    _handle?.session.updateState(_toSessionState(next));
 
     if (!_stateController.isClosed) {
       _stateController.add(next);
@@ -1139,186 +844,25 @@ final class LivePlaybackController {
   }
 
   SessionState _toSessionState(PlayerState playerState) {
-    switch (playerState.playback) {
-      case PlayerPlaybackState.idle:
-        return const SessionState.idle();
-
-      case PlayerPlaybackState.opening:
-        return const SessionState.opening();
-
-      case PlayerPlaybackState.playing:
-        return const SessionState.playing();
-
-      case PlayerPlaybackState.paused:
-        return const SessionState.paused();
-
-      case PlayerPlaybackState.buffering:
-        return const SessionState.buffering();
-
-      case PlayerPlaybackState.stopped:
-      case PlayerPlaybackState.stopping:
-        return const SessionState.stopped();
-
-      case PlayerPlaybackState.completed:
-        return const SessionState.completed();
-
-      case PlayerPlaybackState.error:
-        return const SessionState.error();
-
-      case PlayerPlaybackState.seeking:
-        // Live streams do not seek; treat as an in-flight transition.
-        return const SessionState.buffering();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Watchdog wiring
-  // ---------------------------------------------------------------------------
-
-  void _wireWatchdogs() {
-    /// Watchdogs only infer stalls; they do not act on them.
-    ///
-    /// A stall is evidence the controller has and the handle does not, so
-    /// it is reported to the handle's ladder — which owns the decision of
-    /// what to reopen, switch or give up on. This controller used to keep
-    /// a ladder of its own here, in parallel with the handle's and the
-    /// kernel's; that is what the recovery refactor removed.
-    watchdogs.onStall = (kind) {
-      if (!_playbackRequested || _disposed) {
-        return;
-      }
-
-      final handle = _handle;
-
-      if (handle == null || handle.disposed) {
-        return;
-      }
-
-      _setState(_liveState(PlayerPlaybackState.buffering));
-
-      MediaCoreLog.warning(
-        LogCategory.recovery,
-        'watchdog stall reported: ${kind.name}',
-        fields: <String, Object?>{'line': _currentUrl, 'backend': handle.backendId},
-      );
-
-      handle.reportFailure(
-        RecoveryFailure.fromMessage(
-          'live stall: ${kind.name}',
-          error: kind,
-          code: _codeForStall(kind),
-          source: RecoveryFailureSource.watchdog,
-          uri: _currentUrl,
-        ),
-      );
-    };
-
-    /// Watchdogs never call PlayerHandle directly.
-    ///
-    /// They only request a recovery action. The controller owns the
-    /// asynchronous boundary and reports the result back after the
-    /// PlayerHandle operation completes.
-    watchdogs.onRecoveryRequested = (action) {
-      if (!_playbackRequested) {
-        watchdogs.reportRecoveryResult(false);
-        return;
-      }
-
-      final recoveryGeneration = ++_watchdogRecoveryGeneration;
-      final playbackGeneration = _generation;
-      final handle = _handle;
-
-      if (handle == null || handle.disposed) {
-        watchdogs.reportRecoveryResult(false);
-        return;
-      }
-
-      unawaited(_handleWatchdogRecovery(action, recoveryGeneration, playbackGeneration, handle));
+    return switch (playerState.playback) {
+      PlayerPlaybackState.idle => const SessionState.idle(),
+      PlayerPlaybackState.opening => const SessionState.opening(),
+      PlayerPlaybackState.playing => const SessionState.playing(),
+      PlayerPlaybackState.paused => const SessionState.paused(),
+      PlayerPlaybackState.buffering => const SessionState.buffering(),
+      PlayerPlaybackState.stopped || PlayerPlaybackState.stopping => const SessionState.stopped(),
+      PlayerPlaybackState.completed => const SessionState.completed(),
+      PlayerPlaybackState.error => const SessionState.error(),
+      // Live streams do not seek; treat as an in-flight transition.
+      PlayerPlaybackState.seeking => const SessionState.buffering(),
     };
   }
+}
 
-  /// Executes a watchdog recovery action through [PlayerHandle].
-  ///
-  /// This is deliberately the only bridge between watchdog recovery
-  /// requests and actual player operations.
-  ///
-  /// [PlayerHandle] performs the lifecycle/generation checks. If the
-  /// source was closed, replaced, or the handle was disposed while the
-  /// operation was waiting, the handle prevents the stale command from
-  /// reaching the backend or committing stale playback state.
-  ///
-  /// The controller additionally checks its own playback generation and
-  /// watchdog recovery generation after the asynchronous operation returns.
-  /// This protects the watchdog result itself from becoming stale.
-  Future<void> _handleWatchdogRecovery(
-    LiveWatchdogRecoveryAction action,
-    int recoveryGeneration,
-    int playbackGeneration,
-    PlayerHandle handle,
-  ) async {
-    try {
-      if (!_isCurrent(playbackGeneration) ||
-          !_isWatchdogRecoveryCurrent(recoveryGeneration) ||
-          !_playbackRequested ||
-          _handle != handle ||
-          handle.disposed) {
-        return;
-      }
+/// A queued action paired with the future of whoever awaited it.
+final class _PendingTask {
+  _PendingTask(this.action) : completer = Completer<void>();
 
-      switch (action) {
-        case LiveWatchdogRecoveryAction.reassertPlay:
-          try {
-            await handle.play();
-          } catch (_) {
-            if (_isWatchdogRecoveryCurrent(recoveryGeneration)) {
-              watchdogs.reportRecoveryResult(false);
-            }
-
-            return;
-          }
-
-          if (!_isWatchdogRecoveryCurrent(recoveryGeneration)) {
-            return;
-          }
-
-          if (!_isCurrent(playbackGeneration) || !_playbackRequested || _handle != handle || handle.disposed) {
-            watchdogs.reportRecoveryResult(false);
-            return;
-          }
-
-          // Successful completion means PlayerHandle accepted the play
-          // operation. The adapter's Playing event remains the authoritative
-          // observation of actual playback state.
-          watchdogs.reportRecoveryResult(true);
-      }
-    } catch (_) {
-      if (_isWatchdogRecoveryCurrent(recoveryGeneration)) {
-        watchdogs.reportRecoveryResult(false);
-      }
-    }
-  }
-
-  /// Maps a watchdog-inferred [LiveStallKind] onto the shared error
-  /// model. This is the only place where live-specific stall kinds enter
-  /// the error pipeline.
-  PlayerErrorCode _codeForStall(LiveStallKind kind) {
-    return switch (kind) {
-      LiveStallKind.sourceReadyTimeout => PlayerErrorCode.timeout,
-
-      LiveStallKind.unexpectedPauseResumed => PlayerErrorCode.playbackFailed,
-
-      LiveStallKind.unexpectedPauseResumeFailed => PlayerErrorCode.backendPlayFailed,
-
-      LiveStallKind.unexpectedPauseTimeout => PlayerErrorCode.playbackFailed,
-
-      LiveStallKind.bufferingStallTimeout => PlayerErrorCode.insufficientBandwidth,
-
-      LiveStallKind.videoFrameStallTimeout => PlayerErrorCode.decoderError,
-
-      // Not a decode failure: the engine kept decoding nothing at all, or
-      // stopped pulling segments. Reported as a playback failure so the
-      // ladder reopens the current line before escalating.
-      LiveStallKind.positionStallTimeout => PlayerErrorCode.playbackFailed,
-    };
-  }
+  final Future<void> Function(TaskCancelToken token) action;
+  final Completer<void> completer;
 }

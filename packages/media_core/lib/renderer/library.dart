@@ -16,6 +16,7 @@ library;
 // Public exports
 // ============================================================================
 
+export 'media_player_view.dart';
 export 'player_overlay.dart';
 export 'player_renderer.dart';
 export 'player_surface.dart';

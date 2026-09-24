@@ -6,5 +6,6 @@
 library;
 
 export 'live_playback_controller.dart';
+export 'live_request.dart';
 export 'live_playback_models.dart';
 export 'live_watchdogs.dart';

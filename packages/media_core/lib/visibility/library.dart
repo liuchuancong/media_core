@@ -19,6 +19,7 @@ library;
 export 'visibility_controller.dart';
 export 'visibility_event.dart';
 export 'visibility_metrics.dart';
+export 'player_visibility_binding.dart';
 export 'visibility_observer.dart';
 export 'visibility_snapshot.dart';
 export 'visibility_state.dart';

@@ -253,7 +253,6 @@ final class PlayerKernel {
       config: config,
       registry: registry,
       selector: selector,
-      recoveryPolicy: options.recoveryPolicy,
     );
 
     await handle.initialize();

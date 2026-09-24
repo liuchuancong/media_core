@@ -2,6 +2,8 @@
 
 跨平台可复用的 Flutter 播放器核心。39 个自包含模块 + 一个把它们全部串起来的编排层（kernel）。
 
+> 📐 完整分层架构(模块职责、挂载点、数据流、恢复决策流):[架构总览](docs/zh-Hans/architecture.md) · [Architecture (EN)](docs/en/architecture.md)
+
 ## 架构总览
 
 ```text

@@ -16,6 +16,7 @@ library;
 // Public exports
 // ============================================================================
 
+export 'app_lifecycle_driver.dart';
 export 'lifecycle_controller.dart';
 export 'lifecycle_event.dart';
 export 'lifecycle_observer.dart';

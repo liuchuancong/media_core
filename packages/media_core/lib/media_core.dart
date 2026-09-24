@@ -53,6 +53,9 @@ export 'error/library.dart';
 /// Player event definitions, dispatching and subscriptions..
 export 'event/library.dart';
 
+/// Vertical feed (TikTok/Douyin-style) playback orchestration..
+export 'feed/library.dart';
+
 /// Player and backend factory, registration and selection..
 export 'factory/library.dart';
 
