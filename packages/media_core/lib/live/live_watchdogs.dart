@@ -253,6 +253,10 @@ final class LiveWatchdogs {
   /// looking stalled from the first second.
   bool _hasPositionSignal = false;
 
+  /// Last position sample, reported alongside the arm log so the two arms
+  /// of one session are distinguishable by their value.
+  int? _lastPositionMs;
+
   // ---------------------------------------------------------------------------
   // Active watchdog subscriptions
   // ---------------------------------------------------------------------------
@@ -370,7 +374,7 @@ final class LiveWatchdogs {
       // could not arm the stall detector. Now that playback is known to be
       // running, arm it - see [onPositionProgress].
       if (_hasPositionSignal && _positionStallSubscription == null) {
-        _armPositionStall();
+        _armPositionStall(via: 'playing');
       }
 
       return;
@@ -408,7 +412,7 @@ final class LiveWatchdogs {
 
     if (!buffering && _hasPositionSignal && _positionStallSubscription == null) {
       // Buffering was the reason arming was refused; it is over now.
-      _armPositionStall();
+      _armPositionStall(via: 'bufferingEnd');
     }
 
     if (buffering) {
@@ -457,6 +461,8 @@ final class LiveWatchdogs {
       return;
     }
 
+    _lastPositionMs = position.inMilliseconds;
+
     if (!_hasPositionSignal) {
       // First position of this source: the engine reports position, so the
       // watchdog may start judging it.
@@ -481,7 +487,7 @@ final class LiveWatchdogs {
     // start. Retrying here costs one comparison and keeps the only
     // engine-independent stall detector alive.
     if (_positionStallSubscription == null) {
-      _armPositionStall();
+      _armPositionStall(via: 'position');
 
       return;
     }
@@ -793,7 +799,7 @@ final class LiveWatchdogs {
   /// expected or the presentation is visible. A stream whose position
   /// stops advancing is stuck for an audio-only session and for a
   /// background session too.
-  void _armPositionStall() {
+  void _armPositionStall({String via = 'unknown'}) {
     _cancelPositionStall();
 
     final skipReason = _positionStallSkipReason();
@@ -816,6 +822,11 @@ final class LiveWatchdogs {
     MediaCoreLog.debug(
       LogCategory.recovery,
       'position-stall watchdog armed (${positionStallTimeout.inMilliseconds}ms)',
+      // Which observation armed it: a position sample, a playing state that
+      // followed one, or the end of buffering. Without this the log shows
+      // identical "armed" lines and the sequence that produced them is
+      // guesswork.
+      fields: <String, Object?>{'via': via, 'positionMs': _lastPositionMs},
     );
 
     final generation = _watchdogGeneration;

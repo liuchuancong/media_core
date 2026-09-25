@@ -612,6 +612,22 @@ final class LivePlaybackController {
 
     _sweepAdapterError = null;
 
+    // The engine being replaced keeps playing while this attempt runs, and
+    // its subscription is otherwise only swapped at commit - so for the
+    // whole verification window it kept feeding observations (position,
+    // playing, buffering) to a watchdog set that had just been cancelled
+    // for this attempt. That is what produced a second "armed" line per
+    // engine switch, armed from the retiring source's samples. Detach it
+    // for the attempt; a failed attempt restores the subscription so the
+    // still-running playback keeps its coverage.
+    final retireeSub = previous == null ? null : _adapterSub;
+
+    if (retireeSub != null) {
+      _adapterSub = null;
+
+      await retireeSub.cancel();
+    }
+
     final staged = await kernel.create(preferredBackend: engine);
 
     try {
@@ -660,6 +676,21 @@ final class LivePlaybackController {
         await kernel.release(staged.id);
       } catch (_) {
         // Best-effort cleanup of the failed staging.
+      }
+
+      // The retired engine is still the active one after a failed attempt:
+      // give its adapter events back, or a stream that keeps playing would
+      // run without stall detection until the next candidate commits. The
+      // watchdog capabilities and playing state are re-seeded with it -
+      // the attempt cancelled them, and the retiring handle's Playing event
+      // is long past, so without this the position stall could never re-arm
+      // for a stream that is in fact still running.
+      if (previous != null && !previous.disposed && identical(_handle, previous) && _adapterSub == null) {
+        _adapterSub = previous.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
+
+        watchdogs.updateCapabilities(previous.adapter.capabilities);
+        watchdogs.setVideoExpected(!_audioOnly);
+        watchdogs.onPlayingChanged(_playbackRequested, fromUserIntent: false);
       }
 
       rethrow;
