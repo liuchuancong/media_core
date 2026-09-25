@@ -558,8 +558,11 @@ final class LivePlaybackController {
     handle.declarePlayIntent(true);
 
     // Every watchdog armed for a previous candidate is stale now: cancel
-    // them; they are re-armed below on success.
+    // them, and clear the position observation so the new source starts
+    // unobserved. The first position sample of the *new* source is then
+    // what enables and arms the stall detector - exactly once.
     watchdogs.cancelAll();
+    watchdogs.resetPositionSignal();
 
     _sweepAdapterError = null;
 
@@ -583,7 +586,6 @@ final class LivePlaybackController {
     _currentSource = source;
 
     watchdogs.armSourceReady();
-    watchdogs.resetPositionSignal();
 
     _setState(_liveState(PlayerPlaybackState.buffering));
   }
@@ -636,6 +638,14 @@ final class LivePlaybackController {
       // Commit: the replacement has proven itself. Surface consumers see
       // the new handle through onHandleChanged and rebind at this moment,
       // when the first frame is already decoded.
+      //
+      // The per-source position observation is cleared first: the retiring
+      // engine has been feeding the watchdogs throughout verification (its
+      // subscription is only replaced by _attach), so its samples would
+      // otherwise arm the stall detector for a source that is going away -
+      // one arm per engine switch too many in the log.
+      watchdogs.resetPositionSignal();
+
       _attach(staged);
 
       if (previous != null && !previous.disposed) {
@@ -662,7 +672,6 @@ final class LivePlaybackController {
     _currentSource = source;
 
     watchdogs.armSourceReady();
-    watchdogs.resetPositionSignal();
 
     _setState(_liveState(PlayerPlaybackState.buffering));
   }

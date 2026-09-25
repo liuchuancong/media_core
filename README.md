@@ -81,12 +81,12 @@ adapter 报错后内核自动执行：
 
 ## 后端适配包
 
-| 包 | 后端 | 说明 |
-|---|---|---|
-| `media_core_media_kit` | media_kit | 全能后端，协议/格式覆盖最广 |
-| `media_core_ijk_player` | ijk (niuma_player) | FLV / H.265，移动端 |
-| `media_core_better_player` | 官方 video_player | 轻量、纯 Flutter 生态 |
-| `media_core_native` | 平台原生 | 平台播放器 |
+| 包                           | 后端               | 说明                        |
+| ---------------------------- | ------------------ | --------------------------- |
+| `media_core_media_kit`     | media_kit          | 全能后端，协议/格式覆盖最广 |
+| `media_core_ijk_player`    | ijk (niuma_player) | FLV / H.265，移动端         |
+| `media_core_better_player` | 官方 video_player  | 轻量、纯 Flutter 生态       |
+| `media_core_native`        | 平台原生           | 平台播放器                  |
 
 每个适配包提供 `XxxAdapterFactory` 与 `registerXxxRegistry()` / `defaultRegistration()` 两种注册方式。
 
