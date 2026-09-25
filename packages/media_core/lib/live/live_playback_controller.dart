@@ -17,6 +17,7 @@ import '../adapter/player_adapter_event.dart';
 import '../kernel/player_handle.dart';
 import '../kernel/player_kernel.dart';
 import '../source/player_source.dart';
+import '../source/source_format.dart';
 import '../task/task_cancel_token.dart';
 import '../task/task_manager.dart';
 import '../task/task_type.dart';
@@ -375,11 +376,42 @@ final class LivePlaybackController {
   // ---------------------------------------------------------------------------
 
   Future<void> _startPlayback() async {
-    _engines = _engineOrder();
+    final engines = _engineOrder();
+    final primary = _sources.isNotEmpty ? _sources.first : null;
+    final handle = _handle;
+
+    // A duplicate play of exactly the playback already running - a
+    // double-tap, or the app re-entering its play flow while the first
+    // sweep is still verifying - must not supersede and tear down what it
+    // just asked for. Full-URI comparison: refreshed signatures share the
+    // path but differ in query, so a legitimate re-play still runs.
+    if (handle != null &&
+        !handle.disposed &&
+        _playbackRequested &&
+        primary != null &&
+        _currentSource?.uri == primary.uri &&
+        (engines.isEmpty || handle.backendId == engines.first)) {
+      return;
+    }
+
+    _engines = engines;
     _engineIndex = 0;
     _sourceIndex = 0;
 
     await _sweep();
+  }
+
+  /// Whether the newer command that superseded [generation] is a play of
+  /// exactly [source] on [engine] - in which case committing the staged
+  /// player is correct, and discarding it would only fail the sweep and
+  /// burn the request's single-use URLs on a replay.
+  bool _supersededBySamePlayback(String engine, PlayerSource source) {
+    return _playbackRequested &&
+        _request != null &&
+        _sourceIndex < _sources.length &&
+        _engineIndex < _engines.length &&
+        _sources[_sourceIndex].uri == source.uri &&
+        _engines[_engineIndex] == engine;
   }
 
   Future<void> _openCurrentSource() async {
@@ -568,7 +600,7 @@ final class LivePlaybackController {
   }) async {
     MediaCoreLog.info(
       LogCategory.fallback,
-      'attaching engine \$engine for \${source.uri}',
+      'attaching engine $engine for ${source.uri}',
       fields: <String, Object?>{'line': _sourceIndex, 'staged': previous != null},
     );
 
@@ -590,15 +622,15 @@ final class LivePlaybackController {
 
       await staged.open(source);
 
-      if (_abandoned(generation)) {
-        throw StateError('Staged engine \$engine was abandoned mid-open.');
+      if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
+        throw StateError('Staged engine $engine was abandoned mid-open.');
       }
 
       await staged.play();
       await _verifyPlayback(staged, source);
 
-      if (_abandoned(generation)) {
-        throw StateError('Staged engine \$engine was abandoned mid-verify.');
+      if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
+        throw StateError('Staged engine $engine was abandoned mid-verify.');
       }
 
       // Commit: the replacement has proven itself. Surface consumers see
@@ -667,6 +699,16 @@ final class LivePlaybackController {
 
       final position = handle.playbackStream.value.position;
 
+      // A reopen restarts the demuxer clock: the mirror still holds the
+      // previous playback's position (18s of the old session, say), and
+      // the fresh stream starts near zero. Without re-baselining, every
+      // new sample is "smaller than last" and a perfectly healthy reopen
+      // is condemned as frozen at the stale value.
+      if (position < last) {
+        last = position;
+        continue;
+      }
+
       if (position > last) {
         return;
       }
@@ -717,19 +759,38 @@ final class LivePlaybackController {
   /// selector's scored order for the primary source.
   List<String> _engineOrder() {
     final primary = _sources.isNotEmpty ? _sources.first : _request?.primary;
+    final source = primary ?? _request!.primary;
     final scored = kernel.selector
-        .candidatesFor(primary ?? _request!.primary)
+        .candidatesFor(source)
         .where((registration) => registration.enabled)
         .map((registration) => registration.id)
         .toList(growable: false);
 
+    // A pinned engine still has to be able to play the source. The user
+    // preference must not put an engine that does not declare the source's
+    // format at the front of the sweep: it would burn every single-use
+    // line failing on a format it cannot decode before a capable engine
+    // gets its turn. With an unknown format nothing is filtered.
+    final capable = source.format.isKnown
+        ? scored
+              .where((id) {
+                final registration = kernel.registry.get(id);
+
+                return registration == null ||
+                    kernel.selector.formatMatches(registration.capabilities, source);
+              })
+              .toList(growable: false)
+        : scored;
+
+    final engines = capable.isNotEmpty ? capable : scored;
+
     final pinned = _preferredBackend;
 
-    if (pinned == null || !scored.contains(pinned)) {
-      return scored;
+    if (pinned == null || !engines.contains(pinned)) {
+      return engines;
     }
 
-    return <String>[pinned, ...scored.where((id) => id != pinned)];
+    return <String>[pinned, ...engines.where((id) => id != pinned)];
   }
 
   void _attach(PlayerHandle handle) {
@@ -743,6 +804,14 @@ final class LivePlaybackController {
 
     watchdogs.updateCapabilities(handle.adapter.capabilities);
     watchdogs.setVideoExpected(!_audioOnly);
+
+    // The staged engine plays *before* it is attached: open/play/verify
+    // all run while nothing feeds the watchdogs, so their playing state
+    // is stale-false at attach time and the adapter's Playing event - a
+    // one-shot on engines with a state latch - never arrives again. Seed
+    // the watchdogs from the handle's own mirror, or armSourceReady arms
+    // an 18s deadline against a stream that is already on screen.
+    watchdogs.onPlayingChanged(handle.isPlaying, fromUserIntent: false);
 
     _adapterSub?.cancel();
     _adapterSub = handle.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});

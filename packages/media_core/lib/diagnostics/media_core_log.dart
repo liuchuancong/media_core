@@ -58,9 +58,11 @@ abstract final class MediaCoreLog {
 
   /// Level used before any explicit configuration.
   ///
-  /// `info` keeps normal operation quiet: the framework logs decisions
-  /// (which backend, which recovery step), not bookkeeping.
-  static const LogLevel defaultLevel = LogLevel.info;
+  /// The default is [LogLevel.nothing]: a host that never configures
+  /// logging gets no output at all. Turn it on explicitly - typically in
+  /// debug builds - with `MediaCoreLog.level = LogLevel.info` (or
+  /// `configure` for per-category control).
+  static const LogLevel defaultLevel = LogLevel.nothing;
 
   static PlayerLogger _logger = PlayerLogger(
     minimumLevel: defaultLevel,

@@ -139,5 +139,6 @@ int _developerLevel(LogLevel level) {
     LogLevel.warning => 900,
     LogLevel.error => 1000,
     LogLevel.critical => 1200,
+    LogLevel.nothing => 0,
   };
 }

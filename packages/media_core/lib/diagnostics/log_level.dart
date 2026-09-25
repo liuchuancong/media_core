@@ -39,6 +39,10 @@ enum LogLevel {
 
   /// A critical error that may prevent normal operation.
   critical,
+
+  /// Logging is disabled. The default for production: an application that
+  /// never configures [MediaCoreLog] stays silent.
+  nothing,
 }
 
 /// Provides common operations for [LogLevel].
@@ -58,6 +62,8 @@ extension LogLevelX on LogLevel {
         return 4;
       case LogLevel.critical:
         return 5;
+      case LogLevel.nothing:
+        return 6;
     }
   }
 
@@ -80,6 +86,7 @@ extension LogLevelX on LogLevel {
       LogLevel.warning => 'warning',
       LogLevel.error => 'error',
       LogLevel.critical => 'critical',
+      LogLevel.nothing => 'nothing',
     };
   }
 }

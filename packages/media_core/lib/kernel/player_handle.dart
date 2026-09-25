@@ -1732,6 +1732,14 @@ final class PlayerHandle implements RecoveryTarget {
 
       final current = _runtime.playback.current;
 
+      // A reopen restarts the demuxer clock: re-baseline when the mirror
+      // holds a position from the previous session, or a healthy reopen
+      // reads as frozen at the stale value.
+      if (current.position < last) {
+        last = current.position;
+        continue;
+      }
+
       // Any positive progress counts. Some live streams start their
       // demuxer clock near zero and creep forward by tens of
       // milliseconds while the picture is already on screen; demanding
