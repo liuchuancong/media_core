@@ -806,12 +806,13 @@ final class LivePlaybackController {
     watchdogs.setVideoExpected(!_audioOnly);
 
     // The staged engine plays *before* it is attached: open/play/verify
-    // all run while nothing feeds the watchdogs, so their playing state
-    // is stale-false at attach time and the adapter's Playing event - a
-    // one-shot on engines with a state latch - never arrives again. Seed
-    // the watchdogs from the handle's own mirror, or armSourceReady arms
-    // an 18s deadline against a stream that is already on screen.
-    watchdogs.onPlayingChanged(handle.isPlaying, fromUserIntent: false);
+    // all run while nothing feeds the watchdogs, so their playing state is
+    // stale at attach time and the adapter's Playing event - a one-shot on
+    // engines with a state latch - may never arrive again. Seed from the
+    // declared intent rather than the adapter mirror: live always declares
+    // play intent, and the mirror can read "paused" for an engine that
+    // paused itself mid-open (mpv does) even though playback is on.
+    watchdogs.onPlayingChanged(_playbackRequested, fromUserIntent: false);
 
     _adapterSub?.cancel();
     _adapterSub = handle.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});

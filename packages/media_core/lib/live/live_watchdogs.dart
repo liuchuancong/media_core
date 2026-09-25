@@ -366,6 +366,13 @@ final class LiveWatchdogs {
         _armVideoFrameStall();
       }
 
+      // A position sample that arrived while the engine was still settling
+      // could not arm the stall detector. Now that playback is known to be
+      // running, arm it - see [onPositionProgress].
+      if (_hasPositionSignal && _positionStallSubscription == null) {
+        _armPositionStall();
+      }
+
       return;
     }
 
@@ -398,6 +405,11 @@ final class LiveWatchdogs {
     }
 
     _buffering = buffering;
+
+    if (!buffering && _hasPositionSignal && _positionStallSubscription == null) {
+      // Buffering was the reason arming was refused; it is over now.
+      _armPositionStall();
+    }
 
     if (buffering) {
       _cancelVideoFrameStall();
@@ -455,7 +467,20 @@ final class LiveWatchdogs {
         'position-stall watchdog enabled (${positionStallTimeout.inMilliseconds}ms)',
         fields: <String, Object?>{'positionMs': position.inMilliseconds},
       );
+    }
 
+    // Arming is attempted on every sample, not only on the first one.
+    //
+    // The first position of a source routinely arrives while the engine is
+    // still settling - mpv pauses and restarts itself right after open, so
+    // the sample lands before the playing state is known. A one-shot arm
+    // attempt was refused in that moment ("playback not running") and the
+    // detector then stayed dead for the rest of the source: later samples
+    // only fed a stream nobody was subscribed to, a frozen picture was
+    // never detected, and the room simply appeared to have failed to
+    // start. Retrying here costs one comparison and keeps the only
+    // engine-independent stall detector alive.
+    if (_positionStallSubscription == null) {
       _armPositionStall();
 
       return;
