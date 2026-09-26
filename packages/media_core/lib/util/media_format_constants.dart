@@ -235,11 +235,12 @@ abstract final class BetterPlayerFormats {
 
 /// Coverage of fvp (libmdk).
 ///
-/// libmdk bundles its own FFmpeg with the full demuxer set, so the container
-/// list matches media_kit's. The protocol set is deliberately narrower:
-/// [FvpPlayerConfig.defaultLiveProperties] installs a protocol whitelist that
-/// does not enable `srt`, `ftp` or `ftps`, and declaring a scheme the adapter's
-/// own whitelist blocks would only win a source it then fails to open.
+/// libmdk bundles its own FFmpeg with a broad demuxer set, so the container
+/// list is intended to cover common media formats supported by media_kit.
+/// The protocol set is deliberately narrower: [FvpPlayerConfig.defaultLiveProperties]
+/// installs a protocol whitelist that does not enable `srt`, `ftp` or `ftps`,
+/// and declaring a scheme the adapter's own whitelist blocks would only win
+/// a source it then fails to open.
 abstract final class FvpFormats {
   /// Containers, manifests and elementary streams libmdk opens.
   static const Set<String> supportedFormats = {
@@ -250,8 +251,8 @@ abstract final class FvpFormats {
     'mts', 'vob', 'ts', 'mxf', 'asf',
     'rm', 'rmvb', 'ogv',
 
-    // Adaptive streaming manifests. HLS and DASH only, see [MediaKitFormats].
-    'm3u', 'm3u8', 'mpd',
+    // Adaptive streaming manifests and segments.
+    'm3u', 'm3u8', 'mpd', 'm4s',
 
     // Audio containers and codecs.
     'mp3', 'aac', 'm4a', 'ac3', 'eac3',
