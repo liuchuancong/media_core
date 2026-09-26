@@ -38,3 +38,12 @@ flutter:
       # Windows: MFTEnumEx, DXGI, GlobalMemoryStatusEx.
       windows:
         pluginClass: MediaCoreNativePlugin
+      # Linux: /proc, /sys/class/drm, /dev/dri.
+      linux:
+        pluginClass: MediaCoreNativePlugin
+      # macOS: VideoToolbox, NSScreen, sysctl.
+      macos:
+        pluginClass: MediaCoreNativePlugin
+      # iOS: VideoToolbox, AVPictureInPicture, UIScreen.
+      ios:
+        pluginClass: MediaCoreNativePlugin

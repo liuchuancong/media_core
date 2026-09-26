@@ -2,6 +2,7 @@ package com.mediacore.nativeprobe;
 
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -130,9 +131,10 @@ public final class MediaCoreNativePlugin implements FlutterPlugin, MethodChannel
     capabilities.put("localPlayback", true);
     capabilities.put("pictureInPicture",
         packages.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE));
-    // Leanback is Android TV. Background playback is a manifest declaration
-    // the app owns, so the probe reports what it can see: the activity flag.
     capabilities.put("externalDisplay", hasExternalDisplay());
+    // Background playback is a manifest declaration the app owns, so the answer
+    // is read from the manifest rather than assumed from the platform.
+    capabilities.put("backgroundPlayback", declaresBackgroundPlaybackService(packages));
 
     return capabilities;
   }
@@ -297,6 +299,41 @@ public final class MediaCoreNativePlugin implements FlutterPlugin, MethodChannel
   // ---------------------------------------------------------------------------
   // Small facts
   // ---------------------------------------------------------------------------
+
+  /**
+   * Whether the app declares the foreground service that keeps playback alive.
+   *
+   * From API 34 media playback needs {@code FOREGROUND_SERVICE_MEDIA_PLAYBACK}
+   * on top of {@code FOREGROUND_SERVICE}; before that the general permission was
+   * the whole declaration.
+   */
+  private boolean declaresBackgroundPlaybackService(PackageManager packages) {
+    try {
+      PackageInfo info = packages.getPackageInfo(context.getPackageName(), PackageManager.GET_PERMISSIONS);
+      String[] declared = info.requestedPermissions;
+
+      if (declared == null) {
+        return false;
+      }
+
+      boolean general = false;
+
+      for (String permission : declared) {
+        // Android has no constant for either name; they are manifest strings.
+        if ("android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK".equals(permission)) {
+          return true;
+        }
+
+        if ("android.permission.FOREGROUND_SERVICE".equals(permission)) {
+          general = true;
+        }
+      }
+
+      return general;
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
 
   private boolean supports64BitAbi() {
     // The *device*'s ABIs, not the process's: a 64-bit TV running a 32-bit APK

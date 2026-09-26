@@ -8,7 +8,7 @@
 
 - ✅ **平台能力查询**（`platform` 模块的 `PlatformProvider` 接口）——见下方"能力探针"
 - ⏳ 音频焦点 / 音频会话（`audio` 模块的 `AudioFocus` / `AudioSession` 接口）
-- ⏳ 呈现适配（系统级 PiP，`media_core_pip` 的 `SystemPip` 接口；iOS 需要 `AVPictureInPictureController`）
+- ⏳ 呈现适配（系统级 PiP 的**帧投递层**：`SystemPip` 在 Android 由 `floating` 插件覆盖，iOS 要 `AVSampleBufferDisplayLayer` 才能进系统 PiP，探针已能如实回答平台是否支持）
 
 ## 能力探针
 
@@ -61,18 +61,27 @@ handle.session.context.platform;   // 能力标志（reported: true）
 | `lib/src/media_core_native_platform.dart` | 平台接口（token 校验的 `instance`，便于替换实现） |
 | `lib/src/method_channel_media_core_native.dart` | MethodChannel (`media_core_native`) 默认实现 |
 | `android/**/MediaCoreNativePlugin.java` | `MediaCodecList` / `ActivityManager` / `DisplayManager` / `Build` |
-| `windows/platform_probe.cc` | `MFTEnumEx` 硬解枚举 / `DXGI` HDR 与外接屏 / `GlobalMemoryStatusEx` / `RtlGetVersion` |
+| `windows/platform_probe.cc` | `MFTEnumEx` 硬解枚举 / `DXGI` 外接屏 / `GlobalMemoryStatusEx` / `RtlGetVersion` |
+| `linux/platform_probe.cc` | `/proc/meminfo`、`/sys/class/drm`、`/dev/dri`、`/etc/os-release`（纯 std C++，无 GLib） |
+| `ios/Classes/MediaCoreNativePlugin.swift` | `VideoToolbox` / `AVPictureInPictureController` / `ProcessInfo` / `uname` |
+| `macos/Classes/MediaCoreNativePlugin.swift` | `VideoToolbox` / `NSProcessInfo` / `NSScreen` / `sysctl` |
 
 ## 平台支持
 
 | 平台 | 状态 |
 | --- | --- |
-| Android | ✅ 编解码矩阵（含分辨率/帧率上限）、内存与 low-RAM、PiP 与外接屏、机型与模拟器识别 |
+| Android | ✅ 编解码矩阵（含分辨率/帧率上限）、内存与 low-RAM、PiP 与外接屏、后台播放（看清单声明）、机型与模拟器识别 |
 | Windows | ✅ 硬解 MFT 枚举（h264/hevc/vp9/av1）、多屏、内存与核数、真实系统版本 |
-| iOS / macOS | ⏳ `VideoToolbox`（`VTIsHardwareDecodeSupported`）与系统 PiP 待实现 |
-| Linux | ⏳ `libva` / `/dev/dri` 与 `/proc/meminfo` 待实现 |
+| iOS | ✅ `VTIsHardwareDecodeSupported` 的 h264/hevc、系统 PiP 支持、后台播放（看 `UIBackgroundModes`）、内存/核数/机型/模拟器 |
+| macOS | ✅ 同上（`VideoToolbox` + `sysctl` + `NSScreen`），多屏 |
+| Linux | ✅ `/proc/meminfo`、`/dev/dri` 渲染节点、DRM connector 外接屏、发行版识别 |
 
-尚未实现的平台上 `load()` 不会报错：探针失败即"未知"，播放照常。
+两处刻意的"不回答"，都是同一原则的推论：
+
+- **Linux 不上报编解码矩阵。** 要真答"这台机器有没有 H.264 硬解"需要 libva 或 V4L2 M2M；链接 libva 会让插件在没装它的机器上编译不过，而仅凭渲染节点推断"逐编解码器"支持，正是这层要防的能力谎报。所以平台级答案走 `capabilities.hardwareDecode`（有渲染节点即有 GPU 驱动），逐编解码器保持未知，引擎行为不变。
+- **iOS 的系统 PiP 只报"平台支持"。** `AVPictureInPictureController.isPictureInPictureSupported()` 是平台事实，但真正进入系统 PiP 还需要一条帧投递通路（`AVSampleBufferDisplayLayer`），本包目前不提供；因此 `media_core_pip` 的 `SystemPip` 在 iOS 上仍然回答 `unavailable`，而不是报了个能力却进不去。
+
+尚未接入的平台上 `load()` 不会报错：探针失败即"未知"，播放照常。
 
 ## Example
 
