@@ -185,6 +185,20 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  media_core_logging:
+    dependency: transitive
+    description:
+      path: "../../media_core_logging"
+      relative: true
+    source: path
+    version: "0.1.0"
+  media_core_memory:
+    dependency: transitive
+    description:
+      path: "../../media_core_memory"
+      relative: true
+    source: path
+    version: "0.1.0"
   media_core_native:
     dependency: "direct main"
     description:
