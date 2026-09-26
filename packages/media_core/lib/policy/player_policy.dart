@@ -1,7 +1,7 @@
-import 'playback_policy.dart';
-import 'resource_policy.dart';
-import 'recovery_policy.dart';
-import 'concurrency_policy.dart';
+import 'package:media_core/policy/playback_policy.dart';
+import 'package:media_core/policy/resource_policy.dart';
+import 'package:media_core/policy/recovery_policy.dart';
+import 'package:media_core/policy/concurrency_policy.dart';
 
 /// Root policy configuration for player runtime.
 ///

@@ -16,11 +16,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'event_context.dart';
-export 'event_dispatcher.dart';
-export 'event_filter.dart';
-export 'event_priority.dart';
-export 'event_subscription.dart';
-export 'player_event.dart';
-export 'player_event_bus.dart';
-export 'player_event_type.dart';
+export 'package:media_core/event/event_context.dart';
+export 'package:media_core/event/event_dispatcher.dart';
+export 'package:media_core/event/event_filter.dart';
+export 'package:media_core/event/event_priority.dart';
+export 'package:media_core/event/event_subscription.dart';
+export 'package:media_core/event/player_event.dart';
+export 'package:media_core/event/player_event_bus.dart';
+export 'package:media_core/event/player_event_type.dart';

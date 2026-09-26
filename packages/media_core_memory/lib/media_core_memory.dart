@@ -27,14 +27,14 @@
 /// default). It is logged under the `memory` category whenever the level moves.
 library;
 
-export 'src/memory_account.dart';
-export 'src/memory_budget.dart';
-export 'src/memory_estimates.dart';
-export 'src/memory_hub.dart';
-export 'src/memory_manager.dart';
-export 'src/memory_module.dart';
-export 'src/memory_monitor.dart';
-export 'src/memory_pressure.dart';
-export 'src/memory_registry.dart';
-export 'src/memory_report.dart';
-export 'src/memory_snapshot.dart';
+export 'package:media_core_memory/src/memory_account.dart';
+export 'package:media_core_memory/src/memory_budget.dart';
+export 'package:media_core_memory/src/memory_estimates.dart';
+export 'package:media_core_memory/src/memory_hub.dart';
+export 'package:media_core_memory/src/memory_manager.dart';
+export 'package:media_core_memory/src/memory_module.dart';
+export 'package:media_core_memory/src/memory_monitor.dart';
+export 'package:media_core_memory/src/memory_pressure.dart';
+export 'package:media_core_memory/src/memory_registry.dart';
+export 'package:media_core_memory/src/memory_report.dart';
+export 'package:media_core_memory/src/memory_snapshot.dart';

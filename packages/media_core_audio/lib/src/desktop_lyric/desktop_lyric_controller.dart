@@ -1,15 +1,15 @@
 import 'dart:async';
 
-import '../lyric/lyric_document.dart';
-import '../lyric/lyric_line.dart';
-import '../lyric/lyric_timeline.dart';
-import '../permission/audio_permission.dart';
-import '../permission/audio_permission_service.dart';
-import '../track/music_track.dart';
-import '../player/audio_playback_controller.dart';
-import '../player/audio_player_state.dart';
-import 'desktop_lyric_state.dart';
-import 'desktop_lyric_transport.dart';
+import 'package:media_core_audio/src/lyric/lyric_document.dart';
+import 'package:media_core_audio/src/lyric/lyric_line.dart';
+import 'package:media_core_audio/src/lyric/lyric_timeline.dart';
+import 'package:media_core_audio/src/permission/audio_permission.dart';
+import 'package:media_core_audio/src/permission/audio_permission_service.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/player/audio_playback_controller.dart';
+import 'package:media_core_audio/src/player/audio_player_state.dart';
+import 'package:media_core_audio/src/desktop_lyric/desktop_lyric_state.dart';
+import 'package:media_core_audio/src/desktop_lyric/desktop_lyric_transport.dart';
 
 /// Drives a desktop lyric overlay from an [AudioPlaybackController].
 ///

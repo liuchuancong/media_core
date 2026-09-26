@@ -16,11 +16,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'concurrency_key.dart';
-export 'concurrency_limit.dart';
-export 'concurrency_manager.dart';
-export 'exclusive_task.dart';
-export 'lock.dart';
-export 'mutex.dart';
-export 'semaphore.dart';
-export 'serial_executor.dart';
+export 'package:media_core/concurrency/concurrency_key.dart';
+export 'package:media_core/concurrency/concurrency_limit.dart';
+export 'package:media_core/concurrency/concurrency_manager.dart';
+export 'package:media_core/concurrency/exclusive_task.dart';
+export 'package:media_core/concurrency/lock.dart';
+export 'package:media_core/concurrency/mutex.dart';
+export 'package:media_core/concurrency/semaphore.dart';
+export 'package:media_core/concurrency/serial_executor.dart';

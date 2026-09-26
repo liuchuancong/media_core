@@ -1,6 +1,6 @@
-import 'operation.dart';
-import 'operation_state.dart';
-import '../identity/operation_id.dart';
+import 'package:media_core/operation/operation.dart';
+import 'package:media_core/operation/operation_state.dart';
+import 'package:media_core/identity/operation_id.dart';
 
 /// Stores and manages currently registered operations.
 ///

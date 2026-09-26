@@ -1,13 +1,13 @@
 import 'dart:async';
-import 'pip_controller.dart';
-import 'presentation_mode.dart';
-import 'presentation_state.dart';
-import 'floating_controller.dart';
-import 'presentation_request.dart';
-import 'fullscreen_controller.dart';
-import 'presentation_snapshot.dart';
-import '../geometry/video_orientation.dart';
-import 'presentation_controller.dart';
+import 'package:media_core/presentation/pip_controller.dart';
+import 'package:media_core/presentation/presentation_mode.dart';
+import 'package:media_core/presentation/presentation_state.dart';
+import 'package:media_core/presentation/floating_controller.dart';
+import 'package:media_core/presentation/presentation_request.dart';
+import 'package:media_core/presentation/fullscreen_controller.dart';
+import 'package:media_core/presentation/presentation_snapshot.dart';
+import 'package:media_core/geometry/video_orientation.dart';
+import 'package:media_core/presentation/presentation_controller.dart';
 
 /// High level presentation manager.
 ///

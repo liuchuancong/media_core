@@ -52,7 +52,7 @@ library;
 export 'package:audio_service/audio_service.dart'
     show AudioProcessingState, BaseAudioHandler, MediaAction, MediaControl, MediaItem, PlaybackState;
 
-export 'src/media_session_bootstrap.dart';
-export 'src/media_session_config.dart';
-export 'src/media_session_driver.dart';
-export 'src/media_session_handler.dart';
+export 'package:media_core_mediasession/src/media_session_bootstrap.dart';
+export 'package:media_core_mediasession/src/media_session_config.dart';
+export 'package:media_core_mediasession/src/media_session_driver.dart';
+export 'package:media_core_mediasession/src/media_session_handler.dart';

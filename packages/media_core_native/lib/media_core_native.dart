@@ -42,8 +42,8 @@
 /// streams the device could play.
 library;
 
-export 'src/background_execution.dart';
-export 'src/media_core_native_platform.dart';
-export 'src/method_channel_media_core_native.dart';
-export 'src/native_platform_provider.dart';
-export 'src/platform_probe_report.dart';
+export 'package:media_core_native/src/background_execution.dart';
+export 'package:media_core_native/src/media_core_native_platform.dart';
+export 'package:media_core_native/src/method_channel_media_core_native.dart';
+export 'package:media_core_native/src/native_platform_provider.dart';
+export 'package:media_core_native/src/platform_probe_report.dart';

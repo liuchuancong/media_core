@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
-import 'audio_permission.dart';
+import 'package:media_core_audio/src/permission/audio_permission.dart';
 
 /// Asks the platform for the runtime permissions the music module needs.
 ///

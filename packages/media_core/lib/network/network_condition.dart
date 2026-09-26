@@ -1,5 +1,5 @@
-import 'network_type.dart';
-import 'network_quality.dart';
+import 'package:media_core/network/network_type.dart';
+import 'package:media_core/network/network_quality.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'network_condition.freezed.dart';

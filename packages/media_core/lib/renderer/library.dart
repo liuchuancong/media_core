@@ -16,14 +16,14 @@ library;
 // Public exports
 // ============================================================================
 
-export 'media_player_view.dart';
-export 'player_overlay.dart';
-export 'portable_player.dart';
-export 'player_renderer.dart';
-export 'player_surface.dart';
-export 'player_view.dart';
-export 'renderer_capabilities.dart';
-export 'renderer_config.dart';
-export 'renderer_controller.dart';
-export 'renderer_state.dart';
-export 'video_zoom_controller.dart';
+export 'package:media_core/renderer/media_player_view.dart';
+export 'package:media_core/renderer/player_overlay.dart';
+export 'package:media_core/renderer/portable_player.dart';
+export 'package:media_core/renderer/player_renderer.dart';
+export 'package:media_core/renderer/player_surface.dart';
+export 'package:media_core/renderer/player_view.dart';
+export 'package:media_core/renderer/renderer_capabilities.dart';
+export 'package:media_core/renderer/renderer_config.dart';
+export 'package:media_core/renderer/renderer_controller.dart';
+export 'package:media_core/renderer/renderer_state.dart';
+export 'package:media_core/renderer/video_zoom_controller.dart';

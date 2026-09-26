@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'log_filter.dart';
-import 'log_level.dart';
-import 'log_category.dart';
-import 'log_scope.dart';
+import 'package:media_core_logging/src/log_filter.dart';
+import 'package:media_core_logging/src/log_level.dart';
+import 'package:media_core_logging/src/log_category.dart';
+import 'package:media_core_logging/src/log_scope.dart';
 
 /// Represents one diagnostic log record.
 ///

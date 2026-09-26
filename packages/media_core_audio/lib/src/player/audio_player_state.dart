@@ -1,6 +1,6 @@
-import '../queue/play_mode.dart';
-import '../track/music_quality.dart';
-import '../track/music_track.dart';
+import 'package:media_core_audio/src/queue/play_mode.dart';
+import 'package:media_core_audio/src/track/music_quality.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
 
 /// Everything a music UI needs to render one frame of player state.
 ///

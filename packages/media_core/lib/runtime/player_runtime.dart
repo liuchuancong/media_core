@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'player_geometry_binding.dart';
-import 'player_playback_binding.dart';
+import 'package:media_core/runtime/player_geometry_binding.dart';
+import 'package:media_core/runtime/player_playback_binding.dart';
 import 'package:media_core/adapter/player_adapter.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core/screenshot/screenshot_config.dart';

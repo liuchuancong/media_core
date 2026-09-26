@@ -16,16 +16,16 @@ library;
 // Public exports
 // ============================================================================
 
-export 'media_capabilities.dart';
-export 'media_type.dart';
-export 'player.dart';
-export 'player_capabilities.dart';
-export 'player_config.dart';
-export 'player_constants.dart';
-export 'player_error.dart';
-export 'player_info.dart';
-export 'player_metrics.dart';
-export 'player_options.dart';
-export 'player_snapshot.dart';
-export 'player_state.dart';
-export 'player_status.dart';
+export 'package:media_core/core/media_capabilities.dart';
+export 'package:media_core/core/media_type.dart';
+export 'package:media_core/core/player.dart';
+export 'package:media_core/core/player_capabilities.dart';
+export 'package:media_core/core/player_config.dart';
+export 'package:media_core/core/player_constants.dart';
+export 'package:media_core/core/player_error.dart';
+export 'package:media_core/core/player_info.dart';
+export 'package:media_core/core/player_metrics.dart';
+export 'package:media_core/core/player_options.dart';
+export 'package:media_core/core/player_snapshot.dart';
+export 'package:media_core/core/player_state.dart';
+export 'package:media_core/core/player_status.dart';

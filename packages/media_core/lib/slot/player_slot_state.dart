@@ -1,7 +1,7 @@
-import 'player_slot_status.dart';
-import '../identity/slot_id.dart';
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/slot/player_slot_status.dart';
+import 'package:media_core/identity/slot_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents runtime state of a player slot.

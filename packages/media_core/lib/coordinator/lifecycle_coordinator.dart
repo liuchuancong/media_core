@@ -1,6 +1,6 @@
-import '../identity/player_id.dart';
-import '../lifecycle/lifecycle_event.dart';
-import '../lifecycle/player_lifecycle.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/lifecycle/lifecycle_event.dart';
+import 'package:media_core/lifecycle/player_lifecycle.dart';
 
 /// Coordinates player lifecycle operations.
 ///

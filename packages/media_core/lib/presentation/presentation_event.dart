@@ -1,4 +1,4 @@
-import 'presentation_mode.dart';
+import 'package:media_core/presentation/presentation_mode.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'presentation_event.freezed.dart';

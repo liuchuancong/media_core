@@ -6,13 +6,13 @@ import 'package:clock/clock.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
-import '../identity/player_id.dart';
-import 'player_screenshot.dart';
-import 'screenshot_config.dart';
-import 'screenshot_format.dart';
-import 'screenshot_options.dart';
-import 'screenshot_request.dart';
-import 'screenshot_surface.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/screenshot/player_screenshot.dart';
+import 'package:media_core/screenshot/screenshot_config.dart';
+import 'package:media_core/screenshot/screenshot_format.dart';
+import 'package:media_core/screenshot/screenshot_options.dart';
+import 'package:media_core/screenshot/screenshot_request.dart';
+import 'package:media_core/screenshot/screenshot_surface.dart';
 
 /// Per-player facts a capture needs but does not own.
 ///

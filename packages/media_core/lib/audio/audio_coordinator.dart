@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'audio_focus.dart';
-import 'audio_session.dart';
-import 'audio_focus_state.dart';
-import 'audio_session_state.dart';
+import 'package:media_core/audio/audio_focus.dart';
+import 'package:media_core/audio/audio_session.dart';
+import 'package:media_core/audio/audio_focus_state.dart';
+import 'package:media_core/audio/audio_session_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Coordinates the relationship between an audio session and audio focus.

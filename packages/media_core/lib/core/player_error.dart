@@ -1,12 +1,12 @@
-import '../identity/player_id.dart';
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
-import '../identity/session_id.dart';
-import '../identity/generation_id.dart';
-import '../error/error_classifier.dart';
-import '../error/player_error_code.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/identity/generation_id.dart';
+import 'package:media_core/error/error_classifier.dart';
+import 'package:media_core/error/player_error_code.dart';
 import 'package:equatable/equatable.dart';
-import '../error/player_error_category.dart';
+import 'package:media_core/error/player_error_category.dart';
 
 /// Represents an immutable player error snapshot.
 ///

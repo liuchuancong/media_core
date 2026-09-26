@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'player_adapter.dart';
-import '../core/player_error.dart';
-import '../core/player_state.dart';
-import 'player_adapter_event.dart';
-import 'player_adapter_context.dart';
-import 'player_adapter_metrics.dart';
-import '../source/player_source.dart';
-import '../screenshot/screenshot_request.dart';
-import 'player_adapter_exception.dart';
-import '../error/player_error_code.dart';
-import 'player_adapter_capabilities.dart';
+import 'package:media_core/adapter/player_adapter.dart';
+import 'package:media_core/core/player_error.dart';
+import 'package:media_core/core/player_state.dart';
+import 'package:media_core/adapter/player_adapter_event.dart';
+import 'package:media_core/adapter/player_adapter_context.dart';
+import 'package:media_core/adapter/player_adapter_metrics.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/screenshot/screenshot_request.dart';
+import 'package:media_core/adapter/player_adapter_exception.dart';
+import 'package:media_core/error/player_error_code.dart';
+import 'package:media_core/adapter/player_adapter_capabilities.dart';
 import 'package:flutter/foundation.dart' show protected;
 
 /// Template-method base for [PlayerAdapter] implementations.

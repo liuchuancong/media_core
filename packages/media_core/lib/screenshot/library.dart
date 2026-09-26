@@ -17,11 +17,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_screenshot.dart';
-export 'screenshot_config.dart';
-export 'screenshot_format.dart';
-export 'screenshot_manager.dart';
-export 'screenshot_options.dart';
-export 'screenshot_request.dart';
-export 'screenshot_surface.dart';
-export 'screenshot_writer.dart';
+export 'package:media_core/screenshot/player_screenshot.dart';
+export 'package:media_core/screenshot/screenshot_config.dart';
+export 'package:media_core/screenshot/screenshot_format.dart';
+export 'package:media_core/screenshot/screenshot_manager.dart';
+export 'package:media_core/screenshot/screenshot_options.dart';
+export 'package:media_core/screenshot/screenshot_request.dart';
+export 'package:media_core/screenshot/screenshot_surface.dart';
+export 'package:media_core/screenshot/screenshot_writer.dart';

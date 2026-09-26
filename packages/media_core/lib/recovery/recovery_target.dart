@@ -1,8 +1,8 @@
-import '../identity/source_id.dart';
-import 'recovery_step.dart';
-import 'recovery_session.dart';
-import 'recovery_failure.dart';
-import 'recovery_candidate_provider.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/recovery/recovery_step.dart';
+import 'package:media_core/recovery/recovery_session.dart';
+import 'package:media_core/recovery/recovery_failure.dart';
+import 'package:media_core/recovery/recovery_candidate_provider.dart';
 import 'package:equatable/equatable.dart';
 
 /// What happened while a recovery target executed a step.

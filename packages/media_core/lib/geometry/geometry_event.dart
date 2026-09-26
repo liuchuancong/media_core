@@ -1,4 +1,4 @@
-import 'video_geometry.dart';
+import 'package:media_core/geometry/video_geometry.dart';
 
 /// Geometry lifecycle event.
 sealed class GeometryEvent {

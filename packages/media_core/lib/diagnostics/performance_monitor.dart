@@ -1,4 +1,4 @@
-import 'performance_sample.dart';
+import 'package:media_core/diagnostics/performance_sample.dart';
 import 'package:clock/clock.dart';
 
 /// Collects and retains performance measurements for the media core.

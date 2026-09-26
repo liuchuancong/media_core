@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'bug_hooks.dart';
-import 'fault_type.dart';
-import 'fault_event.dart';
-import 'fault_config.dart';
+import 'package:media_core/bug/bug_hooks.dart';
+import 'package:media_core/bug/fault_type.dart';
+import 'package:media_core/bug/fault_event.dart';
+import 'package:media_core/bug/fault_config.dart';
 import 'package:clock/clock.dart';
-import 'bug_mode_controller.dart';
+import 'package:media_core/bug/bug_mode_controller.dart';
 
 
 /// Coordinates fault injection between bug mode configuration and hooks.

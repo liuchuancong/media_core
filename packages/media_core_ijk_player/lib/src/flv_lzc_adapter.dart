@@ -6,7 +6,7 @@ import 'package:flv_lzc/fijkplayer.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_ijk_player/media_core_ijk_player.dart';
 
-export 'fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
+export 'package:media_core_ijk_player/src/fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
 
 final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   FlvLzcPlayerAdapter({

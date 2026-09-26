@@ -1,5 +1,5 @@
-import '../track/music_track.dart';
-import 'play_mode.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/queue/play_mode.dart';
 
 /// The play list: ordered tracks, a cursor, and the shuffled order when
 /// [PlayMode.random] is active.

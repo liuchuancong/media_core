@@ -24,121 +24,121 @@ library;
 // ============================================================================
 
 /// Player backend adapter abstraction and adapter lifecycle..
-export 'adapter/library.dart';
+export 'package:media_core/adapter/library.dart';
 
 /// Audio focus, session, route, volume and mute management..
-export 'audio/library.dart';
+export 'package:media_core/audio/library.dart';
 
 /// Debugging and fault-injection infrastructure..
-export 'bug/library.dart';
+export 'package:media_core/bug/library.dart';
 
 /// Memory, disk and cache storage abstractions..
-export 'cache/library.dart';
+export 'package:media_core/cache/library.dart';
 
 /// Mutex, semaphore, locking and concurrency control primitives..
-export 'concurrency/library.dart';
+export 'package:media_core/concurrency/library.dart';
 
 /// Cross-module player and playback coordination..
-export 'coordinator/library.dart';
+export 'package:media_core/coordinator/library.dart';
 
 /// Public player API and fundamental player models..
-export 'core/library.dart';
+export 'package:media_core/core/library.dart';
 
 /// Logging, performance, memory and network diagnostics..
-export 'diagnostics/library.dart';
+export 'package:media_core/diagnostics/library.dart';
 
 /// Error models, classification, formatting and error policies..
-export 'error/library.dart';
+export 'package:media_core/error/library.dart';
 
 /// Player event definitions, dispatching and subscriptions..
-export 'event/library.dart';
+export 'package:media_core/event/library.dart';
 
 /// Player and backend factory, registration and selection..
-export 'factory/library.dart';
+export 'package:media_core/factory/library.dart';
 
 /// Backend, line and quality fallback mechanisms..
-export 'fallback/library.dart';
+export 'package:media_core/fallback/library.dart';
 
 /// Video geometry, orientation, rotation and display dimensions..
-export 'geometry/library.dart';
+export 'package:media_core/geometry/library.dart';
 
 /// Stable cross-module identity and identifier value objects..
-export 'identity/library.dart';
+export 'package:media_core/identity/library.dart';
 
 /// Player kernel: orchestration root wiring source, adapter, session, playback, recovery, fallback, pool and events..
-export 'kernel/library.dart';
+export 'package:media_core/kernel/library.dart';
 
 /// Player, page and application lifecycle management..
-export 'lifecycle/library.dart';
+export 'package:media_core/lifecycle/library.dart';
 
 /// Network abstraction, monitoring, conditions and metrics..
-export 'network/library.dart';
+export 'package:media_core/network/library.dart';
 
 /// High-level asynchronous and business operations..
-export 'operation/library.dart';
+export 'package:media_core/operation/library.dart';
 
 /// Platform capabilities and platform-specific abstractions..
-export 'platform/library.dart';
+export 'package:media_core/platform/library.dart';
 
 /// Playback commands, state, position, duration and options..
-export 'playback/library.dart';
+export 'package:media_core/playback/library.dart';
 
 /// Centralized cross-module player policies..
-export 'policy/library.dart';
+export 'package:media_core/policy/library.dart';
 
 /// Player instance pooling, allocation and recycling..
-export 'pool/library.dart';
+export 'package:media_core/pool/library.dart';
 
 /// Media preloading, warm-up and preload scheduling..
-export 'preload/library.dart';
+export 'package:media_core/preload/library.dart';
 
 /// Fullscreen, picture-in-picture and floating presentation..
-export 'presentation/library.dart';
+export 'package:media_core/presentation/library.dart';
 
 /// Reactive abstractions and stream utilities..
-export 'reactive/library.dart';
+export 'package:media_core/reactive/library.dart';
 
 /// Desired-state to actual-state reconciliation..
-export 'reconciler/library.dart';
+export 'package:media_core/reconciler/library.dart';
 
 /// Recording abstraction, sessions, formats and backends..
-export 'recording/library.dart';
+export 'package:media_core/recording/library.dart';
 
 /// Playback recovery, retry scheduling and recovery state..
-export 'recovery/library.dart';
+export 'package:media_core/recovery/library.dart';
 
 /// Player rendering abstraction and rendering state..
-export 'renderer/library.dart';
+export 'package:media_core/renderer/library.dart';
 
 /// Decoder, memory, bandwidth and thermal resource management..
-export 'resource/library.dart';
+export 'package:media_core/resource/library.dart';
 
 /// Unified result and asynchronous result abstractions..
-export 'result/library.dart';
+export 'package:media_core/result/library.dart';
 
 /// Frame capture: engine capture, surface capture, captured-frame value, file writing..
-export 'screenshot/library.dart';
+export 'package:media_core/screenshot/library.dart';
 
 /// Player session lifecycle, context, state and operations..
-export 'session/library.dart';
+export 'package:media_core/session/library.dart';
 
 /// Logical player slot ownership, assignment and state..
-export 'slot/library.dart';
+export 'package:media_core/slot/library.dart';
 
 /// Media source abstraction, metadata, resolution and validation..
-export 'source/library.dart';
+export 'package:media_core/source/library.dart';
 
 /// Generic state-machine infrastructure and state transitions..
-export 'state_machine/library.dart';
+export 'package:media_core/state_machine/library.dart';
 
 /// Task execution, scheduling, priority and cancellation..
-export 'task/library.dart';
+export 'package:media_core/task/library.dart';
 
 /// Generic reusable utility functions and helpers..
-export 'util/library.dart';
+export 'package:media_core/util/library.dart';
 
 /// Player visibility observation, state and management..
-export 'visibility/library.dart';
+export 'package:media_core/visibility/library.dart';
 
 // Composition root: owns adapter + session + per-session controllers.
-export 'runtime/library.dart';
+export 'package:media_core/runtime/library.dart';

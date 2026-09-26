@@ -1,7 +1,7 @@
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
-import '../identity/generation_id.dart';
-import '../identity/identity_json_converters.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/generation_id.dart';
+import 'package:media_core/identity/identity_json_converters.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'task_context.freezed.dart';

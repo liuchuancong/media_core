@@ -1,6 +1,6 @@
-import '../geometry/video_orientation.dart';
-import 'presentation_mode.dart';
-import 'presentation_capabilities.dart';
+import 'package:media_core/geometry/video_orientation.dart';
+import 'package:media_core/presentation/presentation_mode.dart';
+import 'package:media_core/presentation/presentation_capabilities.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'presentation_state.freezed.dart';

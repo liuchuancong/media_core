@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:media_core_memory/media_core_memory.dart';
-import 'player_pool_state.dart';
-import 'player_pool_config.dart';
-import 'player_pool_manager.dart';
-import 'player_pool_snapshot.dart';
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/pool/player_pool_state.dart';
+import 'package:media_core/pool/player_pool_config.dart';
+import 'package:media_core/pool/player_pool_manager.dart';
+import 'package:media_core/pool/player_pool_snapshot.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
 
 /// Public player pool API.
 ///

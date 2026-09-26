@@ -1,8 +1,8 @@
-import 'session_state.dart';
-import '../identity/player_id.dart';
-import '../identity/source_id.dart';
-import '../identity/session_id.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/session/session_state.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'session_snapshot.freezed.dart';

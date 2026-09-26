@@ -1,5 +1,5 @@
-import 'presentation_event.dart';
-import 'presentation_state.dart';
+import 'package:media_core/presentation/presentation_event.dart';
+import 'package:media_core/presentation/presentation_state.dart';
 
 /// Reduces presentation events into presentation states.
 ///

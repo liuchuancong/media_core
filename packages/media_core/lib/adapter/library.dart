@@ -16,17 +16,17 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_adapter.dart';
-export 'player_adapter_base.dart';
-export 'player_adapter_capabilities.dart';
-export 'player_adapter_config.dart';
-export 'player_adapter_context.dart';
-export 'player_adapter_error.dart';
-export 'player_adapter_event.dart';
-export 'player_adapter_exception.dart';
-export 'player_adapter_factory.dart';
-export 'player_adapter_metrics.dart';
-export 'player_adapter_registry.dart';
-export 'player_adapter_selector.dart';
-export 'player_adapter_state.dart';
-export 'player_video_output.dart';
+export 'package:media_core/adapter/player_adapter.dart';
+export 'package:media_core/adapter/player_adapter_base.dart';
+export 'package:media_core/adapter/player_adapter_capabilities.dart';
+export 'package:media_core/adapter/player_adapter_config.dart';
+export 'package:media_core/adapter/player_adapter_context.dart';
+export 'package:media_core/adapter/player_adapter_error.dart';
+export 'package:media_core/adapter/player_adapter_event.dart';
+export 'package:media_core/adapter/player_adapter_exception.dart';
+export 'package:media_core/adapter/player_adapter_factory.dart';
+export 'package:media_core/adapter/player_adapter_metrics.dart';
+export 'package:media_core/adapter/player_adapter_registry.dart';
+export 'package:media_core/adapter/player_adapter_selector.dart';
+export 'package:media_core/adapter/player_adapter_state.dart';
+export 'package:media_core/adapter/player_video_output.dart';

@@ -1,6 +1,6 @@
-import 'preload_state.dart';
-import 'preload_priority.dart';
-import '../identity/source_id.dart';
+import 'package:media_core/preload/preload_state.dart';
+import 'package:media_core/preload/preload_priority.dart';
+import 'package:media_core/identity/source_id.dart';
 
 /// Single preload task.
 final class PreloadTask {

@@ -1,4 +1,4 @@
-import 'recording_format.dart';
+import 'package:media_core/recording/recording_format.dart';
 import 'package:equatable/equatable.dart';
 
 

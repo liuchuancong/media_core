@@ -16,11 +16,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'operation.dart';
-export 'operation_cancel_token.dart';
-export 'operation_context.dart';
-export 'operation_registry.dart';
-export 'operation_state.dart';
-export 'operation_timeout.dart';
-export 'operation_tracker.dart';
-export 'operation_type.dart';
+export 'package:media_core/operation/operation.dart';
+export 'package:media_core/operation/operation_cancel_token.dart';
+export 'package:media_core/operation/operation_context.dart';
+export 'package:media_core/operation/operation_registry.dart';
+export 'package:media_core/operation/operation_state.dart';
+export 'package:media_core/operation/operation_timeout.dart';
+export 'package:media_core/operation/operation_tracker.dart';
+export 'package:media_core/operation/operation_type.dart';

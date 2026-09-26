@@ -1,7 +1,7 @@
-import 'player_session.dart';
-import 'session_context.dart';
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/session/player_session.dart';
+import 'package:media_core/session/session_context.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
 
 /// Manages player sessions.
 ///

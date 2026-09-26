@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'bug_hooks.dart';
-export 'bug_mode.dart';
-export 'bug_mode_config.dart';
-export 'bug_mode_controller.dart';
-export 'fault_config.dart';
-export 'fault_event.dart';
-export 'fault_injector.dart';
-export 'fault_scenario.dart';
-export 'fault_scheduler.dart';
-export 'fault_type.dart';
+export 'package:media_core/bug/bug_hooks.dart';
+export 'package:media_core/bug/bug_mode.dart';
+export 'package:media_core/bug/bug_mode_config.dart';
+export 'package:media_core/bug/bug_mode_controller.dart';
+export 'package:media_core/bug/fault_config.dart';
+export 'package:media_core/bug/fault_event.dart';
+export 'package:media_core/bug/fault_injector.dart';
+export 'package:media_core/bug/fault_scenario.dart';
+export 'package:media_core/bug/fault_scheduler.dart';
+export 'package:media_core/bug/fault_type.dart';

@@ -16,11 +16,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'generation_id.dart';
-export 'identity_json_converters.dart';
-export 'operation_id.dart';
-export 'player_id.dart';
-export 'request_id.dart';
-export 'session_id.dart';
-export 'slot_id.dart';
-export 'source_id.dart';
+export 'package:media_core/identity/generation_id.dart';
+export 'package:media_core/identity/identity_json_converters.dart';
+export 'package:media_core/identity/operation_id.dart';
+export 'package:media_core/identity/player_id.dart';
+export 'package:media_core/identity/request_id.dart';
+export 'package:media_core/identity/session_id.dart';
+export 'package:media_core/identity/slot_id.dart';
+export 'package:media_core/identity/source_id.dart';

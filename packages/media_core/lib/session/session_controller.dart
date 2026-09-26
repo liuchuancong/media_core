@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'session_state.dart';
-import 'player_session.dart';
-import 'session_generation.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/session/session_state.dart';
+import 'package:media_core/session/player_session.dart';
+import 'package:media_core/session/session_generation.dart';
+import 'package:media_core/identity/generation_id.dart';
 
 /// Controls a player session lifecycle.
 ///

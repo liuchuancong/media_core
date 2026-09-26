@@ -20,11 +20,11 @@
 /// (see [DownloadResumePlanner]).
 library;
 
-export 'src/download_config.dart';
-export 'src/download_file_sink.dart';
-export 'src/download_manager.dart';
-export 'src/download_progress.dart';
-export 'src/download_resume.dart';
-export 'src/download_status.dart';
-export 'src/download_task.dart';
-export 'src/download_transport.dart';
+export 'package:media_core_download/src/download_config.dart';
+export 'package:media_core_download/src/download_file_sink.dart';
+export 'package:media_core_download/src/download_manager.dart';
+export 'package:media_core_download/src/download_progress.dart';
+export 'package:media_core_download/src/download_resume.dart';
+export 'package:media_core_download/src/download_status.dart';
+export 'package:media_core_download/src/download_task.dart';
+export 'package:media_core_download/src/download_transport.dart';

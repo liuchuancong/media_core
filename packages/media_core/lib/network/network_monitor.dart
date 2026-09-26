@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'network_state.dart';
-import 'network_metrics.dart';
-import 'network_condition.dart';
+import 'package:media_core/network/network_state.dart';
+import 'package:media_core/network/network_metrics.dart';
+import 'package:media_core/network/network_condition.dart';
 
 
 /// Monitors network changes.

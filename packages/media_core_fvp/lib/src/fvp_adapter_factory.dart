@@ -1,11 +1,11 @@
 import 'package:media_core/media_core.dart';
 
-import 'fvp_player_adapter.dart';
-import 'fvp_player_config.dart';
-import 'fvp_video_config.dart';
+import 'package:media_core_fvp/src/fvp_player_adapter.dart';
+import 'package:media_core_fvp/src/fvp_player_config.dart';
+import 'package:media_core_fvp/src/fvp_video_config.dart';
 
-export 'fvp_player_config.dart' show FvpPlayerConfig, FvpProxyUrlResolver;
-export 'fvp_video_config.dart' show FvpVideoConfig;
+export 'package:media_core_fvp/src/fvp_player_config.dart' show FvpPlayerConfig, FvpProxyUrlResolver;
+export 'package:media_core_fvp/src/fvp_video_config.dart' show FvpVideoConfig;
 
 /// Backend id the fvp (libmdk) adapter registers under.
 const String kFvpPlayerBackendId = 'fvp';

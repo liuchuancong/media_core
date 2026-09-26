@@ -1,5 +1,5 @@
-import 'player_constants.dart';
-import '../identity/source_id.dart';
+import 'package:media_core/core/player_constants.dart';
+import 'package:media_core/identity/source_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Defines immutable runtime options used to configure a player.

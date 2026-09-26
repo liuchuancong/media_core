@@ -1,16 +1,16 @@
-import 'media_type.dart';
-import 'player_state.dart';
-import 'player_status.dart';
-import 'player_metrics.dart';
-import 'player_options.dart';
-import 'media_capabilities.dart';
+import 'package:media_core/core/media_type.dart';
+import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_status.dart';
+import 'package:media_core/core/player_metrics.dart';
+import 'package:media_core/core/player_options.dart';
+import 'package:media_core/core/media_capabilities.dart';
 import 'package:clock/clock.dart';
-import 'player_capabilities.dart';
-import '../identity/player_id.dart';
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
-import '../identity/session_id.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/core/player_capabilities.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents the complete immutable observable state of a player at a

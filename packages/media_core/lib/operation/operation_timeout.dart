@@ -1,4 +1,4 @@
-import 'operation.dart';
+import 'package:media_core/operation/operation.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 

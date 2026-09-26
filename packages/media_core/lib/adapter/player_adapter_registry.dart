@@ -1,5 +1,5 @@
-import 'player_adapter_factory.dart';
-import 'player_adapter_capabilities.dart';
+import 'package:media_core/adapter/player_adapter_factory.dart';
+import 'package:media_core/adapter/player_adapter_capabilities.dart';
 
 /// Registry of available player adapters.
 ///

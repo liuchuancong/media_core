@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_native/media_core_native.dart';
 
-import 'ffmpeg_executor.dart';
-import 'ffmpeg_record_arguments.dart';
-import 'ffmpeg_record_config.dart';
+import 'package:media_core_recording_ffmpeg/src/ffmpeg_executor.dart';
+import 'package:media_core_recording_ffmpeg/src/ffmpeg_record_arguments.dart';
+import 'package:media_core_recording_ffmpeg/src/ffmpeg_record_config.dart';
 
 /// Decision trail for a recording.
 ///

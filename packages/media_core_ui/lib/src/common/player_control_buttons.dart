@@ -2,7 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
-import 'player_controls_theme.dart';
+import 'package:media_core_ui/src/common/player_controls_theme.dart';
 
 /// A control glyph that answers the pointer the way its design language does.
 ///

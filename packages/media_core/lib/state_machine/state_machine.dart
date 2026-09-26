@@ -1,9 +1,9 @@
-import 'state.dart';
-import 'state_transition.dart';
+import 'package:media_core/state_machine/state.dart';
+import 'package:media_core/state_machine/state_transition.dart';
 import 'package:clock/clock.dart';
-import 'state_machine_event.dart';
-import 'state_machine_context.dart';
-import 'state_transition_result.dart';
+import 'package:media_core/state_machine/state_machine_event.dart';
+import 'package:media_core/state_machine/state_machine_context.dart';
+import 'package:media_core/state_machine/state_transition_result.dart';
 
 
 /// Generic asynchronous state machine execution engine.

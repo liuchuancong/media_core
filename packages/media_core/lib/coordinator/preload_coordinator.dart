@@ -1,6 +1,6 @@
-import '../identity/player_id.dart';
-import '../preload/preload_manager.dart';
-import '../preload/preload_request.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/preload/preload_manager.dart';
+import 'package:media_core/preload/preload_request.dart';
 
 /// Coordinates preload operations.
 ///

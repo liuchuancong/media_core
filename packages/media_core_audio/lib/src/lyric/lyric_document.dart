@@ -1,4 +1,4 @@
-import 'lyric_line.dart';
+import 'package:media_core_audio/src/lyric/lyric_line.dart';
 
 /// A parsed lyric, ready for timed display.
 ///

@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import '../player/audio_playback_controller.dart';
-import '../player/audio_player_state.dart';
-import '../track/music_track.dart';
-import '../media_core_audio.dart';
+import 'package:media_core_audio/src/player/audio_playback_controller.dart';
+import 'package:media_core_audio/src/player/audio_player_state.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/media_core_audio.dart';
 import 'package:media_core_mediasession/media_core_mediasession.dart';
 
 /// Connects an [AudioPlaybackController] to the platform's background playback

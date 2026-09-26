@@ -1,11 +1,11 @@
-import '../identity/player_id.dart';
-import '../identity/source_id.dart';
-import '../identity/session_id.dart';
-import '../source/player_source.dart';
-import '../policy/player_policy.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/policy/player_policy.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
-import '../platform/platform_capabilities.dart';
+import 'package:media_core/platform/platform_capabilities.dart';
 
 /// Runtime context of a player session.
 ///

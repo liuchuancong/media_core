@@ -1,4 +1,4 @@
-import 'playback_state.dart';
+import 'package:media_core/playback/playback_state.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable playback snapshot.

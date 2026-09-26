@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'download_config.dart';
+import 'package:media_core_download/src/download_config.dart';
 
 /// One ranged request.
 final class DownloadRequest {

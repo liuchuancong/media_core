@@ -7,17 +7,17 @@
 /// which implements [DanmakuSink]. Neither is known to this package.
 library;
 
-export 'src/danmaku_config.dart';
-export 'src/danmaku_controller.dart';
-export 'src/danmaku_failure.dart';
-export 'src/danmaku_fanout_sink.dart';
-export 'src/danmaku_filter_policy.dart';
-export 'src/danmaku_message.dart';
-export 'src/danmaku_message_gate.dart';
-export 'src/danmaku_overlay_config.dart';
-export 'src/danmaku_overlay_session.dart';
-export 'src/danmaku_repeated_filter.dart';
-export 'src/danmaku_session_state.dart';
-export 'src/danmaku_similarity_filter.dart';
-export 'src/danmaku_sink.dart';
-export 'src/danmaku_transport.dart';
+export 'package:media_core_danmaku/src/danmaku_config.dart';
+export 'package:media_core_danmaku/src/danmaku_controller.dart';
+export 'package:media_core_danmaku/src/danmaku_failure.dart';
+export 'package:media_core_danmaku/src/danmaku_fanout_sink.dart';
+export 'package:media_core_danmaku/src/danmaku_filter_policy.dart';
+export 'package:media_core_danmaku/src/danmaku_message.dart';
+export 'package:media_core_danmaku/src/danmaku_message_gate.dart';
+export 'package:media_core_danmaku/src/danmaku_overlay_config.dart';
+export 'package:media_core_danmaku/src/danmaku_overlay_session.dart';
+export 'package:media_core_danmaku/src/danmaku_repeated_filter.dart';
+export 'package:media_core_danmaku/src/danmaku_session_state.dart';
+export 'package:media_core_danmaku/src/danmaku_similarity_filter.dart';
+export 'package:media_core_danmaku/src/danmaku_sink.dart';
+export 'package:media_core_danmaku/src/danmaku_transport.dart';

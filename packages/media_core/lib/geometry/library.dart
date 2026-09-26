@@ -16,15 +16,15 @@ library;
 // Public exports
 // ============================================================================
 
-export 'aspect_ratio.dart';
-export 'display_size.dart';
-export 'geometry_controller.dart';
-export 'geometry_event.dart';
-export 'geometry_session.dart';
-export 'geometry_snapshot.dart';
-export 'geometry_state.dart';
-export 'pixel_ratio.dart';
-export 'video_geometry.dart';
-export 'video_orientation.dart';
-export 'video_rotation.dart';
-export 'video_size.dart';
+export 'package:media_core/geometry/aspect_ratio.dart';
+export 'package:media_core/geometry/display_size.dart';
+export 'package:media_core/geometry/geometry_controller.dart';
+export 'package:media_core/geometry/geometry_event.dart';
+export 'package:media_core/geometry/geometry_session.dart';
+export 'package:media_core/geometry/geometry_snapshot.dart';
+export 'package:media_core/geometry/geometry_state.dart';
+export 'package:media_core/geometry/pixel_ratio.dart';
+export 'package:media_core/geometry/video_geometry.dart';
+export 'package:media_core/geometry/video_orientation.dart';
+export 'package:media_core/geometry/video_rotation.dart';
+export 'package:media_core/geometry/video_size.dart';

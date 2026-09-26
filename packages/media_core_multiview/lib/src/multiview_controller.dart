@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_danmaku/media_core_danmaku.dart';
 
-import 'multiview_cell.dart';
-import 'multiview_config.dart';
-import 'multiview_layout.dart';
+import 'package:media_core_multiview/src/multiview_cell.dart';
+import 'package:media_core_multiview/src/multiview_config.dart';
+import 'package:media_core_multiview/src/multiview_layout.dart';
 
 /// Decision trail for the wall.
 ///

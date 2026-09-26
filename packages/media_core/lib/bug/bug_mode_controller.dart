@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'bug_mode.dart';
-import 'bug_mode_config.dart';
+import 'package:media_core/bug/bug_mode.dart';
+import 'package:media_core/bug/bug_mode_config.dart';
 
 /// Runtime controller for [BugModeConfig].
 ///

@@ -1,7 +1,7 @@
-import '../error/player_failure.dart';
-import '../error/error_classifier.dart';
-import '../error/player_error_code.dart';
-import '../error/player_error_category.dart';
+import 'package:media_core/error/player_failure.dart';
+import 'package:media_core/error/error_classifier.dart';
+import 'package:media_core/error/player_error_code.dart';
+import 'package:media_core/error/player_error_category.dart';
 
 /// Defines how player failures should be handled.
 ///

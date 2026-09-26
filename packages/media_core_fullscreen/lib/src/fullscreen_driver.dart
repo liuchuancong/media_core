@@ -4,9 +4,9 @@ import 'package:flutter/painting.dart' show Rect;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:media_core/media_core.dart';
 
-import 'fullscreen_config.dart';
-import 'fullscreen_window.dart';
-import 'window_manager_fullscreen_window.dart';
+import 'package:media_core_fullscreen/src/fullscreen_config.dart';
+import 'package:media_core_fullscreen/src/fullscreen_window.dart';
+import 'package:media_core_fullscreen/src/window_manager_fullscreen_window.dart';
 
 /// Decision trail for fullscreen.
 ///

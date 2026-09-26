@@ -1,14 +1,14 @@
 import 'package:clock/clock.dart';
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
-import '../source/player_source.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
-import '../session/session_snapshot.dart';
-import '../geometry/geometry_snapshot.dart';
-import '../playback/playback_snapshot.dart';
-import '../recovery/recovery_snapshot.dart';
-import '../lifecycle/lifecycle_snapshot.dart';
+import 'package:media_core/session/session_snapshot.dart';
+import 'package:media_core/geometry/geometry_snapshot.dart';
+import 'package:media_core/playback/playback_snapshot.dart';
+import 'package:media_core/recovery/recovery_snapshot.dart';
+import 'package:media_core/lifecycle/lifecycle_snapshot.dart';
 
 /// Transient aggregate snapshot of one `PlayerHandle`.
 ///

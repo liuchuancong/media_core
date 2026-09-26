@@ -1,7 +1,7 @@
-import 'session_state.dart';
+import 'package:media_core/session/session_state.dart';
 import 'package:clock/clock.dart';
-import '../identity/source_id.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/session_id.dart';
 import 'package:equatable/equatable.dart';
 
 

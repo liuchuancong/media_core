@@ -15,9 +15,9 @@
 library;
 
 // Adapter, configs, factory, view.
-export 'src/fvp_player_adapter.dart' show FvpPlayerAdapter;
-export 'src/fvp_player_config.dart' show FvpPlayerConfig, FvpProxyUrlResolver;
-export 'src/fvp_video_config.dart' show FvpVideoConfig;
-export 'src/fvp_video_view.dart' show FvpVideoView;
-export 'src/fvp_adapter_factory.dart'
+export 'package:media_core_fvp/src/fvp_player_adapter.dart' show FvpPlayerAdapter;
+export 'package:media_core_fvp/src/fvp_player_config.dart' show FvpPlayerConfig, FvpProxyUrlResolver;
+export 'package:media_core_fvp/src/fvp_video_config.dart' show FvpVideoConfig;
+export 'package:media_core_fvp/src/fvp_video_view.dart' show FvpVideoView;
+export 'package:media_core_fvp/src/fvp_adapter_factory.dart'
     show FvpAdapterFactory, kFvpPlayerBackendId, registerFvpFactory, registerFvpRegistry;

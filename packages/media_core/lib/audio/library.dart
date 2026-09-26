@@ -16,12 +16,12 @@ library;
 // Public exports
 // ============================================================================
 
-export 'audio_coordinator.dart';
-export 'audio_focus.dart';
-export 'audio_focus_state.dart';
-export 'audio_manager.dart';
-export 'audio_mute.dart';
-export 'audio_route.dart';
-export 'audio_session.dart';
-export 'audio_session_state.dart';
-export 'audio_volume.dart';
+export 'package:media_core/audio/audio_coordinator.dart';
+export 'package:media_core/audio/audio_focus.dart';
+export 'package:media_core/audio/audio_focus_state.dart';
+export 'package:media_core/audio/audio_manager.dart';
+export 'package:media_core/audio/audio_mute.dart';
+export 'package:media_core/audio/audio_route.dart';
+export 'package:media_core/audio/audio_session.dart';
+export 'package:media_core/audio/audio_session_state.dart';
+export 'package:media_core/audio/audio_volume.dart';

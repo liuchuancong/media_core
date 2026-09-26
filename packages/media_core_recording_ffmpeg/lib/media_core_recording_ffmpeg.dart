@@ -21,7 +21,7 @@
 /// [FfmpegRecordingBackend].
 library;
 
-export 'src/ffmpeg_executor.dart';
-export 'src/ffmpeg_record_arguments.dart';
-export 'src/ffmpeg_record_config.dart';
-export 'src/ffmpeg_recording_backend.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg_executor.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg_record_arguments.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg_record_config.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg_recording_backend.dart';

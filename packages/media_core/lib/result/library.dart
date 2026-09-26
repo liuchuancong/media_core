@@ -16,8 +16,8 @@ library;
 // Public exports
 // ============================================================================
 
-export 'async_result.dart';
-export 'operation_result.dart';
-export 'result.dart';
-export 'result_error.dart';
-export 'result_status.dart';
+export 'package:media_core/result/async_result.dart';
+export 'package:media_core/result/operation_result.dart';
+export 'package:media_core/result/result.dart';
+export 'package:media_core/result/result_error.dart';
+export 'package:media_core/result/result_status.dart';

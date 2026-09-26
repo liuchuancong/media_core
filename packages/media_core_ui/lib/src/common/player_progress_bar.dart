@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 
-import 'player_control_buttons.dart';
-import 'player_controls_controller.dart';
-import 'player_controls_theme.dart';
+import 'package:media_core_ui/src/common/player_control_buttons.dart';
+import 'package:media_core_ui/src/common/player_controls_controller.dart';
+import 'package:media_core_ui/src/common/player_controls_theme.dart';
 
 /// The timeline every control set shares.
 ///

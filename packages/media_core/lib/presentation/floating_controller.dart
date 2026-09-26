@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'floating_state.dart';
+import 'package:media_core/presentation/floating_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls floating presentation lifecycle.

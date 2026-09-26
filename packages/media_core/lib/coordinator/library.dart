@@ -16,12 +16,12 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_audio_coordinator.dart';
-export 'global_player_coordinator.dart';
-export 'lifecycle_coordinator.dart';
-export 'page_coordinator.dart';
-export 'playback_coordinator.dart';
-export 'player_coordinator.dart';
-export 'preload_coordinator.dart';
-export 'presentation_coordinator.dart';
-export 'resource_coordinator.dart';
+export 'package:media_core/coordinator/player_audio_coordinator.dart';
+export 'package:media_core/coordinator/global_player_coordinator.dart';
+export 'package:media_core/coordinator/lifecycle_coordinator.dart';
+export 'package:media_core/coordinator/page_coordinator.dart';
+export 'package:media_core/coordinator/playback_coordinator.dart';
+export 'package:media_core/coordinator/player_coordinator.dart';
+export 'package:media_core/coordinator/preload_coordinator.dart';
+export 'package:media_core/coordinator/presentation_coordinator.dart';
+export 'package:media_core/coordinator/resource_coordinator.dart';

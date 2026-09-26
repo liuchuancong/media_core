@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../adapter/player_video_output.dart';
-import '../kernel/player_handle.dart';
-import '../screenshot/screenshot_surface.dart';
-import '../source/player_source.dart';
-import 'player_view.dart';
-import 'video_zoom_controller.dart';
+import 'package:media_core/adapter/player_video_output.dart';
+import 'package:media_core/kernel/player_handle.dart';
+import 'package:media_core/screenshot/screenshot_surface.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/renderer/player_view.dart';
+import 'package:media_core/renderer/video_zoom_controller.dart';
 
 /// Application-facing video widget for a [PlayerHandle].
 ///

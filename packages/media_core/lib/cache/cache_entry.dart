@@ -1,4 +1,4 @@
-import 'cache_key.dart';
+import 'package:media_core/cache/cache_key.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 

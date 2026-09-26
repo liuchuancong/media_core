@@ -14,10 +14,10 @@ import 'package:media_core/media_core.dart'
         PoolPlayerHandle,
         memoryContributorKey;
 
-import 'playback_list_config.dart';
-import 'playback_list_item.dart';
-import 'playback_list_player.dart';
-import 'playback_progress_store.dart';
+import 'package:media_core_list_playback/src/playback_list_config.dart';
+import 'package:media_core_list_playback/src/playback_list_item.dart';
+import 'package:media_core_list_playback/src/playback_list_player.dart';
+import 'package:media_core_list_playback/src/playback_progress_store.dart';
 
 /// Decision trail for list playback.
 ///

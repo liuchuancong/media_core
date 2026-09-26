@@ -16,16 +16,16 @@ library;
 // Public exports
 // ============================================================================
 
-export 'fake_clock.dart';
-export 'fake_lifecycle.dart';
-export 'fake_network.dart';
-export 'fake_platform.dart';
-export 'fake_player.dart';
-export 'fake_player_adapter.dart';
-export 'fake_timer.dart';
-export 'fake_visibility.dart';
-export 'test_assertions.dart';
-export 'test_player_factory.dart';
-export 'test_scenarios.dart';
-export 'test_session_factory.dart';
-export 'test_source_factory.dart';
+export 'package:media_core/testing/fake_clock.dart';
+export 'package:media_core/testing/fake_lifecycle.dart';
+export 'package:media_core/testing/fake_network.dart';
+export 'package:media_core/testing/fake_platform.dart';
+export 'package:media_core/testing/fake_player.dart';
+export 'package:media_core/testing/fake_player_adapter.dart';
+export 'package:media_core/testing/fake_timer.dart';
+export 'package:media_core/testing/fake_visibility.dart';
+export 'package:media_core/testing/test_assertions.dart';
+export 'package:media_core/testing/test_player_factory.dart';
+export 'package:media_core/testing/test_scenarios.dart';
+export 'package:media_core/testing/test_session_factory.dart';
+export 'package:media_core/testing/test_source_factory.dart';

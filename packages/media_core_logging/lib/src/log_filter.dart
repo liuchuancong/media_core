@@ -1,5 +1,5 @@
-import 'log_category.dart';
-import 'player_logger.dart';
+import 'package:media_core_logging/src/log_category.dart';
+import 'package:media_core_logging/src/player_logger.dart';
 
 /// Decides whether a record reaches the sinks.
 ///

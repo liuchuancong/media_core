@@ -1,4 +1,4 @@
-import 'player_surface.dart';
+import 'package:media_core/renderer/player_surface.dart';
 import 'package:flutter/widgets.dart';
 
 /// Public widget boundary for displaying a player rendering surface.

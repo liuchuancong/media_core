@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'cache_entry.dart';
-export 'cache_eviction.dart';
-export 'cache_key.dart';
-export 'cache_manager.dart';
-export 'cache_metrics.dart';
-export 'cache_result.dart';
-export 'cache_state.dart';
-export 'cache_storage.dart';
-export 'disk_cache.dart';
-export 'memory_cache.dart';
+export 'package:media_core/cache/cache_entry.dart';
+export 'package:media_core/cache/cache_eviction.dart';
+export 'package:media_core/cache/cache_key.dart';
+export 'package:media_core/cache/cache_manager.dart';
+export 'package:media_core/cache/cache_metrics.dart';
+export 'package:media_core/cache/cache_result.dart';
+export 'package:media_core/cache/cache_state.dart';
+export 'package:media_core/cache/cache_storage.dart';
+export 'package:media_core/cache/disk_cache.dart';
+export 'package:media_core/cache/memory_cache.dart';

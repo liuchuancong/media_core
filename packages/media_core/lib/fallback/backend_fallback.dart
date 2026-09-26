@@ -1,4 +1,4 @@
-import 'backend_fallback_state.dart';
+import 'package:media_core/fallback/backend_fallback_state.dart';
 
 /// Coordinates fallback between media backends.
 ///

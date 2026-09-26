@@ -1,7 +1,7 @@
-import '../identity/player_id.dart';
-import '../kernel/kernel_presentation_driver.dart';
-import 'presentation_mode.dart';
-import 'presentation_request.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/kernel/kernel_presentation_driver.dart';
+import 'package:media_core/presentation/presentation_mode.dart';
+import 'package:media_core/presentation/presentation_request.dart';
 
 /// Binds a driver to the presentation modes it owns.
 ///

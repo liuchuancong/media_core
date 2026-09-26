@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'fullscreen_state.dart';
+import 'package:media_core/presentation/fullscreen_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls fullscreen lifecycle.

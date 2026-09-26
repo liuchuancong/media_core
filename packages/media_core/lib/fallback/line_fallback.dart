@@ -1,4 +1,4 @@
-import 'line_fallback_state.dart';
+import 'package:media_core/fallback/line_fallback_state.dart';
 
 /// Coordinates fallback between playback lines.
 ///

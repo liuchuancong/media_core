@@ -1,6 +1,8 @@
 name: media_core_workspace
-publish_to: none
-
+description: A reusable live playback core for Flutter applications.
+version: 1.0.0
+homepage: https://github.com/liuchuancong/media_core
+repository: https://github.com/liuchuancong/media_core
 environment:
   sdk: ">=3.9.0 <4.0.0"
 
@@ -29,7 +31,7 @@ workspace:
   - packages/media_core_recording_ffmpeg
   - packages/media_core_download
   - packages/media_core_multiview
-  - examples/example
+  - example
 
 dependency_overrides:
   wakelock_plus: ^1.7.0

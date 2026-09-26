@@ -1,7 +1,7 @@
 import 'package:flutter/painting.dart' show Rect;
 import 'package:window_manager/window_manager.dart';
 
-import 'fullscreen_window.dart';
+import 'package:media_core_fullscreen/src/fullscreen_window.dart';
 
 /// [FullscreenWindow] backed by `window_manager`.
 final class WindowManagerFullscreenWindow implements FullscreenWindow {

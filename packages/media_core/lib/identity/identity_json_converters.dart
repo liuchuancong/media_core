@@ -1,10 +1,10 @@
-import 'slot_id.dart';
-import 'player_id.dart';
-import 'source_id.dart';
-import 'request_id.dart';
-import 'session_id.dart';
-import 'operation_id.dart';
-import 'generation_id.dart';
+import 'package:media_core/identity/slot_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/identity/operation_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 class PlayerIdJsonConverter extends JsonConverter<PlayerId, String> {

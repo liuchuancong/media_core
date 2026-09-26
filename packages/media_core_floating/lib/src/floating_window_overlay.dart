@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'floating_window_placement.dart';
+import 'package:media_core_floating/src/floating_window_placement.dart';
 
 /// The in-app small window.
 ///

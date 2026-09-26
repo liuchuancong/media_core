@@ -1,7 +1,7 @@
-import '../diagnostics/library.dart' show LogCategory, LogModule, MediaCoreLog;
-import '../identity/player_id.dart';
-import '../kernel/player_handle.dart';
-import '../kernel/player_kernel.dart';
+import 'package:media_core/diagnostics/library.dart' show LogCategory, LogModule, MediaCoreLog;
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/kernel/player_handle.dart';
+import 'package:media_core/kernel/player_kernel.dart';
 
 /// Records handover lookups that found nothing.
 ///

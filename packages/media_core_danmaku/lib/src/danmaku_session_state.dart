@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-import 'danmaku_failure.dart';
+import 'package:media_core_danmaku/src/danmaku_failure.dart';
 
 /// Lifecycle phase of one danmaku session.
 enum DanmakuSessionPhase {

@@ -1,9 +1,9 @@
-import 'result.dart';
-import 'result_error.dart';
-import 'result_status.dart';
-import 'operation_result.dart';
-import '../identity/request_id.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/result/result.dart';
+import 'package:media_core/result/result_error.dart';
+import 'package:media_core/result/result_status.dart';
+import 'package:media_core/result/operation_result.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents the lifecycle state of an asynchronous player operation.

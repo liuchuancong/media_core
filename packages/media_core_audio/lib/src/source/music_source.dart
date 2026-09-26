@@ -1,6 +1,6 @@
-import '../track/music_quality.dart';
-import '../track/music_track.dart';
-import '../track/track_source.dart';
+import 'package:media_core_audio/src/track/music_quality.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/track/track_source.dart';
 
 /// One platform's music API, expressed as a source.
 ///

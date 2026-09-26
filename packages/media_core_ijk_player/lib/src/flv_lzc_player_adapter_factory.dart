@@ -1,7 +1,7 @@
-import 'flv_lzc_adapter.dart';
+import 'package:media_core_ijk_player/src/flv_lzc_adapter.dart';
 import 'package:media_core/media_core.dart';
 
-export 'fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
+export 'package:media_core_ijk_player/src/fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
 
 const String kIjkPlayerBackendId = 'ijk';
 

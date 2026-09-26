@@ -1,11 +1,11 @@
-import '../session/player_session.dart';
-import '../session/session_context.dart';
-import '../identity/generation_id.dart';
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
-import '../policy/player_policy.dart';
-import '../source/player_source.dart';
-import 'test_source_factory.dart';
+import 'package:media_core/session/player_session.dart';
+import 'package:media_core/session/session_context.dart';
+import 'package:media_core/identity/generation_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/policy/player_policy.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/testing/test_source_factory.dart';
 
 /// Builds [PlayerSession] and [SessionContext] values for tests.
 final class TestSessionFactory {

@@ -2,17 +2,17 @@ import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatf
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 
-import 'common/player_control_actions.dart';
-import 'common/player_controls_controller.dart';
-import 'common/player_controls_stage.dart';
-import 'common/player_controls_style.dart';
-import 'common/player_controls_theme.dart';
-import 'cupertino/cupertino_player_controls.dart';
-import 'fluent/fluent_player_controls.dart';
-import 'macos/macos_player_controls.dart';
-import 'material/material_player_controls.dart';
-import 'neumorphic/neumorphic_player_controls.dart';
-import 'yaru/yaru_player_controls.dart';
+import 'package:media_core_ui/src/common/player_control_actions.dart';
+import 'package:media_core_ui/src/common/player_controls_controller.dart';
+import 'package:media_core_ui/src/common/player_controls_stage.dart';
+import 'package:media_core_ui/src/common/player_controls_style.dart';
+import 'package:media_core_ui/src/common/player_controls_theme.dart';
+import 'package:media_core_ui/src/cupertino/cupertino_player_controls.dart';
+import 'package:media_core_ui/src/fluent/fluent_player_controls.dart';
+import 'package:media_core_ui/src/macos/macos_player_controls.dart';
+import 'package:media_core_ui/src/material/material_player_controls.dart';
+import 'package:media_core_ui/src/neumorphic/neumorphic_player_controls.dart';
+import 'package:media_core_ui/src/yaru/yaru_player_controls.dart';
 
 /// What a double tap on the video does.
 ///

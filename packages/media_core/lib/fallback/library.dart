@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'backend_fallback.dart';
-export 'backend_fallback_state.dart';
-export 'fallback_context.dart';
-export 'fallback_manager.dart';
-export 'fallback_reason.dart';
-export 'fallback_result.dart';
-export 'line_fallback.dart';
-export 'line_fallback_state.dart';
-export 'quality_fallback.dart';
-export 'quality_fallback_state.dart';
+export 'package:media_core/fallback/backend_fallback.dart';
+export 'package:media_core/fallback/backend_fallback_state.dart';
+export 'package:media_core/fallback/fallback_context.dart';
+export 'package:media_core/fallback/fallback_manager.dart';
+export 'package:media_core/fallback/fallback_reason.dart';
+export 'package:media_core/fallback/fallback_result.dart';
+export 'package:media_core/fallback/line_fallback.dart';
+export 'package:media_core/fallback/line_fallback_state.dart';
+export 'package:media_core/fallback/quality_fallback.dart';
+export 'package:media_core/fallback/quality_fallback_state.dart';

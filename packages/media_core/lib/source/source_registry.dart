@@ -1,8 +1,8 @@
-import 'source_service.dart';
-import 'source_resolver.dart';
-import 'source_inspector.dart';
-import 'source_resolver_chain.dart';
-import 'source_inspector_chain.dart';
+import 'package:media_core/source/source_service.dart';
+import 'package:media_core/source/source_resolver.dart';
+import 'package:media_core/source/source_inspector.dart';
+import 'package:media_core/source/source_resolver_chain.dart';
+import 'package:media_core/source/source_inspector_chain.dart';
 
 /// Registry for source-layer implementations.
 ///

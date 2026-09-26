@@ -16,19 +16,19 @@ library;
 // Public exports
 // ============================================================================
 
-export 'bandwidth_budget.dart';
-export 'bandwidth_manager.dart';
-export 'decoder_budget.dart';
-export 'decoder_manager.dart';
-export 'memory_pressure_bridge.dart';
-export 'resource_manager.dart';
-export 'resource_metrics.dart';
-export 'resource_pressure.dart';
-export 'resource_priority.dart';
-export 'resource_snapshot.dart';
-export 'resource_state.dart';
-export 'thermal_manager.dart';
-export 'thermal_state.dart';
+export 'package:media_core/resource/bandwidth_budget.dart';
+export 'package:media_core/resource/bandwidth_manager.dart';
+export 'package:media_core/resource/decoder_budget.dart';
+export 'package:media_core/resource/decoder_manager.dart';
+export 'package:media_core/resource/memory_pressure_bridge.dart';
+export 'package:media_core/resource/resource_manager.dart';
+export 'package:media_core/resource/resource_metrics.dart';
+export 'package:media_core/resource/resource_pressure.dart';
+export 'package:media_core/resource/resource_priority.dart';
+export 'package:media_core/resource/resource_snapshot.dart';
+export 'package:media_core/resource/resource_state.dart';
+export 'package:media_core/resource/thermal_manager.dart';
+export 'package:media_core/resource/thermal_state.dart';
 
 // Memory accounting lives in its own package and is re-exported here so the
 // resource layer keeps one import surface.

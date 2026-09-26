@@ -1,9 +1,9 @@
-import '../platform/platform_capabilities.dart';
-import '../platform/platform_codec_capabilities.dart';
-import '../platform/platform_device_profile.dart';
-import '../platform/platform_info.dart';
-import '../platform/platform_provider.dart';
-import '../platform/platform_type.dart';
+import 'package:media_core/platform/platform_capabilities.dart';
+import 'package:media_core/platform/platform_codec_capabilities.dart';
+import 'package:media_core/platform/platform_device_profile.dart';
+import 'package:media_core/platform/platform_info.dart';
+import 'package:media_core/platform/platform_provider.dart';
+import 'package:media_core/platform/platform_type.dart';
 
 /// Scriptable [PlatformProvider] for tests.
 final class FakePlatformProvider implements PlatformProvider {

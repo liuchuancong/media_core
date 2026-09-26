@@ -1,7 +1,7 @@
-import 'task_id.dart';
-import 'task_queue.dart';
-import 'player_task.dart';
-import 'task_priority.dart';
+import 'package:media_core/task/task_id.dart';
+import 'package:media_core/task/task_queue.dart';
+import 'package:media_core/task/player_task.dart';
+import 'package:media_core/task/task_priority.dart';
 
 /// Schedules [PlayerTask] instances for execution.
 ///

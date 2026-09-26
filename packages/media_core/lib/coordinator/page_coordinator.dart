@@ -1,4 +1,4 @@
-import '../identity/player_id.dart';
+import 'package:media_core/identity/player_id.dart';
 
 /// Coordinates page level player behavior.
 ///

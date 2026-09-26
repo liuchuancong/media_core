@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'event_filter.dart';
-import 'player_event.dart';
-import 'event_priority.dart';
-import 'event_subscription.dart';
+import 'package:media_core/event/event_filter.dart';
+import 'package:media_core/event/player_event.dart';
+import 'package:media_core/event/event_priority.dart';
+import 'package:media_core/event/event_subscription.dart';
 
 
 /// Dispatches player events to subscribers.

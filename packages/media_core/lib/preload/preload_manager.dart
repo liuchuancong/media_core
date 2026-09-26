@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'preload_task.dart';
-import 'preload_metrics.dart';
-import 'preload_request.dart';
-import 'preload_scheduler.dart';
+import 'package:media_core/preload/preload_task.dart';
+import 'package:media_core/preload/preload_metrics.dart';
+import 'package:media_core/preload/preload_request.dart';
+import 'package:media_core/preload/preload_scheduler.dart';
 import 'package:media_core_memory/media_core_memory.dart';
 import 'package:rxdart/rxdart.dart';
 

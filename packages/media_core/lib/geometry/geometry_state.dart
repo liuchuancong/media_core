@@ -1,5 +1,5 @@
-import 'video_geometry.dart';
-import 'geometry_event.dart';
+import 'package:media_core/geometry/video_geometry.dart';
+import 'package:media_core/geometry/geometry_event.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 import 'package:media_core/geometry/video_orientation.dart';

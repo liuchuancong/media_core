@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
-import 'media_core_presentation.dart';
+import 'package:media_core_presentation/src/media_core_presentation.dart';
 
 /// Bridges a [MediaCorePresentation] driver into the core
 /// presentation module's [PresentationAdapter] contract.

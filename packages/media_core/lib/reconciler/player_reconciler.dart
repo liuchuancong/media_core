@@ -1,9 +1,9 @@
-import 'reconcile_plan.dart';
-import 'reconcile_action.dart';
-import 'reconcile_result.dart';
-import 'reconcile_context.dart';
-import '../core/player_state.dart';
-import '../core/player_status.dart';
+import 'package:media_core/reconciler/reconcile_plan.dart';
+import 'package:media_core/reconciler/reconcile_action.dart';
+import 'package:media_core/reconciler/reconcile_result.dart';
+import 'package:media_core/reconciler/reconcile_context.dart';
+import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_status.dart';
 
 /// Reconciles desired player state with current player state.
 ///

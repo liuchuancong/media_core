@@ -1,14 +1,14 @@
 import 'dart:io';
 
-import 'log_file_sink.dart';
-import 'log_filter.dart';
-import 'log_formatter.dart';
-import 'log_level.dart';
-import 'log_category.dart';
-import 'player_logger.dart';
-import 'log_console_sink.dart';
-import 'log_module.dart';
-import 'log_scope.dart';
+import 'package:media_core_logging/src/log_file_sink.dart';
+import 'package:media_core_logging/src/log_filter.dart';
+import 'package:media_core_logging/src/log_formatter.dart';
+import 'package:media_core_logging/src/log_level.dart';
+import 'package:media_core_logging/src/log_category.dart';
+import 'package:media_core_logging/src/player_logger.dart';
+import 'package:media_core_logging/src/log_console_sink.dart';
+import 'package:media_core_logging/src/log_module.dart';
+import 'package:media_core_logging/src/log_scope.dart';
 
 /// The framework-wide logging entry point.
 ///

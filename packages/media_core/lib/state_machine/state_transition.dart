@@ -1,6 +1,6 @@
-import 'state.dart';
-import 'state_machine_event.dart';
-import 'state_machine_context.dart';
+import 'package:media_core/state_machine/state.dart';
+import 'package:media_core/state_machine/state_machine_event.dart';
+import 'package:media_core/state_machine/state_machine_context.dart';
 
 /// Defines a state transition rule.
 ///

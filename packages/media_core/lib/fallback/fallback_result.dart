@@ -1,4 +1,4 @@
-import 'fallback_reason.dart';
+import 'package:media_core/fallback/fallback_reason.dart';
 import 'package:equatable/equatable.dart';
 
 /// Result of a fallback operation.

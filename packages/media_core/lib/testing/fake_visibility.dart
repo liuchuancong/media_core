@@ -1,7 +1,7 @@
 import 'package:clock/clock.dart';
 
-import '../visibility/visibility_event.dart';
-import '../visibility/visibility_observer.dart';
+import 'package:media_core/visibility/visibility_event.dart';
+import 'package:media_core/visibility/visibility_observer.dart';
 
 /// Recording [VisibilityObserver] for tests.
 final class FakeVisibilityObserver implements VisibilityObserver {

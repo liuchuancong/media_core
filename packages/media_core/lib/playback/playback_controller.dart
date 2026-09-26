@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'playback_state.dart';
-import 'playback_command.dart';
-import 'playback_request.dart';
-import 'playback_snapshot.dart';
+import 'package:media_core/playback/playback_state.dart';
+import 'package:media_core/playback/playback_command.dart';
+import 'package:media_core/playback/playback_request.dart';
+import 'package:media_core/playback/playback_snapshot.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls playback lifecycle.

@@ -1,6 +1,6 @@
-import 'renderer_config.dart';
+import 'package:media_core/renderer/renderer_config.dart';
 import 'package:clock/clock.dart';
-import 'renderer_capabilities.dart';
+import 'package:media_core/renderer/renderer_capabilities.dart';
 import 'package:equatable/equatable.dart';
 
 /// Current renderer state.

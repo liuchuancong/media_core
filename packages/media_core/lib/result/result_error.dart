@@ -1,8 +1,8 @@
-import '../error/error_context.dart';
-import '../error/player_failure.dart';
-import '../error/player_error_code.dart';
+import 'package:media_core/error/error_context.dart';
+import 'package:media_core/error/player_failure.dart';
+import 'package:media_core/error/player_error_code.dart';
 import 'package:equatable/equatable.dart';
-import '../error/player_error_category.dart';
+import 'package:media_core/error/player_error_category.dart';
 
 /// Represents an error contained by a [Result].
 ///

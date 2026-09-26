@@ -1,6 +1,6 @@
 import 'package:media_core/media_core.dart';
 
-import 'music_quality.dart';
+import 'package:media_core_audio/src/track/music_quality.dart';
 
 /// A resolved, immediately playable URL for one track.
 ///

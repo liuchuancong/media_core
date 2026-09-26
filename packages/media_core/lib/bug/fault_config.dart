@@ -1,4 +1,4 @@
-import 'fault_type.dart';
+import 'package:media_core/bug/fault_type.dart';
 import 'package:equatable/equatable.dart';
 
 /// Configuration for a single fault injection.

@@ -1,4 +1,4 @@
-import '../core/player_status.dart';
+import 'package:media_core/core/player_status.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents an action required during reconciliation.

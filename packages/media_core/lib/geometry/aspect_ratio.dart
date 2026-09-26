@@ -1,4 +1,4 @@
-import 'video_size.dart';
+import 'package:media_core/geometry/video_size.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable aspect ratio value.

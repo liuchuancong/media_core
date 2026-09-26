@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
-import '../lyric/lyric_document.dart';
-import '../lyric/lyric_loader.dart';
-import '../queue/play_mode.dart';
-import '../queue/play_queue.dart';
-import '../source/music_source_registry.dart';
-import '../track/music_quality.dart';
-import '../track/music_track.dart';
-import '../track/track_source.dart';
-import 'audio_player_state.dart';
+import 'package:media_core_audio/src/lyric/lyric_document.dart';
+import 'package:media_core_audio/src/lyric/lyric_loader.dart';
+import 'package:media_core_audio/src/queue/play_mode.dart';
+import 'package:media_core_audio/src/queue/play_queue.dart';
+import 'package:media_core_audio/src/source/music_source_registry.dart';
+import 'package:media_core_audio/src/track/music_quality.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/track/track_source.dart';
+import 'package:media_core_audio/src/player/audio_player_state.dart';
 
 /// Tuning for [AudioPlaybackController].
 final class AudioPlaybackConfig {

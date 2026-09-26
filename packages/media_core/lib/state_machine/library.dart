@@ -16,10 +16,10 @@ library;
 // Public exports
 // ============================================================================
 
-export 'state.dart';
-export 'state_machine.dart';
-export 'state_machine_context.dart';
-export 'state_machine_controller.dart';
-export 'state_machine_event.dart';
-export 'state_transition.dart';
-export 'state_transition_result.dart';
+export 'package:media_core/state_machine/state.dart';
+export 'package:media_core/state_machine/state_machine.dart';
+export 'package:media_core/state_machine/state_machine_context.dart';
+export 'package:media_core/state_machine/state_machine_controller.dart';
+export 'package:media_core/state_machine/state_machine_event.dart';
+export 'package:media_core/state_machine/state_transition.dart';
+export 'package:media_core/state_machine/state_transition_result.dart';

@@ -1,7 +1,7 @@
-import 'player_source.dart';
-import 'source_resolved.dart';
-import 'source_resolver.dart';
-import 'source_resolve_context.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/source/source_resolved.dart';
+import 'package:media_core/source/source_resolver.dart';
+import 'package:media_core/source/source_resolve_context.dart';
 
 /// Resolves a [PlayerSource] by trying registered resolvers in order.
 ///

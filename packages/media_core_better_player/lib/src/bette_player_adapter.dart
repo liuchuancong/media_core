@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../media_core_video_player.dart';
+import 'package:media_core_better_player/media_core_video_player.dart';
 import 'package:media_core/media_core.dart';
 import 'package:better_player_plus/better_player_plus.dart';
 
-export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
+export 'package:media_core_better_player/src/better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
 
 /// [PlayerAdapter] implementation backed by better_player_plus —
 /// the  BetterPlayer engine.

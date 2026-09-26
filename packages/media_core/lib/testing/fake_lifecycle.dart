@@ -1,7 +1,7 @@
 import 'package:clock/clock.dart';
 
-import '../lifecycle/lifecycle_event.dart';
-import '../lifecycle/lifecycle_observer.dart';
+import 'package:media_core/lifecycle/lifecycle_event.dart';
+import 'package:media_core/lifecycle/lifecycle_observer.dart';
 
 /// Recording [LifecycleObserver] for tests.
 ///

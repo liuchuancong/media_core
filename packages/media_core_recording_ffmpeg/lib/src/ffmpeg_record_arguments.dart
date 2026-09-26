@@ -1,6 +1,6 @@
 import 'package:media_core/media_core.dart' show UriUtils;
 
-import 'ffmpeg_record_config.dart';
+import 'package:media_core_recording_ffmpeg/src/ffmpeg_record_config.dart';
 
 /// Builds the FFmpeg argument lists a recording uses.
 ///

@@ -16,11 +16,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_reconciler.dart';
-export 'reconcile_action.dart';
-export 'reconcile_context.dart';
-export 'reconcile_plan.dart';
-export 'reconcile_queue.dart';
-export 'reconcile_result.dart';
-export 'reconcile_scheduler.dart';
-export 'reconcile_state.dart';
+export 'package:media_core/reconciler/player_reconciler.dart';
+export 'package:media_core/reconciler/reconcile_action.dart';
+export 'package:media_core/reconciler/reconcile_context.dart';
+export 'package:media_core/reconciler/reconcile_plan.dart';
+export 'package:media_core/reconciler/reconcile_queue.dart';
+export 'package:media_core/reconciler/reconcile_result.dart';
+export 'package:media_core/reconciler/reconcile_scheduler.dart';
+export 'package:media_core/reconciler/reconcile_state.dart';

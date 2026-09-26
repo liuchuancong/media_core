@@ -1,6 +1,6 @@
-import 'danmaku_message.dart';
-import 'danmaku_overlay_session.dart';
-import 'danmaku_sink.dart';
+import 'package:media_core_danmaku/src/danmaku_message.dart';
+import 'package:media_core_danmaku/src/danmaku_overlay_session.dart';
+import 'package:media_core_danmaku/src/danmaku_sink.dart';
 
 /// Feeds a small-surface overlay alongside the primary sink.
 ///

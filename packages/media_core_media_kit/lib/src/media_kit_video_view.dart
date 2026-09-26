@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'media_kit_player_adapter.dart';
+import 'package:media_core_media_kit/src/media_kit_player_adapter.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 /// Renders the surface owned by [MediaKitPlayerAdapter].

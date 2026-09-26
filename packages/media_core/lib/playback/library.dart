@@ -16,14 +16,14 @@ library;
 // Public exports
 // ============================================================================
 
-export 'playback_command.dart';
-export 'playback_command_type.dart';
-export 'playback_controller.dart';
-export 'playback_duration.dart';
-export 'playback_options.dart';
-export 'playback_position.dart';
-export 'playback_rate.dart';
-export 'playback_request.dart';
-export 'playback_snapshot.dart';
-export 'playback_state.dart';
-export 'playback_volume.dart';
+export 'package:media_core/playback/playback_command.dart';
+export 'package:media_core/playback/playback_command_type.dart';
+export 'package:media_core/playback/playback_controller.dart';
+export 'package:media_core/playback/playback_duration.dart';
+export 'package:media_core/playback/playback_options.dart';
+export 'package:media_core/playback/playback_position.dart';
+export 'package:media_core/playback/playback_rate.dart';
+export 'package:media_core/playback/playback_request.dart';
+export 'package:media_core/playback/playback_snapshot.dart';
+export 'package:media_core/playback/playback_state.dart';
+export 'package:media_core/playback/playback_volume.dart';

@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'visibility_event.dart';
-import 'visibility_state.dart';
-import 'visibility_metrics.dart';
+import 'package:media_core/visibility/visibility_event.dart';
+import 'package:media_core/visibility/visibility_state.dart';
+import 'package:media_core/visibility/visibility_metrics.dart';
 import 'package:clock/clock.dart';
-import 'visibility_observer.dart';
-import 'visibility_snapshot.dart';
+import 'package:media_core/visibility/visibility_observer.dart';
+import 'package:media_core/visibility/visibility_snapshot.dart';
 import 'package:rxdart/rxdart.dart';
 
 

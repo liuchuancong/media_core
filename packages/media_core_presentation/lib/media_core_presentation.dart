@@ -21,8 +21,8 @@
 /// ```
 library;
 
-export 'src/kernel_presentation_adapter.dart';
-export 'src/media_core_presentation.dart';
-export 'src/presentation_capability_config.dart';
-export 'src/widgets/player_overlay.dart';
-export 'src/widgets/presentation_stage.dart';
+export 'package:media_core_presentation/src/kernel_presentation_adapter.dart';
+export 'package:media_core_presentation/src/media_core_presentation.dart';
+export 'package:media_core_presentation/src/presentation_capability_config.dart';
+export 'package:media_core_presentation/src/widgets/player_overlay.dart';
+export 'package:media_core_presentation/src/widgets/presentation_stage.dart';

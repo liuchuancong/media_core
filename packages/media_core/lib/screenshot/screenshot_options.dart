@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-import 'screenshot_format.dart';
+import 'package:media_core/screenshot/screenshot_format.dart';
 
 /// Route a capture is allowed to take.
 ///

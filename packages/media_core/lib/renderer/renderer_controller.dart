@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'renderer_state.dart';
-import 'renderer_config.dart';
+import 'package:media_core/renderer/renderer_state.dart';
+import 'package:media_core/renderer/renderer_config.dart';
 import 'package:clock/clock.dart';
 import 'package:rxdart/rxdart.dart';
-import 'renderer_capabilities.dart';
+import 'package:media_core/renderer/renderer_capabilities.dart';
 
 /// Controls renderer lifecycle and state.
 ///

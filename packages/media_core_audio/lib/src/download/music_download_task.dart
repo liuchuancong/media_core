@@ -1,4 +1,4 @@
-import 'music_download_request.dart';
+import 'package:media_core_audio/src/download/music_download_request.dart';
 
 /// Lifecycle of one download.
 enum MusicDownloadStatus {

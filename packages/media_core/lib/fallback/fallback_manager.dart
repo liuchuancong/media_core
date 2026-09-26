@@ -1,6 +1,6 @@
-import 'fallback_reason.dart';
-import 'fallback_result.dart';
-import 'fallback_context.dart';
+import 'package:media_core/fallback/fallback_reason.dart';
+import 'package:media_core/fallback/fallback_result.dart';
+import 'package:media_core/fallback/fallback_context.dart';
 
 /// Coordinates a generic fallback lifecycle.
 ///

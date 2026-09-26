@@ -1,4 +1,4 @@
-import '../core/player_error.dart';
+import 'package:media_core/core/player_error.dart';
 
 /// Thrown when an adapter operation fails and the caller invoked the
 /// adapter directly.

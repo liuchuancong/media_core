@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'player_pool_state.dart';
-import 'player_pool_config.dart';
+import 'package:media_core/pool/player_pool_state.dart';
+import 'package:media_core/pool/player_pool_config.dart';
 import 'package:clock/clock.dart';
-import 'player_pool_metrics.dart';
-import 'player_pool_recycler.dart';
-import 'player_pool_snapshot.dart';
+import 'package:media_core/pool/player_pool_metrics.dart';
+import 'package:media_core/pool/player_pool_recycler.dart';
+import 'package:media_core/pool/player_pool_snapshot.dart';
 import 'package:rxdart/rxdart.dart';
-import '../identity/player_id.dart';
-import 'player_pool_allocator.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/pool/player_pool_allocator.dart';
+import 'package:media_core/identity/session_id.dart';
 
 
 /// Manages player pool runtime.

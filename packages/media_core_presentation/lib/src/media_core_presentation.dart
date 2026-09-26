@@ -4,8 +4,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:media_core/media_core.dart';
 
-import 'presentation_capability_config.dart';
-import 'windows_presentation_driver.dart';
+import 'package:media_core_presentation/src/presentation_capability_config.dart';
+import 'package:media_core_presentation/src/windows_presentation_driver.dart';
 
 /// Presentation capability driver for the media_core kernel.
 ///

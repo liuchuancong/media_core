@@ -1,4 +1,4 @@
-import '../core/player_constants.dart';
+import 'package:media_core/core/player_constants.dart';
 
 /// Global options for the player kernel.
 ///

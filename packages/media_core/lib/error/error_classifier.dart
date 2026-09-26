@@ -1,5 +1,5 @@
-import 'player_error_code.dart';
-import 'player_error_category.dart';
+import 'package:media_core/error/player_error_code.dart';
+import 'package:media_core/error/player_error_category.dart';
 
 /// Classifies a concrete [PlayerErrorCode] into a broad
 /// [PlayerErrorCategory].

@@ -1,4 +1,4 @@
-import 'cache_entry.dart';
+import 'package:media_core/cache/cache_entry.dart';
 import 'package:equatable/equatable.dart';
 
 /// Result of a cache lookup.

@@ -1,10 +1,10 @@
-import 'cache_key.dart';
-import 'cache_entry.dart';
-import 'cache_state.dart';
-import 'cache_result.dart';
-import 'memory_cache.dart';
-import 'cache_metrics.dart';
-import 'cache_storage.dart';
+import 'package:media_core/cache/cache_key.dart';
+import 'package:media_core/cache/cache_entry.dart';
+import 'package:media_core/cache/cache_state.dart';
+import 'package:media_core/cache/cache_result.dart';
+import 'package:media_core/cache/memory_cache.dart';
+import 'package:media_core/cache/cache_metrics.dart';
+import 'package:media_core/cache/cache_storage.dart';
 import 'package:clock/clock.dart';
 
 /// Coordinates cache storage and cache lifecycle.

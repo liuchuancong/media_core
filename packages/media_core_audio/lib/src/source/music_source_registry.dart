@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import '../track/music_quality.dart';
-import '../track/music_track.dart';
-import '../track/track_source.dart';
-import 'music_source.dart';
+import 'package:media_core_audio/src/track/music_quality.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/track/track_source.dart';
+import 'package:media_core_audio/src/source/music_source.dart';
 
 /// Raised when a track names a source that is not registered (or is disabled).
 final class MusicSourceNotFoundException implements Exception {

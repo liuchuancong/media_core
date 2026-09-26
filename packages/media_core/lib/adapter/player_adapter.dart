@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
-import '../core/player_state.dart';
-import 'player_adapter_event.dart';
-import 'player_adapter_context.dart';
-import 'player_adapter_metrics.dart';
-import '../source/player_source.dart';
-import '../screenshot/screenshot_request.dart';
-import 'player_adapter_capabilities.dart';
+import 'package:media_core/core/player_state.dart';
+import 'package:media_core/adapter/player_adapter_event.dart';
+import 'package:media_core/adapter/player_adapter_context.dart';
+import 'package:media_core/adapter/player_adapter_metrics.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/screenshot/screenshot_request.dart';
+import 'package:media_core/adapter/player_adapter_capabilities.dart';
 
 /// Abstract media player backend adapter.
 ///

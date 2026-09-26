@@ -4,8 +4,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/widgets.dart' show ImageProvider, MemoryImage;
 import 'package:media_core_logging/media_core_logging.dart';
 
-import '../identity/player_id.dart';
-import 'screenshot_format.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/screenshot/screenshot_format.dart';
 
 /// Where the pixels of a capture came from.
 enum ScreenshotSource {

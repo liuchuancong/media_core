@@ -1,5 +1,5 @@
-import '../identity/session_id.dart';
-import '../identity/operation_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/identity/operation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents an operation executed on a player session.

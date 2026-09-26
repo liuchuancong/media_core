@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
-import 'live_request.dart';
-import 'live_watchdogs.dart';
+import 'package:media_core_live/src/live_request.dart';
+import 'package:media_core_live/src/live_watchdogs.dart';
 
 /// How long a freshly opened source has to prove that playback is real.
 const Duration _verificationWindow = Duration(seconds: 8);

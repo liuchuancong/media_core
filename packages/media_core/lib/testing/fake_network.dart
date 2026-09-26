@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import '../network/network_condition.dart';
-import '../network/network_metrics.dart';
-import '../network/network_monitor.dart';
-import '../network/network_state.dart';
+import 'package:media_core/network/network_condition.dart';
+import 'package:media_core/network/network_metrics.dart';
+import 'package:media_core/network/network_monitor.dart';
+import 'package:media_core/network/network_state.dart';
 
 /// Scriptable [NetworkMonitor] for tests.
 ///

@@ -34,18 +34,18 @@ library;
 // Public exports
 // ============================================================================
 
-export 'src/common/player_control_actions.dart';
-export 'src/common/player_control_buttons.dart';
-export 'src/common/player_control_icons.dart';
-export 'src/common/player_controls_controller.dart';
-export 'src/common/player_controls_stage.dart';
-export 'src/common/player_controls_style.dart';
-export 'src/common/player_controls_theme.dart';
-export 'src/common/player_progress_bar.dart';
-export 'src/cupertino/cupertino_player_controls.dart';
-export 'src/fluent/fluent_player_controls.dart';
-export 'src/macos/macos_player_controls.dart';
-export 'src/material/material_player_controls.dart';
-export 'src/media_core_player_view.dart';
-export 'src/neumorphic/neumorphic_player_controls.dart';
-export 'src/yaru/yaru_player_controls.dart';
+export 'package:media_core_ui/src/common/player_control_actions.dart';
+export 'package:media_core_ui/src/common/player_control_buttons.dart';
+export 'package:media_core_ui/src/common/player_control_icons.dart';
+export 'package:media_core_ui/src/common/player_controls_controller.dart';
+export 'package:media_core_ui/src/common/player_controls_stage.dart';
+export 'package:media_core_ui/src/common/player_controls_style.dart';
+export 'package:media_core_ui/src/common/player_controls_theme.dart';
+export 'package:media_core_ui/src/common/player_progress_bar.dart';
+export 'package:media_core_ui/src/cupertino/cupertino_player_controls.dart';
+export 'package:media_core_ui/src/fluent/fluent_player_controls.dart';
+export 'package:media_core_ui/src/macos/macos_player_controls.dart';
+export 'package:media_core_ui/src/material/material_player_controls.dart';
+export 'package:media_core_ui/src/media_core_player_view.dart';
+export 'package:media_core_ui/src/neumorphic/neumorphic_player_controls.dart';
+export 'package:media_core_ui/src/yaru/yaru_player_controls.dart';

@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'state.dart';
+import 'package:media_core/state_machine/state.dart';
 import 'dart:collection';
-import 'state_machine.dart';
-import 'state_machine_event.dart';
-import 'state_machine_context.dart';
-import 'state_transition_result.dart';
+import 'package:media_core/state_machine/state_machine.dart';
+import 'package:media_core/state_machine/state_machine_event.dart';
+import 'package:media_core/state_machine/state_machine_context.dart';
+import 'package:media_core/state_machine/state_transition_result.dart';
 
 /// Runtime controller for a StateMachine.
 ///

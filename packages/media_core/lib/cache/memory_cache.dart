@@ -1,8 +1,8 @@
-import 'cache_key.dart';
+import 'package:media_core/cache/cache_key.dart';
 import 'package:media_core_memory/media_core_memory.dart';
-import 'cache_entry.dart';
-import 'cache_storage.dart';
-import 'cache_eviction.dart';
+import 'package:media_core/cache/cache_entry.dart';
+import 'package:media_core/cache/cache_storage.dart';
+import 'package:media_core/cache/cache_eviction.dart';
 
 /// In-memory cache storage.
 ///

@@ -1,5 +1,5 @@
-import 'cache_key.dart';
-import 'cache_entry.dart';
+import 'package:media_core/cache/cache_key.dart';
+import 'package:media_core/cache/cache_entry.dart';
 
 /// Abstract cache storage.
 ///

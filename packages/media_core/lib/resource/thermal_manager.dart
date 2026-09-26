@@ -1,5 +1,5 @@
-import 'thermal_state.dart';
-import 'resource_pressure.dart';
+import 'package:media_core/resource/thermal_state.dart';
+import 'package:media_core/resource/resource_pressure.dart';
 
 /// Manages device thermal resource state.
 ///

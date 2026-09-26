@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import 'player_control_icons.dart';
-import 'player_controls_style.dart';
+import 'package:media_core_ui/src/common/player_control_icons.dart';
+import 'package:media_core_ui/src/common/player_controls_style.dart';
 
 /// How a control button answers the pointer.
 ///

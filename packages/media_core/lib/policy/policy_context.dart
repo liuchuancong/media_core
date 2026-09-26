@@ -1,17 +1,17 @@
-import 'audio_policy.dart';
-import 'cache_policy.dart';
-import 'player_policy.dart';
-import 'memory_policy.dart';
-import 'preload_policy.dart';
-import 'thermal_policy.dart';
-import 'playback_policy.dart';
-import 'recovery_policy.dart';
-import 'resource_policy.dart';
-import 'fallback_policy.dart';
-import 'lifecycle_policy.dart';
-import 'visibility_policy.dart';
-import 'concurrency_policy.dart';
-import 'presentation_policy.dart';
+import 'package:media_core/policy/audio_policy.dart';
+import 'package:media_core/policy/cache_policy.dart';
+import 'package:media_core/policy/player_policy.dart';
+import 'package:media_core/policy/memory_policy.dart';
+import 'package:media_core/policy/preload_policy.dart';
+import 'package:media_core/policy/thermal_policy.dart';
+import 'package:media_core/policy/playback_policy.dart';
+import 'package:media_core/policy/recovery_policy.dart';
+import 'package:media_core/policy/resource_policy.dart';
+import 'package:media_core/policy/fallback_policy.dart';
+import 'package:media_core/policy/lifecycle_policy.dart';
+import 'package:media_core/policy/visibility_policy.dart';
+import 'package:media_core/policy/concurrency_policy.dart';
+import 'package:media_core/policy/presentation_policy.dart';
 
 /// Runtime policy container.
 ///

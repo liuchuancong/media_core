@@ -9,8 +9,8 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:media_core_media_kit/media_core_media_kit.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint, kIsWeb, TargetPlatform, ValueListenable;
 
-export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
-export 'media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
+export 'package:media_core_media_kit/src/media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
+export 'package:media_core_media_kit/src/media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
 
 /// [PlayerAdapter] implementation backed by the local media_kit
 /// snapshot — the MPV engine.

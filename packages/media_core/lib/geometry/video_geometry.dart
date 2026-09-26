@@ -1,9 +1,9 @@
-import 'video_size.dart';
-import 'pixel_ratio.dart';
-import 'display_size.dart';
-import 'aspect_ratio.dart';
-import 'video_rotation.dart';
-import 'video_orientation.dart';
+import 'package:media_core/geometry/video_size.dart';
+import 'package:media_core/geometry/pixel_ratio.dart';
+import 'package:media_core/geometry/display_size.dart';
+import 'package:media_core/geometry/aspect_ratio.dart';
+import 'package:media_core/geometry/video_rotation.dart';
+import 'package:media_core/geometry/video_orientation.dart';
 import 'package:equatable/equatable.dart';
 
 /// Complete video geometry information.

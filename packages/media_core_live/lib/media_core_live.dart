@@ -5,8 +5,8 @@
 /// so one line switch cannot race another.
 library;
 
-export 'src/live_playback_controller.dart';
-export 'src/live_playback_models.dart';
-export 'src/live_pool_policy.dart';
-export 'src/live_request.dart';
-export 'src/live_watchdogs.dart';
+export 'package:media_core_live/src/live_playback_controller.dart';
+export 'package:media_core_live/src/live_playback_models.dart';
+export 'package:media_core_live/src/live_pool_policy.dart';
+export 'package:media_core_live/src/live_request.dart';
+export 'package:media_core_live/src/live_watchdogs.dart';

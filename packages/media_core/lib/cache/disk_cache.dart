@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:convert';
-import 'cache_key.dart';
+import 'package:media_core/cache/cache_key.dart';
 import 'dart:typed_data';
-import 'cache_entry.dart';
-import 'cache_storage.dart';
+import 'package:media_core/cache/cache_entry.dart';
+import 'package:media_core/cache/cache_storage.dart';
 
 
 /// Disk-backed cache storage for byte-oriented cache values.

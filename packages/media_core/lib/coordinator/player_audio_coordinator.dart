@@ -1,7 +1,7 @@
-import '../identity/player_id.dart';
-import '../audio/audio_volume.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/audio/audio_volume.dart';
 import 'package:rxdart/rxdart.dart';
-import '../audio/audio_manager.dart';
+import 'package:media_core/audio/audio_manager.dart';
 
 /// Coordinates audio operations across multiple players.
 ///

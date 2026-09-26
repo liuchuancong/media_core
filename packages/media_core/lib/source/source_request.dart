@@ -1,7 +1,7 @@
-import 'source_type.dart';
-import 'source_headers.dart';
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
+import 'package:media_core/source/source_type.dart';
+import 'package:media_core/source/source_headers.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'source_request.freezed.dart';

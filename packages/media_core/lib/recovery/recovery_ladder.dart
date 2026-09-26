@@ -1,17 +1,17 @@
 import 'dart:async';
 
-import 'recovery_step.dart';
+import 'package:media_core/recovery/recovery_step.dart';
 import 'package:clock/clock.dart';
-import 'recovery_state.dart';
-import 'recovery_action.dart';
-import 'recovery_target.dart';
-import 'recovery_session.dart';
-import 'recovery_context.dart';
-import 'recovery_failure.dart';
-import 'recovery_snapshot.dart';
-import 'recovery_ladder_event.dart';
-import 'recovery_candidate_provider.dart';
-import '../error/player_error_code.dart';
+import 'package:media_core/recovery/recovery_state.dart';
+import 'package:media_core/recovery/recovery_action.dart';
+import 'package:media_core/recovery/recovery_target.dart';
+import 'package:media_core/recovery/recovery_session.dart';
+import 'package:media_core/recovery/recovery_context.dart';
+import 'package:media_core/recovery/recovery_failure.dart';
+import 'package:media_core/recovery/recovery_snapshot.dart';
+import 'package:media_core/recovery/recovery_ladder_event.dart';
+import 'package:media_core/recovery/recovery_candidate_provider.dart';
+import 'package:media_core/error/player_error_code.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 
 /// Lifecycle of the ladder.

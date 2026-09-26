@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart' hide Log;
 import 'package:media_core/media_core.dart';
 
-import 'music_download_request.dart';
-import 'music_download_task.dart';
+import 'package:media_core_audio/src/download/music_download_request.dart';
+import 'package:media_core_audio/src/download/music_download_task.dart';
 
 /// Tuning for [MusicDownloader].
 final class MusicDownloadConfig {

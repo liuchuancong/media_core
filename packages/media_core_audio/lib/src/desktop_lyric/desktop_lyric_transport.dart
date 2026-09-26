@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
-import 'desktop_lyric_state.dart';
+import 'package:media_core_audio/src/desktop_lyric/desktop_lyric_state.dart';
 
 /// An action the user performed on the desktop lyric overlay itself.
 ///

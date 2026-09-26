@@ -11,7 +11,7 @@
 /// wants, so a host does not have to re-derive portrait/landscape rules.
 library;
 
-export 'src/fullscreen_config.dart';
-export 'src/fullscreen_driver.dart';
-export 'src/fullscreen_window.dart';
-export 'src/window_manager_fullscreen_window.dart';
+export 'package:media_core_fullscreen/src/fullscreen_config.dart';
+export 'package:media_core_fullscreen/src/fullscreen_driver.dart';
+export 'package:media_core_fullscreen/src/fullscreen_window.dart';
+export 'package:media_core_fullscreen/src/window_manager_fullscreen_window.dart';

@@ -1,10 +1,10 @@
-import '../identity/slot_id.dart';
-import '../identity/player_id.dart';
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
-import '../identity/session_id.dart';
-import '../identity/operation_id.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/identity/slot_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/identity/operation_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Structured runtime context associated with a player error.

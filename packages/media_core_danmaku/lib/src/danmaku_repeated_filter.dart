@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import 'danmaku_message.dart';
+import 'package:media_core_danmaku/src/danmaku_message.dart';
 
 /// Collapses a short burst of identical text into its first message.
 ///

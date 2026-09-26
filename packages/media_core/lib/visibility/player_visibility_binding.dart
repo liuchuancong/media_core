@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import '../kernel/player_handle.dart';
-import 'visibility_controller.dart';
-import 'visibility_event.dart';
+import 'package:media_core/kernel/player_handle.dart';
+import 'package:media_core/visibility/visibility_controller.dart';
+import 'package:media_core/visibility/visibility_event.dart';
 
 /// Wires a [VisibilityController] to a [PlayerHandle]'s lifecycle.
 ///

@@ -1,9 +1,9 @@
-import 'recording_error.dart';
-import 'recording_state.dart';
-import 'recording_config.dart';
-import 'recording_result.dart';
-import 'recording_source.dart';
-import 'recording_backend.dart';
+import 'package:media_core/recording/recording_error.dart';
+import 'package:media_core/recording/recording_state.dart';
+import 'package:media_core/recording/recording_config.dart';
+import 'package:media_core/recording/recording_result.dart';
+import 'package:media_core/recording/recording_source.dart';
+import 'package:media_core/recording/recording_backend.dart';
 import 'package:clock/clock.dart';
 import 'package:rxdart/rxdart.dart';
 

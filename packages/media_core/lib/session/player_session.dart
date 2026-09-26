@@ -1,10 +1,10 @@
-import 'session_state.dart';
-import 'session_context.dart';
-import 'session_snapshot.dart';
-import 'session_generation.dart';
+import 'package:media_core/session/session_state.dart';
+import 'package:media_core/session/session_context.dart';
+import 'package:media_core/session/session_snapshot.dart';
+import 'package:media_core/session/session_generation.dart';
 import 'package:clock/clock.dart';
 import 'package:rxdart/rxdart.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 
 
 /// Represents one playback lifecycle session.

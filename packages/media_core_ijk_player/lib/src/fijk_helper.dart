@@ -1,4 +1,4 @@
-import 'fijk_player_config.dart';
+import 'package:media_core_ijk_player/src/fijk_player_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flv_lzc/fijkplayer.dart';
 import 'package:media_core_logging/media_core_logging.dart';

@@ -18,8 +18,8 @@
 /// the list surface and the gestures.
 library;
 
-export 'src/playback_list_config.dart';
-export 'src/playback_list_controller.dart';
-export 'src/playback_list_item.dart';
-export 'src/playback_list_player.dart';
-export 'src/playback_progress_store.dart';
+export 'package:media_core_list_playback/src/playback_list_config.dart';
+export 'package:media_core_list_playback/src/playback_list_controller.dart';
+export 'package:media_core_list_playback/src/playback_list_item.dart';
+export 'package:media_core_list_playback/src/playback_list_player.dart';
+export 'package:media_core_list_playback/src/playback_progress_store.dart';

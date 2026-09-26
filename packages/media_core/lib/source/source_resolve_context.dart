@@ -1,5 +1,5 @@
-import 'source_headers.dart';
-import '../identity/request_id.dart';
+import 'package:media_core/source/source_headers.dart';
+import 'package:media_core/identity/request_id.dart';
 
 /// Context used when resolving a media source.
 ///

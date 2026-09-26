@@ -1,4 +1,4 @@
-import 'recovery_action.dart';
+import 'package:media_core/recovery/recovery_action.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 

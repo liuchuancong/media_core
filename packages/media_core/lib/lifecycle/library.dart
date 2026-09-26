@@ -16,10 +16,10 @@ library;
 // Public exports
 // ============================================================================
 
-export 'app_lifecycle_driver.dart';
-export 'lifecycle_controller.dart';
-export 'lifecycle_event.dart';
-export 'lifecycle_observer.dart';
-export 'lifecycle_snapshot.dart';
-export 'lifecycle_state.dart';
-export 'player_lifecycle.dart';
+export 'package:media_core/lifecycle/app_lifecycle_driver.dart';
+export 'package:media_core/lifecycle/lifecycle_controller.dart';
+export 'package:media_core/lifecycle/lifecycle_event.dart';
+export 'package:media_core/lifecycle/lifecycle_observer.dart';
+export 'package:media_core/lifecycle/lifecycle_snapshot.dart';
+export 'package:media_core/lifecycle/lifecycle_state.dart';
+export 'package:media_core/lifecycle/player_lifecycle.dart';

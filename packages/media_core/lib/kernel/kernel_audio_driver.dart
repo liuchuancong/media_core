@@ -1,4 +1,4 @@
-import 'player_handle.dart';
+import 'package:media_core/kernel/player_handle.dart';
 
 /// Driver interface for audio capability packages.
 ///

@@ -1,8 +1,8 @@
-import 'media_kit_player_adapter.dart';
+import 'package:media_core_media_kit/src/media_kit_player_adapter.dart';
 import 'package:media_core/media_core.dart';
 
-export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
-export 'media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
+export 'package:media_core_media_kit/src/media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
+export 'package:media_core_media_kit/src/media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
 
 const String kMediaKitPlayerBackendId = 'mpv';
 

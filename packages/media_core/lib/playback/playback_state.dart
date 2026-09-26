@@ -1,4 +1,4 @@
-import 'playback_command.dart';
+import 'package:media_core/playback/playback_command.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 

@@ -1,8 +1,8 @@
 import 'package:audio_session/audio_session.dart' as asession;
 import 'package:media_core/media_core.dart';
 
-import 'media_session_config.dart';
-import 'media_session_driver.dart';
+import 'package:media_core_mediasession/src/media_session_config.dart';
+import 'package:media_core_mediasession/src/media_session_driver.dart';
 
 /// Turns the system media surfaces on for the whole app.
 ///

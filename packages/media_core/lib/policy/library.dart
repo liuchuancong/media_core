@@ -16,18 +16,18 @@ library;
 // Public exports
 // ============================================================================
 
-export 'audio_policy.dart';
-export 'cache_policy.dart';
-export 'concurrency_policy.dart';
-export 'fallback_policy.dart';
-export 'lifecycle_policy.dart';
-export 'memory_policy.dart';
-export 'playback_policy.dart';
-export 'player_policy.dart';
-export 'policy_context.dart';
-export 'preload_policy.dart';
-export 'presentation_policy.dart';
-export 'recovery_policy.dart';
-export 'resource_policy.dart';
-export 'thermal_policy.dart';
-export 'visibility_policy.dart';
+export 'package:media_core/policy/audio_policy.dart';
+export 'package:media_core/policy/cache_policy.dart';
+export 'package:media_core/policy/concurrency_policy.dart';
+export 'package:media_core/policy/fallback_policy.dart';
+export 'package:media_core/policy/lifecycle_policy.dart';
+export 'package:media_core/policy/memory_policy.dart';
+export 'package:media_core/policy/playback_policy.dart';
+export 'package:media_core/policy/player_policy.dart';
+export 'package:media_core/policy/policy_context.dart';
+export 'package:media_core/policy/preload_policy.dart';
+export 'package:media_core/policy/presentation_policy.dart';
+export 'package:media_core/policy/recovery_policy.dart';
+export 'package:media_core/policy/resource_policy.dart';
+export 'package:media_core/policy/thermal_policy.dart';
+export 'package:media_core/policy/visibility_policy.dart';

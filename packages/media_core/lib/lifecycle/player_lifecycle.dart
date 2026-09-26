@@ -1,5 +1,5 @@
-import 'lifecycle_event.dart';
-import 'lifecycle_snapshot.dart';
+import 'package:media_core/lifecycle/lifecycle_event.dart';
+import 'package:media_core/lifecycle/lifecycle_snapshot.dart';
 
 /// Player lifecycle abstraction.
 abstract interface class PlayerLifecycle {

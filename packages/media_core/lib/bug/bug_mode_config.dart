@@ -1,4 +1,4 @@
-import 'bug_mode.dart';
+import 'package:media_core/bug/bug_mode.dart';
 import 'package:equatable/equatable.dart';
 
 /// Defines the configuration used by the bug injection system.

@@ -1,4 +1,4 @@
-import 'download_config.dart';
+import 'package:media_core_download/src/download_config.dart';
 
 /// What should happen to a partially downloaded file.
 enum DownloadResumeDecision {

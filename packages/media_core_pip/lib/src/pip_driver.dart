@@ -4,11 +4,11 @@ import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:media_core/media_core.dart';
 
-import 'floating_system_pip.dart';
-import 'pip_config.dart';
-import 'pip_window.dart';
-import 'system_pip.dart';
-import 'window_manager_pip_window.dart';
+import 'package:media_core_pip/src/floating_system_pip.dart';
+import 'package:media_core_pip/src/pip_config.dart';
+import 'package:media_core_pip/src/pip_window.dart';
+import 'package:media_core_pip/src/system_pip.dart';
+import 'package:media_core_pip/src/window_manager_pip_window.dart';
 
 /// Records which platform path ran and why a request was refused.
 ///

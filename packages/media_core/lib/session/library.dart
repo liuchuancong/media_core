@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_session.dart';
-export 'session_context.dart';
-export 'session_controller.dart';
-export 'session_event.dart';
-export 'session_generation.dart';
-export 'session_lifecycle.dart';
-export 'session_manager.dart';
-export 'session_operation.dart';
-export 'session_snapshot.dart';
-export 'session_state.dart';
+export 'package:media_core/session/player_session.dart';
+export 'package:media_core/session/session_context.dart';
+export 'package:media_core/session/session_controller.dart';
+export 'package:media_core/session/session_event.dart';
+export 'package:media_core/session/session_generation.dart';
+export 'package:media_core/session/session_lifecycle.dart';
+export 'package:media_core/session/session_manager.dart';
+export 'package:media_core/session/session_operation.dart';
+export 'package:media_core/session/session_snapshot.dart';
+export 'package:media_core/session/session_state.dart';

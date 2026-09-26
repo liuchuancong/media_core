@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../common/player_control_buttons.dart';
-import '../common/player_controls_controller.dart';
-import '../common/player_controls_theme.dart';
-import '../common/player_progress_bar.dart';
-import '../fluent/fluent_player_controls.dart' show FluentOverflowMenu;
+import 'package:media_core_ui/src/common/player_control_buttons.dart';
+import 'package:media_core_ui/src/common/player_controls_controller.dart';
+import 'package:media_core_ui/src/common/player_controls_theme.dart';
+import 'package:media_core_ui/src/common/player_progress_bar.dart';
+import 'package:media_core_ui/src/fluent/fluent_player_controls.dart' show FluentOverflowMenu;
 
 /// Control set in the Yaru (Ubuntu) idiom.
 ///

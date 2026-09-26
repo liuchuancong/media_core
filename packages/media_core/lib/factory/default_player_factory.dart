@@ -1,6 +1,6 @@
-import '../core/player.dart';
-import 'player_factory.dart';
-import 'player_factory_config.dart';
+import 'package:media_core/core/player.dart';
+import 'package:media_core/factory/player_factory.dart';
+import 'package:media_core/factory/player_factory_config.dart';
 
 /// Default [PlayerFactory] implementation.
 ///

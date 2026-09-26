@@ -1,4 +1,4 @@
-import 'memory_pressure.dart';
+import 'package:media_core_memory/src/memory_pressure.dart';
 
 /// Memory limits, expressed as thresholds on a byte total.
 ///

@@ -1,5 +1,5 @@
-import 'lyric_document.dart';
-import 'lyric_line.dart';
+import 'package:media_core_audio/src/lyric/lyric_document.dart';
+import 'package:media_core_audio/src/lyric/lyric_line.dart';
 
 /// Parses LRC into a [LyricDocument].
 ///

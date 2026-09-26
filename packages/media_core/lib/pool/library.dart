@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_pool.dart';
-export 'pool_player_host.dart';
-export 'playback_pool_orchestrator.dart';
-export 'player_pool_allocator.dart';
-export 'player_pool_config.dart';
-export 'player_pool_manager.dart';
-export 'player_pool_metrics.dart';
-export 'player_pool_recycler.dart';
-export 'player_pool_snapshot.dart';
-export 'player_pool_state.dart';
+export 'package:media_core/pool/player_pool.dart';
+export 'package:media_core/pool/pool_player_host.dart';
+export 'package:media_core/pool/playback_pool_orchestrator.dart';
+export 'package:media_core/pool/player_pool_allocator.dart';
+export 'package:media_core/pool/player_pool_config.dart';
+export 'package:media_core/pool/player_pool_manager.dart';
+export 'package:media_core/pool/player_pool_metrics.dart';
+export 'package:media_core/pool/player_pool_recycler.dart';
+export 'package:media_core/pool/player_pool_snapshot.dart';
+export 'package:media_core/pool/player_pool_state.dart';

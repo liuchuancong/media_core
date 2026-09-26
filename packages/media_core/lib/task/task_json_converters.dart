@@ -1,8 +1,8 @@
-import 'task_id.dart';
-import 'task_type.dart';
-import 'task_state.dart';
-import 'task_priority.dart';
-import '../operation/operation_context.dart';
+import 'package:media_core/task/task_id.dart';
+import 'package:media_core/task/task_type.dart';
+import 'package:media_core/task/task_state.dart';
+import 'package:media_core/task/task_priority.dart';
+import 'package:media_core/operation/operation_context.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 class TaskIdJsonConverter extends JsonConverter<TaskId, String> {

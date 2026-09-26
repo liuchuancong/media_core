@@ -1,6 +1,6 @@
-import '../source/player_source.dart';
-import '../adapter/player_adapter_registry.dart';
-import 'recovery_failure.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/adapter/player_adapter_registry.dart';
+import 'package:media_core/recovery/recovery_failure.dart';
 import 'package:equatable/equatable.dart';
 
 /// Candidate sets the ladder may draw recovery steps from.

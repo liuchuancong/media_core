@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'presentation_capability_config.dart';
+import 'package:media_core_presentation/src/presentation_capability_config.dart';
 
 /// Desktop presentation driver backed by window_manager.
 ///

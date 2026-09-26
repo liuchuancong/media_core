@@ -1,4 +1,4 @@
-import 'visibility_state.dart';
+import 'package:media_core/visibility/visibility_state.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable visibility snapshot.

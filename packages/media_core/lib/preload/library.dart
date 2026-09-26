@@ -16,11 +16,11 @@ library;
 // Public exports
 // ============================================================================
 
-export 'preload_context.dart';
-export 'preload_manager.dart';
-export 'preload_metrics.dart';
-export 'preload_priority.dart';
-export 'preload_request.dart';
-export 'preload_scheduler.dart';
-export 'preload_state.dart';
-export 'preload_task.dart';
+export 'package:media_core/preload/preload_context.dart';
+export 'package:media_core/preload/preload_manager.dart';
+export 'package:media_core/preload/preload_metrics.dart';
+export 'package:media_core/preload/preload_priority.dart';
+export 'package:media_core/preload/preload_request.dart';
+export 'package:media_core/preload/preload_scheduler.dart';
+export 'package:media_core/preload/preload_state.dart';
+export 'package:media_core/preload/preload_task.dart';

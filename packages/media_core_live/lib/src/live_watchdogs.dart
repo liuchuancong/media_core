@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:media_core/media_core.dart';
-import 'live_playback_models.dart';
+import 'package:media_core_live/src/live_playback_models.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Recovery action requested by [LiveWatchdogs].

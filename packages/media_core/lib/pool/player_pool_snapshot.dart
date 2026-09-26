@@ -1,6 +1,6 @@
-import 'player_pool_state.dart';
+import 'package:media_core/pool/player_pool_state.dart';
 import 'package:clock/clock.dart';
-import 'player_pool_metrics.dart';
+import 'package:media_core/pool/player_pool_metrics.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 

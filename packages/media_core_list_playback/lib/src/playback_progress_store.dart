@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import 'playback_list_config.dart';
+import 'package:media_core_list_playback/src/playback_list_config.dart';
 
 /// Remembers where each item was left.
 ///

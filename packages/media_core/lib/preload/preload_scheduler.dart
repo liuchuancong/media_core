@@ -1,4 +1,4 @@
-import 'preload_task.dart';
+import 'package:media_core/preload/preload_task.dart';
 
 /// Schedules preload tasks.
 final class PreloadScheduler {

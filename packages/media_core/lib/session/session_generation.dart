@@ -1,4 +1,4 @@
-import '../identity/generation_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents a playback generation inside a session.

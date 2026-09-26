@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'memory_account.dart';
-import 'memory_budget.dart';
-import 'memory_module.dart';
-import 'memory_monitor.dart';
-import 'memory_pressure.dart';
-import 'memory_registry.dart';
-import 'memory_report.dart';
+import 'package:media_core_memory/src/memory_account.dart';
+import 'package:media_core_memory/src/memory_budget.dart';
+import 'package:media_core_memory/src/memory_module.dart';
+import 'package:media_core_memory/src/memory_monitor.dart';
+import 'package:media_core_memory/src/memory_pressure.dart';
+import 'package:media_core_memory/src/memory_registry.dart';
+import 'package:media_core_memory/src/memory_report.dart';
 
 /// The framework-wide memory entry point.
 ///

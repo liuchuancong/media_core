@@ -1,6 +1,6 @@
-import 'event_context.dart';
-import 'event_priority.dart';
-import 'player_event_type.dart';
+import 'package:media_core/event/event_context.dart';
+import 'package:media_core/event/event_priority.dart';
+import 'package:media_core/event/player_event_type.dart';
 import 'package:equatable/equatable.dart';
 
 

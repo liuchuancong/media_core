@@ -12,10 +12,10 @@
 /// window elsewhere.
 library;
 
-export 'src/floating_system_pip.dart';
-export 'src/pip_config.dart';
-export 'src/pip_controller.dart';
-export 'src/pip_driver.dart';
-export 'src/pip_window.dart';
-export 'src/system_pip.dart';
-export 'src/window_manager_pip_window.dart';
+export 'package:media_core_pip/src/floating_system_pip.dart';
+export 'package:media_core_pip/src/pip_config.dart';
+export 'package:media_core_pip/src/pip_controller.dart';
+export 'package:media_core_pip/src/pip_driver.dart';
+export 'package:media_core_pip/src/pip_window.dart';
+export 'package:media_core_pip/src/system_pip.dart';
+export 'package:media_core_pip/src/window_manager_pip_window.dart';

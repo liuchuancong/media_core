@@ -16,15 +16,15 @@ library;
 // Public exports
 // ============================================================================
 
-export 'platform_audio.dart';
-export 'platform_capabilities.dart';
-export 'platform_info.dart';
-export 'platform_lifecycle.dart';
-export 'platform_network.dart';
-export 'platform_codec_capabilities.dart';
-export 'platform_device_profile.dart';
-export 'platform_pip.dart';
-export 'platform_provider.dart';
-export 'platform_renderer.dart';
-export 'platform_surface.dart';
-export 'platform_type.dart';
+export 'package:media_core/platform/platform_audio.dart';
+export 'package:media_core/platform/platform_capabilities.dart';
+export 'package:media_core/platform/platform_info.dart';
+export 'package:media_core/platform/platform_lifecycle.dart';
+export 'package:media_core/platform/platform_network.dart';
+export 'package:media_core/platform/platform_codec_capabilities.dart';
+export 'package:media_core/platform/platform_device_profile.dart';
+export 'package:media_core/platform/platform_pip.dart';
+export 'package:media_core/platform/platform_provider.dart';
+export 'package:media_core/platform/platform_renderer.dart';
+export 'package:media_core/platform/platform_surface.dart';
+export 'package:media_core/platform/platform_type.dart';

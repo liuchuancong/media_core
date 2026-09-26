@@ -1,4 +1,4 @@
-import 'quality_fallback_state.dart';
+import 'package:media_core/fallback/quality_fallback_state.dart';
 
 /// Coordinates fallback between playback quality candidates.
 ///

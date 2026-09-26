@@ -1,7 +1,7 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-import 'method_channel_media_core_native.dart';
-import 'platform_probe_report.dart';
+import 'package:media_core_native/src/method_channel_media_core_native.dart';
+import 'package:media_core_native/src/platform_probe_report.dart';
 
 /// Platform side of the capability probe.
 ///

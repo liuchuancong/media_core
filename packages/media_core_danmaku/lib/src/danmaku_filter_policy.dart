@@ -1,4 +1,4 @@
-import 'danmaku_message.dart';
+import 'package:media_core_danmaku/src/danmaku_message.dart';
 
 /// Viewer-level suppression rules applied to incoming chat.
 ///

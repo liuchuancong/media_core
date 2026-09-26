@@ -16,12 +16,12 @@ library;
 // Public exports
 // ============================================================================
 
-export 'network_condition.dart';
-export 'network_manager.dart';
-export 'network_metrics.dart';
-export 'network_monitor.dart';
-export 'network_quality.dart';
-export 'network_request.dart';
-export 'network_response.dart';
-export 'network_state.dart';
-export 'network_type.dart';
+export 'package:media_core/network/network_condition.dart';
+export 'package:media_core/network/network_manager.dart';
+export 'package:media_core/network/network_metrics.dart';
+export 'package:media_core/network/network_monitor.dart';
+export 'package:media_core/network/network_quality.dart';
+export 'package:media_core/network/network_request.dart';
+export 'package:media_core/network/network_response.dart';
+export 'package:media_core/network/network_state.dart';
+export 'package:media_core/network/network_type.dart';

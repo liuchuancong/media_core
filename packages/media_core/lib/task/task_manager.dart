@@ -1,16 +1,16 @@
 import 'dart:async';
-import 'task_id.dart';
-import 'task_type.dart';
-import 'task_state.dart';
-import 'player_task.dart';
-import 'task_context.dart';
-import 'task_priority.dart';
-import 'task_scheduler.dart';
-import 'task_cancel_token.dart';
-import '../identity/player_id.dart';
-import '../identity/request_id.dart';
-import '../identity/generation_id.dart';
-import '../operation/operation_context.dart';
+import 'package:media_core/task/task_id.dart';
+import 'package:media_core/task/task_type.dart';
+import 'package:media_core/task/task_state.dart';
+import 'package:media_core/task/player_task.dart';
+import 'package:media_core/task/task_context.dart';
+import 'package:media_core/task/task_priority.dart';
+import 'package:media_core/task/task_scheduler.dart';
+import 'package:media_core/task/task_cancel_token.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/generation_id.dart';
+import 'package:media_core/operation/operation_context.dart';
 
 /// Manages the complete lifecycle of [PlayerTask] instances.
 ///

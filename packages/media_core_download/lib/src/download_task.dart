@@ -1,8 +1,8 @@
 import 'package:media_core/media_core.dart' show TaskId, TaskPriority;
 
-import 'download_config.dart';
-import 'download_progress.dart';
-import 'download_status.dart';
+import 'package:media_core_download/src/download_config.dart';
+import 'package:media_core_download/src/download_progress.dart';
+import 'package:media_core_download/src/download_status.dart';
 
 /// One file to download.
 ///

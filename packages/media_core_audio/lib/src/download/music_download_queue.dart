@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import '../track/music_track.dart';
-import '../track/track_source.dart';
-import 'music_download_request.dart';
-import 'music_download_task.dart';
-import 'music_downloader.dart';
+import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_audio/src/track/track_source.dart';
+import 'package:media_core_audio/src/download/music_download_request.dart';
+import 'package:media_core_audio/src/download/music_download_task.dart';
+import 'package:media_core_audio/src/download/music_downloader.dart';
 
 /// A download queue with bounded concurrency and retries.
 ///

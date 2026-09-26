@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'audio_focus.dart';
-import 'audio_session.dart';
+import 'package:media_core/audio/audio_focus.dart';
+import 'package:media_core/audio/audio_session.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Coordinates the lifecycle and high-level state of audio playback.

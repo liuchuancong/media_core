@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:media_core_logging/media_core_logging.dart';
 
-import 'memory_account.dart';
-import 'memory_budget.dart';
-import 'memory_estimates.dart';
-import 'memory_module.dart';
-import 'memory_pressure.dart';
-import 'memory_report.dart';
-import 'memory_snapshot.dart';
+import 'package:media_core_memory/src/memory_account.dart';
+import 'package:media_core_memory/src/memory_budget.dart';
+import 'package:media_core_memory/src/memory_estimates.dart';
+import 'package:media_core_memory/src/memory_module.dart';
+import 'package:media_core_memory/src/memory_pressure.dart';
+import 'package:media_core_memory/src/memory_report.dart';
+import 'package:media_core_memory/src/memory_snapshot.dart';
 
 /// Decision trail for memory.
 final LogModule _log = MediaCoreLog.of(LogCategory.memory);

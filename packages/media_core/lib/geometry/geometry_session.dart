@@ -1,4 +1,4 @@
-import 'geometry_snapshot.dart';
+import 'package:media_core/geometry/geometry_snapshot.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 import 'package:media_core/geometry/video_geometry.dart';

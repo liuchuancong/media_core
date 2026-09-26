@@ -1,7 +1,7 @@
 import 'package:media_core/media_core.dart';
 
-import 'media_core_native_platform.dart';
-import 'platform_probe_report.dart';
+import 'package:media_core_native/src/media_core_native_platform.dart';
+import 'package:media_core_native/src/platform_probe_report.dart';
 
 /// [PlatformProvider] backed by the platform's own capability probe.
 ///

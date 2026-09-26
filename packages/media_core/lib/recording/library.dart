@@ -16,12 +16,12 @@ library;
 // Public exports
 // ============================================================================
 
-export 'recording_backend.dart';
-export 'recording_config.dart';
-export 'recording_error.dart';
-export 'recording_format.dart';
-export 'recording_manager.dart';
-export 'recording_result.dart';
-export 'recording_session.dart';
-export 'recording_source.dart';
-export 'recording_state.dart';
+export 'package:media_core/recording/recording_backend.dart';
+export 'package:media_core/recording/recording_config.dart';
+export 'package:media_core/recording/recording_error.dart';
+export 'package:media_core/recording/recording_format.dart';
+export 'package:media_core/recording/recording_manager.dart';
+export 'package:media_core/recording/recording_result.dart';
+export 'package:media_core/recording/recording_session.dart';
+export 'package:media_core/recording/recording_source.dart';
+export 'package:media_core/recording/recording_state.dart';

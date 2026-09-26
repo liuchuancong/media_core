@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 
-import 'pip_config.dart';
-import 'pip_driver.dart';
+import 'package:media_core_pip/src/pip_config.dart';
+import 'package:media_core_pip/src/pip_driver.dart';
 
 /// Decision trail for the small-window handover.
 ///

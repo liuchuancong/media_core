@@ -1,10 +1,10 @@
-import 'fake_player.dart';
-import 'fake_player_adapter.dart';
-import '../adapter/player_adapter_context.dart';
-import '../adapter/player_adapter_factory.dart';
-import '../core/player.dart';
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/testing/fake_player.dart';
+import 'package:media_core/testing/fake_player_adapter.dart';
+import 'package:media_core/adapter/player_adapter_context.dart';
+import 'package:media_core/adapter/player_adapter_factory.dart';
+import 'package:media_core/core/player.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
 
 /// Convenience builders for players and adapters in tests.
 final class TestPlayerFactory {

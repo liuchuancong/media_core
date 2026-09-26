@@ -1,6 +1,6 @@
-import 'memory_budget.dart';
-import 'memory_pressure.dart';
-import 'memory_registry.dart';
+import 'package:media_core_memory/src/memory_budget.dart';
+import 'package:media_core_memory/src/memory_pressure.dart';
+import 'package:media_core_memory/src/memory_registry.dart';
 
 /// The resource layer's view of memory.
 ///

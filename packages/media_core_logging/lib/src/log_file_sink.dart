@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'log_formatter.dart';
-import 'player_logger.dart';
+import 'package:media_core_logging/src/log_formatter.dart';
+import 'package:media_core_logging/src/player_logger.dart';
 
 /// A sink that can be registered on the logger.
 ///

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'memory_snapshot.dart';
+import 'package:media_core_memory/src/memory_snapshot.dart';
 
 /// Produces a device memory measurement.
 typedef MemorySnapshotProvider = MemorySnapshot Function();

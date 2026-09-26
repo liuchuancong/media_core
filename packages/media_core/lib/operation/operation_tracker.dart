@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'operation.dart';
-import 'operation_state.dart';
+import 'package:media_core/operation/operation.dart';
+import 'package:media_core/operation/operation_state.dart';
 import 'package:rxdart/rxdart.dart';
-import '../identity/operation_id.dart';
+import 'package:media_core/identity/operation_id.dart';
 
 /// Tracks operation lifecycle changes.
 ///

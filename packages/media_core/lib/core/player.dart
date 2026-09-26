@@ -1,5 +1,5 @@
 import 'package:clock/clock.dart';
-import '../identity/player_id.dart';
+import 'package:media_core/identity/player_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents the stable identity of a player.

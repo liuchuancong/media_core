@@ -16,10 +16,10 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_slot.dart';
-export 'player_slot_assignment.dart';
-export 'player_slot_manager.dart';
-export 'player_slot_owner.dart';
-export 'player_slot_snapshot.dart';
-export 'player_slot_state.dart';
-export 'player_slot_status.dart';
+export 'package:media_core/slot/player_slot.dart';
+export 'package:media_core/slot/player_slot_assignment.dart';
+export 'package:media_core/slot/player_slot_manager.dart';
+export 'package:media_core/slot/player_slot_owner.dart';
+export 'package:media_core/slot/player_slot_snapshot.dart';
+export 'package:media_core/slot/player_slot_state.dart';
+export 'package:media_core/slot/player_slot_status.dart';

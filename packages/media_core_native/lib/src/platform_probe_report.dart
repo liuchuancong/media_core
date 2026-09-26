@@ -1,6 +1,6 @@
 import 'package:media_core/media_core.dart';
 
-import 'media_core_native_platform.dart';
+import 'package:media_core_native/src/media_core_native_platform.dart';
 
 /// The channel method a probe is requested through.
 ///

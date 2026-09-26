@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
-import 'download_config.dart';
-import 'download_file_sink.dart';
-import 'download_progress.dart';
-import 'download_resume.dart';
-import 'download_status.dart';
-import 'download_task.dart';
-import 'download_transport.dart';
+import 'package:media_core_download/src/download_config.dart';
+import 'package:media_core_download/src/download_file_sink.dart';
+import 'package:media_core_download/src/download_progress.dart';
+import 'package:media_core_download/src/download_resume.dart';
+import 'package:media_core_download/src/download_status.dart';
+import 'package:media_core_download/src/download_task.dart';
+import 'package:media_core_download/src/download_transport.dart';
 
 /// Decision trail for the download queue.
 ///

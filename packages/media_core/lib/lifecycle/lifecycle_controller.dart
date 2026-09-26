@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'lifecycle_event.dart';
-import 'lifecycle_state.dart';
-import 'player_lifecycle.dart';
-import 'lifecycle_observer.dart';
-import 'lifecycle_snapshot.dart';
+import 'package:media_core/lifecycle/lifecycle_event.dart';
+import 'package:media_core/lifecycle/lifecycle_state.dart';
+import 'package:media_core/lifecycle/player_lifecycle.dart';
+import 'package:media_core/lifecycle/lifecycle_observer.dart';
+import 'package:media_core/lifecycle/lifecycle_snapshot.dart';
 import 'package:clock/clock.dart';
 import 'package:rxdart/rxdart.dart';
 

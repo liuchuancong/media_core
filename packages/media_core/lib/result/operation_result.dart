@@ -1,8 +1,8 @@
-import 'result.dart';
-import 'result_error.dart';
-import 'result_status.dart';
-import '../identity/request_id.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/result/result.dart';
+import 'package:media_core/result/result_error.dart';
+import 'package:media_core/result/result_status.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Represents the result of a specific player operation.

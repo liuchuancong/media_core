@@ -1,4 +1,4 @@
-import 'multiview_layout.dart';
+import 'package:media_core_multiview/src/multiview_layout.dart';
 
 /// Which cell the viewer is listening to.
 enum MultiviewAudioMode {

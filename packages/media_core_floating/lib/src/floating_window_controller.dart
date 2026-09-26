@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 
-import 'floating_config.dart';
-import 'floating_driver.dart';
-import 'floating_window_overlay.dart';
-import 'floating_window_placement.dart';
+import 'package:media_core_floating/src/floating_config.dart';
+import 'package:media_core_floating/src/floating_driver.dart';
+import 'package:media_core_floating/src/floating_window_overlay.dart';
+import 'package:media_core_floating/src/floating_window_placement.dart';
 
 /// Decision trail for the in-app small window's session.
 final LogModule _log = MediaCoreLog.of(LogCategory.presentation);

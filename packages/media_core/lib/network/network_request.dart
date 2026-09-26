@@ -1,4 +1,4 @@
-import '../source/source_headers.dart';
+import 'package:media_core/source/source_headers.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 

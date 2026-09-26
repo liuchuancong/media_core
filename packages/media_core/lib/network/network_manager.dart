@@ -1,9 +1,9 @@
-import 'network_state.dart';
-import 'network_metrics.dart';
-import 'network_monitor.dart';
-import 'network_request.dart';
-import 'network_response.dart';
-import 'network_condition.dart';
+import 'package:media_core/network/network_state.dart';
+import 'package:media_core/network/network_metrics.dart';
+import 'package:media_core/network/network_monitor.dart';
+import 'package:media_core/network/network_request.dart';
+import 'package:media_core/network/network_response.dart';
+import 'package:media_core/network/network_condition.dart';
 
 /// Manages network operations and state.
 ///

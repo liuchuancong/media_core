@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'diagnostics_config.dart';
-export 'diagnostics_event.dart';
-export 'diagnostics_manager.dart';
+export 'package:media_core/diagnostics/diagnostics_config.dart';
+export 'package:media_core/diagnostics/diagnostics_event.dart';
+export 'package:media_core/diagnostics/diagnostics_manager.dart';
 export 'package:media_core_logging/media_core_logging.dart';
 export 'package:media_core_memory/media_core_memory.dart';
-export 'network_diagnostics.dart';
-export 'network_snapshot.dart';
-export 'performance_monitor.dart';
-export 'performance_sample.dart';
-export 'player_debug_snapshot.dart';
+export 'package:media_core/diagnostics/network_diagnostics.dart';
+export 'package:media_core/diagnostics/network_snapshot.dart';
+export 'package:media_core/diagnostics/performance_monitor.dart';
+export 'package:media_core/diagnostics/performance_sample.dart';
+export 'package:media_core/diagnostics/player_debug_snapshot.dart';

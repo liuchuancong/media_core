@@ -1,11 +1,11 @@
-import '../identity/source_id.dart';
-import '../error/player_failure.dart';
-import '../error/error_context.dart';
-import '../identity/generation_id.dart';
-import '../error/player_error_code.dart';
-import '../error/error_classifier.dart';
-import '../error/player_error_category.dart';
-import 'recovery_reason.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/error/player_failure.dart';
+import 'package:media_core/error/error_context.dart';
+import 'package:media_core/identity/generation_id.dart';
+import 'package:media_core/error/player_error_code.dart';
+import 'package:media_core/error/error_classifier.dart';
+import 'package:media_core/error/player_error_category.dart';
+import 'package:media_core/recovery/recovery_reason.dart';
 import 'package:equatable/equatable.dart';
 
 /// Describes which layer observed a failure.

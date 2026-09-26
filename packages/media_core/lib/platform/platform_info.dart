@@ -1,4 +1,4 @@
-import 'platform_type.dart';
+import 'package:media_core/platform/platform_type.dart';
 import 'package:equatable/equatable.dart';
 
 

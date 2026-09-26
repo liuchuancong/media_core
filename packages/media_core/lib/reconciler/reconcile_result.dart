@@ -1,4 +1,4 @@
-import 'reconcile_plan.dart';
+import 'package:media_core/reconciler/reconcile_plan.dart';
 import 'package:equatable/equatable.dart';
 
 enum ReconcileResultType { noop, pending, completed, failed }

@@ -1,9 +1,9 @@
-import 'source_format.dart';
-import 'player_source.dart';
-import 'source_headers.dart';
-import 'source_protocol.dart';
-import 'source_media_type.dart';
-import '../identity/source_id.dart';
+import 'package:media_core/source/source_format.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/source/source_headers.dart';
+import 'package:media_core/source/source_protocol.dart';
+import 'package:media_core/source/source_media_type.dart';
+import 'package:media_core/identity/source_id.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'source_resolved.freezed.dart';

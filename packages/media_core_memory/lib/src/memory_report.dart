@@ -1,9 +1,9 @@
-import 'memory_account.dart';
-import 'memory_budget.dart';
-import 'memory_estimates.dart';
-import 'memory_module.dart';
-import 'memory_pressure.dart';
-import 'memory_snapshot.dart';
+import 'package:media_core_memory/src/memory_account.dart';
+import 'package:media_core_memory/src/memory_budget.dart';
+import 'package:media_core_memory/src/memory_estimates.dart';
+import 'package:media_core_memory/src/memory_module.dart';
+import 'package:media_core_memory/src/memory_pressure.dart';
+import 'package:media_core_memory/src/memory_snapshot.dart';
 
 /// One moment of memory accounting across every module.
 ///

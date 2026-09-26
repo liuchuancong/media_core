@@ -1,6 +1,6 @@
-import 'bette_player_adapter.dart';
+import 'package:media_core_better_player/src/bette_player_adapter.dart';
 import 'package:media_core/media_core.dart';
-export 'better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
+export 'package:media_core_better_player/src/better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
 
 const String kBetterPlayerBackendId = 'better_player';
 

@@ -1,6 +1,6 @@
 import 'dart:collection';
-import 'decoder_budget.dart';
-import 'resource_pressure.dart';
+import 'package:media_core/resource/decoder_budget.dart';
+import 'package:media_core/resource/resource_pressure.dart';
 
 /// Manages decoder resource allocation.
 ///

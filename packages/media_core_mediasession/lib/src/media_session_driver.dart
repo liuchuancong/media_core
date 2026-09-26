@@ -7,8 +7,8 @@ import 'package:audio_service_win/audio_service_win.dart' as aswin;
 import 'package:audio_session/audio_session.dart' as asession;
 import 'package:media_core/media_core.dart';
 
-import 'media_session_config.dart';
-import 'media_session_handler.dart';
+import 'package:media_core_mediasession/src/media_session_config.dart';
+import 'package:media_core_mediasession/src/media_session_handler.dart';
 
 /// System media surfaces for the media_core kernel.
 ///

@@ -1,7 +1,7 @@
-import 'lock.dart';
-import 'mutex.dart';
-import 'serial_executor.dart';
-import 'concurrency_limit.dart';
+import 'package:media_core/concurrency/lock.dart';
+import 'package:media_core/concurrency/mutex.dart';
+import 'package:media_core/concurrency/serial_executor.dart';
+import 'package:media_core/concurrency/concurrency_limit.dart';
 
 /// Central manager for concurrency primitives.
 ///

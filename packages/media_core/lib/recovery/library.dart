@@ -27,21 +27,21 @@ library;
 // ============================================================================
 
 // The ladder: one decision point per failure.
-export 'recovery_ladder.dart';
-export 'recovery_ladder_event.dart';
+export 'package:media_core/recovery/recovery_ladder.dart';
+export 'package:media_core/recovery/recovery_ladder_event.dart';
 
 // What the ladder decides with.
-export 'recovery_candidate_provider.dart';
-export 'recovery_failure.dart';
-export 'recovery_session.dart';
-export 'recovery_step.dart';
+export 'package:media_core/recovery/recovery_candidate_provider.dart';
+export 'package:media_core/recovery/recovery_failure.dart';
+export 'package:media_core/recovery/recovery_session.dart';
+export 'package:media_core/recovery/recovery_step.dart';
 
 // What the ladder drives.
-export 'recovery_target.dart';
+export 'package:media_core/recovery/recovery_target.dart';
 
 // Diagnostics. Not part of the decision path.
-export 'recovery_action.dart';
-export 'recovery_context.dart';
-export 'recovery_reason.dart';
-export 'recovery_snapshot.dart';
-export 'recovery_state.dart';
+export 'package:media_core/recovery/recovery_action.dart';
+export 'package:media_core/recovery/recovery_context.dart';
+export 'package:media_core/recovery/recovery_reason.dart';
+export 'package:media_core/recovery/recovery_snapshot.dart';
+export 'package:media_core/recovery/recovery_state.dart';

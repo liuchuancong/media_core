@@ -1,7 +1,7 @@
-import 'media_type.dart';
-import 'player_constants.dart';
-import 'media_capabilities.dart';
-import '../identity/source_id.dart';
+import 'package:media_core/core/media_type.dart';
+import 'package:media_core/core/player_constants.dart';
+import 'package:media_core/core/media_capabilities.dart';
+import 'package:media_core/identity/source_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Defines the immutable configuration of a player.

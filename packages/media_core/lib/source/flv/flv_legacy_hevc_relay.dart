@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'flv_legacy_hevc_rewriter.dart';
-import 'flv_tag_framer.dart';
+import 'package:media_core/source/flv/flv_legacy_hevc_rewriter.dart';
+import 'package:media_core/source/flv/flv_tag_framer.dart';
 
 /// Playback-only loopback relay that applies [FlvLegacyHevcTagRewriter].
 ///

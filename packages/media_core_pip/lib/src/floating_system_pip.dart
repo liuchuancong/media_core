@@ -2,7 +2,7 @@ import 'dart:math' show Rectangle;
 
 import 'package:floating/floating.dart';
 
-import 'system_pip.dart';
+import 'package:media_core_pip/src/system_pip.dart';
 
 /// [SystemPip] backed by the `floating` plugin.
 ///

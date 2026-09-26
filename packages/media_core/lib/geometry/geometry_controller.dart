@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'video_size.dart';
-import 'display_size.dart';
-import 'geometry_event.dart';
-import 'geometry_state.dart';
-import 'video_geometry.dart';
-import 'video_rotation.dart';
-import 'geometry_snapshot.dart';
+import 'package:media_core/geometry/video_size.dart';
+import 'package:media_core/geometry/display_size.dart';
+import 'package:media_core/geometry/geometry_event.dart';
+import 'package:media_core/geometry/geometry_state.dart';
+import 'package:media_core/geometry/video_geometry.dart';
+import 'package:media_core/geometry/video_rotation.dart';
+import 'package:media_core/geometry/geometry_snapshot.dart';
 import 'package:rxdart/rxdart.dart';
 
 

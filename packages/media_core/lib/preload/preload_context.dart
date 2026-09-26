@@ -1,5 +1,5 @@
-import '../identity/player_id.dart';
-import '../identity/session_id.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/session_id.dart';
 
 /// Context for preload execution.
 final class PreloadContext {

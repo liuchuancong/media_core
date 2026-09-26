@@ -1,4 +1,4 @@
-import 'network_snapshot.dart';
+import 'package:media_core/diagnostics/network_snapshot.dart';
 import 'package:clock/clock.dart';
 
 /// Collects aggregate network diagnostics for the media core.

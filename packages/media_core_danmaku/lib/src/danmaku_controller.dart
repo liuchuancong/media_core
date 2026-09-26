@@ -4,16 +4,16 @@ import 'package:media_core/media_core.dart';
 
 import 'package:rxdart/rxdart.dart';
 
-import 'danmaku_config.dart';
-import 'danmaku_failure.dart';
-import 'danmaku_filter_policy.dart';
-import 'danmaku_message.dart';
-import 'danmaku_message_gate.dart';
-import 'danmaku_repeated_filter.dart';
-import 'danmaku_session_state.dart';
-import 'danmaku_similarity_filter.dart';
-import 'danmaku_sink.dart';
-import 'danmaku_transport.dart';
+import 'package:media_core_danmaku/src/danmaku_config.dart';
+import 'package:media_core_danmaku/src/danmaku_failure.dart';
+import 'package:media_core_danmaku/src/danmaku_filter_policy.dart';
+import 'package:media_core_danmaku/src/danmaku_message.dart';
+import 'package:media_core_danmaku/src/danmaku_message_gate.dart';
+import 'package:media_core_danmaku/src/danmaku_repeated_filter.dart';
+import 'package:media_core_danmaku/src/danmaku_session_state.dart';
+import 'package:media_core_danmaku/src/danmaku_similarity_filter.dart';
+import 'package:media_core_danmaku/src/danmaku_sink.dart';
+import 'package:media_core_danmaku/src/danmaku_transport.dart';
 
 /// Owns exactly one room-bound danmaku session.
 ///

@@ -1,7 +1,7 @@
 import 'package:clock/clock.dart';
 
-import '../core/player.dart';
-import '../identity/player_id.dart';
+import 'package:media_core/core/player.dart';
+import 'package:media_core/identity/player_id.dart';
 
 /// Deterministic [Player] builder for tests.
 ///

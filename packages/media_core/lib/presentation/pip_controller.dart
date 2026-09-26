@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'pip_state.dart';
+import 'package:media_core/presentation/pip_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls picture-in-picture lifecycle.

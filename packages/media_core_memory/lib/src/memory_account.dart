@@ -1,5 +1,5 @@
-import 'memory_module.dart';
-import 'memory_pressure.dart';
+import 'package:media_core_memory/src/memory_module.dart';
+import 'package:media_core_memory/src/memory_pressure.dart';
 
 /// Key identifying one contributor inside an account.
 ///

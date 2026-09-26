@@ -1,4 +1,4 @@
-import 'cache_metrics.dart';
+import 'package:media_core/cache/cache_metrics.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable cache state.

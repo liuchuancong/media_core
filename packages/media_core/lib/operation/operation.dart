@@ -1,8 +1,8 @@
-import 'operation_type.dart';
-import 'operation_state.dart';
-import 'operation_context.dart';
+import 'package:media_core/operation/operation_type.dart';
+import 'package:media_core/operation/operation_state.dart';
+import 'package:media_core/operation/operation_context.dart';
 import 'package:clock/clock.dart';
-import '../identity/operation_id.dart';
+import 'package:media_core/identity/operation_id.dart';
 
 /// Represents a single player operation.
 ///

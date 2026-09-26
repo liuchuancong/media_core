@@ -1,5 +1,5 @@
-import 'preload_priority.dart';
-import '../identity/source_id.dart';
+import 'package:media_core/preload/preload_priority.dart';
+import 'package:media_core/identity/source_id.dart';
 
 /// Request for preload operation.
 final class PreloadRequest {

@@ -3,8 +3,8 @@ import 'dart:collection';
 
 import 'package:media_core_memory/media_core_memory.dart';
 
-import 'danmaku_message.dart';
-import 'danmaku_overlay_config.dart';
+import 'package:media_core_danmaku/src/danmaku_message.dart';
+import 'package:media_core_danmaku/src/danmaku_overlay_config.dart';
 
 /// One message scheduled on a small surface.
 final class DanmakuOverlayItem {

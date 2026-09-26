@@ -1,5 +1,5 @@
-import 'fault_type.dart';
-import 'fault_config.dart';
+import 'package:media_core/bug/fault_type.dart';
+import 'package:media_core/bug/fault_config.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 

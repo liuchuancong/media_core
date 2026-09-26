@@ -1,15 +1,15 @@
-import 'task_id.dart';
-import 'task_type.dart';
-import 'task_state.dart';
-import 'task_context.dart';
-import 'task_priority.dart';
+import 'package:media_core/task/task_id.dart';
+import 'package:media_core/task/task_type.dart';
+import 'package:media_core/task/task_state.dart';
+import 'package:media_core/task/task_context.dart';
+import 'package:media_core/task/task_priority.dart';
 import 'package:clock/clock.dart';
-import 'task_json_converters.dart';
-import '../identity/player_id.dart';
-import '../identity/request_id.dart';
-import '../identity/generation_id.dart';
-import '../operation/operation_context.dart';
-import '../identity/identity_json_converters.dart';
+import 'package:media_core/task/task_json_converters.dart';
+import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/generation_id.dart';
+import 'package:media_core/operation/operation_context.dart';
+import 'package:media_core/identity/identity_json_converters.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'player_task.freezed.dart';

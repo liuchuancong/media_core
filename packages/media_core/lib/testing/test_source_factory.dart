@@ -1,10 +1,10 @@
-import '../source/player_source.dart';
-import '../source/source_format.dart';
-import '../source/source_headers.dart';
-import '../source/source_media_type.dart';
-import '../source/source_protocol.dart';
-import '../source/source_type.dart';
-import '../identity/source_id.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/source/source_format.dart';
+import 'package:media_core/source/source_headers.dart';
+import 'package:media_core/source/source_media_type.dart';
+import 'package:media_core/source/source_protocol.dart';
+import 'package:media_core/source/source_type.dart';
+import 'package:media_core/identity/source_id.dart';
 
 /// Builds sample [PlayerSource] values for tests.
 ///

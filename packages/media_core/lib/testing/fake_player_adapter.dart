@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import '../core/player_state.dart';
-import '../source/player_source.dart';
-import '../adapter/player_adapter.dart';
-import '../screenshot/screenshot_request.dart';
-import '../adapter/player_adapter_event.dart';
-import '../adapter/player_adapter_context.dart';
-import '../adapter/player_adapter_metrics.dart';
-import '../adapter/player_adapter_capabilities.dart';
+import 'package:media_core/core/player_state.dart';
+import 'package:media_core/source/player_source.dart';
+import 'package:media_core/adapter/player_adapter.dart';
+import 'package:media_core/screenshot/screenshot_request.dart';
+import 'package:media_core/adapter/player_adapter_event.dart';
+import 'package:media_core/adapter/player_adapter_context.dart';
+import 'package:media_core/adapter/player_adapter_metrics.dart';
+import 'package:media_core/adapter/player_adapter_capabilities.dart';
 
 /// Sentinel used by [PlayerAdapterStateMirror.copyWith] to distinguish
 /// "parameter omitted" from "parameter explicitly set to null".

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'fault_event.dart';
-import 'fault_config.dart';
-import 'fault_scenario.dart';
+import 'package:media_core/bug/fault_event.dart';
+import 'package:media_core/bug/fault_config.dart';
+import 'package:media_core/bug/fault_scenario.dart';
 import 'package:clock/clock.dart';
 
 /// Callback used by [FaultScheduler] to perform the actual fault injection.

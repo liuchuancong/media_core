@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:media_core_logging/media_core_logging.dart';
 import 'package:path/path.dart' as p;
 
-import 'player_screenshot.dart';
+import 'package:media_core/screenshot/player_screenshot.dart';
 
 /// Writes captured frames to disk.
 ///

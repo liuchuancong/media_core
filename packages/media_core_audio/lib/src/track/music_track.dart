@@ -1,4 +1,4 @@
-import 'music_quality.dart';
+import 'package:media_core_audio/src/track/music_quality.dart';
 
 /// One playable piece of music, independent of where it came from.
 ///

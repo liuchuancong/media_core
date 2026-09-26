@@ -16,6 +16,6 @@ library;
 // Public exports
 // ============================================================================
 
-export 'default_player_factory.dart';
-export 'player_factory.dart';
-export 'player_factory_config.dart';
+export 'package:media_core/factory/default_player_factory.dart';
+export 'package:media_core/factory/player_factory.dart';
+export 'package:media_core/factory/player_factory_config.dart';

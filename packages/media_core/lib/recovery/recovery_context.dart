@@ -1,8 +1,8 @@
-import 'recovery_reason.dart';
-import '../identity/source_id.dart';
-import '../identity/request_id.dart';
-import '../identity/operation_id.dart';
-import '../identity/generation_id.dart';
+import 'package:media_core/recovery/recovery_reason.dart';
+import 'package:media_core/identity/source_id.dart';
+import 'package:media_core/identity/request_id.dart';
+import 'package:media_core/identity/operation_id.dart';
+import 'package:media_core/identity/generation_id.dart';
 import 'package:equatable/equatable.dart';
 
 /// Context associated with a recovery attempt.

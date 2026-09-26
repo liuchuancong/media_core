@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
-import 'media_core_native_platform.dart';
-import 'platform_probe_report.dart';
+import 'package:media_core_native/src/media_core_native_platform.dart';
+import 'package:media_core_native/src/platform_probe_report.dart';
 
 /// Channel the platform side answers on.
 ///

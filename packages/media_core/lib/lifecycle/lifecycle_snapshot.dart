@@ -1,4 +1,4 @@
-import 'lifecycle_state.dart';
+import 'package:media_core/lifecycle/lifecycle_state.dart';
 import 'package:equatable/equatable.dart';
 
 

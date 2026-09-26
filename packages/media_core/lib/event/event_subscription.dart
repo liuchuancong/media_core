@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'event_filter.dart';
-import 'player_event.dart';
+import 'package:media_core/event/event_filter.dart';
+import 'package:media_core/event/player_event.dart';
 
 /// Represents one active event subscription.
 ///

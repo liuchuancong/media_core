@@ -26,9 +26,9 @@
 /// picture, and that is `media_core_pip`.
 library;
 
-export 'src/floating_config.dart';
-export 'src/floating_driver.dart';
-export 'src/floating_window_controller.dart';
-export 'src/floating_window_overlay.dart';
-export 'src/floating_window_placement.dart';
-export 'src/floating_window_presenter.dart';
+export 'package:media_core_floating/src/floating_config.dart';
+export 'package:media_core_floating/src/floating_driver.dart';
+export 'package:media_core_floating/src/floating_window_controller.dart';
+export 'package:media_core_floating/src/floating_window_overlay.dart';
+export 'package:media_core_floating/src/floating_window_placement.dart';
+export 'package:media_core_floating/src/floating_window_presenter.dart';

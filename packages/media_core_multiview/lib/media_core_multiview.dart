@@ -19,7 +19,7 @@
 /// one; it renders nothing, resolves nothing and owns no window.
 library;
 
-export 'src/multiview_cell.dart';
-export 'src/multiview_config.dart';
-export 'src/multiview_controller.dart';
-export 'src/multiview_layout.dart';
+export 'package:media_core_multiview/src/multiview_cell.dart';
+export 'package:media_core_multiview/src/multiview_config.dart';
+export 'package:media_core_multiview/src/multiview_controller.dart';
+export 'package:media_core_multiview/src/multiview_layout.dart';

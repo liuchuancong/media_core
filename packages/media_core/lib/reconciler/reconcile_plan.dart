@@ -1,4 +1,4 @@
-import 'reconcile_action.dart';
+import 'package:media_core/reconciler/reconcile_action.dart';
 import 'package:equatable/equatable.dart';
 
 /// Describes a set of actions required

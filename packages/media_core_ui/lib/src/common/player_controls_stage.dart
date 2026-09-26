@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'player_controls_controller.dart';
-import 'player_controls_style.dart';
+import 'package:media_core_ui/src/common/player_controls_controller.dart';
+import 'package:media_core_ui/src/common/player_controls_style.dart';
 
 /// Keyboard shortcuts a desktop player answers to.
 ///

@@ -5,5 +5,5 @@
 /// player lifecycle change.
 library;
 
-export 'src/feed_config.dart';
-export 'src/feed_player_controller.dart';
+export 'package:media_core_feed/src/feed_config.dart';
+export 'package:media_core_feed/src/feed_player_controller.dart';

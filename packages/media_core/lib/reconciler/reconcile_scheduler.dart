@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'reconcile_plan.dart';
-import 'reconcile_queue.dart';
-import 'reconcile_state.dart';
+import 'package:media_core/reconciler/reconcile_plan.dart';
+import 'package:media_core/reconciler/reconcile_queue.dart';
+import 'package:media_core/reconciler/reconcile_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Schedules reconciliation plans.

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'presentation_event.dart';
-import 'presentation_request.dart';
-import 'presentation_capabilities.dart';
+import 'package:media_core/presentation/presentation_event.dart';
+import 'package:media_core/presentation/presentation_request.dart';
+import 'package:media_core/presentation/presentation_capabilities.dart';
 
 /// Platform presentation adapter.
 ///

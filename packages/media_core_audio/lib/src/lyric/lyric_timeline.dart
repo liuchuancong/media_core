@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'lyric_document.dart';
-import 'lyric_line.dart';
+import 'package:media_core_audio/src/lyric/lyric_document.dart';
+import 'package:media_core_audio/src/lyric/lyric_line.dart';
 
 /// Tracks "which lyric line is current" for a moving playback position.
 ///

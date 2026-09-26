@@ -1,6 +1,6 @@
-import 'resource_state.dart';
-import 'resource_metrics.dart';
-import 'resource_pressure.dart';
+import 'package:media_core/resource/resource_state.dart';
+import 'package:media_core/resource/resource_metrics.dart';
+import 'package:media_core/resource/resource_pressure.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 

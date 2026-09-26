@@ -6,6 +6,6 @@
 /// controllers and the bindings between them..
 library;
 
-export 'player_geometry_binding.dart';
-export 'player_playback_binding.dart';
-export 'player_runtime.dart';
+export 'package:media_core/runtime/player_geometry_binding.dart';
+export 'package:media_core/runtime/player_playback_binding.dart';
+export 'package:media_core/runtime/player_runtime.dart';

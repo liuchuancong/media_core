@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'fvp_player_adapter.dart';
+import 'package:media_core_fvp/src/fvp_player_adapter.dart';
 
 /// Renders the surface owned by [FvpPlayerAdapter].
 ///

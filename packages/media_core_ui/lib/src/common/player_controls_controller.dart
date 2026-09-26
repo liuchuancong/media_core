@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:media_core/media_core.dart';
 
-import 'player_control_actions.dart';
-import 'player_controls_style.dart';
-import 'player_controls_theme.dart';
+import 'package:media_core_ui/src/common/player_control_actions.dart';
+import 'package:media_core_ui/src/common/player_controls_style.dart';
+import 'package:media_core_ui/src/common/player_controls_theme.dart';
 
 /// What every control set shares: playback state, actions and visibility.
 ///

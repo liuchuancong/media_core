@@ -1,8 +1,8 @@
-import 'error_context.dart';
-import 'error_classifier.dart';
-import 'player_exception.dart';
-import 'player_error_code.dart';
-import 'player_error_category.dart';
+import 'package:media_core/error/error_context.dart';
+import 'package:media_core/error/error_classifier.dart';
+import 'package:media_core/error/player_exception.dart';
+import 'package:media_core/error/player_error_code.dart';
+import 'package:media_core/error/player_error_category.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable concrete failure produced by the media player core.

@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import '../adapter/player_adapter_event.dart';
-import '../core/player_state.dart';
+import 'package:media_core/adapter/player_adapter_event.dart';
+import 'package:media_core/core/player_state.dart';
 
 /// Common expectations shared by media_core tests.
 ///

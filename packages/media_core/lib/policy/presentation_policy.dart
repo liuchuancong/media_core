@@ -1,4 +1,4 @@
-import '../presentation/presentation_mode.dart';
+import 'package:media_core/presentation/presentation_mode.dart';
 
 /// Defines player presentation policies.
 ///

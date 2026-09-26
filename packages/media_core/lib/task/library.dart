@@ -16,14 +16,14 @@ library;
 // Public exports
 // ============================================================================
 
-export 'player_task.dart';
-export 'task_cancel_token.dart';
-export 'task_context.dart';
-export 'task_id.dart';
-export 'task_json_converters.dart';
-export 'task_manager.dart';
-export 'task_priority.dart';
-export 'task_queue.dart';
-export 'task_scheduler.dart';
-export 'task_state.dart';
-export 'task_type.dart';
+export 'package:media_core/task/player_task.dart';
+export 'package:media_core/task/task_cancel_token.dart';
+export 'package:media_core/task/task_context.dart';
+export 'package:media_core/task/task_id.dart';
+export 'package:media_core/task/task_json_converters.dart';
+export 'package:media_core/task/task_manager.dart';
+export 'package:media_core/task/task_priority.dart';
+export 'package:media_core/task/task_queue.dart';
+export 'package:media_core/task/task_scheduler.dart';
+export 'package:media_core/task/task_state.dart';
+export 'package:media_core/task/task_type.dart';

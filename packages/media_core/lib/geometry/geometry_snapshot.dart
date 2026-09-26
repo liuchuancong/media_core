@@ -1,10 +1,10 @@
-import 'video_size.dart';
-import 'pixel_ratio.dart';
-import 'display_size.dart';
-import 'video_geometry.dart';
-import 'geometry_state.dart';
-import 'video_rotation.dart';
-import 'video_orientation.dart';
+import 'package:media_core/geometry/video_size.dart';
+import 'package:media_core/geometry/pixel_ratio.dart';
+import 'package:media_core/geometry/display_size.dart';
+import 'package:media_core/geometry/video_geometry.dart';
+import 'package:media_core/geometry/geometry_state.dart';
+import 'package:media_core/geometry/video_rotation.dart';
+import 'package:media_core/geometry/video_orientation.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable geometry snapshot.

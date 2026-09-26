@@ -16,10 +16,10 @@ library;
 // Public exports
 // ============================================================================
 
-export 'visibility_controller.dart';
-export 'visibility_event.dart';
-export 'visibility_metrics.dart';
-export 'player_visibility_binding.dart';
-export 'visibility_observer.dart';
-export 'visibility_snapshot.dart';
-export 'visibility_state.dart';
+export 'package:media_core/visibility/visibility_controller.dart';
+export 'package:media_core/visibility/visibility_event.dart';
+export 'package:media_core/visibility/visibility_metrics.dart';
+export 'package:media_core/visibility/player_visibility_binding.dart';
+export 'package:media_core/visibility/visibility_observer.dart';
+export 'package:media_core/visibility/visibility_snapshot.dart';
+export 'package:media_core/visibility/visibility_state.dart';

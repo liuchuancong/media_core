@@ -1,6 +1,6 @@
-import 'recovery_state.dart';
-import 'recovery_action.dart';
-import 'recovery_context.dart';
+import 'package:media_core/recovery/recovery_state.dart';
+import 'package:media_core/recovery/recovery_action.dart';
+import 'package:media_core/recovery/recovery_context.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable snapshot of the complete recovery state.

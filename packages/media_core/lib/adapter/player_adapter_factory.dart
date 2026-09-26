@@ -1,4 +1,4 @@
-import 'player_adapter.dart';
+import 'package:media_core/adapter/player_adapter.dart';
 
 /// Factory for creating player adapters.
 ///

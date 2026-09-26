@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
-import 'floating_config.dart';
-import 'floating_window_presenter.dart';
+import 'package:media_core_floating/src/floating_config.dart';
+import 'package:media_core_floating/src/floating_window_presenter.dart';
 
 /// Decision trail for the in-app small window.
 ///

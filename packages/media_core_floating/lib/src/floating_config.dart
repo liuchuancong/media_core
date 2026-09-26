@@ -1,4 +1,4 @@
-import 'floating_window_placement.dart';
+import 'package:media_core_floating/src/floating_window_placement.dart';
 
 /// Behaviour of the in-app small window.
 ///

@@ -1,5 +1,5 @@
-import 'recovery_step.dart';
-import 'recovery_failure.dart';
+import 'package:media_core/recovery/recovery_step.dart';
+import 'package:media_core/recovery/recovery_failure.dart';
 import 'package:equatable/equatable.dart';
 
 /// Kind of ladder transition.
