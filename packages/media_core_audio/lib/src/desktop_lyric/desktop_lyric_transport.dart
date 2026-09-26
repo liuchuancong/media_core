@@ -30,18 +30,28 @@ enum DesktopLyricAction {
 
 /// Moves [DesktopLyricState] to whatever draws the overlay.
 ///
-/// This package deliberately contains no overlay UI: a desktop lyric window is
-/// a platform object (Win32 layered window, Android `TYPE_APPLICATION_OVERLAY`
-/// service) drawn outside the Flutter tree, and a music core that shipped its
-/// own would force one look and one platform story on every host.
+/// The split is deliberate:
 ///
-/// The split is therefore:
-///
-/// - this package owns the *logic* — which line, which translation, how far
+/// - the Dart layer owns the *logic* — which line, which translation, how far
 ///   through, locked or not, styled how — and pushes whole states;
-/// - the host owns the *window* and answers [isSupported];
-/// - [MethodChannelDesktopLyricTransport] fixes the wire protocol between the
-///   two, so a host written once works with any app built on this core.
+/// - the *window* is a platform object drawn outside the Flutter tree (a Win32
+///   layered window, an Android `TYPE_APPLICATION_OVERLAY` window);
+/// - [MethodChannelDesktopLyricTransport] is the protocol between the two.
+///
+/// This package ships both native implementations:
+///
+/// - **Windows** (`windows/desktop_lyric_window.cc`): a borderless,
+///   always-on-top layered window drawn with GDI+, on its own thread, with
+///   hover controls, dragging and click-through locking;
+/// - **Android** (`android/.../DesktopLyricWindow.java`): a
+///   `TYPE_APPLICATION_OVERLAY` window added through the WindowManager with the
+///   application context, so it survives leaving the player page. It needs
+///   `SYSTEM_ALERT_WINDOW`, requested on the first [show]; that call returns
+///   false and opens the system settings screen, and the host calls show again
+///   once the user is back.
+///
+/// A platform without an implementation reports [isSupported] == false and the
+/// feature simply is not offered.
 abstract interface class DesktopLyricTransport {
   /// Whether the current platform/host can draw an overlay.
   Future<bool> isSupported();

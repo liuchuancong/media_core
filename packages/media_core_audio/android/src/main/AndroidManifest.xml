@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.mediacore.audio">
+
+    <!--
+      Desktop lyric overlay. The permission must also be declared by the host
+      app's manifest for it to be grantable; the plugin only requests it at
+      runtime (Settings.ACTION_MANAGE_OVERLAY_PERMISSION).
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+</manifest>

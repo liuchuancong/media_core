@@ -1,0 +1,39 @@
+group 'com.mediacore.audio'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.mediacore.audio'
+
+    compileSdkVersion 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TYPE_APPLICATION_OVERLAY needs API 26; below that the code falls
+        // back to TYPE_PHONE, and minSdk 21 matches the rest of the ecosystem.
+        minSdkVersion 21
+    }
+}

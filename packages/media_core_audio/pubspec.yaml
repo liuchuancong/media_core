@@ -33,3 +33,16 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
+
+# Native desktop-lyric overlay (Windows layered window / Android overlay
+# window). Declaring the platforms is what makes Flutter register the plugin
+# and build the native side; the Dart API stays usable everywhere - a platform
+# without the implementation reports "unsupported" through the transport.
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.mediacore.audio
+        pluginClass: MediaCoreAudioPlugin
+      windows:
+        pluginClass: MediaCoreAudioPluginCApi

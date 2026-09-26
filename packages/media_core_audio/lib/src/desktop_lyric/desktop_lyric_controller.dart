@@ -17,6 +17,10 @@ import 'desktop_lyric_transport.dart';
 /// something a viewer could notice changed — a new line, a play/pause flip, a
 /// style edit, a lock toggle.
 ///
+/// The window itself is native and ships with this package (Windows layered
+/// window, Android overlay window — see [DesktopLyricTransport]); on any other
+/// platform [show] returns false and the caller should hide the feature.
+///
 /// Not pushed per position tick: an overlay is another window (its own
 /// process on Android), and repainting it several times a second for identical
 /// text is pure waste. Line changes and [minimumUpdateInterval]-spaced word

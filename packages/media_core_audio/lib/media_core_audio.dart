@@ -30,9 +30,12 @@
 /// // Lyrics (LRC with translation and word timing), cached and prefetching
 /// final lyric = await player.loadCurrentLyric();
 ///
-/// // Desktop lyrics: this package owns the logic, the host owns the window
+/// // Desktop lyrics: shows a native overlay window (Windows/Android)
 /// final overlay = DesktopLyricController(player);
-/// await overlay.show();
+/// if (await overlay.show()) {
+///   // first call on Android opens the SYSTEM_ALERT_WINDOW settings screen and
+///   // returns false; call again once the user is back
+/// }
 ///
 /// // Background playback: notification/lock-screen/MPRIS with real metadata
 /// final background = MusicBackgroundBinding(player, audio)..attach();
@@ -51,7 +54,8 @@ export 'src/media_core_audio_handler.dart';
 // Background playback binding for the music player.
 export 'src/background/music_background_binding.dart';
 
-// Desktop lyrics (logic + host transport; the window is the host's).
+// Desktop lyrics: the logic plus the native window it draws into
+// (packages/media_core_audio/{windows,android}).
 export 'src/desktop_lyric/desktop_lyric_controller.dart';
 export 'src/desktop_lyric/desktop_lyric_state.dart';
 export 'src/desktop_lyric/desktop_lyric_transport.dart';
