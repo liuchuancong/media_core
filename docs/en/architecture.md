@@ -88,6 +88,7 @@ concurrency / reactive / result / util / fallback
 | `FeedPlayerController` | TikTok-style vertical feed | one shared handle, next item preloaded |
 | `MediaPlayerView` | Rendering | `adapter as PlayerVideo`, rebuilds on backendChanges |
 | `PlayerVisibilityBinding` | Auto pause/resume on visibility | VisibilityController → handle.pause/play |
+| `DanmakuController` | Live danmaku: transport + filtering + session fencing | Independent of the main chain: host supplies `DanmakuTransport` and `DanmakuSink` |
 
 ### Standalone building blocks
 

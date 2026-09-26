@@ -15,8 +15,9 @@ import 'windows_presentation_driver.dart';
 /// ```text
 /// Windows / macOS / Linux → WindowManagerPresentationDriver
 ///                           (fullscreen + always-on-top PiP)
-/// Android / iOS / other   → UnsupportedPresentationDriver
-///                           (throws on apply; stubs pending)
+/// Android / iOS / other   → throws on apply
+///                           (use media_core_presentation_mobile there:
+///                            system PiP + a host-owned small window)
 /// ```
 ///
 /// It also tracks the active video orientation from adapter
@@ -57,7 +58,8 @@ final class MediaCorePresentation implements KernelPresentationDriver {
   /// Whether this platform serves PiP/floating requests.
   ///
   /// Desktop platforms serve them through an always-on-top
-  /// window; Android/iOS system PiP is not wired yet.
+  /// window. Mobile platforms are served by
+  /// `media_core_presentation_mobile` instead, not by this class.
   bool get supportsFloatingWindow => _desktop != null;
 
   /// Whether overlays should use hover show/hide on this device.
@@ -157,8 +159,9 @@ final class MediaCorePresentation implements KernelPresentationDriver {
 
     throw UnsupportedError(
       'Presentation mode "${request.mode.name}" is not implemented on '
-      '${Platform.operatingSystem}. Windows/macOS/Linux support fullscreen '
-      'and floating PiP windows; Android/iOS system PiP is not wired yet.',
+      '${Platform.operatingSystem}. This driver serves Windows/macOS/Linux '
+      '(fullscreen and floating PiP windows); use media_core_presentation_mobile '
+      'on Android/iOS.',
     );
   }
 

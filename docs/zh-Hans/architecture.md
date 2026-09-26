@@ -87,6 +87,7 @@ reactive / result / util / fallback
 | `FeedPlayerController` | 抖音式上下滑 | 共用一个 handle 换源,下一项进 preload |
 | `MediaPlayerView` | 渲染 | 读 `adapter as PlayerVideo` 的 widget,跟随 backendChanges 重建 |
 | `PlayerVisibilityBinding` | 可见性自动暂停/恢复 | VisibilityController → handle.pause/play |
+| `DanmakuController` | 直播弹幕:传输接入 + 过滤 + 会话围栏 | 独立于主链路:宿主提供 `DanmakuTransport` 与 `DanmakuSink` |
 
 ### 独立积木(不挂在主链路,按需 import)
 

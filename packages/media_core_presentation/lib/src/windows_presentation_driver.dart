@@ -8,6 +8,12 @@ import 'presentation_capability_config.dart';
 
 /// Desktop presentation driver backed by window_manager.
 ///
+/// **Superseded.** The three modes this driver bundles are now separate
+/// packages with one feature each — `media_core_fullscreen`, `media_core_pip`
+/// and `media_core_floating` — composed through `PresentationDriverChain`. This
+/// class is kept for consumers that already depend on it and is not extended
+/// with new modes.
+///
 /// Works on Windows (primary target), macOS and Linux where
 /// window_manager is available.
 ///
@@ -83,6 +89,11 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
         await _exitPip();
         await _exitFullscreen();
       case PresentationMode.fullscreen:
+      case PresentationMode.windowFullscreen:
+        // This composite driver predates the split into per-feature packages and
+        // cannot draw window-level fullscreen (that is the host's layout); it
+        // treats both variants as system fullscreen. New code should use
+        // media_core_fullscreen.
         await _exitPip();
         await _enterFullscreen();
       case PresentationMode.pip:

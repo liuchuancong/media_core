@@ -15,14 +15,25 @@ workspace:
   - packages/media_core_fvp
   - packages/media_core_audio
   - packages/media_core_presentation
-  - packages/media_core_presentation_mobile
+  - packages/media_core_pip
+  - packages/media_core_floating
+  - packages/media_core_fullscreen
   - packages/media_core_danmaku
   - packages/media_core_live
   - packages/media_core_feed
+  - packages/media_core_list_playback
+  - packages/media_core_recording_ffmpeg
+  - packages/media_core_download
   - examples/example
 
 dependency_overrides:
   wakelock_plus: ^1.7.0
+
+  # FFmpegKit 0.6.2 pins code_assets ^1.2.1, media_kit's Native Assets hook
+  # needs ^2.1.0. Both use the hooks API, and 2.x is the version that keeps
+  # working for both, so the workspace pins it here the same way the app does.
+  code_assets: ^2.1.0
+  hooks: ^2.2.0
 
 # media_kit and media_kit_video are workspace members (packages/media_kit,
 # packages/media_kit_video): the copied sources in this repository resolve

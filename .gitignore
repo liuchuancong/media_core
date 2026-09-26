@@ -29,7 +29,10 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+# Unanchored: plugin packages keep their own build/ output one level down
+# (packages/*/build), and "packages/media_core_presentation/build/" was the
+# case that slipped through while this was root-anchored.
+build/
 
 # Symbolication related
 app.*.symbols
