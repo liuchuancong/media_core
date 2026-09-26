@@ -1,5 +1,5 @@
 name: media_core_audio
-description: Background audio and audio session capability for media_core (audio_service / audio_session / audio_service_win).
+description: Music playback for media_core - sources, queue and play modes, lyrics and the native desktop-lyric windows, plus ffmpeg downloads.
 publish_to: none
 version: 0.1.0
 resolution: workspace

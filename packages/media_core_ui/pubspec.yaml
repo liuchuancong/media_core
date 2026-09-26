@@ -1,6 +1,6 @@
 name: media_core_ui
 
-description: Player UI for media_core - iOS, Android and desktop control sets sharing one control layer.
+description: Player UI for media_core - material, cupertino, fluent, macos, yaru and neumorphic control sets sharing one control layer.
 
 publish_to: none
 
