@@ -1,8 +1,7 @@
 import 'player_geometry_binding.dart';
 import 'player_playback_binding.dart';
 import 'package:media_core/adapter/player_adapter.dart';
-import 'package:media_core/diagnostics/log_category.dart';
-import 'package:media_core/diagnostics/media_core_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core/session/player_session.dart';
 import 'package:media_core/session/session_controller.dart';
 import 'package:media_core/geometry/geometry_controller.dart';

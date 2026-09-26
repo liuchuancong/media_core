@@ -1,4 +1,4 @@
-import 'log_level.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:equatable/equatable.dart';
 
 /// Defines configuration for the diagnostics subsystem.

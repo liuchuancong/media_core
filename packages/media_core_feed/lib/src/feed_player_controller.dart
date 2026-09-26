@@ -2,6 +2,14 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
+/// Decision trail for the feed.
+///
+/// A feed is a stream of opens, most of which the viewer swipes past before they
+/// finish. The lines here separate the open that produced what is on screen from
+/// the ones that were abandoned mid-flight — without them, a stalled page and an
+/// abandoned open look the same.
+final LogModule _log = MediaCoreLog.of(LogCategory.playback);
+
 /// How a feed item is currently being played.
 enum FeedItemState {
   /// The item is not attached to a player.
@@ -126,10 +134,13 @@ final class FeedPlayerController {
       ..clear()
       ..addAll(items);
 
+    _log.debug(
+      'feed loaded',
+      fields: <String, Object?>{'items': items.length, 'initialIndex': initialIndex, 'throughPool': pool != null},
+    );
+
     final activePool = pool;
-    _poolItemsSync = activePool == null
-        ? null
-        : activePool.setItems(List<PlayerSource>.unmodifiable(_items));
+    _poolItemsSync = activePool == null ? null : activePool.setItems(List<PlayerSource>.unmodifiable(_items));
 
     return showIndex(initialIndex.clamp(0, items.isEmpty ? 0 : items.length - 1));
   }
@@ -146,6 +157,16 @@ final class FeedPlayerController {
     final previousIndex = _index;
     _index = index;
     _emitIndex(index);
+
+    _log.debug(
+      'feed page attached',
+      fields: <String, Object?>{
+        'from': previousIndex,
+        'to': index,
+        'itemCount': _items.length,
+        'throughPool': pool != null,
+      },
+    );
 
     final activePool = pool;
     if (activePool != null) {
@@ -167,6 +188,10 @@ final class FeedPlayerController {
 
       if (_disposed || _index != index) {
         // The user kept swiping while this page was opening.
+        _log.debug(
+          'feed open finished after the viewer moved on',
+          fields: <String, Object?>{'opened': index, 'current': _index},
+        );
         return;
       }
 
@@ -202,11 +227,7 @@ final class FeedPlayerController {
   /// The pool opens the source, plays the active item and keeps the neighbours
   /// open; this controller only takes the resulting handle so volume, playback
   /// state and its own bookkeeping keep working.
-  Future<void> _showIndexThroughPool(
-    PlaybackPoolOrchestrator activePool,
-    int index,
-    int previousIndex,
-  ) async {
+  Future<void> _showIndexThroughPool(PlaybackPoolOrchestrator activePool, int index, int previousIndex) async {
     final source = _items[index];
     _setItemState(FeedItemState.opening);
 
@@ -219,6 +240,10 @@ final class FeedPlayerController {
 
       if (_disposed || _index != index) {
         // The user kept swiping while this page was opening.
+        _log.debug(
+          'pooled open finished after the viewer moved on',
+          fields: <String, Object?>{'opened': index, 'current': _index},
+        );
         return;
       }
 
@@ -278,8 +303,7 @@ final class FeedPlayerController {
       _handle?.setVolume(volume) ?? _pooledPlayer?.setVolume(volume) ?? Future<void>.value();
 
   /// Mutes the visible item's player.
-  Future<void> setMute(bool muted) =>
-      _handle?.setMute(muted) ?? _pooledPlayer?.setMute(muted) ?? Future<void>.value();
+  Future<void> setMute(bool muted) => _handle?.setMute(muted) ?? _pooledPlayer?.setMute(muted) ?? Future<void>.value();
 
   /// Playback state stream of the visible item's player.
   Stream<PlaybackState> get onPlaybackStateChanged =>

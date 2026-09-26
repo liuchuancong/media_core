@@ -10,6 +10,14 @@ import 'download_status.dart';
 import 'download_task.dart';
 import 'download_transport.dart';
 
+/// Decision trail for the download queue.
+///
+/// The questions a download bug report asks are all here: why did it not start
+/// (queue capacity), why did it start over (the resume check rejected the
+/// partial file), and why did it stop (retry budget spent, or a failure that is
+/// not retryable).
+final LogModule _log = MediaCoreLog.of(LogCategory.download);
+
 /// The download queue.
 ///
 /// Responsibilities:
@@ -123,6 +131,11 @@ final class DownloadManager {
       throw StateError('Task ${task.id} is already ${existing.status.name}.');
     }
 
+    _log.info(
+      'queued a download',
+      fields: <String, Object?>{'id': task.id.value, 'url': task.url, 'priority': task.priority.name},
+    );
+
     _register(task);
     _emit(task.copyWith(status: DownloadStatus.queued, clearError: true));
     unawaited(_pump());
@@ -171,6 +184,7 @@ final class DownloadManager {
     if (task == null || !task.isRunning) {
       return;
     }
+    _log.info('pausing a download', fields: <String, Object?>{'id': id, 'receivedBytes': task.progress.receivedBytes});
     _retryTimers.remove(id)?.cancel();
     _queue.cancel(task.id, 'paused by the viewer');
     _inFlight.remove(task.id);
@@ -309,6 +323,10 @@ final class DownloadManager {
         }
 
         _inFlight.add(task.id);
+        _log.debug(
+          'transfer started',
+          fields: <String, Object?>{'id': id, 'attempt': task.progress.attempt, 'priority': task.priority.name},
+        );
         _emit(task.copyWith(status: DownloadStatus.running, clearError: true));
         try {
           await _transfer(task);
@@ -349,6 +367,12 @@ final class DownloadManager {
     await _files.ensureParentDirectory(task.filePath);
 
     var resumable = await _files.length(task.filePath) > 0;
+    if (resumable) {
+      _log.debug(
+        'partial file found; resuming after verification',
+        fields: <String, Object?>{'id': task.id.value, 'localBytes': await _files.length(task.filePath)},
+      );
+    }
     while (true) {
       try {
         await _transferOnce(task, resume: resumable);
@@ -357,6 +381,13 @@ final class DownloadManager {
         if (!resumable) {
           rethrow;
         }
+        // The tail check rejected the file on disk: it is not a prefix of the
+        // remote one, so the only correct move is to start over rather than
+        // append to bytes that would never play.
+        _log.warning(
+          'partial file did not match the remote file; restarting from zero',
+          fields: <String, Object?>{'id': task.id.value},
+        );
         await _files.truncate(task.filePath, 0);
         resumable = false;
       }
@@ -508,6 +539,10 @@ final class DownloadManager {
     if (task == null || task.status.isTerminal) {
       return;
     }
+    _log.info(
+      'download completed',
+      fields: <String, Object?>{'id': id, 'bytes': task.progress.receivedBytes, 'filePath': task.filePath},
+    );
     _emit(task.copyWith(status: DownloadStatus.completed, clearError: true));
   }
 
@@ -527,12 +562,27 @@ final class DownloadManager {
         error is! _ResumeMismatch && RetryUtils.until(_config.maxAttempts)(error, StackTrace.current, attempt);
 
     if (!mayRetry) {
+      _log.error(
+        'download failed; no attempts left',
+        error: error,
+        fields: <String, Object?>{'id': id, 'attempt': attempt, 'url': task.url},
+      );
       _queue.fail(TaskId(id), error);
       _emit(task.copyWith(status: DownloadStatus.failed, error: error));
       return;
     }
 
     final delay = RetryUtils.backoff(attempt, base: _config.retryDelay);
+    _log.warning(
+      'download attempt failed; retrying',
+      error: error,
+      fields: <String, Object?>{
+        'id': id,
+        'attempt': attempt,
+        'maxAttempts': _config.maxAttempts,
+        'delayMs': delay.inMilliseconds,
+      },
+    );
     _emit(
       task.copyWith(
         status: DownloadStatus.stopped,

@@ -6,6 +6,7 @@ environment:
 
 workspace:
   - packages/media_core
+  - packages/media_core_logging
   - packages/media_core_media_kit
   - packages/media_kit
   - packages/media_kit_video

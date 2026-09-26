@@ -81,6 +81,18 @@ enum LogCategory {
   /// Memory measurements and memory state information.
   memory,
 
+  /// Multi-cell wall: cells, focus, budget and patrol.
+  multiview,
+
+  /// Player instance pool: acquisition, reuse and recycling.
+  pool,
+
+  /// Offline downloads: queue, transfer and resume.
+  download,
+
+  /// The logging subsystem itself: sinks, filters and throttling.
+  logging,
+
   /// Diagnostics subsystem information.
   diagnostics,
 
@@ -106,6 +118,10 @@ extension LogCategoryX on LogCategory {
       LogCategory.fallback => 'fallback',
       LogCategory.cache => 'cache',
       LogCategory.recording => 'recording',
+      LogCategory.multiview => 'multiview',
+      LogCategory.pool => 'pool',
+      LogCategory.download => 'download',
+      LogCategory.logging => 'logging',
       LogCategory.danmaku => 'danmaku',
       LogCategory.visibility => 'visibility',
       LogCategory.lifecycle => 'lifecycle',

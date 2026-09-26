@@ -3,8 +3,7 @@ import '../source/source_protocol.dart';
 import '../source/source_format.dart';
 import 'player_adapter_registry.dart';
 import 'player_adapter_capabilities.dart';
-import '../diagnostics/log_category.dart';
-import '../diagnostics/media_core_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Selects the best adapter registration for a media source.
 ///

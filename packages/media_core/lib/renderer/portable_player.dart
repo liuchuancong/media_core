@@ -1,6 +1,15 @@
+import '../diagnostics/library.dart' show LogCategory, LogModule, MediaCoreLog;
 import '../identity/player_id.dart';
 import '../kernel/player_handle.dart';
 import '../kernel/player_kernel.dart';
+
+/// Records handover lookups that found nothing.
+///
+/// "The small window opened empty" and "the small window did not open" are two
+/// different bugs, and the difference is exactly whether a registry lookup found
+/// a live player. A `null` here means the page disposed what it should have left
+/// to the kernel.
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
 /// A player that can be shown on more than one surface.
 ///
@@ -55,7 +64,11 @@ final class KernelPortablePlayerRegistry implements PortablePlayerRegistry {
   PortablePlayer? find(PlayerId id) {
     final handle = kernel.get(id);
     if (handle == null) {
+      _log.warning('handover lookup found no player', fields: <String, Object?>{'playerId': id.value});
       return null;
+    }
+    if (handle.disposed) {
+      _log.warning('handover lookup found a disposed player', fields: <String, Object?>{'playerId': id.value});
     }
     return _KernelPortablePlayer(handle);
   }

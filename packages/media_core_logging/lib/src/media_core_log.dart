@@ -1,7 +1,14 @@
+import 'dart:io';
+
+import 'log_file_sink.dart';
+import 'log_filter.dart';
+import 'log_formatter.dart';
 import 'log_level.dart';
 import 'log_category.dart';
 import 'player_logger.dart';
 import 'log_console_sink.dart';
+import 'log_module.dart';
+import 'log_scope.dart';
 
 /// The framework-wide logging entry point.
 ///
@@ -64,12 +71,92 @@ abstract final class MediaCoreLog {
   /// `configure` for per-category control).
   static const LogLevel defaultLevel = LogLevel.nothing;
 
-  static PlayerLogger _logger = PlayerLogger(
-    minimumLevel: defaultLevel,
-    sink: consoleLogSink(),
-  );
+  static PlayerLogger _logger = _createLogger();
 
   static final Map<LogCategory, LogLevel> _categoryLevels = <LogCategory, LogLevel>{};
+
+  /// Builds the hub logger and links the per-category overrides into it.
+  ///
+  /// The logger cannot read [_categoryLevels] on its own, and without that link
+  /// a category override would be accepted by the facade and then rejected by
+  /// the logger's own global check.
+  static PlayerLogger _createLogger() {
+    final logger = PlayerLogger(minimumLevel: defaultLevel, sink: consoleLogSink());
+
+    logger.levelResolver = _resolveLevel;
+
+    return logger;
+  }
+
+  /// Effective minimum level of [category], honouring the override map.
+  static LogLevel _resolveLevel(LogCategory category) => _categoryLevels[category] ?? _logger.minimumLevel;
+
+  /// Adds a sink without dropping the ones already registered.
+  ///
+  /// The console is the default sink, so this is how a diagnostics screen or a
+  /// bug report gets its data: the console stays for the developer watching, and
+  /// the memory or file sink collects what needs to be handed over.
+  static void addSink(PlayerLogSink sink) => _logger.addSink(sink);
+
+  /// Removes a previously added sink.
+  static void removeSink(PlayerLogSink sink) => _logger.removeSink(sink);
+
+  /// Removes every sink, including the console.
+  static void clearSinks() => _logger.clearSinks();
+
+  /// Registered sinks.
+  static List<PlayerLogSink> get sinks => _logger.sinks;
+
+  /// Creates a memory sink, registers it and returns it.
+  ///
+  /// The returned sink is what an in-app log screen or a "copy diagnostics"
+  /// button reads from; it keeps the most recent [capacity] records only.
+  static MemoryLogSink attachMemorySink({int capacity = 500, LogLevel minimumLevel = LogLevel.trace}) {
+    final sink = MemoryLogSink(capacity: capacity, minimumLevel: minimumLevel);
+    addSink(sink);
+    return sink;
+  }
+
+  /// Creates a rotating file sink, registers it and returns it.
+  ///
+  /// Call [LogFileSink.close] when done: the sink buffers, and a bug report
+  /// needs the last lines on disk, not in a buffer.
+  static LogFileSink attachFileSink(
+    File file, {
+    LogFormatter formatter = const LogFormatter(),
+    int maxBytes = 2 * 1024 * 1024,
+    int maxFiles = 3,
+  }) {
+    final sink = LogFileSink(file, formatter: formatter, maxBytes: maxBytes, maxFiles: maxFiles);
+    addSink(sink);
+    return sink;
+  }
+
+  /// Sets the developer filter (category narrowing, keyword search), or clears it.
+  static void setFilter(LogFilter? filter) => _logger.filter = filter;
+
+  /// Sets the rate limit per category, or clears it.
+  static void setThrottle(LogThrottle? throttle) => _logger.throttle = throttle;
+
+  /// Records emitted since start.
+  static int get emittedCount => _logger.emittedCount;
+
+  /// Records dropped by the throttle.
+  static int get throttledCount => _logger.throttledCount;
+
+  /// A logger bound to [category].
+  ///
+  /// The form used by modules: `MediaCoreLog.of(LogCategory.playback).debug(...)`
+  /// keeps a call site from repeating its own category on every line, which is
+  /// what makes per-module levels worth having.
+  static LogModule of(LogCategory category) => LogModule(category, _logger);
+
+  /// Runs [body] with [fields] attached to every record inside it.
+  static R scoped<R>(Map<String, Object?> fields, R Function() body) => LogScope.run(fields, body);
+
+  /// Runs [body] with [fields] attached, awaiting its result.
+  static Future<R> scopedAsync<R>(Map<String, Object?> fields, Future<R> Function() body) =>
+      LogScope.runAsync(fields, body);
 
   /// The underlying logger.
   ///
@@ -220,29 +307,17 @@ abstract final class MediaCoreLog {
   }
 
   /// Emits a trace-level record.
-  static void trace(
-    LogCategory category,
-    String message, {
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
+  static void trace(LogCategory category, String message, {Map<String, Object?> fields = const <String, Object?>{}}) {
     log(LogLevel.trace, category, message, fields: fields);
   }
 
   /// Emits a debug-level record.
-  static void debug(
-    LogCategory category,
-    String message, {
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
+  static void debug(LogCategory category, String message, {Map<String, Object?> fields = const <String, Object?>{}}) {
     log(LogLevel.debug, category, message, fields: fields);
   }
 
   /// Emits an info-level record.
-  static void info(
-    LogCategory category,
-    String message, {
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
+  static void info(LogCategory category, String message, {Map<String, Object?> fields = const <String, Object?>{}}) {
     log(LogLevel.info, category, message, fields: fields);
   }
 
@@ -283,6 +358,11 @@ abstract final class MediaCoreLog {
   static PlayerLogger install(PlayerLogger logger) {
     final previous = _logger;
 
+    // A caller who installed a logger with a resolver of their own keeps it;
+    // otherwise the hub's per-category overrides are wired in, so
+    // `setCategoryLevel` keeps working after an install.
+    logger.levelResolver ??= _resolveLevel;
+
     _logger = logger;
 
     return previous;
@@ -291,6 +371,6 @@ abstract final class MediaCoreLog {
   /// Restores the default logger, level and category overrides.
   static void reset() {
     _categoryLevels.clear();
-    _logger = PlayerLogger(minimumLevel: defaultLevel, sink: consoleLogSink());
+    _logger = _createLogger();
   }
 }

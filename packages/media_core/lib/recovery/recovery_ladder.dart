@@ -12,8 +12,7 @@ import 'recovery_snapshot.dart';
 import 'recovery_ladder_event.dart';
 import 'recovery_candidate_provider.dart';
 import '../error/player_error_code.dart';
-import '../diagnostics/log_category.dart';
-import '../diagnostics/media_core_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Lifecycle of the ladder.
 enum RecoveryLadderStatus {

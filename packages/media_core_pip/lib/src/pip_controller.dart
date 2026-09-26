@@ -6,17 +6,20 @@ import 'package:media_core/media_core.dart';
 import 'pip_config.dart';
 import 'pip_driver.dart';
 
+/// Decision trail for the small-window handover.
+///
+/// `presentation/debug` answers the question that a bug report about PiP always
+/// asks: was the window not opened because the policy said no, because the
+/// player was already gone, or because the platform refused?
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
+
 /// When the small window should open on its own.
 ///
 /// Each flag is a decision the viewer makes in settings, and each is separate:
 /// someone may want the window when they leave the page but not when they
 /// switch apps, or the other way round.
 final class PipAutoEnterPolicy {
-  const PipAutoEnterPolicy({
-    this.onPageExit = true,
-    this.onAppBackground = true,
-    this.requirePlaying = true,
-  });
+  const PipAutoEnterPolicy({this.onPageExit = true, this.onAppBackground = true, this.requirePlaying = true});
 
   /// Caller-accepted defaults: both triggers, and only while playing.
   static const PipAutoEnterPolicy defaults = PipAutoEnterPolicy();
@@ -184,10 +187,22 @@ final class PipSessionController {
 
     final player = _registry.find(playerId);
     if (player == null || player.isDisposed) {
-      throw StateError(
-        'Player $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.',
+      _log.error(
+        'cannot enter pip: player is gone',
+        fields: <String, Object?>{'playerId': playerId.value, 'reason': reason},
       );
+      throw StateError('Player $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.');
     }
+
+    _log.info(
+      'entering pip',
+      fields: <String, Object?>{
+        'playerId': playerId.value,
+        'reason': reason,
+        'videoWidth': player.videoWidth,
+        'videoHeight': player.videoHeight,
+      },
+    );
 
     _playerId = playerId;
     _emit(PipSession(playerId: playerId, active: true, reason: reason));
@@ -195,18 +210,22 @@ final class PipSessionController {
     _driver.onVideoSize(player.videoWidth, player.videoHeight);
     await _driver.initialize();
     await _driver.apply(playerId, PresentationRequest.pip());
+
+    _log.debug('pip window applied', fields: <String, Object?>{'active': _driver.isPip});
   }
 
   /// Leaves the small window. The player stays alive for the host to re-attach.
   Future<void> exit({String reason = 'requested'}) async {
     _ensureNotDisposed();
+    _log.info('leaving pip', fields: <String, Object?>{'playerId': _playerId?.value, 'reason': reason});
     await _driver.initialize();
     await _driver.apply(_playerId ?? PlayerId('pip-idle'), PresentationRequest.normal());
     _emit(PipSession(playerId: _playerId, active: false, reason: reason));
   }
 
   /// Enters if idle, leaves if active.
-  Future<void> toggle(PlayerId playerId) => isActive ? exit(reason: 'toggled off') : enter(playerId, reason: 'toggled on');
+  Future<void> toggle(PlayerId playerId) =>
+      isActive ? exit(reason: 'toggled off') : enter(playerId, reason: 'toggled on');
 
   /// Reports that the page showing [playerId] is going away.
   ///
@@ -270,9 +289,17 @@ final class PipSessionController {
   Future<bool> _autoEnter(PlayerId playerId, {required bool playing, required String reason}) async {
     _ensureNotDisposed();
     if (autoEnter.requirePlaying && !playing) {
+      _log.debug(
+        'auto-enter skipped: not playing',
+        fields: <String, Object?>{'playerId': playerId.value, 'trigger': reason},
+      );
       return false;
     }
     if (isActive && _playerId == playerId) {
+      _log.debug(
+        'auto-enter skipped: already carrying this player',
+        fields: <String, Object?>{'playerId': playerId.value, 'trigger': reason},
+      );
       return true;
     }
     await enter(playerId, reason: reason);

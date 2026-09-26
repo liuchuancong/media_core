@@ -1,10 +1,19 @@
 import 'dart:async';
 
 import '../concurrency/serial_executor.dart';
+import '../diagnostics/library.dart' show LogCategory, LogModule, MediaCoreLog;
 import '../resource/resource_pressure.dart';
 import '../source/player_source.dart';
 import 'player_pool_config.dart';
 import 'pool_player_host.dart';
+
+/// Decision trail for the pool.
+///
+/// Pool behaviour is invisible by design — the viewer sees the right item
+/// playing, not the mechanism. When it goes wrong (a leaked player, a warm item
+/// that never opens, playback stuck on the previous item), these are the lines
+/// that say which of those it was.
+final LogModule _log = MediaCoreLog.of(LogCategory.pool);
 
 /// What the pool is doing with one item.
 enum PooledItemRole {
@@ -214,6 +223,7 @@ final class PlaybackPoolOrchestrator {
       return Future<PlaybackPoolPlan>.value(currentPlan);
     }
     _viewportVisible = visible;
+    _log.debug('list viewport visibility changed', fields: <String, Object?>{'visible': visible});
     return _enqueue(_reconcileLocked);
   }
 
@@ -224,6 +234,7 @@ final class PlaybackPoolOrchestrator {
       return Future<PlaybackPoolPlan>.value(currentPlan);
     }
     _occluded = occluded;
+    _log.debug('app occlusion changed', fields: <String, Object?>{'occluded': occluded});
     return _enqueue(_reconcileLocked);
   }
 
@@ -233,6 +244,14 @@ final class PlaybackPoolOrchestrator {
   /// a device in trouble does not wait for the viewer to scroll.
   Future<PlaybackPoolPlan> reportPressure(ResourcePressure pressure) {
     _ensureNotDisposed();
+    _log.debug(
+      'device pressure reported to the pool',
+      fields: <String, Object?>{
+        'hasPressure': pressure.hasPressure,
+        'stopPreload': pressure.shouldStopPreload,
+        'releaseResources': pressure.shouldReleaseResources,
+      },
+    );
     _pressure = pressure;
     return _enqueue(_reconcileLocked);
   }
@@ -255,6 +274,7 @@ final class PlaybackPoolOrchestrator {
       }
       _activeIndex = null;
       _lastActiveIndex = null;
+      _log.debug('released every pooled player', fields: <String, Object?>{'released': released.length});
       return _buildPlan(const <int>{}, const <int>{}, released);
     });
   }
@@ -304,6 +324,15 @@ final class PlaybackPoolOrchestrator {
       // anchored where the viewer left off, so scrolling back is still cheap.
       for (final assignment in _assignments.values) {
         if (assignment.role == PooledItemRole.active) {
+          _log.debug(
+            'no item qualifies: standing down the active player',
+            fields: <String, Object?>{
+              'index': assignment.index,
+              'viewportVisible': _viewportVisible,
+              'occluded': _occluded,
+              'activeRatio': _ratios[assignment.index],
+            },
+          );
           await assignment.handle.pause();
           await assignment.handle.recycle();
           assignment.role = PooledItemRole.idle;
@@ -322,6 +351,19 @@ final class PlaybackPoolOrchestrator {
       _lastActiveIndex = target;
     }
 
+    _log.debug(
+      'pool reconciled',
+      fields: <String, Object?>{
+        'active': target,
+        'playing': playing.length,
+        'warming': warming.length,
+        'released': released.length,
+        'held': _assignments.length,
+        'budget': _config.maxPlayers,
+        'preloadCount': _effectivePreloadCount,
+      },
+    );
+
     return _buildPlan(playing, warming, released);
   }
 
@@ -335,6 +377,10 @@ final class PlaybackPoolOrchestrator {
       if (assignment.role != PooledItemRole.active || assignment.index == target) {
         continue;
       }
+      _log.debug(
+        'demoting the previously active item',
+        fields: <String, Object?>{'from': assignment.index, 'to': target, 'playerId': assignment.handle.id},
+      );
       await assignment.handle.pause();
       assignment.role = PooledItemRole.idle;
       assignment.since = _now;
@@ -356,8 +402,8 @@ final class PlaybackPoolOrchestrator {
       }
       // Equal ratios are broken by recency: a scroll view reports the item it
       // settled on last, and that is the one the viewer is looking at.
-      final better = entry.value > bestRatio ||
-          (entry.value == bestRatio && best != null && _orderOf(entry.key) > _orderOf(best));
+      final better =
+          entry.value > bestRatio || (entry.value == bestRatio && best != null && _orderOf(entry.key) > _orderOf(best));
       if (better || best == null) {
         bestRatio = bestRatio > entry.value ? bestRatio : entry.value;
         best = entry.key;
@@ -419,6 +465,10 @@ final class PlaybackPoolOrchestrator {
     final existing = _findAssignment(index);
     if (existing != null) {
       if (existing.role != PooledItemRole.active) {
+        _log.debug(
+          'resuming a held item instead of opening a new player',
+          fields: <String, Object?>{'index': index, 'from': existing.role.name, 'playerId': existing.handle.id},
+        );
         await existing.handle.play();
         existing.role = PooledItemRole.active;
         playing.add(index);
@@ -428,6 +478,10 @@ final class PlaybackPoolOrchestrator {
     }
 
     final handle = await _takeHandle(excludeIndex: index);
+    _log.debug(
+      'opening the active item',
+      fields: <String, Object?>{'index': index, 'playerId': handle.id, 'uri': _sources[index].uri},
+    );
     await handle.open(_sources[index], autoPlay: true);
     _assign(handle, index, PooledItemRole.active);
     playing.add(index);
@@ -461,12 +515,17 @@ final class PlaybackPoolOrchestrator {
       } on TimeoutException {
         // A warm player that cannot even open is not worth holding: it is
         // costing a decoder for something the viewer has not asked for.
+        _log.warning(
+          'warm open timed out; the player goes back',
+          fields: <String, Object?>{'index': index, 'playerId': handle.id, 'timeoutMs': timeout?.inMilliseconds},
+        );
         await _host.release(handle);
         continue;
       }
       final assignment = _assign(handle, index, PooledItemRole.warming);
       assignment.openedFor = _now;
       warming.add(index);
+      _log.debug('warming an item', fields: <String, Object?>{'index': index, 'playerId': handle.id});
     }
   }
 
@@ -488,6 +547,17 @@ final class PlaybackPoolOrchestrator {
 
       if ((expired || pressureRelease) && !_shouldKeepWarm) {
         released.add(assignment.index);
+        _log.debug(
+          'releasing an item outside the warm window',
+          fields: <String, Object?>{
+            'index': assignment.index,
+            'playerId': assignment.handle.id,
+            'role': assignment.role.name,
+            'idleMs': idleFor.inMilliseconds,
+            'expired': expired,
+            'pressure': pressureRelease,
+          },
+        );
         await _releaseAssignment(assignment);
       }
     }
@@ -532,10 +602,18 @@ final class PlaybackPoolOrchestrator {
     if (_config.reuseIdlePlayers) {
       final reusable = _findReusable(excludeIndex: excludeIndex);
       if (reusable != null) {
+        // A re-point is the cheap path: the player is already open, so the item
+        // it is about to carry pays no cold start.
+        _log.debug(
+          're-pointing an idle player',
+          fields: <String, Object?>{'playerId': reusable.handle.id, 'from': reusable.index, 'to': excludeIndex},
+        );
         return reusable.handle;
       }
     }
-    return _host.acquire();
+    final handle = await _host.acquire();
+    _log.debug('acquired a player from the host', fields: <String, Object?>{'playerId': handle.id});
+    return handle;
   }
 
   /// An idle player the pool may re-point at another item.

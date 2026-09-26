@@ -19,6 +19,10 @@ dependencies:
   # Reactive
   rxdart: ^0.28.0
 
+  # Levelled, categorised logging
+  media_core_logging:
+    path: ../media_core_logging
+
   # Value equality
   equatable: ^2.1.0
 

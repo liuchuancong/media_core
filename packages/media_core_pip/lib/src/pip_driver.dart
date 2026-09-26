@@ -10,6 +10,13 @@ import 'pip_window.dart';
 import 'system_pip.dart';
 import 'window_manager_pip_window.dart';
 
+/// Records which platform path ran and why a request was refused.
+///
+/// Desktop and mobile take different routes to the same mode, and on mobile the
+/// platform can refuse the request outright; the log is what separates "the
+/// driver went the wrong way" from "the device said no".
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
+
 /// Which platform family the driver is running on.
 ///
 /// Resolved from the OS, but injectable so the two paths can be exercised
@@ -76,14 +83,10 @@ enum PipPlatform {
 /// transition, and the host can tell the viewer why nothing happened.
 final class PipDriver implements KernelPresentationDriver {
   /// Creates the driver.
-  PipDriver({
-    this.config = PipConfig.defaults,
-    PipPlatform? platform,
-    PipWindow? desktopWindow,
-    SystemPip? systemPip,
-  }) : platform = platform ?? PipPlatform.resolve(),
-       _desktopWindow = desktopWindow,
-       _systemPip = systemPip;
+  PipDriver({this.config = PipConfig.defaults, PipPlatform? platform, PipWindow? desktopWindow, SystemPip? systemPip})
+    : platform = platform ?? PipPlatform.resolve(),
+      _desktopWindow = desktopWindow,
+      _systemPip = systemPip;
 
   /// Tunables.
   final PipConfig config;
@@ -186,6 +189,10 @@ final class PipDriver implements KernelPresentationDriver {
       case PresentationMode.fullscreen:
       case PresentationMode.windowFullscreen:
       case PresentationMode.floating:
+        _log.warning(
+          'pip driver asked for a mode it does not serve',
+          fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value},
+        );
         throw UnsupportedError(
           'PipDriver serves picture-in-picture only; mode "${request.mode.name}" '
           'belongs to another driver (see PresentationDriverChain).',
@@ -224,6 +231,7 @@ final class PipDriver implements KernelPresentationDriver {
       case PipPlatform.mobile:
         await _enterMobilePip();
       case PipPlatform.unsupported:
+        _log.error('pip is not supported on this platform', fields: <String, Object?>{'platform': platform.name});
         throw UnsupportedError('Picture-in-picture is not supported on this platform.');
     }
   }
@@ -261,6 +269,19 @@ final class PipDriver implements KernelPresentationDriver {
     final size = _smallWindowSize();
     final anchor = snapshot.bounds;
 
+    _log.debug(
+      'entering desktop pip',
+      fields: <String, Object?>{
+        'size': '${size.width.round()}x${size.height.round()}',
+        'videoSize':
+            '$_videoWidth'
+            'x'
+            '$_videoHeight',
+        'alwaysOnTop': true,
+        'skipTaskbar': config.skipTaskbar,
+      },
+    );
+
     await window.applySmallWindow(
       size: size,
       // Bottom-right corner of the previous bounds, clawed back from the
@@ -282,14 +303,28 @@ final class PipDriver implements KernelPresentationDriver {
   Future<void> _enterMobilePip() async {
     final pip = _systemPip;
     if (pip == null) {
+      _log.error('no system pip implementation installed');
       throw UnsupportedError('No system picture-in-picture implementation is installed.');
     }
     if (!await pip.isAvailable) {
+      _log.warning('system pip is not available on this device');
       throw UnsupportedError('System picture-in-picture is not available on this device.');
     }
     if (_videoWidth <= 0 || _videoHeight <= 0) {
+      _log.error('system pip needs a video size, none reported yet');
       throw StateError('Picture-in-picture needs a video size. Call onVideoSize() first.');
     }
+
+    _log.debug(
+      'requesting system pip',
+      fields: <String, Object?>{
+        'videoSize':
+            '$_videoWidth'
+            'x'
+            '$_videoHeight',
+        'sourceRectHint': config.requestSourceRectHint,
+      },
+    );
 
     final status = await pip.enable(
       width: _videoWidth,
@@ -298,6 +333,7 @@ final class PipDriver implements KernelPresentationDriver {
     );
 
     if (status == SystemPipStatus.unavailable) {
+      _log.error('the platform refused to enter pip');
       throw UnsupportedError('The platform refused to enter picture-in-picture.');
     }
 
@@ -310,6 +346,10 @@ final class PipDriver implements KernelPresentationDriver {
 
   void _handleSystemStatus(SystemPipStatus status) {
     final active = status == SystemPipStatus.enabled || status == SystemPipStatus.automatic;
+    // The platform also ends picture-in-picture on its own (the viewer returned
+    // to the app or closed the window); recording the raw status is what shows
+    // a state that changed without the app asking for it.
+    _log.debug('system pip status', fields: <String, Object?>{'status': status.name, 'active': active});
     _setPip(active);
   }
 
@@ -318,6 +358,16 @@ final class PipDriver implements KernelPresentationDriver {
       return;
     }
     _isPip = value;
+    _log.info(
+      value ? 'pip entered' : 'pip left',
+      fields: <String, Object?>{
+        'platform': platform.name,
+        'videoSize':
+            '$_videoWidth'
+            'x'
+            '$_videoHeight',
+      },
+    );
     if (!_pipChanges.isClosed) {
       _pipChanges.add(value);
     }

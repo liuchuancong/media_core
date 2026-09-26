@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'log_filter.dart';
 import 'log_level.dart';
 import 'log_category.dart';
+import 'log_scope.dart';
 
 /// Represents one diagnostic log record.
 ///
@@ -119,7 +121,11 @@ typedef PlayerLogSink = void Function(PlayerLogRecord record);
 /// - [DiagnosticsManager]
 final class PlayerLogger {
   /// Creates a player logger.
-  PlayerLogger({this.minimumLevel = LogLevel.info, this.enabled = true, PlayerLogSink? sink}) : _sink = sink;
+  PlayerLogger({this.minimumLevel = LogLevel.info, this.enabled = true, PlayerLogSink? sink}) {
+    if (sink != null) {
+      _sinks.add(sink);
+    }
+  }
 
   /// Minimum log level accepted by this logger.
   ///
@@ -129,8 +135,42 @@ final class PlayerLogger {
   /// Whether logging is enabled.
   bool enabled;
 
-  /// Current log sink.
-  PlayerLogSink? _sink;
+  /// Resolves the minimum level for a category, overriding [minimumLevel].
+  ///
+  /// This is what makes per-module levels possible. Without it a facade can
+  /// only lower the bar globally: raising one category to trace would be undone
+  /// here, because the record would still be compared against [minimumLevel].
+  /// The facade installs a resolver that reads its category overrides, so
+  /// "download at trace, everything else at warning" works with a single logger.
+  LogLevel Function(LogCategory category)? levelResolver;
+
+  /// Effective minimum level for [category].
+  LogLevel levelFor(LogCategory category) => levelResolver?.call(category) ?? minimumLevel;
+
+  /// Whether a record of [level] in [category] would be emitted.
+  bool isEnabledFor(LogCategory category, LogLevel level) => enabled && level.isAtLeast(levelFor(category));
+
+  /// Registered sinks, in registration order.
+  final List<PlayerLogSink> _sinks = <PlayerLogSink>[];
+
+  /// Optional developer filter applied before the sinks.
+  LogFilter? filter;
+
+  /// Optional rate limit applied per category.
+  ///
+  /// Off by default: a developer who turned logging on wants to see what
+  /// happened, and a throttle that silently drops the first hundred lines of a
+  /// burst hides the beginning of the problem.
+  LogThrottle? throttle;
+
+  /// How many records this logger has emitted.
+  int _emitted = 0;
+
+  /// How many records were dropped by the throttle.
+  int _throttled = 0;
+
+  /// Clock used by [throttle]; overridable for deterministic tests.
+  DateTime Function() clock = DateTime.now;
 
   /// Whether this logger has been disposed.
   bool _disposed = false;
@@ -143,12 +183,46 @@ final class PlayerLogger {
     return _recordsController.stream;
   }
 
-  /// Replaces the current log sink.
+  /// Replaces every registered sink with [sink].
   void setSink(PlayerLogSink? sink) {
     _ensureNotDisposed();
 
-    _sink = sink;
+    _sinks.clear();
+    if (sink != null) {
+      _sinks.add(sink);
+    }
   }
+
+  /// Adds a sink, keeping the ones already registered.
+  ///
+  /// Several sinks at once is the normal case: the console for a developer, the
+  /// memory sink for a diagnostics screen and the file sink for a bug report are
+  /// not alternatives.
+  void addSink(PlayerLogSink sink) {
+    _ensureNotDisposed();
+    _sinks.add(sink);
+  }
+
+  /// Removes [sink].
+  void removeSink(PlayerLogSink sink) {
+    _ensureNotDisposed();
+    _sinks.remove(sink);
+  }
+
+  /// Removes every sink.
+  void clearSinks() {
+    _ensureNotDisposed();
+    _sinks.clear();
+  }
+
+  /// Registered sinks.
+  List<PlayerLogSink> get sinks => List<PlayerLogSink>.unmodifiable(_sinks);
+
+  /// Records emitted since this logger was created.
+  int get emittedCount => _emitted;
+
+  /// Records dropped by [throttle].
+  int get throttledCount => _throttled;
 
   /// Emits a diagnostic log record.
   ///
@@ -164,8 +238,32 @@ final class PlayerLogger {
   }) {
     _ensureNotDisposed();
 
-    if (!enabled || !level.isAtLeast(minimumLevel)) {
+    if (!isEnabledFor(category, level)) {
       return;
+    }
+
+    // Scope fields are merged first so an explicitly passed field wins: the call
+    // site knows more about this line than the enclosing scope does.
+    final scope = LogScope.fields;
+    final mergedFields = scope.isEmpty ? fields : <String, Object?>{...scope, ...fields};
+
+    final developerFilter = filter;
+    if (developerFilter != null &&
+        !developerFilter.accepts(
+          PlayerLogRecord(level: level, category: category, message: message, fields: mergedFields),
+        )) {
+      return;
+    }
+
+    var suppressed = 0;
+    final limiter = throttle;
+    if (limiter != null) {
+      final admission = limiter.admit(category, clock());
+      if (!admission.allowed) {
+        _throttled++;
+        return;
+      }
+      suppressed = admission.suppressed;
     }
 
     final record = PlayerLogRecord(
@@ -174,10 +272,16 @@ final class PlayerLogger {
       message: message,
       error: error,
       stackTrace: stackTrace,
-      fields: fields,
+      // A throttled burst is reported on the next line that gets through, so a
+      // reader can tell one occurrence from four thousand.
+      fields: suppressed > 0 ? <String, Object?>{...mergedFields, 'suppressed': suppressed} : mergedFields,
     );
 
-    _sink?.call(record);
+    _emitted++;
+
+    for (final sink in List<PlayerLogSink>.of(_sinks)) {
+      sink(record);
+    }
 
     if (!_recordsController.isClosed) {
       _recordsController.add(record);
@@ -241,7 +345,7 @@ final class PlayerLogger {
     }
 
     _disposed = true;
-    _sink = null;
+    _sinks.clear();
 
     await _recordsController.close();
   }

@@ -5,6 +5,13 @@ import 'package:media_core/media_core.dart';
 import 'floating_config.dart';
 import 'floating_window_presenter.dart';
 
+/// Decision trail for the in-app small window.
+///
+/// The interesting line here is which surface ended up carrying the video: the
+/// package's own overlay, or a host presenter. A window that never appeared is
+/// usually a presenter that reported itself unsupported.
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
+
 /// Owns the in-app small-window mode.
 ///
 /// Responsibilities:
@@ -116,6 +123,10 @@ final class FloatingDriver implements KernelPresentationDriver {
       case PresentationMode.fullscreen:
       case PresentationMode.windowFullscreen:
       case PresentationMode.pip:
+        _log.warning(
+          'floating driver asked for a mode it does not serve',
+          fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value},
+        );
         throw UnsupportedError(
           'FloatingDriver serves the in-app small window only; mode "${request.mode.name}" '
           'belongs to another driver (see PresentationDriverChain).',
@@ -151,6 +162,17 @@ final class FloatingDriver implements KernelPresentationDriver {
       return;
     }
 
+    _log.info(
+      'showing the in-app small window',
+      fields: <String, Object?>{
+        'playerId': playerId.value,
+        'videoSize':
+            '$_videoWidth'
+            'x'
+            '$_videoHeight',
+      },
+    );
+
     _playerId = playerId;
     if (!_players.isClosed) {
       _players.add(playerId);
@@ -158,13 +180,14 @@ final class FloatingDriver implements KernelPresentationDriver {
 
     final presenter = _presenter;
     if (presenter.isSupported) {
+      // A host presenter takes over the surface entirely (a separate platform
+      // window, a system overlay); the package overlay is what runs otherwise.
+      _log.debug('delegating the surface to the host presenter');
       await presenter.show(
-        FloatingWindowRequest(
-          playerId: playerId.value,
-          videoWidth: _videoWidth,
-          videoHeight: _videoHeight,
-        ),
+        FloatingWindowRequest(playerId: playerId.value, videoWidth: _videoWidth, videoHeight: _videoHeight),
       );
+    } else {
+      _log.debug('no host presenter; the package overlay renders the surface');
     }
 
     _setFloating(true);
@@ -174,6 +197,8 @@ final class FloatingDriver implements KernelPresentationDriver {
     if (!_isFloating) {
       return;
     }
+
+    _log.info('hiding the in-app small window', fields: <String, Object?>{'playerId': _playerId?.value});
 
     final presenter = _presenter;
     if (presenter.isSupported) {
@@ -188,6 +213,7 @@ final class FloatingDriver implements KernelPresentationDriver {
       return;
     }
     _isFloating = value;
+    _log.debug('small window state changed', fields: <String, Object?>{'floating': value});
     if (!_floatingChanges.isClosed) {
       _floatingChanges.add(value);
     }

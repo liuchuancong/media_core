@@ -1,6 +1,8 @@
 import 'dart:developer' as developer;
 import 'log_level.dart';
 import 'log_category.dart';
+import 'log_file_sink.dart';
+import 'log_formatter.dart';
 import 'player_logger.dart';
 
 /// Writes log records to the platform console.
@@ -51,17 +53,37 @@ PlayerLogSink consoleLogSink({bool includeFields = true, bool includeTime = true
 ///
 /// Useful in tests and for a debug overlay: a bounded ring buffer that can
 /// be read back without attaching a stream.
-final class MemoryLogSink {
+final class MemoryLogSink implements LogSink {
   /// Creates a sink retaining up to [capacity] records.
-  MemoryLogSink({this.capacity = 500});
+  MemoryLogSink({this.capacity = 500, this.minimumLevel = LogLevel.trace});
 
   /// Maximum number of retained records.
   final int capacity;
+
+  /// Records below this level are dropped before they reach the buffer.
+  ///
+  /// A diagnostics screen rarely wants trace output from four modules at once;
+  /// the console can carry that, this keeps the last few hundred useful lines.
+  final LogLevel minimumLevel;
+
+  @override
+  void call(PlayerLogRecord record) {
+    if (!record.level.isAtLeast(minimumLevel)) {
+      return;
+    }
+    _records.add(record);
+    while (_records.length > capacity) {
+      _records.removeAt(0);
+    }
+  }
 
   final List<PlayerLogRecord> _records = <PlayerLogRecord>[];
 
   /// Retained records, oldest first.
   List<PlayerLogRecord> get records => List<PlayerLogRecord>.unmodifiable(_records);
+
+  /// How many records are retained.
+  int get length => _records.length;
 
   /// Retained records of one category, oldest first.
   List<PlayerLogRecord> forCategory(LogCategory category) {
@@ -83,14 +105,8 @@ final class MemoryLogSink {
     _records.clear();
   }
 
-  /// Sink callback.
-  void call(PlayerLogRecord record) {
-    _records.add(record);
-
-    while (_records.length > capacity) {
-      _records.removeAt(0);
-    }
-  }
+  /// Retained records as text, one line each.
+  String dump({LogFormatter formatter = const LogFormatter()}) => _records.map(formatter.format).join('\n');
 
   @override
   String toString() => 'MemoryLogSink(${_records.length}/$capacity)';

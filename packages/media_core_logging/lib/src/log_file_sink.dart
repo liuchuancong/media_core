@@ -1,0 +1,135 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'log_formatter.dart';
+import 'player_logger.dart';
+
+/// A sink that can be registered on the logger.
+///
+/// Sinks are callable so they can be passed straight to
+/// `PlayerLogger.addSink(sink)` without a wrapper, and classes so a sink that
+/// owns resources (a file) can expose `flush`/`close` of its own.
+abstract interface class LogSink {
+  /// Records one accepted record.
+  void call(PlayerLogRecord record);
+}
+
+/// Writes records to a rotating file.
+///
+/// The sink a bug report needs: the console is gone once the app is closed, and
+/// a reporter cannot copy a live log. Rotation keeps it from filling the device.
+///
+/// Writes are buffered and flushed on a size or time trigger, because a log line
+/// per frame with a synchronous file write is a way to make the thing you are
+/// debugging stutter.
+final class LogFileSink implements LogSink {
+  LogFileSink(
+    this.file, {
+    this.formatter = const LogFormatter(),
+    this.maxBytes = 2 * 1024 * 1024,
+    this.maxFiles = 3,
+    this.flushInterval = const Duration(seconds: 2),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  /// File records are appended to.
+  final File file;
+
+  /// Line formatter.
+  final LogFormatter formatter;
+
+  /// Size at which the file rotates.
+  final int maxBytes;
+
+  /// How many rotated files are kept (`file.1`, `file.2`, ...).
+  final int maxFiles;
+
+  /// How often buffered lines are written.
+  final Duration flushInterval;
+
+  final DateTime Function() _clock;
+
+  final List<String> _buffer = <String>[];
+  int _flushedBytes = 0;
+  DateTime? _lastFlush;
+  bool _closed = false;
+
+  /// Lines written so far, including buffered ones.
+  int get writtenLines => _flushedBytes >= 0 ? _lineCount : 0;
+  int _lineCount = 0;
+
+  /// Bytes buffered but not yet on disk.
+  int get bufferedBytes => _buffer.fold(0, (total, line) => total + line.length);
+
+  /// Whether the sink has been closed.
+  bool get isClosed => _closed;
+
+  @override
+  void call(PlayerLogRecord record) {
+    if (_closed) {
+      return;
+    }
+    _buffer.add(formatter.format(record));
+    _lineCount++;
+
+    final now = _clock();
+    final due = _lastFlush == null || now.difference(_lastFlush!) >= flushInterval;
+    if (due || bufferedBytes >= 64 * 1024) {
+      unawaited(flush());
+    }
+  }
+
+  /// Writes the buffer and rotates the file when it grew past [maxBytes].
+  Future<void> flush() async {
+    if (_closed || _buffer.isEmpty) {
+      _lastFlush = _clock();
+      return;
+    }
+
+    final lines = _buffer.join('\n');
+    _buffer.clear();
+    _lastFlush = _clock();
+
+    try {
+      await file.parent.create(recursive: true);
+      await file.writeAsString('$lines\n', mode: FileMode.append, flush: false);
+      _flushedBytes = await file.exists() ? await file.length() : 0;
+      if (_flushedBytes >= maxBytes) {
+        await _rotate();
+      }
+    } catch (_) {
+      // A log sink that throws would take the code being logged down with it.
+      // Losing the line is the correct trade; the caller cannot fix a full disk
+      // from inside a log call.
+    }
+  }
+
+  /// Flushes and releases the sink.
+  Future<void> close() async {
+    if (_closed) {
+      return;
+    }
+    await flush();
+    _closed = true;
+  }
+
+  Future<void> _rotate() async {
+    if (maxFiles <= 0) {
+      await file.writeAsString('', flush: true);
+      _flushedBytes = 0;
+      return;
+    }
+
+    for (var index = maxFiles - 1; index >= 1; index--) {
+      final source = File('${file.path}.$index');
+      if (!await source.exists()) {
+        continue;
+      }
+      await source.rename('${file.path}.${index + 1}');
+    }
+    if (await file.exists()) {
+      await file.rename('${file.path}.1');
+    }
+    _flushedBytes = 0;
+  }
+}

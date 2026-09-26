@@ -8,6 +8,13 @@ import 'fullscreen_config.dart';
 import 'fullscreen_window.dart';
 import 'window_manager_fullscreen_window.dart';
 
+/// Decision trail for fullscreen.
+///
+/// Two questions come up whenever fullscreen "does not work": which variant the
+/// host actually asked for (screen-wide or window-wide), and which fit strategy
+/// the video's orientation selected. Both are recorded on every transition.
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
+
 /// Which fullscreen variants the host can actually present.
 enum FullscreenPlatform {
   /// Windows, macOS, Linux: system fullscreen is a window state.
@@ -166,6 +173,21 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
     final wasAnyFullscreen = isAnyFullscreen;
 
+    _log.info(
+      'applying presentation',
+      fields: <String, Object?>{
+        'mode': request.mode.name,
+        'playerId': playerId.value,
+        'platform': platform.name,
+        'orientation': orientation.name,
+        'fit': strategy.name,
+        'videoSize':
+            '$_videoWidth'
+            'x'
+            '$_videoHeight',
+      },
+    );
+
     switch (request.mode) {
       case PresentationMode.fullscreen:
         await _enterSystemFullscreen();
@@ -175,6 +197,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
         await _leaveFullscreen();
       case PresentationMode.pip:
       case PresentationMode.floating:
+        _log.warning(
+          'fullscreen driver asked for a mode it does not serve',
+          fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value},
+        );
         throw UnsupportedError(
           'FullscreenDriver serves the two fullscreen variants only; mode "${request.mode.name}" '
           'belongs to another driver (see PresentationDriverChain).',
@@ -222,14 +248,23 @@ final class FullscreenDriver implements KernelPresentationDriver {
         final window = _desktopWindow ??= WindowManagerFullscreenWindow();
         if (config.restorePreviousBounds) {
           _preFullscreenBounds = await window.captureBounds();
+          _log.debug(
+            'captured pre-fullscreen bounds',
+            fields: <String, Object?>{'bounds': _preFullscreenBounds?.toString()},
+          );
         }
         await window.setFullscreen(true);
       case FullscreenPlatform.mobile:
         // No window to resize and no API to call: on mobile the host hides the
         // system UI. The mode is still tracked so the other features can leave
         // it, and so the host can render the right chrome.
+        _log.debug(
+          'mobile fullscreen: the host hides the system UI',
+          fields: <String, Object?>{'fit': strategy.name, 'orientation': orientation.name},
+        );
         break;
       case FullscreenPlatform.unsupported:
+        _log.error('system fullscreen is not supported on this platform');
         throw UnsupportedError('System fullscreen is not supported on this platform.');
     }
 
@@ -242,12 +277,14 @@ final class FullscreenDriver implements KernelPresentationDriver {
     }
 
     if (platform == FullscreenPlatform.unsupported) {
+      _log.error('window-level fullscreen is not supported on this platform');
       throw UnsupportedError('Window-level fullscreen is not supported on this platform.');
     }
 
     // Filling the window while the screen is also fullscreen would leave the
     // host with two active variants and no defined exit.
     if (_isSystemFullscreen) {
+      _log.debug('handing over from system fullscreen to window fullscreen');
       await _leaveSystemFullscreen();
     }
 
@@ -277,10 +314,16 @@ final class FullscreenDriver implements KernelPresentationDriver {
   // ---------------------------------------------------------------------------
 
   void _setSystemFullscreen(bool value) {
+    if (value != _isSystemFullscreen) {
+      _log.debug('system fullscreen variant changed', fields: <String, Object?>{'active': value});
+    }
     _isSystemFullscreen = value;
   }
 
   void _setWindowFullscreen(bool value) {
+    if (value != _isWindowFullscreen) {
+      _log.debug('window fullscreen variant changed', fields: <String, Object?>{'active': value});
+    }
     _isWindowFullscreen = value;
   }
 
@@ -295,6 +338,7 @@ final class FullscreenDriver implements KernelPresentationDriver {
     if (previous == current || _fullscreenChanges.isClosed) {
       return;
     }
+    _log.debug('fullscreen state settled', fields: <String, Object?>{'fullscreen': current});
     _fullscreenChanges.add(current);
   }
 }

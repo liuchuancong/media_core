@@ -8,17 +8,16 @@ import 'floating_driver.dart';
 import 'floating_window_overlay.dart';
 import 'floating_window_placement.dart';
 
+/// Decision trail for the in-app small window's session.
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
+
 /// When the in-app small window should open on its own.
 ///
 /// The same two triggers as picture-in-picture, kept separate because a viewer
 /// may want one and not the other: leaving a page is a navigation choice, going
 /// to the background is a system one.
 final class FloatingAutoEnterPolicy {
-  const FloatingAutoEnterPolicy({
-    this.onPageExit = true,
-    this.onAppBackground = false,
-    this.requirePlaying = true,
-  });
+  const FloatingAutoEnterPolicy({this.onPageExit = true, this.onAppBackground = false, this.requirePlaying = true});
 
   /// Caller-accepted defaults for an in-app window.
   ///
@@ -172,10 +171,21 @@ final class FloatingSessionController {
 
     final player = _registry.find(playerId);
     if (player == null || player.isDisposed) {
-      throw StateError(
-        'Player $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.',
+      _log.error(
+        'cannot show the small window: player is gone',
+        fields: <String, Object?>{'playerId': playerId.value, 'reason': reason},
       );
+      throw StateError('Player $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.');
     }
+
+    _log.info(
+      'carrying the player into the small window',
+      fields: <String, Object?>{
+        'playerId': playerId.value,
+        'reason': reason,
+        'videoSize': '${player.videoWidth}x${player.videoHeight}',
+      },
+    );
 
     _playerId = playerId;
     _emit(FloatingSession(playerId: playerId, active: true, reason: reason));
@@ -191,6 +201,7 @@ final class FloatingSessionController {
   /// off: the viewer collapsed the window, not the video.
   Future<void> hide({String reason = 'requested'}) async {
     _ensureNotDisposed();
+    _log.info('hiding the small window', fields: <String, Object?>{'playerId': _playerId?.value, 'reason': reason});
     await _driver.initialize();
     await _driver.apply(_playerId ?? PlayerId('floating-idle'), PresentationRequest.normal());
     _emit(FloatingSession(playerId: _playerId, active: false, reason: reason));
@@ -279,9 +290,17 @@ final class FloatingSessionController {
   Future<bool> _autoEnter(PlayerId playerId, {required bool playing, required String reason}) async {
     _ensureNotDisposed();
     if (autoEnter.requirePlaying && !playing) {
+      _log.debug(
+        'auto-show skipped: not playing',
+        fields: <String, Object?>{'playerId': playerId.value, 'trigger': reason},
+      );
       return false;
     }
     if (isActive && _playerId == playerId) {
+      _log.debug(
+        'auto-show skipped: already carrying this player',
+        fields: <String, Object?>{'playerId': playerId.value, 'trigger': reason},
+      );
       return true;
     }
     await show(playerId, reason: reason);

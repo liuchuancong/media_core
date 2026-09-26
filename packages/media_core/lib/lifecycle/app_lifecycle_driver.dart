@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../diagnostics/log_category.dart';
-import '../diagnostics/media_core_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import '../kernel/player_handle.dart';
 
 /// Drives a player's lifecycle from the Flutter application lifecycle.

@@ -1,12 +1,21 @@
 import 'dart:async';
 
 import 'package:equatable/equatable.dart' show Equatable;
-import 'package:media_core/media_core.dart' show PlaybackPoolOrchestrator, PoolPlayerHandle;
+import 'package:media_core/media_core.dart'
+    show LogCategory, LogModule, MediaCoreLog, PlaybackPoolOrchestrator, PoolPlayerHandle;
 
 import 'playback_list_config.dart';
 import 'playback_list_item.dart';
 import 'playback_list_player.dart';
 import 'playback_progress_store.dart';
+
+/// Decision trail for list playback.
+///
+/// Two behaviours are invisible when they work and confusing when they do not:
+/// whether an item resumed from a remembered position or started over, and
+/// whether the item was opened through the pool or by the list's own player.
+/// Both are recorded on every open.
+final LogModule _log = MediaCoreLog.of(LogCategory.playback);
 
 /// Immutable snapshot of a playback list.
 final class PlaybackListState extends Equatable {
@@ -110,8 +119,10 @@ final class PlaybackListController {
     this.config = PlaybackListConfig.defaults,
     this.pool,
     this.poolPlayerFactory,
-  }) : assert(player != null || (pool != null && poolPlayerFactory != null),
-            'A list needs either its own player or a pool plus a way to drive its handles'),
+  }) : assert(
+         player != null || (pool != null && poolPlayerFactory != null),
+         'A list needs either its own player or a pool plus a way to drive its handles',
+       ),
        _player = player,
        _items = List<PlaybackListItem>.unmodifiable(items),
        _store = store ?? InMemoryPlaybackProgressStore(config: config) {
@@ -150,6 +161,7 @@ final class PlaybackListController {
     }
     return current;
   }
+
   final PlaybackProgressStore _store;
 
   /// Tunables.
@@ -227,7 +239,20 @@ final class PlaybackListController {
 
     _index = index;
     final item = _items[index];
-    _emit(_state.copyWith(index: index, count: _items.length, item: item, opening: true, clearError: true, clearResumedFrom: true));
+    _log.debug(
+      'opening a list item',
+      fields: <String, Object?>{'index': index, 'count': _items.length, 'itemId': item.id, 'throughPool': pool != null},
+    );
+    _emit(
+      _state.copyWith(
+        index: index,
+        count: _items.length,
+        item: item,
+        opening: true,
+        clearError: true,
+        clearResumedFrom: true,
+      ),
+    );
 
     final previousIndex = _lastOpenedIndex;
     try {
@@ -242,6 +267,11 @@ final class PlaybackListController {
       final resumedFrom = await _resume(item);
       _emit(_state.copyWith(opening: false, resumedFrom: resumedFrom));
     } catch (error) {
+      _log.error(
+        'could not open the list item',
+        error: error,
+        fields: <String, Object?>{'index': index, 'itemId': item.id},
+      );
       _emit(_state.copyWith(opening: false, error: error));
     }
   }
@@ -336,6 +366,10 @@ final class PlaybackListController {
     await activePool.onVisibilityChanged(index, 1);
     final handle = activePool.handleFor(index);
     if (handle == null) {
+      _log.error(
+        'the pool did not take the item',
+        fields: <String, Object?>{'index': index, 'itemId': item.id, 'uri': item.source.uri},
+      );
       throw StateError('The playback pool did not take item $index (${item.id}).');
     }
     return handle;
@@ -364,10 +398,24 @@ final class PlaybackListController {
     }
 
     if (isNearCompletion(saved, player.duration)) {
+      // Restoring the final seconds reads as a broken player, so the entry is
+      // dropped and the item starts over.
+      _log.debug(
+        'remembered position counts as finished; starting from the beginning',
+        fields: <String, Object?>{
+          'itemId': item.id,
+          'savedMs': saved.inMilliseconds,
+          'durationMs': player.duration.inMilliseconds,
+        },
+      );
       await _store.clear(item.id);
       return null;
     }
 
+    _log.debug(
+      'resuming from the remembered position',
+      fields: <String, Object?>{'itemId': item.id, 'positionMs': saved.inMilliseconds},
+    );
     await player.seek(saved);
     return saved;
   }

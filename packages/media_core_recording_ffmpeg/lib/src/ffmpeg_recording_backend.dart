@@ -7,6 +7,13 @@ import 'ffmpeg_executor.dart';
 import 'ffmpeg_record_arguments.dart';
 import 'ffmpeg_record_config.dart';
 
+/// Decision trail for a recording.
+///
+/// The argument list is logged at debug because an FFmpeg failure is usually a
+/// statement about the arguments, and the exit code alone ("255") says nothing.
+/// The list is what a developer pastes into a shell to reproduce it.
+final LogModule _log = MediaCoreLog.of(LogCategory.recording);
+
 /// What the caller asked for when a recording ended.
 ///
 /// FFmpeg reports `255` both for a stream that died and for a process that was
@@ -49,12 +56,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// [executor] defaults to the FFmpegKit implementation; pass a fake in tests.
   /// [outputDirectory] is the default location for recordings, overridable per
   /// start through `RecordingConfig.outputPath`.
-  FfmpegRecordingBackend({
-    FfmpegExecutor? executor,
-    this.config = FfmpegRecordConfig.defaults,
-    String? outputDirectory,
-  }) : _executor = executor,
-       _outputDirectory = outputDirectory;
+  FfmpegRecordingBackend({FfmpegExecutor? executor, this.config = FfmpegRecordConfig.defaults, String? outputDirectory})
+    : _executor = executor,
+      _outputDirectory = outputDirectory;
 
   /// Recording tunables.
   final FfmpegRecordConfig config;
@@ -125,9 +129,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     // A fresh state, not a copy: `copyWith` cannot clear an error from a
     // previous attempt, and a stale error would make a running recording look
     // failed.
-    _emit(
-      const RecordingState(status: RecordingStatus.starting),
-    );
+    _emit(const RecordingState(status: RecordingStatus.starting));
 
     await Directory(directory).create(recursive: true);
 
@@ -144,12 +146,25 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _lastMediaTime = Duration.zero;
     _lastBytes = 0;
 
+    _log.info(
+      'starting a recording',
+      fields: <String, Object?>{
+        'url': source.value,
+        'type': source.type.name,
+        'directory': directory,
+        'segmentPattern': segmentPattern,
+      },
+    );
+    _log.debug('ffmpeg arguments', fields: <String, Object?>{'argv': arguments.join(' ')});
+
     try {
       final execution = await _executorOf().start(arguments: arguments, onStatistics: _handleStatistics);
       _execution = execution;
       _emit(_state.copyWith(status: RecordingStatus.recording));
+      _log.info('recording started', fields: <String, Object?>{'session': identityHashCode(execution)});
       _exitWatcher = execution.exitCode.asStream().listen(_handleExit);
     } catch (error, stackTrace) {
+      _log.error('could not start the recording', error: error, fields: <String, Object?>{'url': source.value});
       _emit(_state.copyWith(status: RecordingStatus.error, error: error));
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -166,9 +181,19 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     // The intent must be set before the process ends, or the exit watcher sees
     // an unexplained 255 and reports an error for a recording the user ended.
     _intent = _StopIntent.stop;
+    _log.info('stopping the recording', fields: <String, Object?>{'session': identityHashCode(execution)});
     _emit(_state.copyWith(status: RecordingStatus.stopping));
     await execution.stop();
     await _awaitExit(execution);
+
+    _log.info(
+      'recording stopped',
+      fields: <String, Object?>{
+        'directory': _activeDirectory,
+        'durationMs': _lastMediaTime.inMilliseconds,
+        'bytesWritten': _lastBytes,
+      },
+    );
 
     return RecordingResult(
       success: true,
@@ -186,6 +211,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       return;
     }
 
+    _log.info('cancelling the recording', fields: <String, Object?>{'session': identityHashCode(execution)});
     _intent = _StopIntent.cancel;
     await execution.cancel();
     await _awaitExit(execution);
@@ -242,6 +268,22 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _execution = null;
     final succeeded = code == 0;
+    if (succeeded) {
+      _log.info(
+        'recording finished on its own',
+        fields: <String, Object?>{'exitCode': code, 'durationMs': _lastMediaTime.inMilliseconds},
+      );
+    } else {
+      // Nobody asked it to end, so a non-zero code is the process failing.
+      _log.error(
+        'recording ended on its own with a failure',
+        fields: <String, Object?>{
+          'exitCode': code,
+          'durationMs': _lastMediaTime.inMilliseconds,
+          'bytesWritten': _lastBytes,
+        },
+      );
+    }
     _emit(
       RecordingState(
         status: succeeded ? RecordingStatus.completed : RecordingStatus.error,

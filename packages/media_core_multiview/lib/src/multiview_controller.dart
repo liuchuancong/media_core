@@ -7,6 +7,14 @@ import 'multiview_cell.dart';
 import 'multiview_config.dart';
 import 'multiview_layout.dart';
 
+/// Decision trail for the wall.
+///
+/// A wall is where "why is that camera black" gets asked, and the answer is
+/// spread across four mechanisms: the budget, the stall watchdog, the playlist
+/// and the focus. Each one records its decisions under `multiview`, so a wall
+/// that dropped a cell, restarted one, or never opened one says which.
+final LogModule _log = MediaCoreLog.of(LogCategory.multiview);
+
 /// How much quality a cell wants, relative to the best available.
 enum MultiviewQualityPreference {
   /// Best available: worth looking at.
@@ -28,10 +36,8 @@ enum MultiviewQualityPreference {
 /// ask its sites for another rendition. Without one the wall plays what it was
 /// given and the quality policy is inert — which is stated rather than silently
 /// pretended.
-typedef MultiviewQualityResolver = Future<MultiviewCellSource> Function(
-  MultiviewCellSource source,
-  MultiviewQualityPreference preference,
-);
+typedef MultiviewQualityResolver =
+    Future<MultiviewCellSource> Function(MultiviewCellSource source, MultiviewQualityPreference preference);
 
 /// Immutable view of the wall, for a host that renders from state.
 final class MultiviewSnapshot {
@@ -113,10 +119,7 @@ final class MultiviewController {
   }) : _players = players,
        _config = config,
        _clock = clock ?? DateTime.now {
-    _cells = List<MultiviewCell>.generate(
-      _config.layout.capacity,
-      (index) => MultiviewCell(index: index),
-    );
+    _cells = List<MultiviewCell>.generate(_config.layout.capacity, (index) => MultiviewCell(index: index));
     _startTicking();
   }
 
@@ -199,6 +202,15 @@ final class MultiviewController {
     _config = config;
 
     if (config.layout.capacity != previousCapacity) {
+      _log.debug(
+        'resizing the wall',
+        fields: <String, Object?>{
+          'from': previousCapacity,
+          'to': config.layout.capacity,
+          'layout': config.layout.name,
+          'budget': config.effectiveMaxCells,
+        },
+      );
       _resizeCells(config.layout.capacity);
     }
 
@@ -238,11 +250,31 @@ final class MultiviewController {
     final cell = _cellAt(index);
 
     if (_config.budgetPolicy == MultiviewBudgetPolicy.refuseNewCells && _isAtBudget && cell.isEmpty) {
+      _log.warning(
+        'refusing a new cell: at the decode budget',
+        fields: <String, Object?>{
+          'index': index,
+          'roomId': source.roomId,
+          'playing': _playingCount,
+          'budget': _config.effectiveMaxCells,
+        },
+      );
       throw StateError(
         'The wall is at its decode budget (${_config.effectiveMaxCells} cells); '
         'refusing to add another under MultiviewBudgetPolicy.refuseNewCells.',
       );
     }
+
+    _log.info(
+      'assigning a cell',
+      fields: <String, Object?>{
+        'index': index,
+        'roomId': source.roomId,
+        'uri': source.source.uri,
+        'isLive': source.isLive,
+        'playlistSize': playlist?.length,
+      },
+    );
 
     if (playlist != null && playlist.length > 1) {
       _playlists[index] = List<MultiviewCellSource>.unmodifiable(playlist);
@@ -282,6 +314,15 @@ final class MultiviewController {
 
     final position = playlist.indexWhere((candidate) => candidate.roomId == current.roomId);
     final next = playlist[(position + 1) % playlist.length];
+    _log.debug(
+      'advancing to the next room in the playlist',
+      fields: <String, Object?>{
+        'index': index,
+        'from': current.roomId,
+        'to': next.roomId,
+        'playlistSize': playlist.length,
+      },
+    );
     await assign(index, next, playlist: playlist);
     return true;
   }
@@ -344,6 +385,18 @@ final class MultiviewController {
   Future<void> setVideoFocus(int index) async {
     _ensureNotDisposed();
     _cellAt(index);
+    if (_focusedIndex != index) {
+      _log.debug(
+        'video focus moved',
+        fields: <String, Object?>{
+          'from': _focusedIndex,
+          'to': index,
+          'roomId': _cells[index].source?.roomId,
+          'qualityPolicy': _config.qualityPolicy.name,
+          'danmakuOnlyOnFocused': _config.danmakuOnlyOnFocused,
+        },
+      );
+    }
     _focusedIndex = index;
     await _applyQuality();
     _applyDanmakuRouting();
@@ -354,6 +407,12 @@ final class MultiviewController {
   Future<void> setAudioFocus(int index) async {
     _ensureNotDisposed();
     _cellAt(index);
+    if (_audioIndex != index) {
+      _log.debug(
+        'audio focus moved',
+        fields: <String, Object?>{'from': _audioIndex, 'to': index, 'audioMode': _config.audioMode.name},
+      );
+    }
     _audioIndex = index;
     await _applyAudio();
     _emit();
@@ -377,8 +436,13 @@ final class MultiviewController {
     _ensureNotDisposed();
     final playerId = playerIdOf(index);
     if (playerId == null) {
+      _log.debug('cell has no player to hand over', fields: <String, Object?>{'index': index});
       return false;
     }
+    _log.info(
+      'handing a cell over to another surface',
+      fields: <String, Object?>{'index': index, 'playerId': playerId},
+    );
     await handOver(playerId);
     return true;
   }
@@ -394,6 +458,14 @@ final class MultiviewController {
   Future<void> reportPressure(ResourcePressure pressure) async {
     _ensureNotDisposed();
     _pressure = pressure;
+    _log.debug(
+      'device pressure reported',
+      fields: <String, Object?>{
+        'hasPressure': pressure.hasPressure,
+        'stopPreload': pressure.shouldStopPreload,
+        'releaseResources': pressure.shouldReleaseResources,
+      },
+    );
     await _applyBudget();
     _emit();
   }
@@ -411,6 +483,10 @@ final class MultiviewController {
         if (!severe && _playingCount <= _config.effectiveMaxCells) {
           return;
         }
+        _log.warning(
+          'over budget: pausing every cell but the focused one',
+          fields: <String, Object?>{'playing': _playingCount, 'budget': _config.effectiveMaxCells, 'severe': severe},
+        );
         for (final cell in _cells) {
           if (cell.index == _focusedIndex || !cell.isPlaying) {
             continue;
@@ -420,6 +496,10 @@ final class MultiviewController {
         }
       case MultiviewBudgetPolicy.letPlatformDrop:
       case MultiviewBudgetPolicy.refuseNewCells:
+        _log.debug(
+          'over budget, policy leaves the cells alone',
+          fields: <String, Object?>{'policy': _config.budgetPolicy.name, 'playing': _playingCount},
+        );
         return;
     }
   }
@@ -473,6 +553,7 @@ final class MultiviewController {
       if (_config.patrolSkipsOfflineCells && cell.status != MultiviewCellStatus.playing) {
         continue;
       }
+      _log.debug('patrol moving the focus', fields: <String, Object?>{'from': _focusedIndex, 'to': index});
       await setVideoFocus(index);
       await setAudioFocus(index);
       return;
@@ -492,11 +573,26 @@ final class MultiviewController {
     if (!source.isLive) {
       // A room the platform reports as offline needs no player: opening one
       // would show an error the viewer already knows the reason for.
+      _log.debug(
+        'cell is offline; no player opened',
+        fields: <String, Object?>{'index': cell.index, 'roomId': source.roomId},
+      );
       cell.status = MultiviewCellStatus.offline;
       cell.qualityLabel = null;
       await _releaseCell(cell.index);
       return;
     }
+
+    _log.debug(
+      'opening a cell',
+      fields: <String, Object?>{
+        'index': cell.index,
+        'roomId': source.roomId,
+        'uri': source.source.uri,
+        'restarts': cell.restarts,
+        'preference': _preferenceFor(cell.index).name,
+      },
+    );
 
     cell.status = MultiviewCellStatus.starting;
     cell.failure = null;
@@ -508,6 +604,10 @@ final class MultiviewController {
       await handle.open(resolved.source, autoPlay: true);
       cell.status = MultiviewCellStatus.playing;
       cell.qualityLabel = resolved.qualityLabel;
+      _log.info(
+        'cell is playing',
+        fields: <String, Object?>{'index': cell.index, 'roomId': resolved.roomId, 'quality': resolved.qualityLabel},
+      );
       _watchProgress(cell.index, handle);
       await _applyAudio();
     } catch (error, stackTrace) {
@@ -518,6 +618,11 @@ final class MultiviewController {
         cause: error,
       );
       cell.status = MultiviewCellStatus.failed;
+      _log.error(
+        'cell failed to open',
+        error: error,
+        fields: <String, Object?>{'index': cell.index, 'roomId': source.roomId},
+      );
       // A cell that cannot open might still have somewhere to go: a playlist
       // moves on, which is what turns a dead room into the next live one.
       if (_playlists.containsKey(cell.index)) {
@@ -690,6 +795,17 @@ final class MultiviewController {
   }
 
   Future<void> _handleStall(MultiviewCell cell) async {
+    _log.warning(
+      'cell stalled',
+      fields: <String, Object?>{
+        'index': cell.index,
+        'roomId': cell.source?.roomId,
+        'restarts': cell.restarts,
+        'maxRestarts': _config.cellMaxRestarts,
+        'timeoutSeconds': _config.cellStallTimeout.inSeconds,
+      },
+    );
+
     cell.failure = MultiviewCellFailure(
       kind: MultiviewCellFailureKind.stallFailure,
       message: 'No progress for ${_config.cellStallTimeout.inSeconds}s',
@@ -698,6 +814,15 @@ final class MultiviewController {
 
     if (cell.restarts >= _config.cellMaxRestarts) {
       cell.status = MultiviewCellStatus.failed;
+      _log.error(
+        'cell stalled past its restart budget',
+        fields: <String, Object?>{
+          'index': cell.index,
+          'roomId': cell.source?.roomId,
+          'restarts': cell.restarts,
+          'hasPlaylist': _playlists.containsKey(cell.index),
+        },
+      );
       _emit();
       // Out of restarts: a playlist cell moves on, which is the difference
       // between a wall that watches and one that stares at a frozen frame.
@@ -709,6 +834,10 @@ final class MultiviewController {
 
     cell.restarts++;
     cell.status = MultiviewCellStatus.recovering;
+    _log.info(
+      'restarting a stalled cell',
+      fields: <String, Object?>{'index': cell.index, 'roomId': cell.source?.roomId, 'attempt': cell.restarts},
+    );
     _emit();
 
     await _releaseCell(cell.index);
@@ -725,6 +854,11 @@ final class MultiviewController {
         cause: error,
       );
       cell.status = MultiviewCellStatus.failed;
+      _log.error(
+        'restart after a stall failed',
+        error: error,
+        fields: <String, Object?>{'index': cell.index, 'attempt': cell.restarts},
+      );
       _emit();
     }
   }
@@ -763,6 +897,8 @@ final class MultiviewController {
     _tick = null;
     _patrol?.cancel();
     _patrol = null;
+
+    _log.debug('releasing the wall', fields: <String, Object?>{'cells': _cells.length, 'playing': _playingCount});
 
     for (final index in _cells.map((cell) => cell.index).toList()) {
       await _releaseCell(index);

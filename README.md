@@ -139,8 +139,31 @@ adapter 报错后内核自动执行：
 | `media_core_recording_ffmpeg` | 录播 | FFmpegKit 分段 MPEG-TS 录制 + CSV 日志;失败只丢几秒而非整场 |
 | `media_core_download` | 下载 | 有界并发队列、断点续传(先校验再续)、重试预算与进度 |
 | `media_core_multiview` | 多画面同看 | 监控式视频墙:逐格健康度、唯一音频归属、解码预算、逐格弹幕、巡更轮巡、逐格播放列表 |
+| `media_core_logging` | 分级日志 | 全局日志枢纽:分级/分类开关、多 sink 并行(控制台/内存环形缓冲/文件轮转)、开发者过滤与节流、Zone 作用域字段 |
 
 内核只保留与平台无关的基础设施(缓存、协调器、录制抽象、策略、池、预载等)与各能力共享的状态机。
+
+### 分级日志
+
+所有模块通过 `MediaCoreLog` 打日志,默认**完全静默**(`LogLevel.nothing`),由宿主显式开启:
+
+```dart
+MediaCoreLog.level = LogLevel.debug;                             // 全局开到 debug
+MediaCoreLog.setCategoryLevel(LogCategory.pool, LogLevel.trace); // 只把播放器池开到 trace
+final memory = MediaCoreLog.attachMemorySink(capacity: 500);     // 控制台之外再收一份到内存
+MediaCoreLog.attachFileSink(File('${dir}/media_core.log'));      // 或落盘(带尺寸轮转)
+
+LogScope.run({'roomId': room.id}, () => player.open(source));    // 作用域内每条日志都带上房间号
+```
+
+模块内部用绑定了分类的 logger,调用点不必重复写分类;热路径可以先判断再组装字段:
+
+```dart
+final _log = MediaCoreLog.of(LogCategory.multiview);
+if (_log.isDebugEnabled) _log.debug('cell assigned', fields: {'index': index});
+```
+
+分类(`LogCategory`)与模块一一对应:内核与生命周期(`player`/`lifecycle`)、播放与缓冲(`playback`/`buffering`)、源解析(`source`)、呈现与三个小窗包(`presentation`)、恢复与回退(`recovery`/`fallback`)、录制(`recording`)、下载(`download`)、弹幕(`danmaku`)、多画面(`multiview`)、播放器池(`pool`)、资源与内存(`memory`/`performance`)、日志子系统自身(`logging`)。因此排查单个问题时只需把对应分类调高,而不是被其它模块的 trace 淹没。
 
 ## Workspace 布局
 
@@ -164,5 +187,6 @@ packages/
   media_core_recording_ffmpeg/      录播(FFmpegKit 分段录制)
   media_core_download/              下载(队列 + 续传 + 重试)
   media_core_multiview/             多画面同看(监控式视频墙)
+  media_core_logging/               分级日志(枢纽 + sink + 过滤/节流/作用域)
 examples/example/                   示例 App
 ```
