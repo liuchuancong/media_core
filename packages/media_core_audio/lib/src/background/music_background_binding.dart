@@ -4,7 +4,7 @@ import '../player/audio_playback_controller.dart';
 import '../player/audio_player_state.dart';
 import '../track/music_track.dart';
 import '../media_core_audio.dart';
-import '../media_core_audio_handler.dart';
+import 'package:media_core_mediasession/media_core_mediasession.dart';
 
 /// Connects an [AudioPlaybackController] to the platform's background playback
 /// surfaces.
@@ -144,7 +144,7 @@ final class MusicBackgroundBinding {
     // are installed, so installing/removing skip support never needs a second
     // list kept in sync here.
     handler.publishState(
-      AudioHandlerState(
+      MediaSessionState(
         playing: state.playing,
         position: state.position,
         duration: state.duration,
@@ -153,10 +153,10 @@ final class MusicBackgroundBinding {
     );
   }
 
-  AudioHandlerMediaItem _itemFor(MusicTrack track, AudioPlaybackState state) {
+  MediaSessionItem _itemFor(MusicTrack track, AudioPlaybackState state) {
     final isCurrent = identical(track, state.track) || track == state.track;
 
-    return AudioHandlerMediaItem(
+    return MediaSessionItem(
       id: '${track.sourceId}:${track.id}',
       title: track.title,
       artist: track.artist,

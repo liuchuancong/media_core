@@ -54,10 +54,13 @@
 /// ```
 library;
 
-// Capability (background audio + audio session).
-export 'src/audio_capability_config.dart';
+import 'package:media_core_mediasession/media_core_mediasession.dart';
+
+// Capability (background audio + audio session). The implementation lives in
+// media_core_mediasession now — these names are this module's historical
+// spelling of it, so music hosts and older call sites keep compiling.
 export 'src/media_core_audio.dart';
-export 'src/media_core_audio_handler.dart';
+export 'package:media_core_mediasession/media_core_mediasession.dart';
 
 // Background playback binding for the music player.
 export 'src/background/music_background_binding.dart';
@@ -102,3 +105,19 @@ export 'src/source/music_source_registry.dart';
 export 'src/track/music_quality.dart';
 export 'src/track/music_track.dart';
 export 'src/track/track_source.dart';
+
+// ============================================================================
+// Names this module used before the media surfaces moved out
+// ============================================================================
+
+/// The music module's name for [MediaSessionConfig].
+typedef AudioCapabilityConfig = MediaSessionConfig;
+
+/// The music module's name for [MediaSessionHandler].
+typedef MediaCoreAudioHandler = MediaSessionHandler;
+
+/// The music module's name for [MediaSessionState].
+typedef AudioHandlerState = MediaSessionState;
+
+/// The music module's name for [MediaSessionItem].
+typedef AudioHandlerMediaItem = MediaSessionItem;

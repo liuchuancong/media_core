@@ -1,9 +1,9 @@
 import 'package:audio_service/audio_service.dart';
 
-/// Snapshot of playback state pushed into the media notification.
-final class AudioHandlerState {
+/// Snapshot of playback state pushed into the system media surface.
+final class MediaSessionState {
   /// Creates the snapshot.
-  const AudioHandlerState({
+  const MediaSessionState({
     required this.playing,
     required this.position,
     required this.duration,
@@ -24,9 +24,9 @@ final class AudioHandlerState {
 }
 
 /// Metadata describing the current media item.
-final class AudioHandlerMediaItem {
+final class MediaSessionItem {
   /// Creates the metadata.
-  const AudioHandlerMediaItem({
+  const MediaSessionItem({
     required this.id,
     required this.title,
     this.album = '',
@@ -52,18 +52,44 @@ final class AudioHandlerMediaItem {
 
   /// Artwork uri when available.
   final Uri? artUri;
+
+  /// This item with some fields replaced.
+  MediaSessionItem copyWith({String? title, String? album, String? artist, Duration? duration, Uri? artUri}) {
+    return MediaSessionItem(
+      id: id,
+      title: title ?? this.title,
+      album: album ?? this.album,
+      artist: artist ?? this.artist,
+      duration: duration ?? this.duration,
+      artUri: artUri ?? this.artUri,
+    );
+  }
+
+  /// Converts to the platform model.
+  MediaItem toMediaItem() {
+    return MediaItem(
+      id: id,
+      album: album,
+      title: title,
+      artist: artist,
+      duration: duration,
+      artUri: artUri,
+    );
+  }
 }
 
-/// [BaseAudioHandler] that bridges audio_service and media_core.
+/// [BaseAudioHandler] that bridges the platform media surfaces and media_core.
 ///
-/// Outbound (kernel → notification): [publishState] and
-/// [publishMediaItem] mirror PlayerHandle playback state.
+/// Outbound (player → notification): [publishState] and [publishMediaItem]
+/// mirror a `PlayerHandle`'s playback state.
 ///
-/// Inbound (notification → kernel): transport commands are
-/// forwarded through the callbacks supplied at construction.
-final class MediaCoreAudioHandler extends BaseAudioHandler {
+/// Inbound (notification → player): transport commands are forwarded through
+/// the callbacks supplied at construction. A callback that was not supplied
+/// degrades to [BaseAudioHandler]'s default, so a control the host did not
+/// install cannot silently do nothing.
+final class MediaSessionHandler extends BaseAudioHandler {
   /// Creates the handler.
-  MediaCoreAudioHandler({
+  MediaSessionHandler({
     required Future<void> Function() onPlay,
     required Future<void> Function() onPause,
     required Future<void> Function(Duration position) onSeek,
@@ -99,23 +125,23 @@ final class MediaCoreAudioHandler extends BaseAudioHandler {
 
   /// Optional builder for notification controls.
   ///
-  /// Receives the current playing state and returns the controls
-  /// to display. When null a play/pause + stop pair is used.
+  /// Receives the current playing state and returns the controls to display.
+  /// When null a play/pause + stop pair is used.
   final List<MediaControl> Function(bool playing)? controlsBuilder;
 
   /// Builds compact action indices advertised to the platform.
   ///
-  /// Derived from [controls] so callers don't have to keep two
-  /// lists in sync.
+  /// Derived from [controls] so callers don't have to keep two lists in sync.
   static List<int> compactIndicesFor(List<MediaControl> controls) {
     if (controls.length <= 2) {
       return List<int>.generate(controls.length, (index) => index);
     }
+
     return const <int>[0, 1];
   }
 
-  /// Pushes [state] into the media notification.
-  void publishState(AudioHandlerState state, {List<MediaControl>? controls}) {
+  /// Pushes [state] into the media surface.
+  void publishState(MediaSessionState state, {List<MediaControl>? controls}) {
     playbackState.add(
       PlaybackState(
         controls: controls ?? const <MediaControl>[],
@@ -128,7 +154,7 @@ final class MediaCoreAudioHandler extends BaseAudioHandler {
     );
   }
 
-  /// Pushes idle state into the media notification.
+  /// Pushes idle state into the media surface.
   void publishIdle() {
     playbackState.add(
       PlaybackState(
@@ -141,17 +167,8 @@ final class MediaCoreAudioHandler extends BaseAudioHandler {
   }
 
   /// Pushes [item] as the current media item.
-  void publishMediaItem(AudioHandlerMediaItem item) {
-    mediaItem.add(
-      MediaItem(
-        id: item.id,
-        album: item.album,
-        title: item.title,
-        artist: item.artist,
-        duration: item.duration,
-        artUri: item.artUri,
-      ),
-    );
+  void publishMediaItem(MediaSessionItem item) {
+    mediaItem.add(item.toMediaItem());
   }
 
   /// Clears the current media item.
@@ -163,21 +180,8 @@ final class MediaCoreAudioHandler extends BaseAudioHandler {
   ///
   /// The playing entry is also published as the current [mediaItem]; the
   /// platform derives "current" from that, not from the list order.
-  void publishQueue(List<AudioHandlerMediaItem> items, {int index = -1}) {
-    queue.add(
-      items
-          .map(
-            (item) => MediaItem(
-              id: item.id,
-              album: item.album,
-              title: item.title,
-              artist: item.artist,
-              duration: item.duration,
-              artUri: item.artUri,
-            ),
-          )
-          .toList(growable: false),
-    );
+  void publishQueue(List<MediaSessionItem> items, {int index = -1}) {
+    queue.add(items.map((item) => item.toMediaItem()).toList(growable: false));
 
     if (index >= 0 && index < items.length) {
       publishMediaItem(items[index]);
@@ -185,7 +189,7 @@ final class MediaCoreAudioHandler extends BaseAudioHandler {
   }
 
   // ---------------------------------------------------------------------------
-  // Inbound transport commands (notification / lock screen)
+  // Inbound transport commands (notification / lock screen / media keys)
   // ---------------------------------------------------------------------------
 
   @override

@@ -77,6 +77,11 @@ dependencies:
   media_core_native:
     path: ../../packages/media_core_native
 
+  # System media surfaces (notification / lock screen / SMTC / MPRIS) for the
+  # video player.
+  media_core_mediasession:
+    path: ../../packages/media_core_mediasession
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

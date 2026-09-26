@@ -17,6 +17,7 @@ workspace:
   - packages/media_core_fvp
   - packages/media_core_audio
   - packages/media_core_ui
+  - packages/media_core_mediasession
   - packages/media_core_presentation
   - packages/media_core_pip
   - packages/media_core_floating

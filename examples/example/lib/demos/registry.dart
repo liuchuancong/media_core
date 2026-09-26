@@ -3,6 +3,7 @@ import '../pages/live_demo_page.dart';
 import '../pages/memory_demo_page.dart';
 import '../pages/music_demo_page.dart';
 import '../pages/multiview_demo_page.dart';
+import '../pages/media_session_demo_page.dart';
 import '../pages/player_demo_page.dart';
 import '../pages/ui_styles_demo_page.dart';
 import '../pages/presentation_demo_page.dart';
@@ -46,6 +47,14 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
     purposeZh: 'material / cupertino / fluent / macos / yaru / neumorphic 共用一层控制逻辑，播放中切换风格不重置状态、进度与显隐策略；同页演示双指缩放、双击缩放与截图落盘。',
     purposeEn: 'material / cupertino / fluent / macos / yaru / neumorphic share one control layer, so switching mid-playback keeps state, position and visibility policy; the same page shows pinch/double-tap zoom and a saved screenshot.',
     builder: (_) => const UiStylesDemoPage(),
+  ),
+  RunnableDemo(
+    id: 'media-session',
+    nameZh: '系统媒体面：通知 / 锁屏 / SMTC',
+    nameEn: 'System media surfaces: notification, lock screen, SMTC',
+    purposeZh: '视频播放器接入系统媒体控件（Android 通知、iOS 锁屏、Windows SMTC、Linux MPRIS）：标题、进度、播放暂停、±10 秒、停止；按通知上的按钮会走回同一个 handle，日志里能看到状态变化。',
+    purposeEn: 'A video player published to the platform surfaces (Android notification, iOS lock screen, Windows SMTC, Linux MPRIS) with title, progress, play/pause, ±10s and stop; pressing them drives the same handle, and the log shows it.',
+    builder: (_) => const MediaSessionDemoPage(),
   ),
   RunnableDemo(
     id: 'live',

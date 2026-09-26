@@ -1,0 +1,40 @@
+name: media_core_mediasession
+
+description: System media surfaces for media_core - media notification, lock screen, SMTC and MPRIS for any player, video or audio.
+
+publish_to: none
+
+version: 0.1.0
+
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The player whose state is published and whose transport is driven.
+  media_core:
+    path: ../media_core
+
+  # The platform media surfaces. audio_service is the one abstraction that
+  # reaches all four: a notification on Android, the lock screen and Control
+  # Center on iOS, SMTC on Windows and MPRIS on Linux.
+  audio_service: ^0.18.19
+
+  # Windows implementation of audio_service (SMTC).
+  audio_service_win: ^0.0.3
+
+  # Linux implementation of audio_service (MPRIS / D-Bus).
+  audio_service_mpris: ^0.2.1
+
+  # Audio focus, interruptions and becoming-noisy.
+  audio_session: ^0.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
