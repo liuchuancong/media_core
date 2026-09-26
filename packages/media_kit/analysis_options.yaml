@@ -1,30 +1,27 @@
-# This file configures the static analysis results for your project (errors,
-# warnings, and lints).
+# This file configures the static analysis results for this project.
 #
-# This enables the 'recommended' set of lints from `package:lints`.
-# This set helps identify many issues that may lead to problems when running
-# or consuming Dart code, and enforces writing Dart using a single, idiomatic
-# style and format.
-#
-# If you want a smaller set of lints you can change this to specify
-# 'package:lints/core.yaml'. These are just the most critical lints
-# (the recommended set includes the core lints).
-# The core lints are also what is used by pub.dev for scoring packages.
+# The package is vendored: its Dart and native sources are kept identical to
+# Predidit/media-kit@d13fc22 plus the PureLive patch (see the repository's
+# packages/media_kit_video/PURELIVE_PATCH.md), so the entries below only
+# configure *analysis*; they never change what the code does.
 
 include: package:lints/recommended.yaml
 
-# Uncomment the following section to specify additional rules.
+analyzer:
+  # Web-only sources. They are written against dart:html and the legacy
+  # package:js interop, and package:js 0.7.2 re-exports the internal
+  # dart:_js_annotations library, which an analyzer can only resolve while a
+  # JS platform is enabled. This package declares Android as its plugin
+  # platform, so these files take part in no build here - and a consumer
+  # targeting web still compiles them with the web compiler, which does
+  # provide those libraries.
+  exclude:
+    - lib/src/player/web/**
+    - lib/src/models/media/media_web.dart
 
-# linter:
-#   rules:
-#     - camel_case_types
-
-# analyzer:
-#   exclude:
-#     - path/to/excluded/files/**
-
-# For more information about the core and recommended set of lints, see
-# https://dart.dev/go/core-lints
-
-# For additional information about configuring this file, see
-# https://dart.dev/guides/language/analysis-options
+  errors:
+    # Upstream documentation style: library-level doc comments without a
+    # `library;` directive, and `<...>` in prose. Style-only diagnostics,
+    # silenced to keep the vendored diff against upstream at zero.
+    dangling_library_doc_comments: ignore
+    unintended_html_in_doc_comment: ignore

@@ -1,3 +1,10 @@
+# This file configures the static analysis results for this project.
+#
+# The package is vendored: its Dart and native sources are kept identical to
+# Predidit/media-kit@d13fc22 plus the PureLive patch (see PURELIVE_PATCH.md in
+# this directory), so the entries below only configure *analysis*; they never
+# change what the code does.
+
 analyzer:
   exclude:
     - build/**
@@ -6,7 +13,29 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
-include: package:flutter_lints/flutter.yaml
+    # Web-only sources: dart:html + conditional web implementations. They are
+    # written against the legacy package:js interop, whose annotations live in
+    # an internal SDK library that an analyzer can only resolve while a JS
+    # platform is enabled - see the note in
+    # packages/media_kit/analysis_options.yaml. A web build still compiles
+    # them.
+    - lib/src/video/video_web.dart
+    - lib/src/video_controller/web_video_controller/**
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+  errors:
+    # Upstream documentation style: library-level doc comments without a
+    # `library;` directive, and `<...>` in prose. Style-only diagnostics,
+    # silenced to keep the vendored diff against upstream at zero.
+    dangling_library_doc_comments: ignore
+    unintended_html_in_doc_comment: ignore
+    # Upstream predates these idioms; also style-only.
+    use_super_parameters: ignore
+    unnecessary_underscores: ignore
+    unnecessary_this: ignore
+    unnecessary_non_null_assertion: ignore
+    # Two upstream warts (an unused private `_theme`, two redundant `!`s).
+    # Silenced rather than patched so the vendored copy stays identical to
+    # upstream; remove these ignores if the files are ever edited.
+    unused_element: ignore
+
+include: package:flutter_lints/flutter.yaml
