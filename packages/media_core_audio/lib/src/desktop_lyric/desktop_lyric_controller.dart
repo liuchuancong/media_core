@@ -3,6 +3,8 @@ import 'dart:async';
 import '../lyric/lyric_document.dart';
 import '../lyric/lyric_line.dart';
 import '../lyric/lyric_timeline.dart';
+import '../permission/audio_permission.dart';
+import '../permission/audio_permission_service.dart';
 import '../track/music_track.dart';
 import '../player/audio_playback_controller.dart';
 import '../player/audio_player_state.dart';
@@ -39,10 +41,12 @@ final class DesktopLyricController {
   DesktopLyricController(
     this.player, {
     DesktopLyricTransport? transport,
+    AudioPermissionService? permissions,
     DesktopLyricStyle style = const DesktopLyricStyle(),
     this.minimumUpdateInterval = const Duration(milliseconds: 200),
     this.showTranslation = true,
   }) : _transport = transport ?? MethodChannelDesktopLyricTransport(),
+       _permissions = permissions ?? AudioPermissionService(),
        _style = style,
        _timeline = LyricTimeline(minimumUpdateInterval: minimumUpdateInterval);
 
@@ -56,6 +60,7 @@ final class DesktopLyricController {
   final bool showTranslation;
 
   final DesktopLyricTransport _transport;
+  final AudioPermissionService _permissions;
   final LyricTimeline _timeline;
 
   StreamSubscription<AudioPlaybackState>? _stateSub;
@@ -98,12 +103,23 @@ final class DesktopLyricController {
   /// Whether the host can draw an overlay at all.
   Future<bool> isSupported() => _transport.isSupported();
 
-  /// Shows the overlay, loading the current track's lyric first.
+  /// Whether the overlay permission is granted right now.
+  Future<bool> hasPermission() => _permissions.isGranted(AudioPermission.desktopLyricOverlay);
+
+  /// Shows the overlay, obtaining the permission it needs first.
   ///
-  /// Returns false when the host has no overlay (or the permission was
-  /// denied); callers should then simply not offer the feature.
+  /// One call, including the awkward part: where an overlay needs
+  /// authorization (Android's "draw over other apps"), this awaits the system
+  /// settings round trip — the user is sent there, and the future answers once
+  /// they have toggled the switch. Returns false when the platform has no
+  /// overlay or the user refused, in which case the caller simply does not
+  /// offer the feature.
   Future<bool> show() async {
     if (_disposed) {
+      return false;
+    }
+
+    if (!await _permissions.request(AudioPermission.desktopLyricOverlay)) {
       return false;
     }
 

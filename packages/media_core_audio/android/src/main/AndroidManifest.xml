@@ -2,9 +2,40 @@
     package="com.mediacore.audio">
 
     <!--
-      Desktop lyric overlay. The permission must also be declared by the host
-      app's manifest for it to be grantable; the plugin only requests it at
-      runtime (Settings.ACTION_MANAGE_OVERLAY_PERMISSION).
+      Desktop-lyric overlay. Special permission: never granted at install time,
+      only through the system settings screen (the plugin opens it and answers
+      the request once the switch is on).
     -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!--
+      Media notification (Android 13+). Without it the notification silently
+      does not appear; playback is unaffected, which is why it is worth asking
+      for through AudioPermissionService rather than wondering.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      Local music: the module's LocalMusicSource scans the device, and a host's
+      own library screen does the same. Android 13 split storage into media
+      types; older releases use the broad storage permission, capped at API 32
+      so it is not requested where it does not exist.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!--
+      Background playback through audio_service. WAKE_LOCK keeps the decoder
+      alive with the screen off; the FOREGROUND_SERVICE pair is required from
+      API 34 with the media-playback type.
+
+      The app still has to declare audio_service's own plumbing (its
+      AudioServiceActivity, service and MediaButtonReceiver) because a library
+      cannot replace the app's activity; see the module documentation.
+    -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 </manifest>

@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
@@ -27,7 +29,7 @@ import io.flutter.plugin.common.MethodChannel;
  * The plugin owns no playback state: it draws what it is told and reports which
  * button was pressed.
  */
-public final class MediaCoreAudioPlugin implements FlutterPlugin, MethodChannel.MethodCallHandler {
+public final class MediaCoreAudioPlugin implements FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
 
   /** Channel name; kept in sync with the Dart transport. */
   private static final String CHANNEL_NAME = "media_core_audio/desktop_lyric";
@@ -37,10 +39,16 @@ public final class MediaCoreAudioPlugin implements FlutterPlugin, MethodChannel.
 
   private DesktopLyricWindow window;
 
+  /** Runtime permissions; needs the activity, forwarded through ActivityAware. */
+  private AudioPermissionsDelegate permissions;
+
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
     channel = new MethodChannel(binding.getBinaryMessenger(), CHANNEL_NAME);
     channel.setMethodCallHandler(this);
+
+    permissions = new AudioPermissionsDelegate(binding.getApplicationContext());
+    permissions.attach(binding.getBinaryMessenger());
 
     window = new DesktopLyricWindow(
         binding.getApplicationContext(),
@@ -54,6 +62,11 @@ public final class MediaCoreAudioPlugin implements FlutterPlugin, MethodChannel.
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    if (permissions != null) {
+      permissions.detach();
+      permissions = null;
+    }
+
     if (window != null) {
       window.dispose();
       window = null;
@@ -62,6 +75,38 @@ public final class MediaCoreAudioPlugin implements FlutterPlugin, MethodChannel.
     if (channel != null) {
       channel.setMethodCallHandler(null);
       channel = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Activity awareness (forwarded to the permissions delegate)
+  // ---------------------------------------------------------------------------
+
+  @Override
+  public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+    if (permissions != null) {
+      permissions.onAttachedToActivity(binding);
+    }
+  }
+
+  @Override
+  public void onDetachedFromActivityForConfigChanges() {
+    if (permissions != null) {
+      permissions.onDetachedFromActivityForConfigChanges();
+    }
+  }
+
+  @Override
+  public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+    if (permissions != null) {
+      permissions.onReattachedToActivityForConfigChanges(binding);
+    }
+  }
+
+  @Override
+  public void onDetachedFromActivity() {
+    if (permissions != null) {
+      permissions.onDetachedFromActivity();
     }
   }
 

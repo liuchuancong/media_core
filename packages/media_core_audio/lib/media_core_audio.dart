@@ -16,6 +16,8 @@
 /// kernel.attachAudio(audio);
 /// ```
 ///
+/// Platform permission and manifest checklist: `doc/permissions.md`.
+///
 /// **2. Music (player-facing)** — a player built for songs:
 ///
 /// ```dart
@@ -30,12 +32,17 @@
 /// // Lyrics (LRC with translation and word timing), cached and prefetching
 /// final lyric = await player.loadCurrentLyric();
 ///
+/// // Permissions the module needs beyond its own Dart code
+/// final permissions = AudioPermissionService();
+/// await permissions.request(AudioPermission.notifications); // Android 13+
+/// await permissions.request(AudioPermission.mediaLibrary);  // local music only
+///
 /// // Desktop lyrics: shows a native overlay window
-/// // (Windows / Android / macOS / Linux; iOS and web have no such window)
+/// // (Windows / Android / macOS / Linux; iOS and web have no such window).
+/// // show() obtains the overlay authorization itself and waits for it.
 /// final overlay = DesktopLyricController(player);
 /// if (await overlay.show()) {
-///   // first call on Android opens the SYSTEM_ALERT_WINDOW settings screen and
-///   // returns false; call again once the user is back
+///   // the window is on screen
 /// }
 ///
 /// // Background playback: notification/lock-screen/MPRIS with real metadata
@@ -73,6 +80,10 @@ export 'src/lyric/lyric_line.dart';
 export 'src/lyric/lyric_loader.dart';
 export 'src/lyric/lyric_timeline.dart';
 export 'src/lyric/lrc_parser.dart';
+
+// Runtime permissions (notifications, media library, overlay).
+export 'src/permission/audio_permission.dart';
+export 'src/permission/audio_permission_service.dart';
 
 // Music player.
 export 'src/player/audio_playback_controller.dart';

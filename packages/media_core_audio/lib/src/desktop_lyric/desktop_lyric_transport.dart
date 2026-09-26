@@ -43,7 +43,7 @@ enum DesktopLyricAction {
 /// | platform | window | notes |
 /// |---|---|---|
 /// | Windows | `windows/`, layered window drawn with GDI+ on its own thread | hover controls, dragging, click-through locking |
-/// | Android | `android/`, `TYPE_APPLICATION_OVERLAY` added with the application context | needs `SYSTEM_ALERT_WINDOW`: the first [show] opens the system settings screen and returns false, so the host calls it again afterwards; survives leaving the player page, no Service of its own |
+/// | Android | `android/`, `TYPE_APPLICATION_OVERLAY` added with the application context | needs `SYSTEM_ALERT_WINDOW`: `DesktopLyricController.show()` requests it first through `AudioPermissionService`, which opens the system settings screen and only answers once the switch is on; the window survives leaving the player page and needs no Service of its own |
 /// | macOS | `macos/`, borderless `NSWindow` at `.floating` level | joins every Space, never takes focus; `ignoresMouseEvents` makes the lock truly click-through |
 /// | Linux | `linux/`, override-redirect GTK popup drawn with Cairo/Pango | click-through uses an empty input shape, which is X11-only: under Wayland a locked overlay hides its controls but still catches input |
 /// | iOS, web | — | no cross-application overlay exists: iOS' equivalent is the lock screen / a Live Activity, and a web page cannot draw outside its own tab. [isSupported] stays false, which is not an error |
