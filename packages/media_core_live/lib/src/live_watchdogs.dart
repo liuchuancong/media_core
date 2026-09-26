@@ -266,6 +266,17 @@ final class LiveWatchdogs {
   StreamSubscription<void>? _videoFrameSubscription;
   StreamSubscription<void>? _positionStallSubscription;
 
+  /// The last "not armed" reason each watchdog reported.
+  ///
+  /// While a stream is stalled the watchdogs are re-armed on every position
+  /// tick, so the same decision line was written several times a second — the
+  /// frame watchdog alone printed thousands of identical lines in the minute
+  /// that a frozen source was being recovered, burying the stall that caused
+  /// them. The line is emitted when the decision changes instead, which is the
+  /// information it carries anyway.
+  String? _loggedFrameStallSkip;
+  String? _loggedPositionStallSkip;
+
   // ---------------------------------------------------------------------------
   // Current playback observations
   // ---------------------------------------------------------------------------
@@ -748,22 +759,29 @@ final class LiveWatchdogs {
       // "Why is the frame watchdog not watching?" is the first question
       // both when a frozen stream goes unnoticed and when recovery keeps
       // reopening a stream that was never stalled. Logging the decision
-      // inputs answers it without a debugger.
-      MediaCoreLog.debug(
-        LogCategory.recovery,
-        'frame-stall watchdog not armed: $skipReason',
-        fields: <String, Object?>{
-          'declaresFrameProgress': _capabilities?.supportsVideoFrameProgress,
-          'videoExpected': _videoExpected,
-          'presentationVisible': _presentationVisible,
-          'playing': _playing,
-          'buffering': _buffering,
-          'timeoutMs': videoFrameStallTimeout.inMilliseconds,
-        },
-      );
+      // inputs answers it without a debugger — once per decision, not once
+      // per re-arm.
+      if (skipReason != _loggedFrameStallSkip) {
+        _loggedFrameStallSkip = skipReason;
+
+        MediaCoreLog.debug(
+          LogCategory.recovery,
+          'frame-stall watchdog not armed: $skipReason',
+          fields: <String, Object?>{
+            'declaresFrameProgress': _capabilities?.supportsVideoFrameProgress,
+            'videoExpected': _videoExpected,
+            'presentationVisible': _presentationVisible,
+            'playing': _playing,
+            'buffering': _buffering,
+            'timeoutMs': videoFrameStallTimeout.inMilliseconds,
+          },
+        );
+      }
 
       return;
     }
+
+    _loggedFrameStallSkip = null;
 
     MediaCoreLog.debug(
       LogCategory.recovery,
@@ -804,19 +822,25 @@ final class LiveWatchdogs {
     final skipReason = _positionStallSkipReason();
 
     if (skipReason != null) {
-      MediaCoreLog.debug(
-        LogCategory.recovery,
-        'position-stall watchdog not armed: $skipReason',
-        fields: <String, Object?>{
-          'hasPositionSignal': _hasPositionSignal,
-          'playing': _playing,
-          'buffering': _buffering,
-          'timeoutMs': positionStallTimeout.inMilliseconds,
-        },
-      );
+      if (skipReason != _loggedPositionStallSkip) {
+        _loggedPositionStallSkip = skipReason;
+
+        MediaCoreLog.debug(
+          LogCategory.recovery,
+          'position-stall watchdog not armed: $skipReason',
+          fields: <String, Object?>{
+            'hasPositionSignal': _hasPositionSignal,
+            'playing': _playing,
+            'buffering': _buffering,
+            'timeoutMs': positionStallTimeout.inMilliseconds,
+          },
+        );
+      }
 
       return;
     }
+
+    _loggedPositionStallSkip = null;
 
     MediaCoreLog.debug(
       LogCategory.recovery,
