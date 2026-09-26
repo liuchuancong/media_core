@@ -18,6 +18,8 @@ final class AudioCapabilityConfig {
     this.playIcon = 'ic_media_play',
     this.pauseIcon = 'ic_media_pause',
     this.stopIcon = 'ic_media_stop',
+    this.previousIcon = 'ic_media_previous',
+    this.nextIcon = 'ic_media_next',
     this.androidCompactActionIndices = const <int>[0, 1],
   });
 
@@ -60,6 +62,15 @@ final class AudioCapabilityConfig {
 
   /// Drawable name for the stop control.
   final String stopIcon;
+
+  /// Drawable name for the skip-previous control.
+  ///
+  /// Only used when a queue transport is installed (music playback); the
+  /// drawable must exist in the host app like the other icons.
+  final String previousIcon;
+
+  /// Drawable name for the skip-next control.
+  final String nextIcon;
 
   /// Compact action indices for the Android notification.
   final List<int> androidCompactActionIndices;

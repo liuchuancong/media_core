@@ -46,6 +46,23 @@ final class MediaCoreAudio implements KernelAudioDriver {
 
   MediaCoreAudioHandler? _handler;
   PlayerHandle? _active;
+
+  /// Queue transports a host may install (see `MusicBackgroundBinding`).
+  ///
+  /// Mutable rather than constructor arguments: the driver is created once at
+  /// startup, while the music player that owns a queue appears later — and a
+  /// single-media app never sets them, so the notification simply shows no
+  /// skip buttons.
+  Future<void> Function()? skipToNextHandler;
+
+  /// Installed counterpart of [skipToNextHandler].
+  Future<void> Function()? skipToPreviousHandler;
+
+  /// Jump to a queue index.
+  Future<void> Function(int index)? skipToQueueItemHandler;
+
+  /// Playback-rate changes coming from the platform.
+  Future<void> Function(double rate)? setSpeedHandler;
   StreamSubscription<void>? _playbackSub;
   StreamSubscription<asession.AudioInterruptionEvent>? _interruptionSub;
   StreamSubscription<void>? _noisySub;
@@ -96,6 +113,10 @@ final class MediaCoreAudio implements KernelAudioDriver {
         onPause: () async => _active?.pause(),
         onSeek: (position) async => _active?.seek(position),
         onStop: () async => _active?.stop(),
+        onNext: skipToNextHandler == null ? null : () async => skipToNextHandler!.call(),
+        onPrevious: skipToPreviousHandler == null ? null : () async => skipToPreviousHandler!.call(),
+        onSkipToQueueItem: skipToQueueItemHandler == null ? null : (index) async => skipToQueueItemHandler!.call(index),
+        onSetSpeed: setSpeedHandler == null ? null : (rate) async => setSpeedHandler!.call(rate),
         controlsBuilder: _buildControls,
       ),
       config: asvc.AudioServiceConfig(
@@ -267,12 +288,21 @@ final class MediaCoreAudio implements KernelAudioDriver {
     if (!config.showControls) {
       return const <asvc.MediaControl>[];
     }
+
     return <asvc.MediaControl>[
+      if (skipToPreviousHandler != null)
+        asvc.MediaControl(
+          androidIcon: config.previousIcon,
+          label: 'Previous',
+          action: asvc.MediaAction.skipToPrevious,
+        ),
       asvc.MediaControl(
         androidIcon: playing ? config.pauseIcon : config.playIcon,
         label: playing ? 'Pause' : 'Play',
         action: playing ? asvc.MediaAction.pause : asvc.MediaAction.play,
       ),
+      if (skipToNextHandler != null)
+        asvc.MediaControl(androidIcon: config.nextIcon, label: 'Next', action: asvc.MediaAction.skipToNext),
       asvc.MediaControl(androidIcon: config.stopIcon, label: 'Stop', action: asvc.MediaAction.stop),
     ];
   }

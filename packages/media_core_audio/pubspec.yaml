@@ -26,5 +26,10 @@ dependencies:
   # Audio focus / interruption / becoming-noisy events
   audio_session: ^0.2.3
 
+  # Music downloads (HLS/adaptive sources, tag writing, codec choice).
+  # Pinned to the version the app resolves, so a single native ffmpeg build
+  # serves both packages.
+  ffmpeg_kit_extended_flutter: 0.6.2
+
 dev_dependencies:
   flutter_lints: ^6.0.0
