@@ -832,7 +832,27 @@ final class LivePlaybackController {
 
     final pinned = _preferredBackend;
 
-    if (pinned == null || !engines.contains(pinned)) {
+    if (pinned == null) {
+      return engines;
+    }
+
+    if (!engines.contains(pinned)) {
+      // The pin lost its turn because its own declaration excludes this
+      // format. Silence here is what makes "I chose ExoPlayer and got mpv"
+      // unanswerable from the outside — the preference was honoured all the
+      // way to this line and then dropped. Either the declaration is too
+      // narrow (FLV was, see `BetterPlayerFormats`) or the engine really
+      // cannot open the source, and both are worth a line.
+      MediaCoreLog.warning(
+        LogCategory.fallback,
+        'pinned engine "$pinned" does not declare the source format — falling back to the scored order',
+        fields: <String, Object?>{
+          'pinned': pinned,
+          'format': source.format.name,
+          'tried': engines.join(','),
+        },
+      );
+
       return engines;
     }
 
