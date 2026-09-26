@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../common/player_control_buttons.dart';
 import '../common/player_controls_controller.dart';
 import '../common/player_controls_theme.dart';
+import '../common/player_progress_bar.dart';
 
-/// Control set in the Android / Material idiom.
+/// Control set in the Material Design idiom.
 ///
 /// What makes it read as Material rather than as "dark buttons":
 ///
@@ -11,18 +13,18 @@ import '../common/player_controls_theme.dart';
 ///   because Android put the actions there since the first YouTube app;
 /// - a filled circular play button in the middle, sized for a thumb;
 /// - a thick slider with a visible thumb, always, not only while dragging;
-/// - the duration on the right and the elapsed time on the left of the slider,
-///   with the mute and fullscreen glyphs at the ends of the same row;
+/// - the elapsed time and the duration on either side of the slider, with the
+///   mute and fullscreen glyphs at the ends of the same row;
 /// - ripple feedback on every control;
 /// - no volume slider: Android volume belongs to the hardware keys, and an
 ///   in-app slider would fight the system panel.
 ///
 /// ```dart
-/// MediaCorePlayerView(handle: handle, style: PlayerControlsStyle.android)
+/// MediaCorePlayerView(handle: handle, style: PlayerControlsStyle.material)
 /// ```
-final class AndroidPlayerControls extends StatelessWidget {
-  /// Creates the Android control set.
-  const AndroidPlayerControls({
+final class MaterialPlayerControls extends StatelessWidget {
+  /// Creates the Material control set.
+  const MaterialPlayerControls({
     required this.controller,
     super.key,
     this.theme,
@@ -36,7 +38,7 @@ final class AndroidPlayerControls extends StatelessWidget {
   /// Playback state and actions.
   final PlayerControlsController controller;
 
-  /// Colors and metrics; defaults to [PlayerControlsTheme.android].
+  /// Colors and metrics; defaults to [PlayerControlsTheme.material].
   final PlayerControlsTheme? theme;
 
   /// Whether the title rides in the top bar.
@@ -48,11 +50,10 @@ final class AndroidPlayerControls extends StatelessWidget {
   /// floating window.
   final bool showOverflowMenu;
 
-  /// Whether ±10 s buttons flank the play button.
+  /// Whether skip buttons flank the play button.
   ///
   /// Off by default — Android apps usually leave those to gestures — but the
-  /// buttons are there for hosts that want YouTube's tap-to-skip buttons
-  /// visible.
+  /// buttons exist for hosts that want YouTube's tap-to-skip pair visible.
   final bool showSkipButtons;
 
   /// Amount the skip buttons jump.
@@ -61,15 +62,15 @@ final class AndroidPlayerControls extends StatelessWidget {
   /// Padding around the whole set.
   final EdgeInsets padding;
 
-  PlayerControlsTheme get _theme => theme ?? const PlayerControlsTheme.android();
+  PlayerControlsTheme get _theme => theme ?? const PlayerControlsTheme.material();
 
   @override
   Widget build(BuildContext context) {
     final theme = _theme;
 
     return Material(
-      // Transparent, but present: Material widgets (ripple, menus, sliders)
-      // assert without a Material ancestor, and a host may be a Cupertino app.
+      // Transparent, but present: Material widgets assert without a Material
+      // ancestor, and a host may be a Cupertino app.
       type: MaterialType.transparency,
       child: ListenableBuilder(
         listenable: controller,
@@ -78,12 +79,7 @@ final class AndroidPlayerControls extends StatelessWidget {
             padding: padding,
             child: Column(
               children: <Widget>[
-                _TopBar(
-                  controller: controller,
-                  theme: theme,
-                  showTitle: showTitle,
-                  showOverflowMenu: showOverflowMenu,
-                ),
+                _TopBar(controller: controller, theme: theme, showTitle: showTitle, showMenu: showOverflowMenu),
                 Expanded(
                   child: _CenterControls(
                     controller: controller,
@@ -103,21 +99,17 @@ final class AndroidPlayerControls extends StatelessWidget {
 }
 
 final class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.controller,
-    required this.theme,
-    required this.showTitle,
-    required this.showOverflowMenu,
-  });
+  const _TopBar({required this.controller, required this.theme, required this.showTitle, required this.showMenu});
 
   final PlayerControlsController controller;
   final PlayerControlsTheme theme;
   final bool showTitle;
-  final bool showOverflowMenu;
+  final bool showMenu;
 
   @override
   Widget build(BuildContext context) {
     final title = controller.title;
+    final icons = theme.icons;
 
     return ColoredBox(
       color: theme.scrim,
@@ -126,28 +118,24 @@ final class _TopBar extends StatelessWidget {
         child: Row(
           children: <Widget>[
             if (showTitle && title != null)
-              Expanded(
-                child: Text(title, style: theme.titleTextStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-              )
+              Expanded(child: Text(title, style: theme.titleTextStyle, maxLines: 1, overflow: TextOverflow.ellipsis))
             else
               const Spacer(),
             if (controller.canCaptureScreenshot)
               PlayerIconButton(
-                icon: Icons.photo_camera_outlined,
+                icon: icons.screenshot,
                 theme: theme,
-                ripple: true,
                 tooltip: 'Save frame',
                 onPressed: controller.captureScreenshot,
               ),
             if (controller.actions.canEnterPip)
               PlayerIconButton(
-                icon: Icons.picture_in_picture_alt_outlined,
+                icon: icons.pictureInPicture,
                 theme: theme,
-                ripple: true,
                 tooltip: 'Picture in picture',
                 onPressed: controller.enterPip,
               ),
-            if (showOverflowMenu) _OverflowMenu(controller: controller, theme: theme),
+            if (showMenu) _OverflowMenu(controller: controller, theme: theme),
           ],
         ),
       ),
@@ -163,49 +151,12 @@ final class _OverflowMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = <PopupMenuEntry<String>>[
-      if (controller.canSeek)
-        PopupMenuItem<String>(
-          value: 'rate',
-          child: Row(
-            children: <Widget>[
-              const Icon(Icons.speed, size: 20),
-              const SizedBox(width: 12),
-              const Text('Playback speed'),
-              const Spacer(),
-              Text('${controller.rate.toStringAsFixed(2)}x', style: theme.timeTextStyle.copyWith(color: Colors.black87)),
-            ],
-          ),
-        ),
-      PopupMenuItem<String>(
-        value: 'loop',
-        child: Row(
-          children: <Widget>[
-            Icon(controller.isLooping ? Icons.repeat_on_outlined : Icons.repeat, size: 20),
-            const SizedBox(width: 12),
-            const Text('Loop'),
-            if (controller.isLooping) const Spacer(),
-            if (controller.isLooping) const Icon(Icons.check, size: 18),
-          ],
-        ),
-      ),
-      if (controller.actions.canEnterFloating)
-        const PopupMenuItem<String>(
-          value: 'floating',
-          child: Row(
-            children: <Widget>[
-              Icon(Icons.picture_in_picture_outlined, size: 20),
-              SizedBox(width: 12),
-              Text('Floating window'),
-            ],
-          ),
-        ),
-    ];
+    final icons = theme.icons;
 
     return PopupMenuButton<String>(
       tooltip: 'More',
       color: const Color(0xFF212121),
-      icon: const Icon(Icons.more_vert, size: 22, color: Color(0xFFFFFFFF)),
+      icon: Icon(icons.more, size: 22, color: theme.foreground),
       onSelected: (value) {
         switch (value) {
           case 'rate':
@@ -216,7 +167,44 @@ final class _OverflowMenu extends StatelessWidget {
             controller.enterFloating();
         }
       },
-      itemBuilder: (context) => entries,
+      itemBuilder: (context) => <PopupMenuEntry<String>>[
+        if (controller.canSeek)
+          PopupMenuItem<String>(
+            value: 'rate',
+            child: Row(
+              children: <Widget>[
+                Icon(icons.speed, size: 20),
+                const SizedBox(width: 12),
+                const Text('Playback speed'),
+                const Spacer(),
+                Text('${controller.rate.toStringAsFixed(2)}x', style: const TextStyle(color: Colors.black54)),
+              ],
+            ),
+          ),
+        PopupMenuItem<String>(
+          value: 'loop',
+          child: Row(
+            children: <Widget>[
+              Icon(icons.loop, size: 20),
+              const SizedBox(width: 12),
+              const Text('Loop'),
+              if (controller.isLooping) const Spacer(),
+              if (controller.isLooping) const Icon(Icons.check, size: 18),
+            ],
+          ),
+        ),
+        if (controller.actions.canEnterFloating)
+          PopupMenuItem<String>(
+            value: 'floating',
+            child: Row(
+              children: <Widget>[
+                Icon(icons.floatingWindow, size: 20),
+                const SizedBox(width: 12),
+                const Text('Floating window'),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -240,12 +228,10 @@ final class _CenterControls extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final icons = theme.icons;
+
     if (controller.isBuffering) {
-      return SizedBox(
-        width: theme.primaryIconSize,
-        height: theme.primaryIconSize,
-        child: CircularProgressIndicator(strokeWidth: 3, valueColor: AlwaysStoppedAnimation<Color>(theme.accent)),
-      );
+      return PlayerBufferingIndicator(theme: theme);
     }
 
     return Row(
@@ -253,10 +239,10 @@ final class _CenterControls extends StatelessWidget {
       children: <Widget>[
         if (showSkipButtons)
           IconButton(
-            iconSize: 32,
+            iconSize: theme.iconSize + 8,
             color: theme.foreground,
             tooltip: 'Back ${skipStep.inSeconds}s',
-            icon: const Icon(Icons.replay_10),
+            icon: Icon(icons.rewind),
             onPressed: () => controller.seekBy(-skipStep),
           ),
         Padding(
@@ -269,16 +255,16 @@ final class _CenterControls extends StatelessWidget {
               padding: const EdgeInsets.all(12),
             ),
             tooltip: controller.isPlaying ? 'Pause' : 'Play',
-            icon: Icon(controller.isPlaying ? Icons.pause : Icons.play_arrow),
+            icon: Icon(icons.transportFor(playing: controller.isPlaying)),
             onPressed: controller.togglePlayPause,
           ),
         ),
         if (showSkipButtons)
           IconButton(
-            iconSize: 32,
+            iconSize: theme.iconSize + 8,
             color: theme.foreground,
             tooltip: 'Forward ${skipStep.inSeconds}s',
-            icon: const Icon(Icons.forward_10),
+            icon: Icon(icons.forward),
             onPressed: () => controller.seekBy(skipStep),
           ),
       ],
@@ -294,6 +280,8 @@ final class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icons = theme.icons;
+
     return ColoredBox(
       color: theme.scrim,
       child: Padding(
@@ -302,31 +290,22 @@ final class _BottomBar extends StatelessWidget {
             ? Row(
                 children: <Widget>[
                   // YouTube-Android order: elapsed, slider, duration, then the
-                  // two glyphs at the end of the same row.
+                  // glyphs at the end of the same row.
                   Expanded(child: PlayerTimeline(controller: controller, theme: theme, barHeight: 26)),
                   PlayerIconButton(
-                    icon: controller.isMuted ? Icons.volume_off : Icons.volume_up,
+                    icon: icons.volumeFor(muted: controller.isMuted),
                     theme: theme,
-                    ripple: true,
                     tooltip: controller.isMuted ? 'Unmute' : 'Mute',
                     onPressed: controller.toggleMute,
                   ),
-                  if (controller.actions.canEnterFullscreen)
-                    PlayerIconButton(
-                      icon: Icons.fullscreen,
-                      theme: theme,
-                      ripple: true,
-                      tooltip: 'Fullscreen',
-                      onPressed: controller.enterFullscreen,
-                    ),
-                  if (controller.actions.canExitFullscreen)
-                    PlayerIconButton(
-                      icon: Icons.fullscreen_exit,
-                      theme: theme,
-                      ripple: true,
-                      tooltip: 'Leave fullscreen',
-                      onPressed: controller.exitFullscreen,
-                    ),
+                  PlayerIconButton(
+                    icon: icons.fullscreenFor(active: controller.actions.canExitFullscreen),
+                    theme: theme,
+                    tooltip: 'Fullscreen',
+                    onPressed: controller.actions.canExitFullscreen
+                        ? controller.exitFullscreen
+                        : (controller.actions.canEnterFullscreen ? controller.enterFullscreen : null),
+                  ),
                 ],
               )
             : Row(
@@ -342,17 +321,15 @@ final class _BottomBar extends StatelessWidget {
                     ),
                   const Spacer(),
                   PlayerIconButton(
-                    icon: controller.isMuted ? Icons.volume_off : Icons.volume_up,
+                    icon: icons.volumeFor(muted: controller.isMuted),
                     theme: theme,
-                    ripple: true,
                     tooltip: controller.isMuted ? 'Unmute' : 'Mute',
                     onPressed: controller.toggleMute,
                   ),
                   if (controller.actions.canEnterFullscreen)
                     PlayerIconButton(
-                      icon: Icons.fullscreen,
+                      icon: icons.fullscreen,
                       theme: theme,
-                      ripple: true,
                       tooltip: 'Fullscreen',
                       onPressed: controller.enterFullscreen,
                     ),

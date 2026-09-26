@@ -1,9 +1,11 @@
 import 'package:flutter/cupertino.dart';
+
 import '../common/player_control_buttons.dart';
 import '../common/player_controls_controller.dart';
 import '../common/player_controls_theme.dart';
+import '../common/player_progress_bar.dart';
 
-/// Control set in the iOS / AVPlayer idiom.
+/// Control set in the Cupertino / Human Interface Guidelines idiom.
 ///
 /// What makes it read as iOS rather than as "dark buttons":
 ///
@@ -11,20 +13,20 @@ import '../common/player_controls_theme.dart';
 ///   a row of small buttons;
 /// - the right-hand time counts *down* and is prefixed with a minus, so the
 ///   viewer reads "how much is left", not "how long it was";
-/// - a hairline progress bar that thickens only while it is being dragged;
+/// - a hairline progress bar with no thumb at all, which thickens only while it
+///   is being dragged;
 /// - a buffering spinner in place of the play glyph, not on top of it;
+/// - gradient scrims instead of panels, so the picture stays visible behind the
+///   controls;
 /// - no volume slider: iOS volume is the hardware buttons, and a second control
 ///   for it would be a lie.
 ///
-/// The scrim is a top and bottom gradient rather than a flat panel, so the
-/// picture stays visible behind the controls.
-///
 /// ```dart
-/// MediaCorePlayerView(handle: handle, style: PlayerControlsStyle.ios)
+/// MediaCorePlayerView(handle: handle, style: PlayerControlsStyle.cupertino)
 /// ```
-final class IosPlayerControls extends StatelessWidget {
-  /// Creates the iOS control set.
-  const IosPlayerControls({
+final class CupertinoPlayerControls extends StatelessWidget {
+  /// Creates the Cupertino control set.
+  const CupertinoPlayerControls({
     required this.controller,
     super.key,
     this.theme,
@@ -37,7 +39,7 @@ final class IosPlayerControls extends StatelessWidget {
   /// Playback state and actions.
   final PlayerControlsController controller;
 
-  /// Colors and metrics; defaults to [PlayerControlsTheme.ios].
+  /// Colors and metrics; defaults to [PlayerControlsTheme.cupertino].
   final PlayerControlsTheme? theme;
 
   /// Whether the title rides in the top bar.
@@ -52,7 +54,7 @@ final class IosPlayerControls extends StatelessWidget {
   /// Padding around the whole set.
   final EdgeInsets padding;
 
-  PlayerControlsTheme get _theme => theme ?? const PlayerControlsTheme.ios();
+  PlayerControlsTheme get _theme => theme ?? const PlayerControlsTheme.cupertino();
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +95,7 @@ final class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = controller.title;
+    final icons = theme.icons;
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -107,32 +110,24 @@ final class _TopBar extends StatelessWidget {
         child: Row(
           children: <Widget>[
             if (showTitle && title != null)
-              Expanded(
-                child: Text(title, style: theme.titleTextStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-              )
+              Expanded(child: Text(title, style: theme.titleTextStyle, maxLines: 1, overflow: TextOverflow.ellipsis))
             else
               const Spacer(),
             if (controller.actions.canEnterPip)
               PlayerIconButton(
-                icon: CupertinoIcons.rectangle_on_rectangle_angled,
+                icon: icons.pictureInPicture,
                 theme: theme,
                 tooltip: 'Picture in picture',
                 onPressed: controller.enterPip,
               ),
-            if (controller.actions.canEnterFullscreen)
-              PlayerIconButton(
-                icon: CupertinoIcons.arrow_up_left_arrow_down_right,
-                theme: theme,
-                tooltip: 'Fullscreen',
-                onPressed: controller.enterFullscreen,
-              ),
-            if (controller.actions.canExitFullscreen)
-              PlayerIconButton(
-                icon: CupertinoIcons.arrow_down_right_arrow_up_left,
-                theme: theme,
-                tooltip: 'Leave fullscreen',
-                onPressed: controller.exitFullscreen,
-              ),
+            PlayerIconButton(
+              icon: icons.fullscreenFor(active: controller.actions.canExitFullscreen),
+              theme: theme,
+              tooltip: 'Fullscreen',
+              onPressed: controller.actions.canExitFullscreen
+                  ? controller.exitFullscreen
+                  : (controller.actions.canEnterFullscreen ? controller.enterFullscreen : null),
+            ),
           ],
         ),
       ),
@@ -159,6 +154,8 @@ final class _CenterControls extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final icons = theme.icons;
+
     if (controller.isBuffering) {
       // The spinner *replaces* the glyph: a play button that does nothing while
       // the stream loads is the classic way to make a viewer tap twice.
@@ -172,7 +169,7 @@ final class _CenterControls extends StatelessWidget {
       children: <Widget>[
         if (showSkipButtons)
           PlayerIconButton(
-            icon: _rewindIcon(seconds),
+            icon: seconds <= 10 ? CupertinoIcons.gobackward_10 : (seconds >= 45 ? CupertinoIcons.gobackward_45 : icons.rewind),
             theme: theme,
             size: theme.primaryIconSize * 0.6,
             tooltip: 'Back ${seconds}s',
@@ -181,7 +178,7 @@ final class _CenterControls extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22),
           child: PlayerIconButton(
-            icon: controller.isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
+            icon: icons.transportFor(playing: controller.isPlaying),
             theme: theme,
             size: theme.primaryIconSize,
             tooltip: controller.isPlaying ? 'Pause' : 'Play',
@@ -190,7 +187,7 @@ final class _CenterControls extends StatelessWidget {
         ),
         if (showSkipButtons)
           PlayerIconButton(
-            icon: _forwardIcon(seconds),
+            icon: seconds <= 10 ? CupertinoIcons.goforward_10 : (seconds >= 45 ? CupertinoIcons.goforward_45 : icons.forward),
             theme: theme,
             size: theme.primaryIconSize * 0.6,
             tooltip: 'Forward ${seconds}s',
@@ -198,32 +195,6 @@ final class _CenterControls extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  /// Cupertino ships 10/30/45-second glyphs only; the closest one is used and
-  /// the tooltip states the real step.
-  IconData _rewindIcon(int seconds) {
-    if (seconds <= 10) {
-      return CupertinoIcons.gobackward_10;
-    }
-
-    if (seconds >= 45) {
-      return CupertinoIcons.gobackward_45;
-    }
-
-    return CupertinoIcons.gobackward_15;
-  }
-
-  IconData _forwardIcon(int seconds) {
-    if (seconds <= 10) {
-      return CupertinoIcons.goforward_10;
-    }
-
-    if (seconds >= 45) {
-      return CupertinoIcons.goforward_45;
-    }
-
-    return CupertinoIcons.goforward_15;
   }
 }
 
@@ -235,6 +206,8 @@ final class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icons = theme.icons;
+
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -253,22 +226,22 @@ final class _BottomBar extends StatelessWidget {
             Row(
               children: <Widget>[
                 PlayerIconButton(
-                  icon: controller.isMuted ? CupertinoIcons.speaker_slash_fill : CupertinoIcons.speaker_2_fill,
+                  icon: icons.volumeFor(muted: controller.isMuted),
                   theme: theme,
                   tooltip: controller.isMuted ? 'Unmute' : 'Mute',
                   onPressed: controller.toggleMute,
                 ),
                 if (controller.canCaptureScreenshot)
                   PlayerIconButton(
-                    icon: CupertinoIcons.camera,
+                    icon: icons.screenshot,
                     theme: theme,
                     tooltip: 'Save frame',
                     onPressed: controller.captureScreenshot,
                   ),
                 const Spacer(),
-                if (controller.actions.canEnterFullscreen)
+                if (controller.actions.canEnterFullscreen && !controller.actions.canExitFullscreen)
                   PlayerIconButton(
-                    icon: CupertinoIcons.arrow_up_left_arrow_down_right,
+                    icon: icons.fullscreen,
                     theme: theme,
                     tooltip: 'Fullscreen',
                     onPressed: controller.enterFullscreen,

@@ -2,8 +2,8 @@
 
 /// Public library for the `media_core_ui` package.
 ///
-/// Player UI for media_core: iOS, Android and desktop control sets over one
-/// shared control layer.
+/// Player UI for media_core: six design languages over one shared control
+/// layer.
 ///
 /// The package is split in two halves:
 ///
@@ -11,7 +11,8 @@
 ///   [PlayerHandle] and owns the controls' visibility, the theme tokens, the
 ///   timeline (progress bar + time labels), the control button, the keyboard
 ///   map and the stage that stacks the bars over the video.
-/// * `src/ios`, `src/android`, `src/windows` — one control set each. A set is
+/// * `src/material`, `src/cupertino`, `src/fluent`, `src/macos`, `src/yaru`,
+///   `src/neumorphic` — one control set per design language. A set is
 ///   stateless: it renders the controller's state and calls its actions.
 ///
 /// A host normally uses [MediaCorePlayerView], which assembles video, controls,
@@ -33,14 +34,18 @@ library;
 // Public exports
 // ============================================================================
 
-export 'src/android/android_player_controls.dart';
 export 'src/common/player_control_actions.dart';
 export 'src/common/player_control_buttons.dart';
+export 'src/common/player_control_icons.dart';
 export 'src/common/player_controls_controller.dart';
 export 'src/common/player_controls_stage.dart';
 export 'src/common/player_controls_style.dart';
 export 'src/common/player_controls_theme.dart';
 export 'src/common/player_progress_bar.dart';
-export 'src/ios/ios_player_controls.dart';
+export 'src/cupertino/cupertino_player_controls.dart';
+export 'src/fluent/fluent_player_controls.dart';
+export 'src/macos/macos_player_controls.dart';
+export 'src/material/material_player_controls.dart';
 export 'src/media_core_player_view.dart';
-export 'src/windows/windows_player_controls.dart';
+export 'src/neumorphic/neumorphic_player_controls.dart';
+export 'src/yaru/yaru_player_controls.dart';

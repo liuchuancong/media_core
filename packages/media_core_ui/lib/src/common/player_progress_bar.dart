@@ -1,16 +1,22 @@
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 
+import 'player_control_buttons.dart';
 import 'player_controls_controller.dart';
 import 'player_controls_theme.dart';
 
 /// The timeline every control set shares.
 ///
-/// One implementation of the interaction, themed by each style: drag to
-/// preview, release to seek, tap to jump, and a buffered range behind the
+/// One implementation of the interaction, themed by each design language: drag
+/// to preview, release to seek, tap to jump, and a buffered range behind the
 /// played range. Writing it once matters more than it sounds — "seek on every
 /// drag update" floods an engine with commands and makes a drag stutter, and
 /// every player that gets this wrong does so in the same place.
+///
+/// The look is tokenised rather than forked: [PlayerProgressThumb] decides
+/// whether the played part ends in a cap (Cupertino), a full circle (Material,
+/// Yaru, macOS) or a dot that grows under the pointer (Fluent), and
+/// [PlayerProgressTrack.inset] sinks the groove into the surface for soft UI.
 ///
 /// Responsibilities:
 ///
@@ -21,7 +27,7 @@ import 'player_controls_theme.dart';
 /// It does not:
 ///
 /// - decide colors or sizes ([PlayerControlsTheme] does)
-/// - show times (the bars do, driven by [onPreview])
+/// - show times (bars do, driven by [onPreview])
 final class PlayerProgressBar extends StatefulWidget {
   /// Creates a progress bar for [controller].
   const PlayerProgressBar({
@@ -33,15 +39,14 @@ final class PlayerProgressBar extends StatefulWidget {
     this.thumbRadius,
     this.trackHeight,
     this.trackHeightWhileDragging,
-    this.expandThumbOnDrag = true,
-    this.hoverable = false,
+    this.hoverable,
     this.padding = EdgeInsets.zero,
   });
 
   /// Controller whose player this bar seeks.
   final PlayerControlsController controller;
 
-  /// Colors and metrics.
+  /// Colors, metrics and shapes.
   final PlayerControlsTheme theme;
 
   /// Reports the position being previewed during a drag, and null when the drag
@@ -63,13 +68,8 @@ final class PlayerProgressBar extends StatefulWidget {
   /// Track height while dragging.
   final double? trackHeightWhileDragging;
 
-  /// Whether the track thickens during a drag.
-  final bool expandThumbOnDrag;
-
   /// Whether the track thickens while the pointer is over it.
-  ///
-  /// Desktop: the bar is otherwise a hairline.
-  final bool hoverable;
+  final bool? hoverable;
 
   /// Padding around the track inside the hit area.
   final EdgeInsets padding;
@@ -84,15 +84,17 @@ final class _PlayerProgressBarState extends State<PlayerProgressBar> {
 
   bool _hovering = false;
 
+  PlayerControlsTheme get _theme => widget.theme;
+
+  bool get _hoverable => widget.hoverable ?? !_theme.progressThumbShape.isNone;
+
+  bool get _growing => _dragFraction != null || (_hoverable && _hovering);
+
   double get _trackHeight {
-    final base = widget.trackHeight ?? widget.theme.trackHeight;
+    final base = widget.trackHeight ?? _theme.trackHeight;
 
-    if (_dragFraction != null) {
-      return widget.trackHeightWhileDragging ?? widget.theme.trackHeightWhileDragging;
-    }
-
-    if (widget.hoverable && _hovering) {
-      return widget.trackHeightWhileDragging ?? widget.theme.trackHeightWhileDragging;
+    if (_growing) {
+      return widget.trackHeightWhileDragging ?? _theme.trackHeightWhileDragging;
     }
 
     return base;
@@ -119,62 +121,83 @@ final class _PlayerProgressBarState extends State<PlayerProgressBar> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
+    final theme = _theme;
+    final barHeight = widget.height ?? (theme.progressThumbShape.isNone ? 22 : theme.thumbRadius * 2 + 10);
 
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: widget.hoverable ? (_) => setState(() => _hovering = true) : null,
-          onExit: widget.hoverable ? (_) => setState(() => _hovering = false) : null,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (details) {
-              // A tap is a complete gesture: seeking right away is what the
-              // viewer asked for.
-              final fraction = _fractionFor(details.localPosition, width);
-
-              widget.controller.seekTo(_positionFor(fraction));
-            },
-            onHorizontalDragStart: (details) {
-              setState(() => _dragFraction = _fractionFor(details.localPosition, width));
-
-              widget.onPreview?.call(_positionFor(_dragFraction!));
-            },
-            onHorizontalDragUpdate: (details) {
-              final fraction = _fractionFor(details.localPosition, width);
-
-              setState(() => _dragFraction = fraction);
-
-              widget.onPreview?.call(_positionFor(fraction));
-            },
-            onHorizontalDragEnd: (_) => _commitDrag(),
-            onHorizontalDragCancel: _commitDrag,
-            child: Padding(
-              padding: widget.padding,
-              child: SizedBox(
-                height: widget.height ?? (widget.theme.thumbRadius * 2 + 8),
-                child: ValueListenableBuilder<PlaybackState>(
-                  valueListenable: widget.controller.playbackListenable,
-                  builder: (context, playback, _) {
-                    return CustomPaint(
-                      painter: _ProgressPainter(
-                        theme: widget.theme,
-                        trackHeight: _trackHeight,
-                        thumbRadius: widget.thumbRadius ?? widget.theme.thumbRadius,
-                        showThumb: _dragFraction != null || (widget.hoverable ? _hovering : true),
-                        playbackFraction: playback.hasDuration ? playback.progress.clamp(0.0, 1.0) : 0,
-                        dragFraction: _dragFraction,
-                      ),
-                    );
-                  },
-                ),
-              ),
+    Widget track = SizedBox(
+      height: barHeight,
+      child: ValueListenableBuilder<PlaybackState>(
+        valueListenable: widget.controller.playbackListenable,
+        builder: (context, playback, _) {
+          return CustomPaint(
+            painter: _ProgressPainter(
+              theme: theme,
+              trackHeight: _trackHeight,
+              thumbRadius: widget.thumbRadius ?? theme.thumbRadius,
+              thumb: theme.progressThumbShape,
+              revealThumb: _growing,
+              playbackFraction: playback.hasDuration ? playback.progress.clamp(0.0, 1.0) : 0,
+              dragFraction: _dragFraction,
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
+
+    if (theme.progressTrackShape == PlayerProgressTrack.inset) {
+      // Soft UI presses the track into the surface instead of laying a bar on
+      // top of it, so the groove is the surface and only the played part is
+      // painted.
+      track = SoftSurface(
+        theme: theme,
+        inset: true,
+        radius: (theme.trackHeight + 4) / 2,
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: track,
+      );
+    }
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (details) {
+          // A tap is a complete gesture: seeking right away is what the viewer
+          // asked for.
+          widget.controller.seekTo(_positionFor(_fractionFor(details.localPosition, _barWidth)));
+        },
+        onHorizontalDragStart: (details) {
+          final fraction = _fractionFor(details.localPosition, _barWidth);
+
+          setState(() => _dragFraction = fraction);
+
+          widget.onPreview?.call(_positionFor(fraction));
+        },
+        onHorizontalDragUpdate: (details) {
+          final fraction = _fractionFor(details.localPosition, _barWidth);
+
+          setState(() => _dragFraction = fraction);
+
+          widget.onPreview?.call(_positionFor(fraction));
+        },
+        onHorizontalDragEnd: (_) => _commitDrag(),
+        onHorizontalDragCancel: _commitDrag,
+        child: Padding(padding: widget.padding, child: track),
+      ),
+    );
+  }
+
+  /// Width of the bar's own box, used to turn a local x into a fraction.
+  double get _barWidth {
+    final box = context.findRenderObject();
+
+    if (box is RenderBox && box.hasSize) {
+      return box.size.width;
+    }
+
+    return 0;
   }
 
   void _commitDrag() {
@@ -198,7 +221,8 @@ final class _ProgressPainter extends CustomPainter {
     required this.theme,
     required this.trackHeight,
     required this.thumbRadius,
-    required this.showThumb,
+    required this.thumb,
+    required this.revealThumb,
     required this.playbackFraction,
     required this.dragFraction,
   });
@@ -206,7 +230,8 @@ final class _ProgressPainter extends CustomPainter {
   final PlayerControlsTheme theme;
   final double trackHeight;
   final double thumbRadius;
-  final bool showThumb;
+  final PlayerProgressThumb thumb;
+  final bool revealThumb;
   final double playbackFraction;
   final double? dragFraction;
 
@@ -216,7 +241,11 @@ final class _ProgressPainter extends CustomPainter {
     final track = Rect.fromLTWH(0, centerY - trackHeight / 2, size.width, trackHeight);
     final radius = Radius.circular(trackHeight / 2);
 
-    canvas.drawRRect(RRect.fromRectAndRadius(track, radius), Paint()..color = theme.progressTrack);
+    // Soft UI has already sunk the groove into the surface; painting another
+    // track on top of it would double the channel.
+    if (theme.progressTrackShape != PlayerProgressTrack.inset) {
+      canvas.drawRRect(RRect.fromRectAndRadius(track, radius), Paint()..color = theme.progressTrack);
+    }
 
     final played = dragFraction ?? playbackFraction;
 
@@ -224,20 +253,22 @@ final class _ProgressPainter extends CustomPainter {
       return;
     }
 
-    final playedRect = Rect.fromLTWH(0, track.top, size.width * played, trackHeight);
-
     canvas.drawRRect(
-      RRect.fromRectAndRadius(playedRect, radius),
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, track.top, size.width * played, trackHeight), radius),
       Paint()..color = theme.progressPlayed,
     );
 
-    if (!showThumb) {
+    if (thumb.isNone) {
       return;
     }
 
+    // Fluent's dot is small at rest and grows under the pointer; a full circle
+    // is always full size.
+    final scale = thumb.isDot ? (revealThumb ? 1.0 : 0.55) : 1.0;
+
     canvas.drawCircle(
       Offset(size.width * played, centerY),
-      thumbRadius,
+      thumbRadius * scale,
       Paint()..color = theme.progressThumb,
     );
   }
@@ -246,10 +277,103 @@ final class _ProgressPainter extends CustomPainter {
   bool shouldRepaint(_ProgressPainter oldDelegate) {
     return oldDelegate.trackHeight != trackHeight ||
         oldDelegate.thumbRadius != thumbRadius ||
-        oldDelegate.showThumb != showThumb ||
+        oldDelegate.thumb != thumb ||
+        oldDelegate.revealThumb != revealThumb ||
         oldDelegate.playbackFraction != playbackFraction ||
         oldDelegate.dragFraction != dragFraction ||
         oldDelegate.theme != theme;
+  }
+}
+
+/// Progress bar plus the two time labels, laid out the way a bar wants.
+///
+/// The labels move during a drag because they read the same preview the bar
+/// reports: a viewer dragging on a phone cannot see the thumb under their
+/// finger, so the text is the feedback.
+final class PlayerTimeline extends StatefulWidget {
+  /// Creates a timeline row.
+  const PlayerTimeline({
+    required this.controller,
+    required this.theme,
+    super.key,
+    this.showRemaining = false,
+    this.padding,
+    this.barHeight,
+    this.hoverable,
+    this.spacing,
+  });
+
+  /// Controller whose player this timeline drives.
+  final PlayerControlsController controller;
+
+  /// Colors and metrics.
+  final PlayerControlsTheme theme;
+
+  /// Whether the right label counts down instead of showing the duration.
+  ///
+  /// The Cupertino convention; the others show the total.
+  final bool showRemaining;
+
+  /// Padding around the row.
+  final EdgeInsets? padding;
+
+  /// Height of the bar's hit area.
+  final double? barHeight;
+
+  /// Whether the bar thickens under the pointer.
+  final bool? hoverable;
+
+  /// Gap between a label and the bar.
+  final double? spacing;
+
+  @override
+  State<PlayerTimeline> createState() => _PlayerTimelineState();
+}
+
+final class _PlayerTimelineState extends State<PlayerTimeline> {
+  Duration? _preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final spacing = widget.spacing ?? theme.barGap;
+
+    return ValueListenableBuilder<PlaybackState>(
+      valueListenable: widget.controller.playbackListenable,
+      builder: (context, playback, _) {
+        final duration = playback.duration;
+        final position = _preview ?? playback.position;
+        final hours = duration.inHours > 0;
+
+        final left = formatPlayerDuration(position, showHours: hours);
+
+        final right = widget.showRemaining
+            ? '-${formatPlayerDuration(duration - position, showHours: hours)}'
+            : formatPlayerDuration(duration, showHours: hours);
+
+        return Padding(
+          padding: widget.padding ?? const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: <Widget>[
+              Text(left, style: theme.timeTextStyle, maxLines: 1, softWrap: false),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: spacing),
+                  child: PlayerProgressBar(
+                    controller: widget.controller,
+                    theme: theme,
+                    height: widget.barHeight,
+                    hoverable: widget.hoverable,
+                    onPreview: (value) => setState(() => _preview = value),
+                  ),
+                ),
+              ),
+              Text(right, style: theme.timeTextStyle, maxLines: 1, softWrap: false),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -268,4 +392,13 @@ String formatPlayerDuration(Duration duration, {bool showHours = false}) {
   }
 
   return '${two(minutes)}:${two(seconds)}';
+}
+
+/// Whether a thumb shape draws nothing at all.
+extension PlayerProgressThumbShape on PlayerProgressThumb {
+  /// Whether the played part ends in a rounded cap instead of a thumb.
+  bool get isNone => this == PlayerProgressThumb.none;
+
+  /// Whether the thumb is a dot that grows under the pointer.
+  bool get isDot => this == PlayerProgressThumb.dot;
 }

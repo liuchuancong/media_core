@@ -2,14 +2,17 @@ import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatf
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 
-import 'android/android_player_controls.dart';
 import 'common/player_control_actions.dart';
 import 'common/player_controls_controller.dart';
 import 'common/player_controls_stage.dart';
 import 'common/player_controls_style.dart';
 import 'common/player_controls_theme.dart';
-import 'ios/ios_player_controls.dart';
-import 'windows/windows_player_controls.dart';
+import 'cupertino/cupertino_player_controls.dart';
+import 'fluent/fluent_player_controls.dart';
+import 'macos/macos_player_controls.dart';
+import 'material/material_player_controls.dart';
+import 'neumorphic/neumorphic_player_controls.dart';
+import 'yaru/yaru_player_controls.dart';
 
 /// What a double tap on the video does.
 ///
@@ -29,13 +32,13 @@ enum PlayerDoubleTapAction {
   /// Do nothing; the host handles it.
   none;
 
-  /// What a style does by default.
+  /// What a design language does by default.
+  ///
+  /// Touch languages magnify — the gesture is already in the viewer's muscle
+  /// memory from every photo app; pointer languages toggle the window, which is
+  /// what a double click means on a desktop.
   static PlayerDoubleTapAction forStyle(PlayerControlsStyle style) {
-    return switch (style) {
-      PlayerControlsStyle.ios => PlayerDoubleTapAction.zoom,
-      PlayerControlsStyle.android => PlayerDoubleTapAction.zoom,
-      PlayerControlsStyle.windows => PlayerDoubleTapAction.fullscreen,
-    };
+    return style.isTouch ? PlayerDoubleTapAction.zoom : PlayerDoubleTapAction.fullscreen;
   }
 }
 
@@ -274,7 +277,10 @@ final class _MediaCorePlayerViewState extends State<MediaCorePlayerView> {
       fit: widget.fit,
       alignment: widget.alignment,
       mirror: widget.mirror,
-      backgroundColor: widget.backgroundColor,
+      // Soft UI is invisible without a page that shares its surface color, so
+      // the composed view seeds the background from the theme; every other
+      // language keeps the neutral black.
+      backgroundColor: widget.backgroundColor ?? (style == PlayerControlsStyle.neumorphic ? _theme.surface : null),
       captureBoundary: widget.captureBoundary,
       zoom: _zoom,
       enablePinchZoom: widget.pinchToZoom,
@@ -305,9 +311,12 @@ final class _MediaCorePlayerViewState extends State<MediaCorePlayerView> {
     final theme = _theme;
 
     return switch (style) {
-      PlayerControlsStyle.ios => IosPlayerControls(controller: controller, theme: theme),
-      PlayerControlsStyle.android => AndroidPlayerControls(controller: controller, theme: theme),
-      PlayerControlsStyle.windows => WindowsPlayerControls(controller: controller, theme: theme),
+      PlayerControlsStyle.material => MaterialPlayerControls(controller: controller, theme: theme),
+      PlayerControlsStyle.cupertino => CupertinoPlayerControls(controller: controller, theme: theme),
+      PlayerControlsStyle.fluent => FluentPlayerControls(controller: controller, theme: theme),
+      PlayerControlsStyle.macos => MacosPlayerControls(controller: controller, theme: theme),
+      PlayerControlsStyle.yaru => YaruPlayerControls(controller: controller, theme: theme),
+      PlayerControlsStyle.neumorphic => NeumorphicPlayerControls(controller: controller, theme: theme),
     };
   }
 }
