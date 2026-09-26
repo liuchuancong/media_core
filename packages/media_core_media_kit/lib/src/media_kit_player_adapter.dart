@@ -185,7 +185,9 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   String? _videoCodec;
 
   /// Loopback relay for the source being opened when the bundled FFmpeg
-  /// cannot read it as served. See [FlvLegacyHevcRelay].
+  /// cannot read it as served (legacy codec-id-12 HEVC in FLV). The mechanism
+  /// lives in `media_core`'s source layer; which hosts it applies to comes from
+  /// [MediaKitPlayerConfig.legacyHevcFlvHosts]. See [FlvLegacyHevcRelay].
   FlvLegacyHevcRelay? _hevcRelay;
 
   // ignore: unused_field
@@ -401,13 +403,14 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     await _closeHevcRelay();
 
     final url = source.uri.toString();
-    if (!FlvLegacyHevcRelay.appliesTo(url)) return;
+    if (!FlvLegacyHevcRelay.appliesTo(url, hostSuffixes: config.legacyHevcFlvHosts)) return;
 
     try {
       _hevcRelay = await FlvLegacyHevcRelay.start(
         url,
         source.hasHeaders ? source.headers!.values : const <String, String>{},
         findProxy: (_) => _relayProxyDirective(),
+        hostSuffixes: config.legacyHevcFlvHosts,
       );
       _privateInput = true;
     } catch (error) {

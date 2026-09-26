@@ -20,6 +20,16 @@ typedef MediaKitProxyUrlResolver = String Function({required bool privateInput})
 ///
 /// macOS unconditionally forces `hwdec=no` regardless of anything here.
 final class MediaKitPlayerConfig {
+  /// Host suffixes where codec-id-12 HEVC has been observed.
+  ///
+  /// On 17LIVE it depends on the broadcaster's encoder; AVC tags pass through
+  /// the relay unchanged either way.
+  static const Set<String> defaultLegacyHevcFlvHosts = <String>{
+    '.livetech.shopee.co.id',
+    '.livestream.shopee.co.id',
+    '.17app.co',
+  };
+
   const MediaKitPlayerConfig({
     this.proxyUrlResolver,
     this.enableCodec = true,
@@ -29,6 +39,7 @@ final class MediaKitPlayerConfig {
     this.videoOutputDriver = 'auto',
     this.audioOutputDriver,
     this.enableRtxVsr = false,
+    this.legacyHevcFlvHosts = defaultLegacyHevcFlvHosts,
     this.extraProperties = const <String, String>{},
 
     // VideoControllerConfiguration passthrough.
@@ -74,6 +85,20 @@ final class MediaKitPlayerConfig {
   ///
   /// Silently ignored on every other platform.
   final bool enableRtxVsr;
+
+  /// Host suffixes whose plain FLV may carry legacy (codec-id-12) HEVC.
+  ///
+  /// FFmpeg only learned that spelling in 8.0, and the FFmpeg inside a bundled
+  /// libmpv is older, so such a stream plays audio only. The adapter routes
+  /// those hosts through a loopback relay that rewrites the tag header
+  /// (`FlvLegacyHevcRelay` in `media_core`'s source layer).
+  ///
+  /// The list is deployment knowledge — which CDNs do this depends on the
+  /// rooms an app plays and on individual broadcasters' encoders — so it is
+  /// configuration rather than a constant. It defaults to the hosts this
+  /// workaround has been observed on; an app serving other rooms passes its own
+  /// list, and an empty list disables the relay entirely.
+  final Set<String> legacyHevcFlvHosts;
 
   /// Escape hatch: additional native mpv properties applied after the
   /// built-in contract.
@@ -141,6 +166,7 @@ final class MediaKitPlayerConfig {
     String? videoOutputDriver,
     Object? audioOutputDriver = _noChange,
     bool? enableRtxVsr,
+    Set<String>? legacyHevcFlvHosts,
     Map<String, String>? extraProperties,
 
     // VideoControllerConfiguration passthrough.
@@ -163,6 +189,7 @@ final class MediaKitPlayerConfig {
           ? this.audioOutputDriver
           : audioOutputDriver as String?,
       enableRtxVsr: enableRtxVsr ?? this.enableRtxVsr,
+      legacyHevcFlvHosts: legacyHevcFlvHosts ?? this.legacyHevcFlvHosts,
       extraProperties: extraProperties ?? this.extraProperties,
 
       videoScale: videoScale ?? this.videoScale,

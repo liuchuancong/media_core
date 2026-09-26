@@ -26,4 +26,3 @@ export 'src/utils/player_consts.dart' show PlayerConsts;
 export 'src/utils/mpv_platform_profile.dart' show MpvPlatformProfile;
 export 'src/utils/mpv_decode_policy.dart' show MpvDecodePolicy;
 export 'src/utils/live_buffer_policy.dart' show LiveBufferPolicy;
-export 'src/utils/flv_legacy_hevc_relay.dart' show FlvLegacyHevcRelay, FlvLegacyHevcTagRewriter, FlvTagFramer;
