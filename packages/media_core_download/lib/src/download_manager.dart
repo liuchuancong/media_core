@@ -102,7 +102,12 @@ final class DownloadManager {
   final DateTime Function() _clock;
 
   final Map<String, DownloadTask> _tasks = <String, DownloadTask>{};
-  final Set<TaskId> _inFlight = <TaskId>{};
+  /// Task → the attempt currently transferring it.
+  ///
+  /// A token rather than a set: a task can have a previous attempt winding down
+  /// while a new one starts (pause, then resume), and the old attempt's cleanup
+  /// must not unregister the new one.
+  final Map<TaskId, Object> _inFlight = <TaskId, Object>{};
   final Map<String, Timer> _retryTimers = <String, Timer>{};
   final StreamController<DownloadTask> _taskController = StreamController<DownloadTask>.broadcast();
 
@@ -149,9 +154,8 @@ final class DownloadManager {
       fields: <String, Object?>{'id': task.id.value, 'url': task.url, 'priority': task.priority.name},
     );
 
-    _register(task);
+    unawaited(_register(task).then((_) => _pump()));
     _emit(task.copyWith(status: DownloadStatus.queued, clearError: true));
-    unawaited(_pump());
   }
 
   /// Removes a task and any partial file it produced.
@@ -177,10 +181,15 @@ final class DownloadManager {
       return;
     }
 
-    if (_queue.get(TaskId(id)) == null) {
-      _register(task);
-    } else {
+    // A paused download left the core queue *cancelled*, and a cancelled core
+    // task cannot be queued again — resuming has to register a fresh one. This
+    // is the same reason the retry path re-registers rather than re-queues, and
+    // without it "pause, then resume" silently did nothing at all.
+    final queued = _queue.get(TaskId(id));
+    if (queued != null && (queued.isQueued || queued.isRunning)) {
       _queue.queue(TaskId(id));
+    } else {
+      await _register(task);
     }
     _emit(task.copyWith(status: DownloadStatus.queued, clearError: true));
     await _pump();
@@ -191,12 +200,30 @@ final class DownloadManager {
   /// The task leaves the core queue: a paused download is not waiting for a
   /// slot, it is waiting for the viewer. Leaving it queued would restart it the
   /// moment capacity appeared.
+  ///
+  /// A task that has been queued but has not started yet is paused too. A viewer
+  /// who presses pause during the moment before a transfer begins means it, and
+  /// that moment is easy to hit when several downloads are waiting for a slot.
   Future<void> pause(String id) async {
     _ensureNotDisposed();
     final task = _tasks[id];
-    if (task == null || !task.isRunning) {
+    if (task == null || task.isTerminal) {
       return;
     }
+
+    if (!task.isRunning) {
+      if (task.status != DownloadStatus.queued) {
+        return;
+      }
+      _log.info('pausing a queued download', fields: <String, Object?>{'id': id});
+      _retryTimers.remove(id)?.cancel();
+      _queue.cancel(task.id, 'paused by the viewer');
+      _queue.remove(task.id);
+      _inFlight.remove(task.id);
+      _emit(task.copyWith(status: DownloadStatus.paused));
+      return;
+    }
+
     _log.info('pausing a download', fields: <String, Object?>{'id': id, 'receivedBytes': task.progress.receivedBytes});
     _retryTimers.remove(id)?.cancel();
     _queue.cancel(task.id, 'paused by the viewer');
@@ -228,8 +255,7 @@ final class DownloadManager {
       return;
     }
     _retryTimers.remove(id)?.cancel();
-    _queue.remove(TaskId(id));
-    _register(task.copyWith(progress: task.progress.copyWith(attempt: 1)));
+    await _register(task.copyWith(progress: task.progress.copyWith(attempt: 1)));
     _emit(task.copyWith(status: DownloadStatus.queued, progress: task.progress.copyWith(attempt: 1), clearError: true));
     await _pump();
   }
@@ -272,7 +298,7 @@ final class DownloadManager {
   void _reportMemory() {
     var bytes = 0;
     var active = 0;
-    for (final id in _inFlight) {
+    for (final id in _inFlight.keys) {
       final task = _tasks[id.value];
       if (task == null) {
         continue;
@@ -289,7 +315,7 @@ final class DownloadManager {
     if (_disposed) {
       return;
     }
-    for (final id in _inFlight.toList()) {
+    for (final id in _inFlight.keys.toList()) {
       await pause(id.value);
     }
     for (final timer in _retryTimers.values) {
@@ -313,20 +339,43 @@ final class DownloadManager {
   /// The core separates the two on purpose — a task can exist without being
   /// scheduled — so both steps are needed here: a download the viewer asked for
   /// is work to do, not a record of work.
-  void _register(DownloadTask task) {
-    _queue.register(
-      PlayerTask(
-        id: task.id,
-        type: downloadTaskType,
-        priority: task.priority,
-        context: TaskContext(
-          source: task.url,
-          description: task.title ?? task.fileName,
-          metadata: <String, Object?>{'filePath': task.filePath},
-        ),
+  /// Registers a fresh core task for [task] and queues it.
+  ///
+  /// `registerOrReplace`, not `register`: a task that was paused or failed is
+  /// still in the scheduler as a cancelled entry, and `register` refuses a
+  /// duplicate id while `queue` refuses a terminal one — so a resumed or retried
+  /// transfer silently never ran at all.
+  ///
+  /// The wait is for the previous attempt's execution slot: the queue frees it
+  /// when that attempt's handler returns, which happens as soon as its transfer
+  /// loop notices it is no longer in flight. Until then the queue refuses a
+  /// replacement, and the replacement is the only way back in.
+  Future<void> _register(DownloadTask task) async {
+    final coreTask = PlayerTask(
+      id: task.id,
+      type: downloadTaskType,
+      priority: task.priority,
+      context: TaskContext(
+        source: task.url,
+        description: task.title ?? task.fileName,
+        metadata: <String, Object?>{'filePath': task.filePath},
       ),
     );
+
+    for (var attempt = 0; ; attempt++) {
+      try {
+        _queue.registerOrReplace(coreTask);
+        break;
+      } on StateError {
+        if (attempt >= 600) {
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
     _queue.queue(task.id);
+    // ignore: avoid_print
   }
 
   /// Runs as many queued transfers as the core queue has capacity for.
@@ -337,6 +386,7 @@ final class DownloadManager {
     if (_disposed) {
       return;
     }
+    // ignore: avoid_print
     while (!_disposed && _queue.hasCapacity && _queue.hasQueuedTasks) {
       // Not awaited: a transfer runs until it finishes, and waiting here would
       // serialize the whole queue behind the first task.
@@ -353,19 +403,30 @@ final class DownloadManager {
       await _queue.execute((coreTask) async {
         final id = coreTask.id.value;
         final task = _tasks[id];
+        // ignore: avoid_print
         if (task == null || task.isTerminal) {
           return null;
         }
 
-        _inFlight.add(task.id);
+        final attempt = Object();
+        _inFlight[task.id] = attempt;
         _log.debug(
           'transfer started',
           fields: <String, Object?>{'id': id, 'attempt': task.progress.attempt, 'priority': task.priority.name},
         );
         _emit(task.copyWith(status: DownloadStatus.running, clearError: true));
         try {
-          await _transfer(task);
-          _complete(id);
+          final finished = await _transfer(task);
+
+          if (finished) {
+            _complete(id);
+          } else {
+            // Abandoned: the status the pause/cancel already published stands.
+            _log.debug(
+              'transfer stopped before it finished',
+              fields: <String, Object?>{'id': id, 'status': _tasks[id]?.status.name},
+            );
+          }
           return null;
         } catch (error) {
           // Rethrown on purpose: the core queue is what records a failed task.
@@ -374,7 +435,13 @@ final class DownloadManager {
           // already terminal.
           Error.throwWithStackTrace(error, StackTrace.current);
         } finally {
-          _inFlight.remove(task.id);
+          // Only this attempt's own registration is removed. A resumed attempt
+          // registers its own while the previous one is still winding down, and
+          // clearing that would make the resumed transfer conclude it had
+          // nothing to do — completing a file that is only partly there.
+          if (identical(_inFlight[task.id], attempt)) {
+            _inFlight.remove(task.id);
+          }
         }
       });
     } on TaskExecutionFailure catch (failure) {
@@ -387,6 +454,7 @@ final class DownloadManager {
       // task was cancelled) has already been reflected in the download status.
     }
 
+    // ignore: avoid_print
     if (!_disposed && _queue.hasQueuedTasks) {
       await _pump();
     }
@@ -398,7 +466,13 @@ final class DownloadManager {
   /// A mismatch is not a failure: the attempt restarts from zero, which is the
   /// point of verifying before appending. Only a *second* mismatch — from a file
   /// this attempt just wrote — is reported.
-  Future<void> _transfer(DownloadTask task) async {
+  /// Returns whether the transfer finished.
+  ///
+  /// `false` means the attempt was abandoned — a pause or a cancel removed it
+  /// from the in-flight set — and the caller must not treat the file on disk as
+  /// complete. This is the difference between "the stream ended" and "nobody is
+  /// listening any more", and conflating them marked paused downloads completed.
+  Future<bool> _transfer(DownloadTask task) async {
     await _files.ensureParentDirectory(task.filePath);
 
     var resumable = await _files.length(task.filePath) > 0;
@@ -410,8 +484,7 @@ final class DownloadManager {
     }
     while (true) {
       try {
-        await _transferOnce(task, resume: resumable);
-        return;
+        return await _transferOnce(task, resume: resumable);
       } on _ResumeMismatch {
         if (!resumable) {
           rethrow;
@@ -429,7 +502,7 @@ final class DownloadManager {
     }
   }
 
-  Future<void> _transferOnce(DownloadTask task, {required bool resume}) async {
+  Future<bool> _transferOnce(DownloadTask task, {required bool resume}) async {
     var startByte = 0;
     final localBytes = await _files.length(task.filePath);
     int? remoteBytes;
@@ -447,8 +520,8 @@ final class DownloadManager {
       }
     }
 
-    if (!_inFlight.contains(task.id)) {
-      return;
+    if (!_inFlight.containsKey(task.id)) {
+      return false;
     }
 
     var response = await _transport.fetch(_requestFor(task, startByte));
@@ -473,8 +546,8 @@ final class DownloadManager {
     final needsVerification = startByte > 0 && verifyBytes > 0;
 
     await for (final chunk in response.byteStream) {
-      if (!_inFlight.contains(task.id)) {
-        return;
+      if (!_inFlight.containsKey(task.id)) {
+        return false;
       }
       if (chunk.isEmpty) {
         continue;
@@ -521,17 +594,15 @@ final class DownloadManager {
       throw StateError('Transfer ended at $received of $total bytes.');
     }
 
-    _emit(
-      _tasks[task.id.value]!.copyWith(
-        status: DownloadStatus.completed,
-        progress: DownloadProgress(
-          receivedBytes: received,
-          totalBytes: total ?? received,
-          attempt: task.progress.attempt,
-        ),
-        clearError: true,
+    _tasks[task.id.value] = _tasks[task.id.value]!.copyWith(
+      progress: DownloadProgress(
+        receivedBytes: received,
+        totalBytes: total ?? received,
+        attempt: task.progress.attempt,
       ),
     );
+
+    return true;
   }
 
   DownloadRequest _requestFor(DownloadTask task, int startByte) {
@@ -573,6 +644,11 @@ final class DownloadManager {
   void _complete(String id) {
     final task = _tasks[id];
     if (task == null || task.status.isTerminal) {
+      return;
+    }
+    if (task.status != DownloadStatus.running) {
+      // A pause, a cancel or a retry moved this task on while the transfer was
+      // still unwinding. Completing it here would overwrite that decision.
       return;
     }
     _reportMemory();
@@ -635,10 +711,9 @@ final class DownloadManager {
         return;
       }
       _emit(current.copyWith(status: DownloadStatus.queued));
-      // A fresh core task: the previous one is terminal, and a terminal task
-      // cannot be queued again.
-      _queue.remove(current.id);
-      _register(current);
+      // A fresh core task: the previous one is terminal, and a terminal core
+      // task cannot be queued again.
+      unawaited(_register(current));
       unawaited(_pump());
     });
   }

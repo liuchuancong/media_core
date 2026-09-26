@@ -1,7 +1,8 @@
 # media_core example
 
-A runnable tour of the framework: five pages that actually play media, plus a
-module tour that prints what the pure-logic modules did.
+A runnable tour of the framework: pages a developer interacts with (most of them
+playing real media, two running offline over fake players), plus a module tour
+that prints what the pure-logic modules actually did.
 
 ```bash
 flutter run -d windows      # or: -d macos / -d linux / -d <android-device>
@@ -20,6 +21,8 @@ version, no external fork.
 | **短视频上下滑** (feed) | One shared player re-opened per item (no engine startup between swipes); only the visible page mounts a video widget; the next item is preloaded. |
 | **音乐** (music) | The whole `media_core_audio` surface: a `MusicSource` implementation, queue + four play modes, lyric timeline, desktop-lyric window (with lock/style), background binding, and an ffmpeg download with live progress. |
 | **展示与弹幕** (presentation) | `kernel.attachPresentation(driver)` forwarding fullscreen/PiP/floating, and the danmaku session fed by a synthetic transport. |
+| **内存监控仪表盘** (memory) | The `media_core_memory` surface, live: per-module accounts, a budget slider that moves the pressure level, peaks, and a device-provider switch. **Runs offline.** |
+| **多画面视频墙** (multiview) | A monitoring wall: 2×2 / 3×3 layouts, focus and one audible cell, the decode budget degrading the wall, a frozen cell triggering the watchdog, patrol, per-cell danmaku. **Runs offline over fake players** — the wall logic is the real one. |
 
 Each page has an event log at the bottom: it is where the framework's own
 decisions (backend chosen, recovery rung, download progress) become visible,
@@ -32,6 +35,15 @@ their result.
 
 | Demo | What it prints |
 | --- | --- |
+| `memory` | Two instances adding up on one account, the total crossing `warning`/`critical`/`emergency`, the peak after a release, and a full report with declared **and** measured numbers side by side. |
+| `logging` | The actual records: which lines survived a level, what a category override changed, scope fields appearing inside `LogScope.run`, a filter narrowing output, and a throttle's `suppressed` count on the next line that got through. |
+| `cache` | LRU eviction (with the touched entry surviving), expiry dropped at read time, and the measured byte count the memory module reads from the cache. |
+| `task` | Priority ordering under a concurrency cap, three serialized operations, a mutex turning a racing read-modify-write into a predictable one, and a retry budget with its backoff sequence. |
+| `pool` | Every reconciliation of the playback pool: which item became active, which stayed warm, when an idle player was re-pointed instead of created, and what pressure shrank. |
+| `list` | The resume rule: a position restored on the way back, an item abandoned inside the completion threshold restarting, and a live stream never counting as finished. |
+| `fault` | The fault vocabulary, injection gated by `BugModeConfig`, and `ErrorPolicy` deciding retryability per code *and* per attempt count. |
+| `download` | Two transfers at a time with a third queued, a paused transfer resumed after verifying its tail, a poisoned partial file restarting from zero, and an attempt budget ending a task visibly. |
+| `recording` | The exact FFmpeg argument list for FLV/HLS/RTMP sources, then the recording state machine driven by a fake process — including why exit code 255 needs a stop intent. |
 | `lrc` | A parsed lyric table (repeated timestamps, offset, merged translation, `<mm:ss.xx>` word timing) and a timeline walk showing that only line changes emit events. |
 | `queue` | A queue walk per play mode — including that a user "next" on the last track does **not** silently wrap in `list` mode — plus the shuffled permutation and `insertNext`. |
 | `source` | `search → resolveTrackSource → TrackSource → PlayerSource`, with headers/`expiresAt`, and an expired resolution that would be re-resolved instead of replayed. |

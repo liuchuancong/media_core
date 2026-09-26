@@ -138,6 +138,19 @@ void main() {
       expect(host.handles.where((handle) => handle.openedSource == 'item2').length, 1);
     });
 
+    test('an item the warm window still covers is reported as warm, not idle', () async {
+      final pool = await build();
+      await pool.onVisibilityChanged(2, 1);
+
+      // Swiping one item on demotes item 2 from active; the warm window follows
+      // the new active item and still covers it, so it is held *for* this list —
+      // reporting it as idle would read as a player that could be released.
+      await pool.onVisibilityChanged(3, 1);
+
+      expect(pool.roleOf(2), PooledItemRole.warming);
+      expect(pool.roleOf(3), PooledItemRole.active);
+    });
+
     test('an item below the play threshold does not take over', () async {
       final pool = await build();
       await pool.onVisibilityChanged(2, 1);

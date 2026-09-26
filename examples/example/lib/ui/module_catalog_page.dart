@@ -32,7 +32,9 @@ class ModuleCatalogPage extends StatelessWidget {
         children: [
           _SectionHeader(
             title: isZh ? '可运行示例' : 'Runnable demos',
-            note: isZh ? '会真的创建播放器并播放媒体' : 'these create a player and actually play media',
+            note: isZh
+                ? '多数会真的创建播放器并播放媒体；内存与多画面两个页面完全离线'
+                : 'most create a player and actually play media; memory and multiview run fully offline',
           ),
           for (final demo in entries)
             ListTile(

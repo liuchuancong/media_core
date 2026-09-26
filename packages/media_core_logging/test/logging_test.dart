@@ -354,6 +354,21 @@ void main() {
       expect(await File('${file.path}.1').exists(), isTrue, reason: 'the previous file was rotated');
     });
 
+    test('close waits for a write that is already in flight', () async {
+      final directory = _tempDirectory();
+      final file = File('${directory.path}${Platform.pathSeparator}inflight.log');
+      final sink = LogFileSink(file);
+
+      // The first record triggers the sink's own unawaited flush; closing right
+      // after must not return before those bytes are on disk, because a bug
+      // report reads the file at that moment.
+      sink(PlayerLogRecord(level: LogLevel.info, category: LogCategory.pool, message: 'in flight'));
+      await sink.close();
+
+      expect(await file.exists(), isTrue);
+      expect(await file.readAsString(), contains('in flight'));
+    });
+
     test('close flushes and refuses further records', () async {
       final directory = _tempDirectory();
       final file = File('${directory.path}${Platform.pathSeparator}run.log');

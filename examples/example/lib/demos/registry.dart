@@ -1,20 +1,33 @@
 import '../pages/feed_demo_page.dart';
 import '../pages/live_demo_page.dart';
+import '../pages/memory_demo_page.dart';
 import '../pages/music_demo_page.dart';
+import '../pages/multiview_demo_page.dart';
 import '../pages/player_demo_page.dart';
 import '../pages/presentation_demo_page.dart';
+import 'console/cache_demo.dart';
+import 'console/download_demo.dart';
+import 'console/fault_demo.dart';
+import 'console/list_playback_demo.dart';
+import 'console/logging_demo.dart';
 import 'console/lyric_demo.dart';
+import 'console/memory_demo.dart';
 import 'console/platform_demo.dart';
+import 'console/pool_demo.dart';
 import 'console/queue_demo.dart';
+import 'console/recording_demo.dart';
 import 'console/source_demo.dart';
+import 'console/task_demo.dart';
 import 'module_demo.dart';
 import 'runnable_demo.dart';
 
-/// Pages that play media.
+/// Pages a developer interacts with.
 ///
-/// These are the demos a developer debugs against: each one creates a real
-/// player, so the framework's behaviour (backend selection, recovery,
-/// watchdogs, lyrics timing) is observable instead of described.
+/// Most create a real player, so the framework's behaviour (backend selection,
+/// recovery, watchdogs, lyrics timing) is observable instead of described. Two
+/// of them — the memory dashboard and the multiview wall — deliberately do not:
+/// they drive fake players, which is what makes the pool's and the wall's logic
+/// runnable with no backend, no network and no device.
 final List<RunnableDemo> runnableDemos = <RunnableDemo>[
   RunnableDemo(
     id: 'player',
@@ -49,6 +62,22 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
     builder: (_) => const MusicDemoPage(),
   ),
   RunnableDemo(
+    id: 'memory',
+    nameZh: '内存监控仪表盘',
+    nameEn: 'Memory dashboard',
+    purposeZh: '实时报告视图：预算滑杆、按模块上报/释放、压力等级与峰值、设备实测值开关。全部离线，不需要播放器。',
+    purposeEn: 'A live report view: budget slider, per-module report/release, pressure level and peaks, plus a device-provider switch. Fully offline, no player needed.',
+    builder: (_) => const MemoryDemoPage(),
+  ),
+  RunnableDemo(
+    id: 'multiview',
+    nameZh: '多画面视频墙',
+    nameEn: 'Multiview wall',
+    purposeZh: '2×2 / 3×3 网格、焦点与唯一音频归属、解码预算降级、冻格触发看门狗重启、巡更轮巡、逐格弹幕；播放器是假的，墙的逻辑是真的。',
+    purposeEn: 'A 2x2 / 3x3 grid with focus, one audible cell, budget degradation, a freezing cell that triggers the watchdog, patrol and per-cell danmaku. Fake players; real wall.',
+    builder: (_) => const MultiviewDemoPage(),
+  ),
+  RunnableDemo(
     id: 'presentation',
     nameZh: '全屏 / 画中画 / 悬浮窗 / 弹幕',
     nameEn: 'Fullscreen, PiP, floating & danmaku',
@@ -64,6 +93,20 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
 /// the output *is* the evidence — a lyric table, a queue walk, the exact ffmpeg
 /// argument list.
 final List<ModuleDemo> moduleDemos = <ModuleDemo>[
+  // Foundation: the shared infrastructure every other module reports through.
+  const MemoryDemo(),
+  const LoggingDemo(),
+  const CacheDemo(),
+  // Control and the playback chain.
+  const TaskDemo(),
+  const PoolDemo(),
+  const ListPlaybackDemo(),
+  // Failure handling.
+  const FaultDemo(),
+  // Capabilities.
+  const DownloadDemo(),
+  const RecordingDemo(),
+  // Domain demos that predate the split.
   const LyricDemo(),
   const QueueDemo(),
   const SourceDemo(),

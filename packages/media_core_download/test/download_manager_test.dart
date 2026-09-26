@@ -225,6 +225,47 @@ void main() {
       }
     }
 
+    test('a paused download resumes and finishes', () async {
+      // A transport that dribbles: the package's own fake serves the whole body
+      // in one chunk, so there would be nothing to pause.
+      final slow = _SlowTransport(_payload(1000));
+      final slowSink = _MemorySink();
+      final slowManager = DownloadManager(
+        transport: slow,
+        files: slowSink,
+        config: DownloadConfig.defaults.copyWith(retryDelay: Duration.zero, maxAttempts: 2),
+      );
+      addTearDown(slowManager.dispose);
+
+      slowManager.add(_task('resume-me'));
+
+      // Wait until it is actually mid-transfer, then pause. Pausing cancels the
+      // core queue task, and a cancelled core task cannot be queued again —
+      // which is what used to make "pause, then resume" do nothing at all.
+      for (var attempt = 0; attempt < 200 && slowSink.bytesOf('/downloads/resume-me.ts').isEmpty; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final partial = slowSink.bytesOf('/downloads/resume-me.ts').length;
+      expect(partial, greaterThan(0), reason: 'the transfer should have started');
+      expect(partial, lessThan(slow.payload.length), reason: 'and should not be finished yet');
+
+      await slowManager.pause('resume-me');
+      expect(slowManager.task('resume-me')!.status, DownloadStatus.paused);
+
+      await slowManager.resume('resume-me');
+      for (var attempt = 0; attempt < 400 && !(slowManager.task('resume-me')?.isTerminal ?? false); attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      expect(slowManager.task('resume-me')!.status, DownloadStatus.completed);
+      expect(slowSink.bytesOf('/downloads/resume-me.ts'), slow.payload);
+      expect(
+        slow.requests.any((request) => request.rangeHeader != null),
+        isTrue,
+        reason: 'the resumed transfer asked for the remaining bytes, not the whole file again',
+      );
+    });
+
     test('downloads a file end to end', () async {
       manager.add(_task('a'));
       await waitForTerminal('a');
@@ -381,4 +422,47 @@ void main() {
       expect(() => manager.add(_task('a')), throwsA(isA<StateError>()));
     });
   });
+}
+
+/// A server that streams its body in chunks with a delay.
+///
+/// The other fake answers in a single chunk, which finishes before a test can
+/// observe it mid-transfer; pausing needs a transfer that is still in flight.
+final class _SlowTransport implements DownloadTransport {
+  _SlowTransport(this.payload);
+
+  final Uint8List payload;
+
+  /// Bytes per chunk and the delay between them: enough for a test to catch the
+  /// transfer in flight, small enough to keep it fast.
+  static const int chunkSize = 128;
+  static const Duration chunkDelay = Duration(milliseconds: 20);
+
+  final List<DownloadRequest> requests = <DownloadRequest>[];
+
+  @override
+  Future<DownloadResponse> fetch(DownloadRequest request) async {
+    requests.add(request);
+
+    final start = request.startByte;
+    final body = payload.sublist(start);
+
+    Stream<List<int>> chunks() async* {
+      for (var offset = 0; offset < body.length; offset += chunkSize) {
+        await Future<void>.delayed(chunkDelay);
+        yield body.sublist(offset, (offset + chunkSize).clamp(0, body.length));
+      }
+    }
+
+    return DownloadResponse(
+      statusCode: start > 0 ? 206 : 200,
+      byteStream: chunks(),
+      contentLength: body.length,
+      totalBytes: payload.length,
+      acceptsRanges: true,
+    );
+  }
+
+  @override
+  Future<void> dispose() async {}
 }

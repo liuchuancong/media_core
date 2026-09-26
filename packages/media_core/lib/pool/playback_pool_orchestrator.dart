@@ -513,6 +513,12 @@ final class PlaybackPoolOrchestrator {
           // It was playing and is now only warm: stop it, keep it open.
           await existing.handle.pause();
           existing.role = PooledItemRole.warming;
+        } else if (existing.role == PooledItemRole.idle) {
+          // Demoted from active by the previous step and now back inside the warm
+          // window: it is held for this item, not idle for nothing. Reporting it
+          // as idle under-counts the warm window and makes a plan read as if the
+          // pool were holding a player it had already given back.
+          existing.role = PooledItemRole.warming;
         }
         continue;
       }

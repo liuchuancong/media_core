@@ -44,6 +44,10 @@ dependencies:
   media_core_logging:
     path: ../../packages/media_core_logging
 
+  # Memory accounting: the memory demo page and the cache demo both read it.
+  media_core_memory:
+    path: ../../packages/media_core_memory
+
   # Feature modules, one import per demo page below.
   media_core_live:
     path: ../../packages/media_core_live
@@ -55,6 +59,14 @@ dependencies:
     path: ../../packages/media_core_presentation
   media_core_danmaku:
     path: ../../packages/media_core_danmaku
+  media_core_multiview:
+    path: ../../packages/media_core_multiview
+  media_core_list_playback:
+    path: ../../packages/media_core_list_playback
+  media_core_download:
+    path: ../../packages/media_core_download
+  media_core_recording_ffmpeg:
+    path: ../../packages/media_core_recording_ffmpeg
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

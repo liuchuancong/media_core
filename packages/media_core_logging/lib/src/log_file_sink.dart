@@ -50,6 +50,10 @@ final class LogFileSink implements LogSink {
   final DateTime Function() _clock;
 
   final List<String> _buffer = <String>[];
+
+  /// Tail of the flush chain, so writes never interleave.
+  Future<void> _pending = Future<void>.value();
+
   int _flushedBytes = 0;
   DateTime? _lastFlush;
   bool _closed = false;
@@ -80,7 +84,21 @@ final class LogFileSink implements LogSink {
   }
 
   /// Writes the buffer and rotates the file when it grew past [maxBytes].
-  Future<void> flush() async {
+  ///
+  /// Concurrent calls are serialized rather than run in parallel, and a call
+  /// that arrives while a write is in flight waits for it. Both matters: the
+  /// `unawaited(flush())` from [call] and an explicit `await flush()` from a
+  /// caller must not interleave, and [close] must not return before the bytes it
+  /// promised are on disk — a bug report reads the file right after it.
+  Future<void> flush() {
+    final next = _pending.then((_) => _writeBuffer());
+    // The chain has to survive a failure, or one bad write would break every
+    // later flush.
+    _pending = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _writeBuffer() async {
     if (_closed || _buffer.isEmpty) {
       _lastFlush = _clock();
       return;
@@ -105,6 +123,8 @@ final class LogFileSink implements LogSink {
   }
 
   /// Flushes and releases the sink.
+  ///
+  /// Waits for writes already in flight, not only for the buffered lines.
   Future<void> close() async {
     if (_closed) {
       return;
