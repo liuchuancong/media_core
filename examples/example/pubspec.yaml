@@ -30,8 +30,31 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # The framework itself.
   media_core:
     path: ../../packages/media_core
+
+  # The backend this example plays through (media_kit is vendored in this
+  # repository, so no external fork is needed).
+  media_core_media_kit:
+    path: ../../packages/media_core_media_kit
+
+  # Logging: the framework logs through this package, and the example turns
+  # it on so the demo pages can show what the framework decides.
+  media_core_logging:
+    path: ../../packages/media_core_logging
+
+  # Feature modules, one import per demo page below.
+  media_core_live:
+    path: ../../packages/media_core_live
+  media_core_feed:
+    path: ../../packages/media_core_feed
+  media_core_audio:
+    path: ../../packages/media_core_audio
+  media_core_presentation:
+    path: ../../packages/media_core_presentation
+  media_core_danmaku:
+    path: ../../packages/media_core_danmaku
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

@@ -1,30 +1,18 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:example/main.dart';
 
+/// Smoke test: the example boots and lists its runnable demos.
+///
+/// Deliberately shallow — it touches no player and no native library, so it
+/// runs anywhere `flutter test` does. Its job is to catch a broken catalog
+/// wiring before a developer launches a device build.
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('catalog lists the runnable demos', (tester) async {
+    await tester.pumpWidget(const MediaCoreExampleApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('可运行示例'), findsOneWidget);
+    expect(find.text('播放器与生命周期'), findsOneWidget);
+    expect(find.text('音乐：队列 / 歌词 / 桌面歌词 / 后台 / 下载'), findsOneWidget);
   });
 }
