@@ -22,6 +22,111 @@ enum BackgroundJobKind {
   task,
 }
 
+/// What a session's notification says, and how far along the job is.
+///
+/// Every field is what the *host* knows and the platform can only be told: the
+/// library ships the mechanism, not the words. Only Android draws a
+/// notification today, so on the other platforms this describes something with
+/// no visible effect — [BackgroundExecutionSession.update] is then a no-op
+/// rather than an error, because the job's protection is the point and the
+/// notification is how the user is told about it.
+///
+/// ```dart
+/// final session = await BackgroundExecution.acquire(
+///   notification: const BackgroundNotification(
+///     title: '正在录制',
+///     text: 'room-42 · 00:12:34',
+///     kind: BackgroundJobKind.record,
+///     progress: BackgroundProgress.indeterminate(),
+///   ),
+/// );
+/// ```
+final class BackgroundNotification {
+  /// Creates a description of the notification.
+  const BackgroundNotification({
+    required this.title,
+    this.text,
+    this.kind = BackgroundJobKind.task,
+    this.icon,
+    this.progress,
+  });
+
+  /// First line: what is running. The host's own words (a room name, a
+  /// programme), which is why the library never invents it.
+  final String title;
+
+  /// Second line: what it is working on. Null shows a bare title.
+  final String? text;
+
+  /// What the job is; [icon] falls back to the glyph shipped for this kind.
+  final BackgroundJobKind kind;
+
+  /// Name of a drawable in the **host app's** `res/drawable` — the same
+  /// convention the media notification uses (`MediaSessionConfig.playIcon`).
+  ///
+  /// Null uses the glyph this package ships for [kind]. A name that does not
+  /// resolve in the host app also falls back to that glyph, so a missing asset
+  /// leaves a plain notification rather than a broken one.
+  final String? icon;
+
+  /// Progress to show, or null for none.
+  final BackgroundProgress? progress;
+
+  /// Same description with some fields replaced.
+  ///
+  /// What a long job uses to keep the notification moving (elapsed time, bytes
+  /// written, percentage) without holding on to every field it started with:
+  /// `session.update(description.copyWith(text: elapsed))`.
+  BackgroundNotification copyWith({
+    String? title,
+    String? text,
+    BackgroundJobKind? kind,
+    String? icon,
+    BackgroundProgress? progress,
+  }) {
+    return BackgroundNotification(
+      title: title ?? this.title,
+      text: text ?? this.text,
+      kind: kind ?? this.kind,
+      icon: icon ?? this.icon,
+      progress: progress ?? this.progress,
+    );
+  }
+
+  @override
+  String toString() =>
+      'BackgroundNotification(title: $title, text: $text, kind: ${kind.name}, icon: $icon, progress: $progress)';
+}
+
+/// How far along a job is, for the platforms that can show it.
+///
+/// A live recording has no total, which is why indeterminate is a first-class
+/// shape and not "0 of 0": a percentage the job cannot know would make the
+/// platform draw a bar that means nothing.
+final class BackgroundProgress {
+  /// The platform draws an activity indicator: the job is running, its end is
+  /// not known (a live recording).
+  const BackgroundProgress.indeterminate() : current = null, total = null;
+
+  /// The platform draws a filled bar: [current] out of [total] (a download).
+  const BackgroundProgress.determinate({required this.current, required this.total}) : assert(total != null && total > 0);
+
+  /// Completed units, or null when the end is unknown.
+  final int? current;
+
+  /// Units in total, or null when the end is unknown.
+  final int? total;
+
+  /// Whether the end is unknown.
+  bool get isIndeterminate => total == null;
+
+  /// Fraction complete in `0..1`, or null when indeterminate.
+  double? get fraction => total == null ? null : (current ?? 0) / total!;
+
+  @override
+  String toString() => isIndeterminate ? 'BackgroundProgress.indeterminate()' : 'BackgroundProgress($current/$total)';
+}
+
 /// Keeps a long-running job alive while the app is not in the foreground.
 ///
 /// Recording a stream, or downloading a large one, is work the user asked for
@@ -36,6 +141,21 @@ enum BackgroundJobKind {
 /// | macOS | keeps the system from idle-sleeping for as long as the session lives |
 /// | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)`: the system stays awake, the display may still turn off |
 /// | Linux | ⏳ not implemented (logind `Inhibit`); [acquire] reports null there |
+///
+/// ### What the host controls
+///
+/// The notification is described by a [BackgroundNotification]: title, second
+/// line, icon (a drawable of the host's own, or the glyph shipped for the job's
+/// [BackgroundJobKind]) and [BackgroundProgress]. It can be replaced at any time
+/// through [BackgroundExecutionSession.update] — which is what a long job uses to
+/// show elapsed time or a percentage — and it disappears with the session.
+///
+/// What is deliberately **not** configurable: buttons/actions (a stop button
+/// needs a callback path and a wake-up into Dart, which is a feature of its own),
+/// and the Android notification channel (one per library, so a user can silence
+/// "background tasks" as a group without hunting per job). Media *playback*
+/// notifications are a different surface with a different owner: that is
+/// `MediaSessionConfig` in `media_core_mediasession`.
 ///
 /// ### The Android notification permission
 ///
@@ -86,10 +206,8 @@ final class BackgroundExecution {
 
   /// Starts a background-execution session.
   ///
-  /// [title] and [text] are what the platform shows while the job runs — on
-  /// Android they are a notification the user can see (and tap, which returns
-  /// to the app); elsewhere they are ignored. [kind] picks the notification's
-  /// icon.
+  /// [notification] is what the user sees while the job runs — a notification on
+  /// Android (tapping it returns to the app), ignored elsewhere.
   ///
   /// [wakeLock] additionally keeps the *CPU* running, which is what matters on
   /// a phone whose screen turned off. A host that only wants the process
@@ -106,10 +224,8 @@ final class BackgroundExecution {
   /// which is the honest outcome — failing a recording because the user
   /// declined a notification would be worse.
   static Future<BackgroundExecutionSession?> acquire({
-    required String title,
-    String? text,
+    required BackgroundNotification notification,
     bool wakeLock = true,
-    BackgroundJobKind kind = BackgroundJobKind.task,
   }) async {
     if (!isSupported) {
       return null;
@@ -117,10 +233,8 @@ final class BackgroundExecution {
 
     try {
       final id = await _channel.invokeMethod<int>('acquire', <String, Object?>{
-        'title': title,
-        'text': text,
+        'notification': encodeNotification(notification),
         'wakeLock': wakeLock,
-        'kind': kind.name,
       });
 
       if (id == null) {
@@ -141,6 +255,30 @@ final class BackgroundExecution {
     }
   }
 
+  /// Wire form of a notification, shared by `acquire` and `update`.
+  ///
+  /// Public so a host implementing its own [BackgroundExecutionLease] against
+  /// the same channel sends the same shape; the native side reads it in
+  /// `BackgroundExecutionDelegate` and `BackgroundExecutionService`.
+  ///
+  /// Progress says which of its two shapes it is (`indeterminate`) rather than
+  /// leaving it to be inferred from missing numbers: "no total yet" and "no
+  /// progress at all" are different things to draw.
+  static Map<String, Object?> encodeNotification(BackgroundNotification notification) {
+    final progress = notification.progress;
+
+    return <String, Object?>{
+      'title': notification.title,
+      'text': notification.text,
+      'kind': notification.kind.name,
+      'icon': notification.icon,
+      'progress': progress == null
+          ? null
+          : progress.isIndeterminate
+          ? <String, Object?>{'indeterminate': true}
+          : <String, Object?>{'current': progress.current, 'total': progress.total},
+    };
+  }
 }
 
 /// A held background-execution session.
@@ -156,14 +294,27 @@ abstract interface class BackgroundExecutionLease {
   /// Whether the session is still held.
   bool get isActive;
 
+  /// Replaces what the notification shows.
+  ///
+  /// This is how a long job keeps the shade honest: elapsed time, bytes written,
+  /// a download's percentage. A platform that shows no notification does nothing
+  /// here — the session's job is the protection, and a host should not have to
+  /// ask which platform it is on to describe its own progress.
+  ///
+  /// After [release] this is a no-op: the session is gone, and a notification
+  /// must not outlive it.
+  Future<void> update(BackgroundNotification notification);
+
   /// Ends the session. Idempotent.
   Future<void> release();
 }
 
 /// One running session.
 ///
-/// [release] is idempotent: a job that ends twice (a stop after an exit, a
-/// dispose after a stop) must not release somebody else's session.
+/// [update] and [release] are both safe to call twice, and both are no-ops once
+/// the session ended: a job that stops after a failure and a job that stops on
+/// request must not step on each other, and neither may release somebody else's
+/// session.
 final class BackgroundExecutionSession implements BackgroundExecutionLease {
   BackgroundExecutionSession._(this.id);
 
@@ -175,6 +326,26 @@ final class BackgroundExecutionSession implements BackgroundExecutionLease {
   /// Whether the session is still held.
   @override
   bool get isActive => !_released;
+
+  /// Replaces what the notification shows.
+  @override
+  Future<void> update(BackgroundNotification notification) async {
+    if (_released) {
+      return;
+    }
+
+    try {
+      await BackgroundExecution._channel.invokeMethod<void>('update', <String, Object?>{
+        'id': id,
+        'notification': BackgroundExecution.encodeNotification(notification),
+      });
+    } on PlatformException {
+      // A session the platform already tore down has no notification to update;
+      // the job keeps running either way.
+    } on MissingPluginException {
+      // Same as the platforms that never had one.
+    }
+  }
 
   /// Ends the session: the notification goes away and the wake lock is freed.
   @override

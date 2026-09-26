@@ -16,7 +16,16 @@
 录制或下载是"用户让它做，然后就不看了"的活。没有这层保护，屏幕一关，进程几秒内就被冻结或杀掉，FFmpeg 退出码说不了任何原因。
 
 ```dart
-final session = await BackgroundExecution.acquire(title: '正在录制', text: roomName);
+final session = await BackgroundExecution.acquire(
+  notification: BackgroundNotification(
+    title: '正在录制',
+    text: '$roomName · 00:12:34',
+    kind: BackgroundJobKind.record,
+    icon: 'ic_stat_record',                       // 宿主 res/drawable|mipmap 里的名字，可省
+    progress: const BackgroundProgress.indeterminate(),
+  ),
+);
+
 try {
   await startTheJob();
 } finally {
@@ -31,6 +40,21 @@ try {
 | macOS | `beginActivity(.idleSystemSleepDisabled)`：系统不睡，屏幕可以关 |
 | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)`：系统不睡（**不**阻止息屏） |
 | Linux | ⏳ 未实现（logind `Inhibit`），`acquire` 返回 null |
+
+### 通知能设什么
+
+`BackgroundNotification` 就是宿主的输入口，库不替它编词：
+
+| 字段 | 说明 |
+| --- | --- |
+| `title` / `text` | 两行文字，宿主自己的语言与内容（房间名、节目名、文件名） |
+| `kind` | 任务类型，决定没给 `icon` 时用哪个内置字形（record / download / task） |
+| `icon` | 宿主自己 `res/drawable` 或 `res/mipmap` 里的名字（与 `MediaSessionConfig.playIcon` 同一套约定，`@drawable/` 前缀也接受）；找不到名字就退回内置字形，不会留下一条没有图标的通知 |
+| `progress` | `BackgroundProgress.determinate(current, total)` 画进度条，`BackgroundProgress.indeterminate()` 画转圈 —— 直播录制没有总量，转圈才是诚实的形状 |
+
+跑起来以后用 `session.update(description.copyWith(text: ...))` 替换描述：录制就是每秒推一次"已录时长 · 已写字节"。**一条通知只描述最新启动的那个会话**，早启动的任务更新自己的描述不会把通知从后来的任务手里抢走；它结束时通知回到还在跑的那个，正文的 `+N` 数剩下的任务。
+
+按钮 / 操作（需要一条回调进 Dart 的通道）和通知渠道名（整库一个，好让用户一次静音掉所有后台任务）都是**故意不可配**的；媒体**播放**通知是另一套面（`media_core_mediasession` 的 `MediaSessionConfig`）。
 
 会话是**按 id 计数**的：两个任务（一个录制 + 一个下载）共享同一个前台服务与同一条通知（标题是后取的那个，正文标 `+N`），释放一个只退自己 —— 把服务停掉就等于把还在跑的那个任务暴露给系统，所以唤醒锁只在最后一个需要它的会话消失时才放开。释放是幂等的。
 

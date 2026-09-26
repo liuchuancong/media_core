@@ -39,7 +39,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * first release would silently take the protection away from a job that is still
  * running, and dropping the wake lock with it would let the device sleep
  * mid-recording — so the lock is released only once no remaining session wants
- * it.
+ * it. The newest session is also the one whose title, icon and progress the
+ * notification shows; an older job updates its own description without taking
+ * the notification over from a job the user started later.
  *
  * <p>Declared in this plugin's own manifest, which the app inherits — a plain
  * {@code <service>} merges from a library manifest, unlike audio_service's
@@ -58,6 +60,10 @@ public final class BackgroundExecutionService extends Service {
   static final String EXTRA_SESSION_ID = "sessionId";
   static final String EXTRA_WAKE_LOCK = "wakeLock";
   static final String EXTRA_KIND = "kind";
+  static final String EXTRA_ICON = "icon";
+  static final String EXTRA_PROGRESS_STATE = "progressState";
+  static final String EXTRA_PROGRESS_CURRENT = "progressCurrent";
+  static final String EXTRA_PROGRESS_TOTAL = "progressTotal";
 
   /**
    * Notification id.
@@ -84,19 +90,71 @@ public final class BackgroundExecutionService extends Service {
   /** The process's single instance, while it is alive. */
   private static BackgroundExecutionService instance;
 
-  /** One job that asked not to be frozen. */
-  private static final class Session {
-    final int id;
+  /**
+   * What the host asked the notification to say.
+   *
+   * Every field comes from Dart and none of them is invented here: the library
+   * knows what a notification is, not what this job is called.
+   */
+  static final class Description {
+    /** Nothing to draw. */
+    static final int PROGRESS_NONE = 0;
+
+    /** A spinner: the job is running, its end is unknown. */
+    static final int PROGRESS_INDETERMINATE = 1;
+
+    /** A bar: a known amount of a known total. */
+    static final int PROGRESS_DETERMINATE = 2;
+
     final String title;
     final String text;
     final String kind;
-    final boolean wakeLock;
+    final String icon;
+    final int progressState;
+    final int progressCurrent;
+    final int progressTotal;
 
-    Session(int id, String title, String text, String kind, boolean wakeLock) {
-      this.id = id;
-      this.title = title;
+    Description(
+        String title,
+        String text,
+        String kind,
+        String icon,
+        int progressState,
+        int progressCurrent,
+        int progressTotal) {
+      this.title = title == null || title.isEmpty() ? "Running" : title;
       this.text = text;
       this.kind = kind;
+      this.icon = icon;
+      // A bar needs a positive total to mean anything; anything else is the
+      // spinner, which is what "running, length unknown" honestly looks like.
+      final boolean bar = progressState == PROGRESS_DETERMINATE && progressTotal > 0;
+
+      this.progressState = bar ? PROGRESS_DETERMINATE : progressState == PROGRESS_NONE ? PROGRESS_NONE : PROGRESS_INDETERMINATE;
+      this.progressTotal = bar ? progressTotal : 0;
+      this.progressCurrent = bar ? Math.max(0, Math.min(progressCurrent, progressTotal)) : 0;
+    }
+
+    /** Whether a bar or a spinner belongs in the notification. */
+    boolean hasProgress() {
+      return progressState != PROGRESS_NONE;
+    }
+
+    /** Whether the end of the job is known. */
+    boolean isDeterminate() {
+      return progressState == PROGRESS_DETERMINATE;
+    }
+  }
+
+  /** One job that asked not to be frozen. */
+  private static final class Session {
+    final int id;
+    final Description description;
+    final boolean wakeLock;
+
+    Session(int id, Description description, boolean wakeLock) {
+      this.id = id;
+      this.description = description;
       this.wakeLock = wakeLock;
     }
   }
@@ -115,16 +173,14 @@ public final class BackgroundExecutionService extends Service {
    * <em>notification</em> is not that case: the service still runs and the wake
    * lock still holds, only the notification is hidden.
    */
-  static int start(Context context, String title, String text, boolean wakeLock, String kind) {
+  static int start(Context context, Description description, boolean wakeLock) {
     final int sessionId = nextSessionId();
 
-    final Intent intent =
-        new Intent(context, BackgroundExecutionService.class)
-            .putExtra(EXTRA_TITLE, title)
-            .putExtra(EXTRA_TEXT, text)
-            .putExtra(EXTRA_SESSION_ID, sessionId)
-            .putExtra(EXTRA_WAKE_LOCK, wakeLock)
-            .putExtra(EXTRA_KIND, kind);
+    final Intent intent = new Intent(context, BackgroundExecutionService.class);
+
+    putDescription(intent, description);
+
+    intent.putExtra(EXTRA_SESSION_ID, sessionId).putExtra(EXTRA_WAKE_LOCK, wakeLock);
 
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -142,6 +198,20 @@ public final class BackgroundExecutionService extends Service {
   }
 
   /**
+   * Replaces what a running session's notification says.
+   *
+   * A no-op for a session that is gone: the notification went with it, and a job
+   * that finishes while an update is in flight must not resurrect one.
+   */
+  static void update(int sessionId, Description description) {
+    final BackgroundExecutionService service = instance;
+
+    if (service != null) {
+      service.updateSession(sessionId, description);
+    }
+  }
+
+  /**
    * Ends the session with {@code sessionId}, leaving every other session alone.
    *
    * A no-op when the service is already gone: the sessions went with it.
@@ -152,6 +222,39 @@ public final class BackgroundExecutionService extends Service {
     if (service != null) {
       service.releaseSession(sessionId);
     }
+  }
+
+  private static void putDescription(Intent intent, Description description) {
+    intent
+        .putExtra(EXTRA_TITLE, description.title)
+        .putExtra(EXTRA_TEXT, description.text)
+        .putExtra(EXTRA_KIND, description.kind)
+        .putExtra(EXTRA_ICON, description.icon)
+        .putExtra(EXTRA_PROGRESS_STATE, description.progressState)
+        .putExtra(EXTRA_PROGRESS_CURRENT, description.progressCurrent)
+        .putExtra(EXTRA_PROGRESS_TOTAL, description.progressTotal);
+  }
+
+  /**
+   * Reads a description back out of the Intent.
+   *
+   * The Intent is the durable half: extras survive a service the platform
+   * recreated, which is why the description travels with it rather than through
+   * a field of this instance.
+   */
+  private static Description readDescription(Intent intent) {
+    if (intent == null) {
+      return new Description(null, null, null, null, Description.PROGRESS_NONE, 0, 0);
+    }
+
+    return new Description(
+        intent.getStringExtra(EXTRA_TITLE),
+        intent.getStringExtra(EXTRA_TEXT),
+        intent.getStringExtra(EXTRA_KIND),
+        intent.getStringExtra(EXTRA_ICON),
+        intent.getIntExtra(EXTRA_PROGRESS_STATE, Description.PROGRESS_NONE),
+        intent.getIntExtra(EXTRA_PROGRESS_CURRENT, 0),
+        intent.getIntExtra(EXTRA_PROGRESS_TOTAL, 0));
   }
 
   private PowerManager.WakeLock wakeLock;
@@ -173,18 +276,12 @@ public final class BackgroundExecutionService extends Service {
       return START_NOT_STICKY;
     }
 
-    final String title = intent.getStringExtra(EXTRA_TITLE);
-    final Session session =
-        new Session(
-            sessionId,
-            title == null ? "Running" : title,
-            intent.getStringExtra(EXTRA_TEXT),
-            intent.getStringExtra(EXTRA_KIND),
-            intent.getBooleanExtra(EXTRA_WAKE_LOCK, false));
+    final boolean wakeLock = intent.getBooleanExtra(EXTRA_WAKE_LOCK, false);
+    final Session session = new Session(sessionId, readDescription(intent), wakeLock);
 
     SESSIONS.put(sessionId, session);
 
-    startForegroundInternal(session, startId);
+    startForegroundInternal(startId);
 
     if (session.wakeLock) {
       acquireWakeLock();
@@ -230,6 +327,20 @@ public final class BackgroundExecutionService extends Service {
   // Sessions
   // ---------------------------------------------------------------------------
 
+  private void updateSession(int sessionId, Description description) {
+    final Session session = SESSIONS.get(sessionId);
+
+    if (session == null) {
+      return;
+    }
+
+    // Replacement keeps the register's order, so an update never decides which
+    // job owns the notification.
+    SESSIONS.put(sessionId, new Session(sessionId, description, session.wakeLock));
+
+    updateNotification();
+  }
+
   private void releaseSession(int sessionId) {
     if (SESSIONS.remove(sessionId) == null) {
       return;
@@ -272,6 +383,7 @@ public final class BackgroundExecutionService extends Service {
     return false;
   }
 
+  // The boolean form is the API < 24 branch.
   @SuppressWarnings("deprecation")
   private void stopForegroundAndSelf() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -287,7 +399,7 @@ public final class BackgroundExecutionService extends Service {
   // Foreground notification
   // ---------------------------------------------------------------------------
 
-  private void startForegroundInternal(Session session, int startId) {
+  private void startForegroundInternal(int startId) {
     createChannel();
 
     final Notification notification = buildNotification();
@@ -330,11 +442,15 @@ public final class BackgroundExecutionService extends Service {
     manager.createNotificationChannel(channel);
   }
 
-  // The one-argument Builder is the API < 26 branch; the channel id is the
-  // only way to build one from 26 on.
+  // The one-argument Builder is the API < 26 branch; the channel id is the only
+  // way to build one from 26 on.
   @SuppressWarnings("deprecation")
   private Notification buildNotification() {
     final Session visible = newestSession();
+    final Description description =
+        visible == null
+            ? new Description(null, null, null, null, Description.PROGRESS_NONE, 0, 0)
+            : visible.description;
 
     final Notification.Builder builder =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -353,17 +469,23 @@ public final class BackgroundExecutionService extends Service {
       builder.setContentIntent(pending);
     }
 
-    final String text = visible == null ? null : visible.text;
+    final String text = description.text;
     final String others = count(SESSIONS.size() - 1);
 
     builder
-        .setContentTitle(visible == null ? "Running" : visible.title)
+        .setContentTitle(description.title)
         .setContentText(
             text == null || text.isEmpty() ? others : others.isEmpty() ? text : text + "  (" + others + ")")
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setShowWhen(false)
-        .setSmallIcon(notificationIcon(visible == null ? null : visible.kind));
+        .setSmallIcon(notificationIcon(description));
+
+    if (description.hasProgress()) {
+      // The two shapes the platform draws: a filled bar with a known total, and
+      // a spinner with no numbers at all.
+      builder.setProgress(description.progressTotal, description.progressCurrent, !description.isDeterminate());
+    }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       // Show it now rather than after the platform's grace period for a service
@@ -381,21 +503,56 @@ public final class BackgroundExecutionService extends Service {
   }
 
   /**
-   * Icon of the notification, by what the job is.
+   * Icon of the notification.
    *
-   * Shipped as vectors in this plugin's resources (merged into the app), because
-   * borrowing a system drawable would show a download arrow on a recording.
+   * The host's own drawable when it named one (the convention the media
+   * notification uses too), otherwise the glyph shipped with this plugin for the
+   * job's kind — borrowing a system drawable would show a download arrow on a
+   * recording. A name that does not resolve falls back to that glyph rather than
+   * leaving the notification without an icon, which the platform refuses to post
+   * at all.
    */
-  private int notificationIcon(String kind) {
-    if ("record".equals(kind)) {
+  private int notificationIcon(Description description) {
+    final int named = resolveIcon(description.icon);
+
+    if (named != 0) {
+      return named;
+    }
+
+    if ("record".equals(description.kind)) {
       return R.drawable.ic_stat_media_core_record;
     }
 
-    if ("download".equals(kind)) {
+    if ("download".equals(description.kind)) {
       return R.drawable.ic_stat_media_core_download;
     }
 
     return R.drawable.ic_stat_media_core_task;
+  }
+
+  /**
+   * Looks a host icon up by name.
+   *
+   * A bare name is tried as a drawable and then as a mipmap, and a full
+   * {@code @drawable/name} reference is accepted too, because both spellings are
+   * common in a host's resources. Zero means "not found".
+   */
+  private int resolveIcon(String name) {
+    if (name == null || name.isEmpty()) {
+      return 0;
+    }
+
+    String bare = name;
+
+    if (bare.startsWith("@drawable/")) {
+      bare = bare.substring("@drawable/".length());
+    } else if (bare.startsWith("@mipmap/")) {
+      bare = bare.substring("@mipmap/".length());
+    }
+
+    final int drawable = getResources().getIdentifier(bare, "drawable", getPackageName());
+
+    return drawable != 0 ? drawable : getResources().getIdentifier(bare, "mipmap", getPackageName());
   }
 
   // ---------------------------------------------------------------------------

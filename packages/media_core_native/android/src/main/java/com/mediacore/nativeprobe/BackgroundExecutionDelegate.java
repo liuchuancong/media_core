@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 
+import java.util.Map;
+
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
@@ -17,8 +19,14 @@ import io.flutter.plugin.common.MethodChannel;
  *
  * | direction | method | arguments | result |
  * |---|---|---|---|
- * | Dart → host | {@code acquire} | {title, text, wakeLock, kind} | session id, or null when the platform refused |
+ * | Dart → host | {@code acquire} | {notification, wakeLock} | session id, or null when the platform refused |
+ * | Dart → host | {@code update} | {id, notification} | – |
  * | Dart → host | {@code release} | {id} | – |
+ *
+ * <p>{@code notification} is the map `BackgroundExecution.encodeNotification`
+ * builds: title, text, kind, icon and an optional progress map that says which
+ * of the two shapes it is. None of it is defaulted here beyond a placeholder
+ * title — the words and the icon are the host's.
  *
  * <p>No {@code isSupported} call: the platform name is known in Dart, and a
  * round trip to answer "am I Android" would only be a way to disagree with it.
@@ -54,9 +62,7 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
 
   /** The acquire waiting for the user to answer the dialog, if one is. */
   private MethodChannel.Result pendingResult;
-  private String pendingTitle;
-  private String pendingText;
-  private String pendingKind;
+  private BackgroundExecutionService.Description pendingDescription;
   private boolean pendingWakeLock;
 
   BackgroundExecutionDelegate(Context context) {
@@ -83,6 +89,12 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
     switch (call.method) {
       case "acquire":
         acquire(call, result);
+        break;
+
+      case "update":
+        update(call);
+
+        result.success(null);
         break;
 
       case "release":
@@ -112,18 +124,12 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
   }
 
   private void acquire(MethodCall call, MethodChannel.Result result) {
-    final String title = call.argument("title");
-    final String text = call.argument("text");
-    final String kind = call.argument("kind");
+    final BackgroundExecutionService.Description description = descriptionOf(call);
     final boolean wakeLock = Boolean.TRUE.equals(call.argument("wakeLock"));
-
-    final String name = title == null ? "Running" : title;
 
     if (needsNotificationPermission()) {
       pendingResult = result;
-      pendingTitle = name;
-      pendingText = text;
-      pendingKind = kind;
+      pendingDescription = description;
       pendingWakeLock = wakeLock;
 
       activity.requestPermissions(new String[] {PERMISSION_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
@@ -133,7 +139,18 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
       return;
     }
 
-    result.success(start(name, text, kind, wakeLock));
+    result.success(start(description, wakeLock));
+  }
+
+  /** Replaces what a running session's notification says. */
+  private void update(MethodCall call) {
+    final Integer id = call.argument("id");
+
+    if (id == null || id < 0) {
+      return;
+    }
+
+    BackgroundExecutionService.update(id, descriptionOf(call));
   }
 
   /** Starts the session the pending acquire asked for, and answers it. */
@@ -146,19 +163,68 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
 
     pendingResult = null;
 
-    result.success(start(pendingTitle, pendingText, pendingKind, pendingWakeLock));
+    result.success(start(pendingDescription, pendingWakeLock));
 
-    pendingTitle = null;
-    pendingText = null;
-    pendingKind = null;
+    pendingDescription = null;
     pendingWakeLock = false;
   }
 
-  private Integer start(String title, String text, String kind, boolean wakeLock) {
-    final int sessionId =
-        BackgroundExecutionService.start(context, title, text, wakeLock, kind);
+  private Integer start(BackgroundExecutionService.Description description, boolean wakeLock) {
+    final int sessionId = BackgroundExecutionService.start(context, description, wakeLock);
 
     return sessionId < 0 ? null : sessionId;
+  }
+
+  /**
+   * Reads the notification description out of a call.
+   *
+   * A missing or malformed map yields a plain "Running" — the platform still
+   * needs a notification, and refusing to start a job over a bad title would
+   * fail the work for the label on it.
+   */
+  private BackgroundExecutionService.Description descriptionOf(MethodCall call) {
+    final Object encoded = call.argument("notification");
+
+    if (!(encoded instanceof Map)) {
+      return new BackgroundExecutionService.Description(
+          null, null, null, null, BackgroundExecutionService.Description.PROGRESS_NONE, 0, 0);
+    }
+
+    final Map<?, ?> notification = (Map<?, ?>) encoded;
+    final Object progress = notification.get("progress");
+
+    int state = BackgroundExecutionService.Description.PROGRESS_NONE;
+    int current = 0;
+    int total = 0;
+
+    if (progress instanceof Map) {
+      final Map<?, ?> values = (Map<?, ?>) progress;
+
+      if (Boolean.TRUE.equals(values.get("indeterminate"))) {
+        state = BackgroundExecutionService.Description.PROGRESS_INDETERMINATE;
+      } else {
+        state = BackgroundExecutionService.Description.PROGRESS_DETERMINATE;
+        current = intValue(values.get("current"));
+        total = intValue(values.get("total"));
+      }
+    }
+
+    return new BackgroundExecutionService.Description(
+        stringValue(notification.get("title")),
+        stringValue(notification.get("text")),
+        stringValue(notification.get("kind")),
+        stringValue(notification.get("icon")),
+        state,
+        current,
+        total);
+  }
+
+  private static String stringValue(Object value) {
+    return value instanceof String ? (String) value : null;
+  }
+
+  private static int intValue(Object value) {
+    return value instanceof Integer ? (Integer) value : 0;
   }
 
   /**

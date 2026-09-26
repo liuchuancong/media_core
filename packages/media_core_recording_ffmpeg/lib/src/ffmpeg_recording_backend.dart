@@ -89,6 +89,17 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// The session holding this recording's process alive, if any.
   BackgroundExecutionLease? _keepAlive;
 
+  /// What the notification says, without the moving parts: the title, icon and
+  /// kind the host chose, kept so an update can replace only the second line.
+  BackgroundNotification? _keepAliveNotification;
+
+  /// Media time of the last notification update, so FFmpeg's twice-a-second
+  /// statistics do not become twice-a-second notification replacements.
+  Duration _notifiedAt = Duration.zero;
+
+  /// File prefix of the running recording, for the notification's second line.
+  String _activePrefix = '';
+
   final StreamController<RecordingState> _stateController = StreamController<RecordingState>.broadcast();
 
   RecordingState _state = const RecordingState();
@@ -286,18 +297,27 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// <em>notification</em> is not even that: the session is still held and only
   /// the notification stays hidden.
   Future<void> _acquireKeepAlive(String prefix) async {
+    _activePrefix = prefix;
+    _notifiedAt = Duration.zero;
+
     if (!config.keepAlive) {
       return;
     }
 
-    final session = await _keepAliveStarter(
+    final notification = BackgroundNotification(
       title: config.keepAliveTitle ?? 'Recording',
       text: prefix,
-      wakeLock: true,
       kind: BackgroundJobKind.record,
+      icon: config.keepAliveIcon,
+      // A live recording has no total, so the honest shape is a spinner; the
+      // numbers the user can act on go in the text, one update per second.
+      progress: const BackgroundProgress.indeterminate(),
     );
 
+    final session = await _keepAliveStarter(notification: notification, wakeLock: true);
+
     _keepAlive = session;
+    _keepAliveNotification = session == null ? null : notification;
 
     if (session == null) {
       _log.debug('no background execution on this platform; the recording is unprotected');
@@ -306,10 +326,67 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
   }
 
+  /// Keeps the notification's second line moving: what is being written, how
+  /// long it has been running, how much has landed.
+  ///
+  /// Throttled by media time rather than wall clock, because that is the clock
+  /// FFmpeg reports on and the one a user compares the number against.
+  void _updateKeepAlive() {
+    final session = _keepAlive;
+    final notification = _keepAliveNotification;
+
+    if (session == null || notification == null) {
+      return;
+    }
+
+    if (_lastMediaTime - _notifiedAt < const Duration(seconds: 1)) {
+      return;
+    }
+
+    _notifiedAt = _lastMediaTime;
+
+    final parts = <String>[
+      _activePrefix,
+      _formatDuration(_lastMediaTime),
+      if (_formatBytes(_lastBytes) case final String bytes) bytes,
+    ];
+
+    unawaited(session.update(notification.copyWith(text: parts.join(' · '))));
+  }
+
+  /// `00:12:34` — fixed width, so the line does not jump as it counts.
+  static String _formatDuration(Duration duration) {
+    String pad(int value) => value.toString().padLeft(2, '0');
+
+    return '${pad(duration.inHours)}:${pad(duration.inMinutes % 60)}:${pad(duration.inSeconds % 60)}';
+  }
+
+  /// Bytes written, or null before anything has landed.
+  static String? _formatBytes(int bytes) {
+    if (bytes <= 0) {
+      return null;
+    }
+
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
   Future<void> _releaseKeepAlive() async {
     final session = _keepAlive;
 
     _keepAlive = null;
+    _keepAliveNotification = null;
 
     await session?.release();
   }
@@ -329,6 +406,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       return;
     }
     _emit(_state.copyWith(duration: _lastMediaTime, bytesWritten: _lastBytes));
+    _updateKeepAlive();
   }
 
   /// Reacts to a process that ended on its own.
@@ -412,9 +490,4 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 /// that the backend's lifecycle (acquire on start, release on *every* end) is
 /// what matters, and that is worth observing without a device.
 typedef BackgroundExecutionStarter =
-    Future<BackgroundExecutionLease?> Function({
-      required String title,
-      String? text,
-      bool wakeLock,
-      BackgroundJobKind kind,
-    });
+    Future<BackgroundExecutionLease?> Function({required BackgroundNotification notification, bool wakeLock});

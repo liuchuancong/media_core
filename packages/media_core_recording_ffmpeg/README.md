@@ -27,9 +27,9 @@ final result = await backend.stop();     // 用户主动停止是"成功录制"
 录制以一个说明不了任何原因的 FFmpeg 退出码结束。默认开启（`FfmpegRecordConfig.keepAlive`）：
 
 - **Android**：前台服务（API 34+ 声明 `dataSync`）+ 通知 + `PARTIAL_WAKE_LOCK`（屏幕熄灭后 CPU 继续跑）。
-  清单条目由 `media_core_native` 的插件清单合并进应用，`POST_NOTIFICATIONS` 也由它在第一次取会话时自己弹窗申请（应用不需要写这一步）
-  ——用 `media_core_audio` 的 `AudioPermissionService`（`AudioPermission.notifications`）或自己的权限插件。
+  清单条目由 `media_core_native` 的插件清单合并进应用，`POST_NOTIFICATIONS` 也由它在第一次取会话时自己弹窗申请（应用不需要写这一步）。
   用户拒了通知权限时，前台服务与唤醒锁照旧生效（只是通知不可见），录制**照常进行**；只有平台连服务都不肯起时才拿不到会话（`acquire` 返回 null），录制依然继续，只是没有保护 —— 不会因为一条通知失败而挂掉录制。
+  通知长什么样是宿主决定的：`keepAliveTitle` 给标题（默认 "Recording"）、`keepAliveIcon` 给宿主 `res/drawable` 里的图标名（默认用内置的录制字形），正文是"文件前缀 · 已录时长 · 已写字节"，每秒刷新一次；进度是**转圈**而不是进度条 —— 直播录制没有总量，画一根百分比条只是假装。
 - **macOS / Windows**：持有睡眠断言（系统不睡，屏幕可以关）。
 - **iOS**：只买到过渡窗口（约 30 秒）。要长时间后台录制，需要应用在 `Info.plist` 声明 `audio` 后台模式——
   这是应用的决定，库替不了；声明后录制才能在后台持续。

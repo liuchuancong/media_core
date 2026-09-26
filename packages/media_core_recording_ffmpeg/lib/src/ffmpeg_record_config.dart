@@ -15,6 +15,7 @@ final class FfmpegRecordConfig {
     this.journalSuffix = '.clock-v1.csv',
     this.keepAlive = true,
     this.keepAliveTitle,
+    this.keepAliveIcon,
   });
 
   /// Caller-accepted defaults.
@@ -38,10 +39,18 @@ final class FfmpegRecordConfig {
 
   /// Title of the notification shown while [keepAlive] holds the process.
   ///
-  /// Null uses a neutral "Recording". The body is the file prefix, which is
-  /// usually the room or programme name the host chose — that is what a user
-  /// needs to recognise, not a timestamp.
+  /// Null uses a neutral "Recording". The body is the file prefix plus the
+  /// elapsed time and bytes written, which is what a user needs to recognise the
+  /// job and see that it is moving.
   final String? keepAliveTitle;
+
+  /// Name of a drawable in the host app's `res/drawable` (or `res/mipmap`) for
+  /// the notification's icon.
+  ///
+  /// Null uses the glyph the platform package ships for a recording. A name that
+  /// does not resolve falls back to that glyph, so a missing asset leaves a
+  /// plain notification rather than a broken one.
+  final String? keepAliveIcon;
 
   /// Length of each segment, in seconds.
   ///
