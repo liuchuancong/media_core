@@ -1,4 +1,7 @@
 import '../core/player_config.dart';
+import '../platform/platform_capabilities.dart';
+import '../platform/platform_codec_capabilities.dart';
+import '../platform/platform_device_profile.dart';
 import '../identity/player_id.dart';
 import 'player_adapter_config.dart';
 import '../identity/session_id.dart';
@@ -46,6 +49,19 @@ abstract class PlayerAdapterContext with _$PlayerAdapterContext {
 
     /// Backend specific options.
     @Default({}) Map<String, Object?> options,
+
+    /// Capabilities reported by the running device.
+    ///
+    /// Filled from the platform probe the kernel was given; the defaults are
+    /// what a host that attached no provider gets, and they report themselves
+    /// as [PlatformCapabilities.reported] `false` so a backend can tell.
+    @Default(PlatformCapabilities()) PlatformCapabilities platform,
+
+    /// Device facts of the running device (cores, memory, ABI width).
+    @Default(PlatformDeviceProfile.unknown) PlatformDeviceProfile device,
+
+    /// What the device can decode, and in hardware or not.
+    @Default(PlatformCodecCapabilities.unknown) PlatformCodecCapabilities codecs,
 
     /// Debug mode.
     @Default(false) bool debug,

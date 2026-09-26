@@ -37,7 +37,6 @@ import '../playback/playback_controller.dart';
 import '../adapter/player_adapter_context.dart';
 import '../adapter/player_adapter_metrics.dart';
 import '../lifecycle/lifecycle_controller.dart';
-import '../platform/platform_capabilities.dart';
 import '../adapter/player_adapter_registry.dart';
 import '../operation/operation_cancel_token.dart';
 import '../operation/operation.dart';
@@ -162,7 +161,10 @@ final class PlayerHandle implements RecoveryTarget {
              sourceId: PlayerSource.unknown().id,
              source: PlayerSource.unknown(),
              policy: policy,
-             platform: const PlatformCapabilities(),
+             // The session reports the platform the kernel was told about; a
+             // hardcoded `const PlatformCapabilities()` here is what used to
+             // make every session claim the same device.
+             platform: adapterContext.platform,
            ),
          ),
        ) {

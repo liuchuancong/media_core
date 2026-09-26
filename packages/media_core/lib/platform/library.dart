@@ -21,6 +21,8 @@ export 'platform_capabilities.dart';
 export 'platform_info.dart';
 export 'platform_lifecycle.dart';
 export 'platform_network.dart';
+export 'platform_codec_capabilities.dart';
+export 'platform_device_profile.dart';
 export 'platform_pip.dart';
 export 'platform_provider.dart';
 export 'platform_renderer.dart';

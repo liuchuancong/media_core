@@ -1,4 +1,6 @@
 import '../platform/platform_capabilities.dart';
+import '../platform/platform_codec_capabilities.dart';
+import '../platform/platform_device_profile.dart';
 import '../platform/platform_info.dart';
 import '../platform/platform_provider.dart';
 import '../platform/platform_type.dart';
@@ -10,6 +12,8 @@ final class FakePlatformProvider implements PlatformProvider {
     PlatformType? type,
     PlatformInfo? info,
     PlatformCapabilities? capabilities,
+    PlatformDeviceProfile? device,
+    PlatformCodecCapabilities? codecs,
   })  : _type = type ?? PlatformType.unknown,
         _info = info ??
             PlatformInfo(
@@ -17,11 +21,15 @@ final class FakePlatformProvider implements PlatformProvider {
               name: 'FakeDevice',
               version: '1.0.0',
             ),
-        _capabilities = capabilities ?? const PlatformCapabilities();
+        _capabilities = capabilities ?? const PlatformCapabilities(),
+        _device = device ?? PlatformDeviceProfile.unknown,
+        _codecs = codecs ?? PlatformCodecCapabilities.unknown;
 
   PlatformType _type;
   PlatformInfo _info;
   PlatformCapabilities _capabilities;
+  PlatformDeviceProfile _device;
+  PlatformCodecCapabilities _codecs;
   bool _ready = false;
 
   @override
@@ -32,6 +40,12 @@ final class FakePlatformProvider implements PlatformProvider {
 
   @override
   PlatformCapabilities get capabilities => _capabilities;
+
+  @override
+  PlatformDeviceProfile get device => _device;
+
+  @override
+  PlatformCodecCapabilities get codecs => _codecs;
 
   @override
   bool get isReady => _ready;
@@ -47,4 +61,10 @@ final class FakePlatformProvider implements PlatformProvider {
 
   /// Replaces the capabilities.
   void updateCapabilities(PlatformCapabilities capabilities) => _capabilities = capabilities;
+
+  /// Replaces the device profile.
+  void updateDevice(PlatformDeviceProfile device) => _device = device;
+
+  /// Replaces the codec capabilities.
+  void updateCodecs(PlatformCodecCapabilities codecs) => _codecs = codecs;
 }

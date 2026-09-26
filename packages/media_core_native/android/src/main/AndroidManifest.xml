@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.mediacore.nativeprobe">
+    <!--
+      The probe only reads: codec lists, memory, features, displays. It declares
+      no permission, because asking for one to describe a device would be asking
+      the user for something the answer does not need.
+    -->
+</manifest>

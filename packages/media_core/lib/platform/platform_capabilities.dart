@@ -46,6 +46,8 @@ final class PlatformCapabilities extends Equatable {
     this.networkPlayback = true,
 
     this.localPlayback = true,
+
+    this.reported = false,
   });
 
   /// Whether hardware decoding is supported.
@@ -74,6 +76,14 @@ final class PlatformCapabilities extends Equatable {
 
   /// Whether background playback is supported.
   final bool backgroundPlayback;
+
+  /// Whether these answers came from a platform probe.
+  ///
+  /// `false` means every field above is a default rather than a fact — the
+  /// state of every session that was created without a [PlatformProvider]
+  /// attached. The defaults are deliberately optimistic; what this flag adds
+  /// is the ability to tell "the platform said yes" from "nobody asked".
+  final bool reported;
 
   /// Whether network playback is supported.
   final bool networkPlayback;
@@ -178,6 +188,8 @@ final class PlatformCapabilities extends Equatable {
     networkPlayback,
 
     localPlayback,
+
+    reported,
   ];
 
   @override

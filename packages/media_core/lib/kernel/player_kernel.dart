@@ -18,6 +18,10 @@ import '../pool/player_pool.dart';
 import '../preload/preload_manager.dart';
 import '../preload/preload_priority.dart';
 import '../preload/preload_request.dart';
+import '../platform/platform_capabilities.dart';
+import '../platform/platform_codec_capabilities.dart';
+import '../platform/platform_device_profile.dart';
+import '../platform/platform_provider.dart';
 import '../presentation/presentation_request.dart';
 import '../screenshot/player_screenshot.dart';
 import '../screenshot/screenshot_options.dart';
@@ -137,6 +141,8 @@ final class PlayerKernel {
 
   KernelAudioDriver? _audioDriver;
   KernelPresentationDriver? _presentationDriver;
+
+  PlatformProvider? _platformProvider;
   StreamSubscription<PlayerEvent>? _activeTrackingSub;
   PlayerHandle? _activeHandle;
 
@@ -239,6 +245,8 @@ final class PlayerKernel {
     final player = Player.create();
     final sessionId = SessionId.generate();
     final adapter = registration.factory.create(registration.id);
+    final platform = _platformProvider;
+
     final adapterContext = PlayerAdapterContext(
       playerId: player.id,
       sessionId: sessionId,
@@ -249,6 +257,12 @@ final class PlayerKernel {
         audioEnabled: config.enableAudio,
       ),
       playerConfig: config,
+      // What the device can do, as far as anyone knows. A player created with
+      // no provider attached carries the defaults, which report themselves as
+      // unreported rather than as a healthy device.
+      platform: platform?.capabilities ?? const PlatformCapabilities(),
+      device: platform?.device ?? PlatformDeviceProfile.unknown,
+      codecs: platform?.codecs ?? PlatformCodecCapabilities.unknown,
     );
 
     final handle = PlayerHandle(
@@ -435,6 +449,41 @@ final class PlayerKernel {
     if (driver != null && _activeHandle != null) {
       driver.onPlayerDeactivated();
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Platform capability
+  // ---------------------------------------------------------------------------
+
+  /// The attached platform provider, if any.
+  ///
+  /// Without one, every session and every adapter is handed the optimistic
+  /// defaults in `PlatformCapabilities` — playback works, but nothing knows
+  /// what the device can actually decode.
+  PlatformProvider? get platformProvider => _platformProvider;
+
+  /// Attaches the platform capability source.
+  ///
+  /// The provider is consulted once per created player and its answers are
+  /// carried into the session context and into the adapter context, so a
+  /// backend can pick a decoder from facts instead of guesses:
+  ///
+  /// ```dart
+  /// final provider = await NativePlatformProvider.load();
+  /// kernel.attachPlatformProvider(provider);
+  /// ```
+  ///
+  /// It is never awaited: the provider caches its own probe, and a player
+  /// created while the probe is still running gets whatever the provider
+  /// reports at that moment (its documented "unknown" answers) rather than
+  /// waiting for a device query before it can start.
+  void attachPlatformProvider(PlatformProvider provider) {
+    _platformProvider = provider;
+  }
+
+  /// Detaches the platform capability source.
+  void detachPlatformProvider() {
+    _platformProvider = null;
   }
 
   // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -165,6 +166,24 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   bool _privateInput = false;
   bool _softwareDecoderNextOpen = false;
 
+  /// What the device is, as far as the platform probe could say.
+  ///
+  /// Falls back to the process's own CPU count when nothing was probed, which
+  /// is the one device fact a Dart process can read by itself.
+  PlatformDeviceProfile _device = PlatformDeviceProfile.unknown;
+
+  /// What the device can decode, and in hardware or not.
+  ///
+  /// Unknown when the host attached no provider; [MpvDecodePolicy] then keeps
+  /// the engine's own behaviour instead of guessing.
+  PlatformCodecCapabilities _codecs = PlatformCodecCapabilities.unknown;
+
+  /// Codec of the video track mpv reported for the current source.
+  ///
+  /// The container says nothing about this: an MP4 carries H.264, HEVC or AV1,
+  /// and which decoder to reach for depends on the codec.
+  String? _videoCodec;
+
   /// Loopback relay for the source being opened when the bundled FFmpeg
   /// cannot read it as served. See [FlvLegacyHevcRelay].
   FlvLegacyHevcRelay? _hevcRelay;
@@ -327,9 +346,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   Future<void> onInitialize(PlayerAdapterContext context) async {
     _player = _injectedPlayer ?? mk.Player();
 
-    // The device budget must be known before the video controller and
-    // the native property contract are built, because both branch on it.
-    await DevicePlaybackProfile.ensureLoaded();
+    // The device budget must be known before the video controller and the
+    // native property contract are built, because both branch on it. It now
+    // arrives with the adapter context: the kernel stamps what the platform
+    // probe answered into every session.
+    _device = _resolveDevice(context);
+    _codecs = context.codecs;
 
     _resolvePreferredHardwareDecoder();
 
@@ -746,7 +768,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (_player?.platform == null) return;
 
     final platform = defaultTargetPlatform;
-    final profile = DevicePlaybackProfile.current;
+    final profile = _device;
 
     await _setNativeProperty(
       'protocol_whitelist',
@@ -764,9 +786,18 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // Drop a failing hw decoder after one bad frame.
     await _setNativeProperty('hwdec-software-fallback', '1');
 
-    await _applyDecodeCostPolicy(profile, software: _preferredHardwareDecoder == 'no');
+    await _applyDecodeCostPolicy(
+      MpvDecodePolicy.resolve(
+        preferredHwdec: _preferredHardwareDecoder,
+        codec: _videoCodec,
+        width: _width ?? 0,
+        height: _height ?? 0,
+        device: _device,
+        codecs: _codecs,
+      ),
+    );
 
-    if (profile.lowEnd) {
+    if (profile.isLowEnd) {
       await _setNativeProperty('audio-buffer', '0.4');
 
       await _setNativeProperty(
@@ -812,12 +843,14 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     }
   }
 
-  Future<void> _applyDecodeCostPolicy(DevicePlaybackProfile profile, {required bool software}) async {
-    if (!profile.lowEnd) return;
+  Future<void> _applyDecodeCostPolicy(MpvDecodePolicy policy) async {
+    final threads = policy.threads;
 
-    if (software) {
-      await _setNativeProperty('vd-lavc-threads', profile.softwareDecodeThreads.toString());
+    if (threads != null) {
+      await _setNativeProperty('vd-lavc-threads', threads.toString());
+    }
 
+    if (policy.tuneForSmallDevice) {
       await _setNativeProperty('vd-lavc-o', 'lowres=1');
 
       await _setNativeProperty('vd-lavc-skiploopfilter', 'nonref');
@@ -844,13 +877,29 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   }
 
   Future<void> _applyDecoderPolicy() async {
-    final decoder = _softwareDecoderNextOpen ? 'no' : _preferredHardwareDecoder;
+    final forced = _softwareDecoderNextOpen;
 
     _softwareDecoderNextOpen = false;
 
-    await _setNativeProperty('hwdec', decoder);
+    final policy = MpvDecodePolicy.resolve(
+      preferredHwdec: _preferredHardwareDecoder,
+      forceSoftware: forced,
+      codec: _videoCodec,
+      width: _width ?? 0,
+      height: _height ?? 0,
+      device: _device,
+      codecs: _codecs,
+    );
 
-    await _applyDecodeCostPolicy(DevicePlaybackProfile.current, software: decoder == 'no');
+    await _setNativeProperty('hwdec', policy.hwdec);
+
+    await _applyDecodeCostPolicy(policy);
+
+    debugPrint(
+      '[MediaKitPlayerAdapter] decode policy: ${policy.rationale} '
+      '(hwdec=${policy.hwdec}, codec=$_videoCodec, threads=${policy.threads}, '
+      'lowEnd=${_device.isLowEnd}, deviceKnown=${_device.isKnown})',
+    );
   }
 
   Future<void> _applyProxy() async {
@@ -898,6 +947,68 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _subscriptions.add(s.error.listen(_onError));
 
     _subscriptions.add(s.buffer.listen(_onBuffer));
+
+    // The track list is where the codec becomes known, and the codec is what
+    // decides whether hardware decoding was ever possible.
+    _subscriptions.add(s.tracks.listen(_onTracks));
+  }
+
+  /// Records the video codec, and reacts when the device cannot decode it.
+  ///
+  /// Two things happen once the platform says this codec has no hardware
+  /// decoder here: the next open of the same source starts in software instead
+  /// of spending a failed hardware attempt on it, and — while no frame has been
+  /// decoded yet — the current open switches over immediately, which is free
+  /// because nothing has been shown.
+  void _onTracks(mk.Tracks tracks) {
+    for (final track in tracks.video) {
+      final codec = VideoCodec.tryParse(track.codec);
+
+      if (codec == null) {
+        continue;
+      }
+
+      _videoCodec = track.codec;
+
+      final hardware = _codecs.canDecodeInHardware(codec, width: _width ?? 0, height: _height ?? 0);
+
+      if (hardware != false) {
+        return;
+      }
+
+      _softwareDecoderNextOpen = true;
+
+      debugPrint('[MediaKitPlayerAdapter] no hardware decoder for ${track.codec}; decoding in software');
+
+      if (!_hasDecodedVideoFrame) {
+        unawaited(_applyDecoderPolicy());
+      }
+
+      return;
+    }
+  }
+
+  /// The device profile this adapter works from.
+  ///
+  /// A probed device is used as-is. Without one, the process's own CPU count is
+  /// applied to the unknown profile: that count is real even when nobody asked
+  /// the platform, and it is what sizes the software decoder's thread pool.
+  PlatformDeviceProfile _resolveDevice(PlayerAdapterContext context) {
+    final device = context.device;
+
+    if (device.isKnown) {
+      return device;
+    }
+
+    return device.copyWith(cpuCores: _cpuCores(), reported: true);
+  }
+
+  int _cpuCores() {
+    try {
+      return Platform.numberOfProcessors;
+    } catch (_) {
+      return PlatformDeviceProfile.unknown.cpuCores;
+    }
   }
 
   /// Starts the decoded-video heartbeat observer.

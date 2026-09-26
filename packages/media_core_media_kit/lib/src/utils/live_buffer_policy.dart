@@ -1,4 +1,4 @@
-import 'device_playback_profile.dart';
+import 'package:media_core/media_core.dart';
 
 /// Bounded buffer budget for non-seekable live streams.
 ///
@@ -21,7 +21,7 @@ abstract final class LiveBufferPolicy {
   static const int forwardBytes = 96 * 1024 * 1024;
   static const int backBytes = 8 * 1024 * 1024;
 
-  /// Forward byte ceiling on a low-RAM device (see [DevicePlaybackProfile]).
+  /// Forward byte ceiling on a low-RAM device (see [PlatformDeviceProfile]).
   ///
   /// The byte budget is the only part of this contract that costs memory
   /// while it is *unused*: mpv reserves it as the demuxer's ceiling, and
@@ -44,15 +44,15 @@ abstract final class LiveBufferPolicy {
   static const int cachePauseWaitSeconds = 4;
 
   /// Forward byte budget for [profile].
-  static int forwardBytesFor(DevicePlaybackProfile? profile) =>
-      (profile?.lowEnd ?? false) ? lowEndForwardBytes : forwardBytes;
+  static int forwardBytesFor(PlatformDeviceProfile? profile) =>
+      (profile?.isLowEnd ?? false) ? lowEndForwardBytes : forwardBytes;
 
   /// Backward byte budget for [profile].
-  static int backBytesFor(DevicePlaybackProfile? profile) => (profile?.lowEnd ?? false) ? lowEndBackBytes : backBytes;
+  static int backBytesFor(PlatformDeviceProfile? profile) => (profile?.isLowEnd ?? false) ? lowEndBackBytes : backBytes;
 
   static Future<void> apply(
     Future<void> Function(String name, String value) setProperty, {
-    DevicePlaybackProfile? profile,
+    PlatformDeviceProfile? profile,
   }) async {
     // Network cache-secs takes precedence over the smaller base readahead.
     // Set the whole contract before opening media, including inherited values.
