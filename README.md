@@ -104,25 +104,25 @@ adapter 报错后，唯一决策点 `RecoveryLadder` 按梯级推进，每一步
 
 ## 能力一览
 
-| 包 | 能力 | 一句话 |
-| --- | --- | --- |
-| `media_core_ui` | 播放器 UI | **六套设计语言**（material / cupertino / fluent / macos / yaru / neumorphic）共用一层控制逻辑；含双指/双击缩放与截图按钮 |
-| `media_core_mediasession` | 系统媒体面 | 通知 / 锁屏 / SMTC / MPRIS + 音频焦点；**进程内一次 `enable()`，之后所有播放器自动挂载** |
-| `media_core_native` | 平台能力探针 | 编解码硬解与分辨率上限、内存/核数、系统特性；五平台实现，答案随每个 session 与适配器下发 |
-| `media_core_live` | 直播 | 线路/引擎扫描、卡顿看门狗、退避重试（跑在单槽任务队列上） |
-| `media_core_feed` | 抖音式上下滑 | 共用一个播放器换源、滑动吸附、下一项预载 |
-| `media_core_list_playback` | 列表播放 | 单窗口上/下滑切换，按条目记忆进度，返回时续播 |
-| `media_core_multiview` | 多画面同看 | 监控式视频墙：逐格健康度、唯一音频归属、解码预算、逐格弹幕、巡更轮巡、逐格列表 |
-| `media_core_danmaku` | 弹幕 | 传输契约 + 消息归一化 + 去重/积压闸门 + 内容过滤 + 会话围栏 |
-| `media_core_audio` | 音乐 | 音源注册与解析（签名 URL 带过期）、队列与四种播放模式、歌词（LRC/翻译/逐字）、桌面歌词原生窗口、下载（ffmpeg） |
-| `media_core_recording_ffmpeg` | 录播 | FFmpegKit 分段 MPEG-TS 录制 + CSV 日志；失败只丢几秒而非整场 |
-| `media_core_download` | 下载 | 有界并发队列、断点续传（先校验再续）、重试预算与进度 |
-| `media_core_presentation` | 呈现接缝 | 窗口级驱动契约 + 通用浮层舞台（槽位 / 悬停显隐），三个窗口包共用 |
-| `media_core_fullscreen` | 全屏 | 系统全屏与窗口级全屏两种变体，含横竖屏适配策略 |
-| `media_core_pip` | 画中画 | 桌面置顶小窗（可锁宽高比）+ Android 系统 PiP；移动端"能进不能出"是平台事实，如实返回 |
-| `media_core_floating` | 应用内小窗 | widget 树内可拖拽、贴边吸附的浮层；纯几何，无平台分支 |
-| `media_core_logging` | 分级日志 | 全局枢纽：分级/分类开关、多 sink（控制台/内存环/文件轮转）、作用域字段 |
-| `media_core_memory` | 内存记账 | 按贡献者申报求和 + 设备实测快照；预算阈值驱动的四级压力 |
+| 包                              | 能力         | 一句话                                                                                                                         |
+| ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `media_core_ui`               | 播放器 UI    | **六套设计语言**（material / cupertino / fluent / macos / yaru / neumorphic）共用一层控制逻辑；含双指/双击缩放与截图按钮 |
+| `media_core_mediasession`     | 系统媒体面   | 通知 / 锁屏 / SMTC / MPRIS + 音频焦点；**进程内一次 `enable()`，之后所有播放器自动挂载**                               |
+| `media_core_native`           | 平台能力探针 | 编解码硬解与分辨率上限、内存/核数、系统特性，以及**后台保活**（前台服务/唤醒锁、防休眠）；五平台实现，答案随每个 session 与适配器下发 |
+| `media_core_live`             | 直播         | 线路/引擎扫描、卡顿看门狗、退避重试（跑在单槽任务队列上）                                                                      |
+| `media_core_feed`             | 抖音式上下滑 | 共用一个播放器换源、滑动吸附、下一项预载                                                                                       |
+| `media_core_list_playback`    | 列表播放     | 单窗口上/下滑切换，按条目记忆进度，返回时续播                                                                                  |
+| `media_core_multiview`        | 多画面同看   | 监控式视频墙：逐格健康度、唯一音频归属、解码预算、逐格弹幕、巡更轮巡、逐格列表                                                 |
+| `media_core_danmaku`          | 弹幕         | 传输契约 + 消息归一化 + 去重/积压闸门 + 内容过滤 + 会话围栏                                                                    |
+| `media_core_audio`            | 音乐         | 音源注册与解析（签名 URL 带过期）、队列与四种播放模式、歌词（LRC/翻译/逐字）、桌面歌词原生窗口、下载（ffmpeg）                 |
+| `media_core_recording_ffmpeg` | 录播         | FFmpegKit 分段 MPEG-TS 录制 + CSV 日志；失败只丢几秒而非整场；进程默认取后台保活会话（熄屏继续录）                              |
+| `media_core_download`         | 下载         | 有界并发队列、断点续传（先校验再续）、重试预算与进度                                                                           |
+| `media_core_presentation`     | 呈现接缝     | 窗口级驱动契约 + 通用浮层舞台（槽位 / 悬停显隐），三个窗口包共用                                                               |
+| `media_core_fullscreen`       | 全屏         | 系统全屏与窗口级全屏两种变体，含横竖屏适配策略                                                                                 |
+| `media_core_pip`              | 画中画       | 桌面置顶小窗（可锁宽高比）+ Android 系统 PiP；移动端"能进不能出"是平台事实，如实返回                                           |
+| `media_core_floating`         | 应用内小窗   | widget 树内可拖拽、贴边吸附的浮层；纯几何，无平台分支                                                                          |
+| `media_core_logging`          | 分级日志     | 全局枢纽：分级/分类开关、多 sink（控制台/内存环/文件轮转）、作用域字段                                                         |
+| `media_core_memory`           | 内存记账     | 按贡献者申报求和 + 设备实测快照；预算阈值驱动的四级压力                                                                        |
 
 ### 池化播放编排
 
@@ -148,24 +148,24 @@ provider）。没有 Dart API 能报出解码器/纹理占了多少字节，所�
 
 ## 后端适配包
 
-| 包 | 后端 | 工厂 | 说明 |
-| --- | --- | --- | --- |
-| `media_core_media_kit` | media_kit（vendor 在本仓库） | `MediaKitAdapterFactory` | 协议/格式覆盖最广，默认首选；自带解码策略（按设备能力决定硬解或直接软解） |
-| `media_core_ijk_player` | ijk（`flv_lzc`） | `IjkPlayerAdapterFactory` | FLV / H.265，移动端 |
-| `media_core_better_player` | better_player_plus（video_player） | `BetterPlayerAdapterFactory` | 轻量、纯 Flutter 生态 |
-| `media_core_fvp` | fvp（libmdk） | `FvpAdapterFactory` | 另一条桌面/移动解码路径 |
+| 包                           | 后端                               | 工厂                           | 说明                                                                      |
+| ---------------------------- | ---------------------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `media_core_media_kit`     | media_kit（vendor 在本仓库）       | `MediaKitAdapterFactory`     | 协议/格式覆盖最广，默认首选；自带解码策略（按设备能力决定硬解或直接软解） |
+| `media_core_ijk_player`    | ijk（`flv_lzc`）                 | `IjkPlayerAdapterFactory`    | FLV / H.265，移动端                                                       |
+| `media_core_better_player` | better_player_plus（video_player） | `BetterPlayerAdapterFactory` | 轻量、纯 Flutter 生态                                                     |
+| `media_core_fvp`           | fvp（libmdk）                      | `FvpAdapterFactory`          | 另一条桌面/移动解码路径                                                   |
 
 注册方式统一：`kernel.registerBackend(const XxxAdapterFactory().registration())`。
 
 ## 平台支持
 
-| | Android | iOS | macOS | Windows | Linux |
-| --- | --- | --- | --- | --- | --- |
-| 播放（四个后端任选） | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 系统媒体面（通知 / 锁屏 / SMTC / MPRIS） | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 能力探针（硬解 / 设备 / 系统特性） | ✅ | ✅ | ✅ | ✅ | ✅（逐编解码器待接 libva） |
-| 系统 PiP | ✅ | ⏳ 需帧投递层 | ⏳ | — 用应用内小窗 | — 用应用内小窗 |
-| 桌面歌词窗口 | ✅ | — | ✅ | ✅ | ✅ |
+|                                          | Android | iOS           | macOS | Windows         | Linux                      |
+| ---------------------------------------- | ------- | ------------- | ----- | --------------- | -------------------------- |
+| 播放（四个后端任选）                     | ✅      | ✅            | ✅    | ✅              | ✅                         |
+| 系统媒体面（通知 / 锁屏 / SMTC / MPRIS） | ✅      | ✅            | ✅    | ✅              | ✅                         |
+| 能力探针（硬解 / 设备 / 系统特性）       | ✅      | ✅            | ✅    | ✅              | ✅（逐编解码器待接 libva） |
+| 系统 PiP                                 | ✅      | ⏳ 需帧投递层 | ⏳    | — 用应用内小窗 | — 用应用内小窗            |
+| 桌面歌词窗口                             | ✅      | —            | ✅    | ✅              | ✅                         |
 
 ## 文档
 
