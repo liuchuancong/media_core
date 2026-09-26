@@ -13,6 +13,8 @@ dependencies:
     sdk: flutter
   media_core:
     path: ../media_core
+  media_core_logging:
+    path: ../media_core_logging
   flv_lzc: 
     git: https://github.com/liuchuancong/flv_lzc.git
 

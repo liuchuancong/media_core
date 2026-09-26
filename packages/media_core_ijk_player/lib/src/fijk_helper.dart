@@ -1,6 +1,7 @@
 import 'fijk_player_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flv_lzc/fijkplayer.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// FijkPlayer Helper
 class FijkHelper {
@@ -78,6 +79,54 @@ class FijkHelper {
     ];
 
     await Future.wait(futures);
+  }
+
+  /// Level the engine was last told to log at.
+  ///
+  /// Static because the plugin's level is process-wide: one value per app, not
+  /// one per player, and a room-per-player host must not push it again on every
+  /// open.
+  static FijkLogLevel? _engineLogLevel;
+
+  /// Copies the host's logging configuration onto the engine's own log.
+  ///
+  /// ijkplayer logs from C — a line per state transition and a block per player
+  /// create/release (`IJKMEDIA`), plus a Dart line per plugin call — and none of
+  /// that goes through [MediaCoreLog]. A host that keeps the hub silent still
+  /// gets hundreds of engine lines in logcat, which reads as "this adapter logs
+  /// too much" when the adapter itself logs nothing at all.
+  ///
+  /// The engine has its own switch and this is the only place it is set, so the
+  /// hub stays the single authority: a silent hub is a silent engine, and a host
+  /// chasing an engine problem sets `MediaCoreLog.level = LogLevel.trace` to get
+  /// the engine's own output back. The mapping is monotone; the plugin normalizes
+  /// the value on its own side (`level / 100`, clamped to 0..8, then ijk's
+  /// `setLogLevel`).
+  ///
+  /// Call before the first player exists: setting it loads the plugin's native
+  /// libraries, and doing that mid-open pays for it on the user's first frame.
+  static void syncLogLevel() {
+    final level = _engineLogLevelOf(MediaCoreLog.level);
+
+    if (level == _engineLogLevel) {
+      return;
+    }
+
+    _engineLogLevel = level;
+
+    FijkLog.setLevel(level);
+  }
+
+  static FijkLogLevel _engineLogLevelOf(LogLevel level) {
+    return switch (level) {
+      LogLevel.trace => FijkLogLevel.Verbose,
+      LogLevel.debug => FijkLogLevel.Debug,
+      LogLevel.info => FijkLogLevel.Info,
+      LogLevel.warning => FijkLogLevel.Warn,
+      LogLevel.error => FijkLogLevel.Error,
+      LogLevel.critical => FijkLogLevel.Fatal,
+      LogLevel.nothing => FijkLogLevel.Silent,
+    };
   }
 
   /// Formats a player position as a readable string.

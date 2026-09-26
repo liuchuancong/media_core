@@ -133,6 +133,10 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onInitialize(PlayerAdapterContext context) async {
+    // First, and before the player is touched: the engine's own log follows the
+    // host's logging configuration (see [FijkHelper.syncLogLevel]).
+    FijkHelper.syncLogLevel();
+
     _player.addListener(_onPlayerValue);
     _positionSubscription = _player.onCurrentPosUpdate.listen(_onPositionChanged);
 
