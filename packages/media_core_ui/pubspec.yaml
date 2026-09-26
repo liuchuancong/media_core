@@ -1,0 +1,29 @@
+name: media_core_ui
+
+description: Player UI for media_core - iOS, Android and desktop control sets sharing one control layer.
+
+publish_to: none
+
+version: 0.1.0
+
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The player the controls drive, its video view, the zoom controller and the
+  # screenshot API.
+  media_core:
+    path: ../media_core
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+  # The control sets are widgets; they are checked by pumping them.
+  flutter_test:
+    sdk: flutter

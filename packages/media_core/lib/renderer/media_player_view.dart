@@ -59,6 +59,7 @@ final class MediaPlayerView extends StatefulWidget {
     this.captureBoundary = true,
     this.zoom,
     this.enablePinchZoom = false,
+    this.enableDoubleTapZoom = false,
     this.resetZoomOnSourceChange = true,
   });
 
@@ -93,7 +94,7 @@ final class MediaPlayerView extends StatefulWidget {
   /// alone.
   final VideoZoomController? zoom;
 
-  /// Whether the view magnifies the video with pinch and double tap.
+  /// Whether the view magnifies the video with a two-finger pinch.
   ///
   /// Off by default, and deliberately so: the gesture layer competes with the
   /// host's own gestures. A video inside a vertical feed or a horizontally
@@ -101,10 +102,18 @@ final class MediaPlayerView extends StatefulWidget {
   /// `zoom.isZoomed` (`physics: NeverScrollableScrollPhysics`), because a
   /// magnified picture wants the drag for panning.
   ///
-  /// When enabled, a two-finger pinch scales around its focal point, a drag
-  /// pans while zoomed, and a double tap toggles between 1x and
-  /// [VideoZoomController.doubleTapScale].
+  /// Unlike an unzoomed single-finger drag — which a parent scrollable still
+  /// wins — a pinch is claimed as soon as a second finger lands.
   final bool enablePinchZoom;
+
+  /// Whether a double tap magnifies the video.
+  ///
+  /// Separate from [enablePinchZoom] because the two answer different
+  /// questions: a feed wants no pinch (it swipes) but may still want double-tap
+  /// to zoom, and a desktop player wants neither (a double click is
+  /// fullscreen). A double tap toggles between 1x and
+  /// [VideoZoomController.doubleTapScale], around the point that was tapped.
+  final bool enableDoubleTapZoom;
 
   /// Whether opening another source returns the zoom to 1x.
   ///
@@ -161,7 +170,7 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
   Size _viewSize = Size.zero;
 
   /// Whether the view should apply (and may change) a zoom transform.
-  bool get _zoomEnabled => widget.enablePinchZoom || widget.zoom != null;
+  bool get _zoomEnabled => widget.enablePinchZoom || widget.enableDoubleTapZoom || widget.zoom != null;
 
   @override
   void didUpdateWidget(MediaPlayerView oldWidget) {
@@ -407,30 +416,37 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
   }
 
   /// Wraps [child] in the gesture layer, when the host asked for gestures.
+  ///
+  /// Only the recognizers that were asked for are installed: a GestureDetector
+  /// with a scale callback claims drags in the gesture arena, and a host that
+  /// wanted nothing but a double tap must not pay for that.
   Widget _withGestures(Widget child) {
-    if (!widget.enablePinchZoom) {
+    final pinch = widget.enablePinchZoom;
+    final doubleTap = widget.enableDoubleTapZoom;
+
+    if (!pinch && !doubleTap) {
       return child;
     }
 
     return GestureDetector(
-      onScaleStart: (details) {
-        _gestureStartScale = _zoom.scale;
-      },
-      onScaleUpdate: (details) {
-        // A pinch reports the scale relative to the start of the gesture, so
-        // it is applied as a ratio against the scale recorded then: feeding
-        // `details.scale` in every frame would compound it.
-        if (details.pointerCount > 1) {
-          _zoom.scaleBy(_gestureStartScale * details.scale / _zoom.scale, details.localFocalPoint, _viewSize);
+      onScaleStart: pinch ? (details) => _gestureStartScale = _zoom.scale : null,
+      onScaleUpdate: pinch
+          ? (details) {
+              // A pinch reports the scale relative to the start of the gesture,
+              // so it is applied as a ratio against the scale recorded then:
+              // feeding `details.scale` in every frame would compound it.
+              if (details.pointerCount > 1) {
+                _zoom.scaleBy(_gestureStartScale * details.scale / _zoom.scale, details.localFocalPoint, _viewSize);
 
-          return;
-        }
+                return;
+              }
 
-        _zoom.panBy(details.focalPointDelta, _viewSize);
-      },
-      onScaleEnd: (_) => _zoom.settle(_viewSize),
-      onDoubleTapDown: (details) => _doubleTapPosition = details.localPosition,
-      onDoubleTap: () => _zoom.toggleAt(_doubleTapPosition, _viewSize),
+              _zoom.panBy(details.focalPointDelta, _viewSize);
+            }
+          : null,
+      onScaleEnd: pinch ? (_) => _zoom.settle(_viewSize) : null,
+      onDoubleTapDown: doubleTap ? (details) => _doubleTapPosition = details.localPosition : null,
+      onDoubleTap: doubleTap ? () => _zoom.toggleAt(_doubleTapPosition, _viewSize) : null,
       child: child,
     );
   }
