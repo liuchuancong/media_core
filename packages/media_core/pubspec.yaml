@@ -38,6 +38,9 @@ dependencies:
   # Async primitives
   async: ^2.13.1
 
+  # Danmaku similarity scoring
+  fuzzywuzzy: ^1.1.6
+
   # Testable time
   clock: ^1.1.3
 

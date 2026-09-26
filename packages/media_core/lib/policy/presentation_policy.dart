@@ -30,6 +30,7 @@ final class PresentationPolicy {
     this.enabled = true,
 
     this.allowFullscreen = true,
+    this.allowWindowFullscreen = true,
 
     this.allowPictureInPicture = true,
 
@@ -51,6 +52,12 @@ final class PresentationPolicy {
 
   /// Allow fullscreen mode.
   final bool allowFullscreen;
+
+  /// Whether window-level fullscreen may be entered.
+  ///
+  /// Separate from [allowFullscreen] so a host can offer "fill the window"
+  /// without offering "take over the screen".
+  final bool allowWindowFullscreen;
 
   /// Allow picture-in-picture mode.
   final bool allowPictureInPicture;
@@ -80,6 +87,11 @@ final class PresentationPolicy {
     return enabled && allowFullscreen;
   }
 
+  /// Whether window-level fullscreen is available.
+  bool canWindowFullscreen() {
+    return enabled && allowWindowFullscreen;
+  }
+
   /// Whether PiP is available.
   bool canPictureInPicture() {
     return enabled && allowPictureInPicture;
@@ -98,6 +110,9 @@ final class PresentationPolicy {
 
       case PresentationMode.fullscreen:
         return canFullscreen();
+
+      case PresentationMode.windowFullscreen:
+        return canWindowFullscreen();
 
       case PresentationMode.pip:
         return canPictureInPicture();
@@ -150,6 +165,7 @@ final class PresentationPolicy {
     bool? enabled,
 
     bool? allowFullscreen,
+    bool? allowWindowFullscreen,
 
     bool? allowPictureInPicture,
 
@@ -169,6 +185,7 @@ final class PresentationPolicy {
       enabled: enabled ?? this.enabled,
 
       allowFullscreen: allowFullscreen ?? this.allowFullscreen,
+      allowWindowFullscreen: allowWindowFullscreen ?? this.allowWindowFullscreen,
 
       allowPictureInPicture: allowPictureInPicture ?? this.allowPictureInPicture,
 
@@ -190,6 +207,7 @@ final class PresentationPolicy {
   const PresentationPolicy.mobile()
     : enabled = true,
       allowFullscreen = true,
+      allowWindowFullscreen = true,
       allowPictureInPicture = true,
       allowFloatingWindow = false,
       autoFullscreenOnLandscape = true,
@@ -202,6 +220,7 @@ final class PresentationPolicy {
   const PresentationPolicy.desktop()
     : enabled = true,
       allowFullscreen = true,
+      allowWindowFullscreen = true,
       allowPictureInPicture = false,
       allowFloatingWindow = true,
       autoFullscreenOnLandscape = false,
@@ -214,6 +233,7 @@ final class PresentationPolicy {
   const PresentationPolicy.tv()
     : enabled = true,
       allowFullscreen = true,
+      allowWindowFullscreen = true,
       allowPictureInPicture = false,
       allowFloatingWindow = false,
       autoFullscreenOnLandscape = false,
@@ -226,6 +246,7 @@ final class PresentationPolicy {
   const PresentationPolicy.unrestricted()
     : enabled = true,
       allowFullscreen = true,
+      allowWindowFullscreen = true,
       allowPictureInPicture = true,
       allowFloatingWindow = true,
       autoFullscreenOnLandscape = true,

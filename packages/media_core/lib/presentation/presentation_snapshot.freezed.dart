@@ -36,7 +36,8 @@ mixin _$PresentationSnapshot {
  PresentationMode? get targetMode;/// Platform capabilities.
 ///
 /// Describes supported presentation features.
- PresentationCapabilities get capabilities;/// Whether presentation transition
+ PresentationCapabilities get capabilities;/// Orientation of the media being presented. See [PresentationState.orientation].
+ VideoOrientation get orientation;/// Whether presentation transition
 /// is running.
  bool get transitioning;/// Whether presentation subsystem
 /// is enabled.
@@ -58,20 +59,20 @@ $PresentationSnapshotCopyWith<PresentationSnapshot> get copyWith => _$Presentati
 @override
 bool operator ==(Object other) {
   final _this = this as PresentationSnapshot;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PresentationSnapshot&&(identical(other.mode, _this.mode) || other.mode == _this.mode)&&(identical(other.targetMode, _this.targetMode) || other.targetMode == _this.targetMode)&&(identical(other.capabilities, _this.capabilities) || other.capabilities == _this.capabilities)&&(identical(other.transitioning, _this.transitioning) || other.transitioning == _this.transitioning)&&(identical(other.enabled, _this.enabled) || other.enabled == _this.enabled)&&(identical(other.available, _this.available) || other.available == _this.available)&&(identical(other.generation, _this.generation) || other.generation == _this.generation)&&(identical(other.error, _this.error) || other.error == _this.error));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PresentationSnapshot&&(identical(other.mode, _this.mode) || other.mode == _this.mode)&&(identical(other.targetMode, _this.targetMode) || other.targetMode == _this.targetMode)&&(identical(other.capabilities, _this.capabilities) || other.capabilities == _this.capabilities)&&(identical(other.orientation, _this.orientation) || other.orientation == _this.orientation)&&(identical(other.transitioning, _this.transitioning) || other.transitioning == _this.transitioning)&&(identical(other.enabled, _this.enabled) || other.enabled == _this.enabled)&&(identical(other.available, _this.available) || other.available == _this.available)&&(identical(other.generation, _this.generation) || other.generation == _this.generation)&&(identical(other.error, _this.error) || other.error == _this.error));
 }
 
 
 @override
 int get hashCode {
   final _this = this as PresentationSnapshot;
-  return Object.hash(runtimeType,_this.mode,_this.targetMode,_this.capabilities,_this.transitioning,_this.enabled,_this.available,_this.generation,_this.error);
+  return Object.hash(runtimeType,_this.mode,_this.targetMode,_this.capabilities,_this.orientation,_this.transitioning,_this.enabled,_this.available,_this.generation,_this.error);
 }
 
 @override
 String toString() {
   final _this = this as PresentationSnapshot;
-  return 'PresentationSnapshot(mode: ${_this.mode}, targetMode: ${_this.targetMode}, capabilities: ${_this.capabilities}, transitioning: ${_this.transitioning}, enabled: ${_this.enabled}, available: ${_this.available}, generation: ${_this.generation}, error: ${_this.error})';
+  return 'PresentationSnapshot(mode: ${_this.mode}, targetMode: ${_this.targetMode}, capabilities: ${_this.capabilities}, orientation: ${_this.orientation}, transitioning: ${_this.transitioning}, enabled: ${_this.enabled}, available: ${_this.available}, generation: ${_this.generation}, error: ${_this.error})';
 }
 
 
@@ -82,7 +83,7 @@ abstract mixin class $PresentationSnapshotCopyWith<$Res>  {
   factory $PresentationSnapshotCopyWith(PresentationSnapshot value, $Res Function(PresentationSnapshot) _then) = _$PresentationSnapshotCopyWithImpl;
 @useResult
 $Res call({
- PresentationMode mode, PresentationMode? targetMode, PresentationCapabilities capabilities, bool transitioning, bool enabled, bool available, int generation, String? error
+ PresentationMode mode, PresentationMode? targetMode, PresentationCapabilities capabilities, VideoOrientation orientation, bool transitioning, bool enabled, bool available, int generation, String? error
 });
 
 
@@ -99,12 +100,13 @@ class _$PresentationSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of PresentationSnapshot
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? mode = null,Object? targetMode = freezed,Object? capabilities = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? mode = null,Object? targetMode = freezed,Object? capabilities = null,Object? orientation = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
   return _then(PresentationSnapshot(
 mode: null == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
 as PresentationMode,targetMode: freezed == targetMode ? _self.targetMode : targetMode // ignore: cast_nullable_to_non_nullable
 as PresentationMode?,capabilities: null == capabilities ? _self.capabilities : capabilities // ignore: cast_nullable_to_non_nullable
-as PresentationCapabilities,transitioning: null == transitioning ? _self.transitioning : transitioning // ignore: cast_nullable_to_non_nullable
+as PresentationCapabilities,orientation: null == orientation ? _self.orientation : orientation // ignore: cast_nullable_to_non_nullable
+as VideoOrientation,transitioning: null == transitioning ? _self.transitioning : transitioning // ignore: cast_nullable_to_non_nullable
 as bool,enabled: null == enabled ? _self.enabled : enabled // ignore: cast_nullable_to_non_nullable
 as bool,available: null == available ? _self.available : available // ignore: cast_nullable_to_non_nullable
 as bool,generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
@@ -203,10 +205,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  VideoOrientation orientation,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _PresentationSnapshot() when $default != null:
-return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
+return $default(_that.mode,_that.targetMode,_that.capabilities,_that.orientation,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
   return orElse();
 
 }
@@ -224,10 +226,10 @@ return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioni
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  VideoOrientation orientation,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)  $default,) {final _that = this;
 switch (_that) {
 case _PresentationSnapshot():
-return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
+return $default(_that.mode,_that.targetMode,_that.capabilities,_that.orientation,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -244,10 +246,10 @@ return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioni
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PresentationMode mode,  PresentationMode? targetMode,  PresentationCapabilities capabilities,  VideoOrientation orientation,  bool transitioning,  bool enabled,  bool available,  int generation,  String? error)?  $default,) {final _that = this;
 switch (_that) {
 case _PresentationSnapshot() when $default != null:
-return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
+return $default(_that.mode,_that.targetMode,_that.capabilities,_that.orientation,_that.transitioning,_that.enabled,_that.available,_that.generation,_that.error);case _:
   return null;
 
 }
@@ -259,7 +261,7 @@ return $default(_that.mode,_that.targetMode,_that.capabilities,_that.transitioni
 
 
 class _PresentationSnapshot extends PresentationSnapshot {
-  const _PresentationSnapshot({this.mode = PresentationMode.normal, this.targetMode, this.capabilities = const PresentationCapabilities(), this.transitioning = false, this.enabled = true, this.available = true, this.generation = 0, this.error}): super._();
+  const _PresentationSnapshot({this.mode = PresentationMode.normal, this.targetMode, this.capabilities = const PresentationCapabilities(), this.orientation = VideoOrientation.unknown, this.transitioning = false, this.enabled = true, this.available = true, this.generation = 0, this.error}): super._();
   
 
 /// Current active presentation mode.
@@ -286,6 +288,8 @@ class _PresentationSnapshot extends PresentationSnapshot {
 ///
 /// Describes supported presentation features.
 @override@JsonKey() final  PresentationCapabilities capabilities;
+/// Orientation of the media being presented. See [PresentationState.orientation].
+@override@JsonKey() final  VideoOrientation orientation;
 /// Whether presentation transition
 /// is running.
 @override@JsonKey() final  bool transitioning;
@@ -312,18 +316,18 @@ _$PresentationSnapshotCopyWith<_PresentationSnapshot> get copyWith => __$Present
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PresentationSnapshot&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.targetMode, targetMode) || other.targetMode == targetMode)&&(identical(other.capabilities, capabilities) || other.capabilities == capabilities)&&(identical(other.transitioning, transitioning) || other.transitioning == transitioning)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.available, available) || other.available == available)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.error, error) || other.error == error));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PresentationSnapshot&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.targetMode, targetMode) || other.targetMode == targetMode)&&(identical(other.capabilities, capabilities) || other.capabilities == capabilities)&&(identical(other.orientation, orientation) || other.orientation == orientation)&&(identical(other.transitioning, transitioning) || other.transitioning == transitioning)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.available, available) || other.available == available)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.error, error) || other.error == error));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,mode,targetMode,capabilities,transitioning,enabled,available,generation,error);
+    return Object.hash(runtimeType,mode,targetMode,capabilities,orientation,transitioning,enabled,available,generation,error);
 }
 
 @override
 String toString() {
-    return 'PresentationSnapshot(mode: $mode, targetMode: $targetMode, capabilities: $capabilities, transitioning: $transitioning, enabled: $enabled, available: $available, generation: $generation, error: $error)';
+    return 'PresentationSnapshot(mode: $mode, targetMode: $targetMode, capabilities: $capabilities, orientation: $orientation, transitioning: $transitioning, enabled: $enabled, available: $available, generation: $generation, error: $error)';
 }
 
 
@@ -334,7 +338,7 @@ abstract mixin class _$PresentationSnapshotCopyWith<$Res> implements $Presentati
   factory _$PresentationSnapshotCopyWith(_PresentationSnapshot value, $Res Function(_PresentationSnapshot) _then) = __$PresentationSnapshotCopyWithImpl;
 @override @useResult
 $Res call({
- PresentationMode mode, PresentationMode? targetMode, PresentationCapabilities capabilities, bool transitioning, bool enabled, bool available, int generation, String? error
+ PresentationMode mode, PresentationMode? targetMode, PresentationCapabilities capabilities, VideoOrientation orientation, bool transitioning, bool enabled, bool available, int generation, String? error
 });
 
 
@@ -351,12 +355,13 @@ class __$PresentationSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of PresentationSnapshot
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? mode = null,Object? targetMode = freezed,Object? capabilities = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? mode = null,Object? targetMode = freezed,Object? capabilities = null,Object? orientation = null,Object? transitioning = null,Object? enabled = null,Object? available = null,Object? generation = null,Object? error = freezed,}) {
   return _then(_PresentationSnapshot(
 mode: null == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
 as PresentationMode,targetMode: freezed == targetMode ? _self.targetMode : targetMode // ignore: cast_nullable_to_non_nullable
 as PresentationMode?,capabilities: null == capabilities ? _self.capabilities : capabilities // ignore: cast_nullable_to_non_nullable
-as PresentationCapabilities,transitioning: null == transitioning ? _self.transitioning : transitioning // ignore: cast_nullable_to_non_nullable
+as PresentationCapabilities,orientation: null == orientation ? _self.orientation : orientation // ignore: cast_nullable_to_non_nullable
+as VideoOrientation,transitioning: null == transitioning ? _self.transitioning : transitioning // ignore: cast_nullable_to_non_nullable
 as bool,enabled: null == enabled ? _self.enabled : enabled // ignore: cast_nullable_to_non_nullable
 as bool,available: null == available ? _self.available : available // ignore: cast_nullable_to_non_nullable
 as bool,generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable

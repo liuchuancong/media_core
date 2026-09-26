@@ -63,6 +63,9 @@ enum LogCategory {
   /// Recording operations and recording state information.
   recording,
 
+  /// Danmaku session, transport and filter information.
+  danmaku,
+
   /// Visibility and foreground/background information.
   visibility,
 
@@ -103,6 +106,7 @@ extension LogCategoryX on LogCategory {
       LogCategory.fallback => 'fallback',
       LogCategory.cache => 'cache',
       LogCategory.recording => 'recording',
+      LogCategory.danmaku => 'danmaku',
       LogCategory.visibility => 'visibility',
       LogCategory.lifecycle => 'lifecycle',
       LogCategory.network => 'network',

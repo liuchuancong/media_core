@@ -50,6 +50,24 @@ enum PresentationMode {
   /// - macOS fullscreen space
   fullscreen,
 
+  /// Window-level fullscreen presentation.
+  ///
+  /// The player fills the application's own window while the window itself
+  /// stays a window: no OS fullscreen, no taskbar hidden, no window bounds
+  /// changed. Chrome around the video (app bars, lists, tab bars) is hidden,
+  /// and the video is laid out against the window's edges.
+  ///
+  /// It is a separate mode rather than a flag on [fullscreen] because the two
+  /// are independent capabilities: a desktop window can fill without going
+  /// fullscreen, a phone has no OS fullscreen at all yet fills the screen, and
+  /// a host may offer both as distinct buttons. Collapsing them would force a
+  /// platform that supports only one to lie about the other.
+  ///
+  /// The actual layout is handled by the host; the mode is what the host, the
+  /// presentation state and the PiP/floating drivers agree on so that entering
+  /// one fullscreen variant reliably leaves the other.
+  windowFullscreen,
+
   /// Picture-in-picture presentation.
   ///
   /// The player is displayed in
@@ -94,7 +112,19 @@ extension PresentationModeExtension on PresentationMode {
   ///
   /// Returns true when the player
   /// occupies the fullscreen area.
+  ///
+  /// System fullscreen only: a window that fills the app is
+  /// [isWindowFullscreen]. Use [isAnyFullscreen] when either counts.
   bool get isFullscreen => this == PresentationMode.fullscreen;
+
+  /// Whether this mode is window-level fullscreen.
+  bool get isWindowFullscreen => this == PresentationMode.windowFullscreen;
+
+  /// Whether this mode is any fullscreen variant.
+  ///
+  /// Both variants hide the surrounding chrome; they differ in what they take
+  /// over — the screen or only the window.
+  bool get isAnyFullscreen => isFullscreen || isWindowFullscreen;
 
   /// Whether this mode is picture-in-picture.
   ///
@@ -133,6 +163,7 @@ extension PresentationModeExtension on PresentationMode {
     switch (this) {
       case PresentationMode.normal:
       case PresentationMode.fullscreen:
+      case PresentationMode.windowFullscreen:
         return false;
 
       case PresentationMode.pip:
@@ -152,6 +183,7 @@ extension PresentationModeExtension on PresentationMode {
         return false;
 
       case PresentationMode.fullscreen:
+      case PresentationMode.windowFullscreen:
       case PresentationMode.pip:
       case PresentationMode.floating:
         return true;
@@ -173,6 +205,9 @@ extension PresentationModeExtension on PresentationMode {
       case PresentationMode.fullscreen:
         return 'fullscreen';
 
+      case PresentationMode.windowFullscreen:
+        return 'windowFullscreen';
+
       case PresentationMode.pip:
         return 'pip';
 
@@ -192,6 +227,7 @@ extension PresentationModeExtension on PresentationMode {
         return false;
 
       case PresentationMode.fullscreen:
+      case PresentationMode.windowFullscreen:
       case PresentationMode.pip:
       case PresentationMode.floating:
         return true;

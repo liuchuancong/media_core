@@ -4,6 +4,7 @@ import 'presentation_state.dart';
 import 'presentation_adapter.dart';
 import 'presentation_request.dart';
 import 'package:rxdart/rxdart.dart';
+import '../geometry/video_orientation.dart';
 import 'presentation_controller.dart';
 import 'presentation_capabilities.dart';
 
@@ -58,6 +59,16 @@ final class PresentationService {
 
   /// Current platform capabilities.
   PresentationCapabilities get capabilities => _adapter.capabilities;
+
+  /// Updates the media orientation the presentation describes.
+  ///
+  /// Fed from the video-size events the host already receives; see
+  /// [PresentationController.updateOrientation].
+  void updateOrientation(VideoOrientation orientation) {
+    _ensureNotDisposed();
+
+    _controller.updateOrientation(orientation);
+  }
 
   // ============================================================
   // Request API

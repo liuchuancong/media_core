@@ -1,3 +1,4 @@
+import '../geometry/video_orientation.dart';
 import 'presentation_mode.dart';
 import 'presentation_capabilities.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -67,6 +68,16 @@ abstract class PresentationState with _$PresentationState {
     /// Capabilities describe what the environment supports.
     /// They do not describe the current presentation mode.
     @Default(PresentationCapabilities()) PresentationCapabilities capabilities,
+
+    /// Orientation of the media currently being presented.
+    ///
+    /// Both fullscreen variants present differently per orientation — a
+    /// portrait video filling a portrait phone, a landscape video taking over
+    /// the screen, a portrait video letterboxed on a desktop monitor — so the
+    /// orientation belongs to the presentation state rather than to one
+    /// platform's driver. Drivers and hosts read it to pick a layout strategy;
+    /// nothing here decides that strategy for them.
+    @Default(VideoOrientation.unknown) VideoOrientation orientation,
 
     /// Whether a presentation transition is currently
     /// running.

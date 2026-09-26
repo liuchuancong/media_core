@@ -13,8 +13,10 @@ import '../presentation/presentation_request.dart';
 ///
 /// Implementations:
 ///
-/// - `media_core_presentation` (window_manager on Windows; stubs
-///   on the other platforms pending native integration)
+/// - `media_core_presentation` (window_manager: fullscreen and an
+///   always-on-top small window on Windows, macOS and Linux)
+/// - `media_core_presentation_mobile` (Android/iOS: system
+///   picture-in-picture and a host-owned small window)
 ///
 /// It does not:
 ///

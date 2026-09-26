@@ -53,9 +53,6 @@ export 'error/library.dart';
 /// Player event definitions, dispatching and subscriptions..
 export 'event/library.dart';
 
-/// Vertical feed (TikTok/Douyin-style) playback orchestration..
-export 'feed/library.dart';
-
 /// Player and backend factory, registration and selection..
 export 'factory/library.dart';
 
@@ -70,9 +67,6 @@ export 'identity/library.dart';
 
 /// Player kernel: orchestration root wiring source, adapter, session, playback, recovery, fallback, pool and events..
 export 'kernel/library.dart';
-
-/// Live-stream orchestration: stall watchdogs, line and engine fallback, backoff retry..
-export 'live/library.dart';
 
 /// Player, page and application lifecycle management..
 export 'lifecycle/library.dart';

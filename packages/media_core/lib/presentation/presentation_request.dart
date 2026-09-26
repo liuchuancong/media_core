@@ -129,6 +129,34 @@ abstract class PresentationRequest with _$PresentationRequest {
     );
   }
 
+  /// Creates window-level fullscreen request.
+  ///
+  /// Fills the application window without changing the window itself; see
+  /// [PresentationMode.windowFullscreen].
+  factory PresentationRequest.windowFullscreen({
+    bool animated = true,
+
+    bool automatic = false,
+
+    String? source,
+
+    int generation = 0,
+  }) {
+    return PresentationRequest(
+      mode: PresentationMode.windowFullscreen,
+
+      animated: animated,
+
+      automatic: automatic,
+
+      source: source,
+
+      generation: generation,
+
+      createdAt: clock.now(),
+    );
+  }
+
   /// Creates PiP request.
   factory PresentationRequest.pip({bool animated = true, bool automatic = false, String? source, int generation = 0}) {
     return PresentationRequest(
@@ -173,6 +201,12 @@ abstract class PresentationRequest with _$PresentationRequest {
 
   /// Whether request enters fullscreen.
   bool get isFullscreen => mode == PresentationMode.fullscreen;
+
+  /// Whether request enters window-level fullscreen.
+  bool get isWindowFullscreen => mode == PresentationMode.windowFullscreen;
+
+  /// Whether request enters either fullscreen variant.
+  bool get isAnyFullscreen => isFullscreen || isWindowFullscreen;
 
   /// Whether request enters PiP.
   bool get isPip => mode == PresentationMode.pip;

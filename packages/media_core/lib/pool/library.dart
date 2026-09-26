@@ -17,6 +17,8 @@ library;
 // ============================================================================
 
 export 'player_pool.dart';
+export 'pool_player_host.dart';
+export 'playback_pool_orchestrator.dart';
 export 'player_pool_allocator.dart';
 export 'player_pool_config.dart';
 export 'player_pool_manager.dart';

@@ -42,6 +42,10 @@ final class PresentationDispatcher {
         break;
 
       case PresentationMode.fullscreen:
+      case PresentationMode.windowFullscreen:
+        // Both variants serialize through the fullscreen controller; which one
+        // is active is the state machine's business (PresentationState.mode)
+        // and reaches the platform driver through the request.
         await enterFullscreen();
 
         break;

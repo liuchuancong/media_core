@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../geometry/video_orientation.dart';
 import 'presentation_mode.dart';
 import 'presentation_event.dart';
 import 'presentation_state.dart';
@@ -89,6 +90,25 @@ final class PresentationController {
     _capabilities = capabilities;
 
     _stateSubject.add(current.copyWith(capabilities: capabilities));
+  }
+
+  /// Updates the media orientation the presentation describes.
+  ///
+  /// Called by whoever watches the video's geometry — normally the kernel's
+  /// video-size events. Both fullscreen variants present differently per
+  /// orientation, so this must be kept current even while no transition is
+  /// running: the next fullscreen request reads it to choose a layout.
+  ///
+  /// A repeated orientation is ignored rather than republished, so a stream of
+  /// geometry events does not turn into a stream of presentation states.
+  void updateOrientation(VideoOrientation orientation) {
+    _ensureNotDisposed();
+
+    if (current.orientation == orientation) {
+      return;
+    }
+
+    _stateSubject.add(current.copyWith(orientation: orientation));
   }
 
   // ============================================================

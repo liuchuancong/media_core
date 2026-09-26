@@ -1,3 +1,4 @@
+import '../geometry/video_orientation.dart';
 import 'presentation_mode.dart';
 import 'presentation_capabilities.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -56,6 +57,9 @@ abstract class PresentationSnapshot with _$PresentationSnapshot {
     /// Describes supported presentation features.
     @Default(PresentationCapabilities()) PresentationCapabilities capabilities,
 
+    /// Orientation of the media being presented. See [PresentationState.orientation].
+    @Default(VideoOrientation.unknown) VideoOrientation orientation,
+
     /// Whether presentation transition
     /// is running.
     @Default(false) bool transitioning,
@@ -99,6 +103,12 @@ abstract class PresentationSnapshot with _$PresentationSnapshot {
   /// Whether fullscreen active.
   bool get isFullscreen => mode == PresentationMode.fullscreen;
 
+  /// Whether the player currently fills the window without system fullscreen.
+  bool get isWindowFullscreen => mode == PresentationMode.windowFullscreen;
+
+  /// Whether either fullscreen variant is active.
+  bool get isAnyFullscreen => isFullscreen || isWindowFullscreen;
+
   /// Whether PiP active.
   bool get isPip => mode == PresentationMode.pip;
 
@@ -128,6 +138,10 @@ abstract class PresentationSnapshot with _$PresentationSnapshot {
   /// transitioning:
   /// true
   bool get isTransitioningToFullscreen => transitioning && targetMode == PresentationMode.fullscreen;
+
+  /// Whether switching to window-level fullscreen.
+  bool get isTransitioningToWindowFullscreen =>
+      transitioning && targetMode == PresentationMode.windowFullscreen;
 
   /// Whether transition is targeting PiP.
   bool get isTransitioningToPip => transitioning && targetMode == PresentationMode.pip;

@@ -6,6 +6,7 @@ import 'floating_controller.dart';
 import 'presentation_request.dart';
 import 'fullscreen_controller.dart';
 import 'presentation_snapshot.dart';
+import '../geometry/video_orientation.dart';
 import 'presentation_controller.dart';
 
 /// High level presentation manager.
@@ -97,11 +98,30 @@ final class PresentationManager {
   /// Whether switching to fullscreen.
   bool get isTransitioningToFullscreen => snapshot.isTransitioningToFullscreen;
 
+  /// Whether window-level fullscreen is active.
+  bool get isWindowFullscreen => snapshot.isWindowFullscreen;
+
+  /// Whether either fullscreen variant is active.
+  bool get isAnyFullscreen => snapshot.isAnyFullscreen;
+
+  /// Whether switching to window-level fullscreen.
+  bool get isTransitioningToWindowFullscreen => snapshot.isTransitioningToWindowFullscreen;
+
   /// Whether switching to PiP.
   bool get isTransitioningToPip => snapshot.isTransitioningToPip;
 
   /// Whether switching to floating.
   bool get isTransitioningToFloating => snapshot.isTransitioningToFloating;
+
+  /// Updates the media orientation the presentation describes.
+  void updateOrientation(VideoOrientation orientation) {
+    _ensureNotDisposed();
+
+    _controller.updateOrientation(orientation);
+  }
+
+  /// Orientation of the media currently being presented.
+  VideoOrientation get orientation => _latestState.orientation;
 
   /// Requests presentation change.
   Future<void> request(PresentationRequest request) {
@@ -118,6 +138,24 @@ final class PresentationManager {
   /// Exit fullscreen.
   Future<void> exitFullscreen() {
     if (!isFullscreen) {
+      return Future.value();
+    }
+
+    return exit();
+  }
+
+  /// Enter window-level fullscreen.
+  ///
+  /// Fills the application window; the system-fullscreen variant is
+  /// [enterFullscreen]. The two are separate so a host can offer both without
+  /// one silently implying the other.
+  Future<void> enterWindowFullscreen() {
+    return request(PresentationRequest.windowFullscreen());
+  }
+
+  /// Exit window-level fullscreen.
+  Future<void> exitWindowFullscreen() {
+    if (!isWindowFullscreen) {
       return Future.value();
     }
 
@@ -160,6 +198,15 @@ final class PresentationManager {
     }
 
     return enterFullscreen();
+  }
+
+  /// Toggle window-level fullscreen.
+  Future<void> toggleWindowFullscreen() {
+    if (isWindowFullscreen) {
+      return exitWindowFullscreen();
+    }
+
+    return enterWindowFullscreen();
   }
 
   /// Toggle PiP.
