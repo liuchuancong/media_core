@@ -26,3 +26,4 @@ export 'renderer_capabilities.dart';
 export 'renderer_config.dart';
 export 'renderer_controller.dart';
 export 'renderer_state.dart';
+export 'video_zoom_controller.dart';

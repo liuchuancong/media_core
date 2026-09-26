@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 import '../adapter/player_video_output.dart';
 import '../kernel/player_handle.dart';
 import '../screenshot/screenshot_surface.dart';
+import '../source/player_source.dart';
 import 'player_view.dart';
+import 'video_zoom_controller.dart';
 
 /// Application-facing video widget for a [PlayerHandle].
 ///
@@ -23,10 +25,29 @@ import 'player_view.dart';
 ///   ratio when the backend reports the video size,
 /// - offers its video layer as a screenshot surface, so
 ///   [PlayerHandle.captureScreenshot] works on engines that have no
-///   frame-capture API of their own.
+///   frame-capture API of their own,
+/// - magnifies the video on request, through [zoom] and [enablePinchZoom].
 ///
 /// The view never controls playback. Pausing, muting, recovery and
 /// lifecycle belong to the handle; this widget only renders.
+///
+/// ### Zooming
+///
+/// Magnification is a transform of the rendered surface, applied *inside* the
+/// aspect-ratio box and the capture boundary:
+///
+/// ```text
+/// AspectRatio            the box matches the video, so a magnified picture
+///  └ GestureDetector      only when gestures are enabled
+///     └ RepaintBoundary   screenshots capture what the user sees
+///        └ ClipRect       crops what the magnification pushed outside
+///           └ Transform   scale + translation
+///              └ PlayerView (fit, mirror) → adapter video widget
+/// ```
+///
+/// The order matters. The transform sits outside `mirror` so a drag always
+/// moves the picture with the finger, and inside the clip so magnifying crops
+/// the edges instead of painting over the host's UI.
 final class MediaPlayerView extends StatefulWidget {
   const MediaPlayerView({
     required this.handle,
@@ -36,6 +57,9 @@ final class MediaPlayerView extends StatefulWidget {
     this.mirror = false,
     this.backgroundColor = const Color(0xFF000000),
     this.captureBoundary = true,
+    this.zoom,
+    this.enablePinchZoom = false,
+    this.resetZoomOnSourceChange = true,
   });
 
   /// The player whose video is rendered.
@@ -60,6 +84,34 @@ final class MediaPlayerView extends StatefulWidget {
   /// that never takes screenshots and renders many players at once.
   final bool captureBoundary;
 
+  /// Zoom applied to the video.
+  ///
+  /// Pass one to read the current magnification, to reset it, or to remember
+  /// it across widgets — a feed that keeps each item's zoom, or a small window
+  /// that opens with the zoom the inline view had. When omitted, the view owns
+  /// one internally for as long as it needs it, which is enough for gestures
+  /// alone.
+  final VideoZoomController? zoom;
+
+  /// Whether the view magnifies the video with pinch and double tap.
+  ///
+  /// Off by default, and deliberately so: the gesture layer competes with the
+  /// host's own gestures. A video inside a vertical feed or a horizontally
+  /// paged gallery must either keep this off or stop its scrollable while
+  /// `zoom.isZoomed` (`physics: NeverScrollableScrollPhysics`), because a
+  /// magnified picture wants the drag for panning.
+  ///
+  /// When enabled, a two-finger pinch scales around its focal point, a drag
+  /// pans while zoomed, and a double tap toggles between 1x and
+  /// [VideoZoomController.doubleTapScale].
+  final bool enablePinchZoom;
+
+  /// Whether opening another source returns the zoom to 1x.
+  ///
+  /// Default true: the next video is a different picture, and inheriting the
+  /// previous magnification of a differently shaped video is disorienting.
+  final bool resetZoomOnSourceChange;
+
   @override
   State<MediaPlayerView> createState() => _MediaPlayerViewState();
 }
@@ -74,6 +126,7 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
 
   StreamSubscription<void>? _backendSubscription;
   StreamSubscription<void>? _geometrySubscription;
+  StreamSubscription<PlayerSource?>? _sourceSubscription;
 
   /// Boundary wrapping the video layer, used as a screenshot surface.
   ///
@@ -94,9 +147,33 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
 
   bool _surfaceSyncScheduled = false;
 
+  /// Zoom state, owned by this view when the host did not supply one.
+  late VideoZoomController _zoom = widget.zoom ?? VideoZoomController();
+
+  /// Scale at the start of the running pinch, so the reported cumulative scale
+  /// is applied as a ratio instead of being multiplied in every frame.
+  double _gestureStartScale = 1.0;
+
+  /// Where the last double tap landed, in view coordinates.
+  Offset _doubleTapPosition = Offset.zero;
+
+  /// Size of the video box, needed by every zoom operation for clamping.
+  Size _viewSize = Size.zero;
+
+  /// Whether the view should apply (and may change) a zoom transform.
+  bool get _zoomEnabled => widget.enablePinchZoom || widget.zoom != null;
+
   @override
   void didUpdateWidget(MediaPlayerView oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (!identical(oldWidget.zoom, widget.zoom)) {
+      // A host that swaps controllers owns the lifetime of what it passes
+      // in; only the one this view created is its to dispose.
+      _releaseOwnedZoom();
+
+      _zoom = widget.zoom ?? VideoZoomController();
+    }
 
     if (!identical(oldWidget.handle, widget.handle)) {
       _bind(widget.handle);
@@ -125,6 +202,8 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
   void dispose() {
     _unbind();
 
+    _releaseOwnedZoom();
+
     super.dispose();
   }
 
@@ -150,6 +229,15 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
     _geometrySubscription = handle.geometryController.state.listen((_) {
       if (mounted) {
         setState(() {});
+      }
+    });
+
+    // A new source is a different picture; the previous magnification belongs
+    // to what is no longer on screen. The stream also reports the source being
+    // closed, which is when the reset matters least but is still correct.
+    _sourceSubscription = handle.sourceChanges.listen((_) {
+      if (widget.resetZoomOnSourceChange) {
+        _zoom.reset();
       }
     });
   }
@@ -187,6 +275,9 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
 
     _geometrySubscription?.cancel();
     _geometrySubscription = null;
+
+    _sourceSubscription?.cancel();
+    _sourceSubscription = null;
 
     // `attach`/`detach` exist for surfaces with an explicit lifecycle
     // (SurfaceTexture / PlatformView based engines); they are no-ops for the
@@ -270,19 +361,133 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
 
     return AspectRatio(
       aspectRatio: _aspectRatio(handle),
-      child: widget.captureBoundary ? RepaintBoundary(key: _captureKey, child: picture) : picture,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _trackViewSize(constraints.biggest);
+
+          // Outermost first: the capture boundary has to see the magnification
+          // (a screenshot is "what I see"), the gesture layer has to work in
+          // view coordinates — inside the transform its focal points would be
+          // content coordinates — and the clip has to crop what the transform
+          // pushed outside the box.
+          return _withCaptureBoundary(_withGestures(_withZoom(picture)));
+        },
+      ),
     );
+  }
+
+  /// Wraps [child] in the capture boundary when the host wants screenshots.
+  Widget _withCaptureBoundary(Widget child) {
+    return widget.captureBoundary ? RepaintBoundary(key: _captureKey, child: child) : child;
+  }
+
+  /// Wraps [child] in the zoom transform when zooming is in play.
+  ///
+  /// The clip and the transform are rebuilt on their own, with [child] passed
+  /// straight through, so a drag never re-builds the engine's video widget —
+  /// the picture subtree is not touched while the user pinches. At rest there
+  /// is no wrapper at all: a host that passes a controller to read the zoom
+  /// pays nothing for a video nobody magnified.
+  Widget _withZoom(Widget child) {
+    if (!_zoomEnabled) {
+      return child;
+    }
+
+    return ListenableBuilder(
+      listenable: _zoom,
+      child: child,
+      builder: (context, child) {
+        if (!_zoom.isActive) {
+          return child!;
+        }
+
+        return ClipRect(child: Transform(transform: _zoom.matrix, child: child));
+      },
+    );
+  }
+
+  /// Wraps [child] in the gesture layer, when the host asked for gestures.
+  Widget _withGestures(Widget child) {
+    if (!widget.enablePinchZoom) {
+      return child;
+    }
+
+    return GestureDetector(
+      onScaleStart: (details) {
+        _gestureStartScale = _zoom.scale;
+      },
+      onScaleUpdate: (details) {
+        // A pinch reports the scale relative to the start of the gesture, so
+        // it is applied as a ratio against the scale recorded then: feeding
+        // `details.scale` in every frame would compound it.
+        if (details.pointerCount > 1) {
+          _zoom.scaleBy(_gestureStartScale * details.scale / _zoom.scale, details.localFocalPoint, _viewSize);
+
+          return;
+        }
+
+        _zoom.panBy(details.focalPointDelta, _viewSize);
+      },
+      onScaleEnd: (_) => _zoom.settle(_viewSize),
+      onDoubleTapDown: (details) => _doubleTapPosition = details.localPosition,
+      onDoubleTap: () => _zoom.toggleAt(_doubleTapPosition, _viewSize),
+      child: child,
+    );
+  }
+
+  /// Records the size of the video box and re-clamps the zoom when it changes.
+  ///
+  /// Rotation, fullscreen and split-screen resize all move the bounds the
+  /// translation was clamped against. The re-clamp is deferred to after the
+  /// frame because it notifies listeners, and notifying during a build is an
+  /// error.
+  void _trackViewSize(Size size) {
+    if (size == _viewSize || size.isEmpty) {
+      return;
+    }
+
+    _viewSize = size;
+
+    if (!_zoomEnabled || !_zoom.isActive) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _zoom.reclamp(_viewSize);
+      }
+    });
   }
 
   Color get _backgroundColor => widget.backgroundColor ?? const Color(0xFF000000);
 
+  /// Aspect ratio of the box the video is rendered into.
+  ///
+  /// Read from the geometry snapshot rather than from its raw video size: the
+  /// geometry module derives the ratio from the size *after* rotation, and a
+  /// phone recording is a landscape pixel grid plus a 90° rotation. Using the
+  /// raw size would open a 16:9 box for a portrait video and letterbox the
+  /// picture inside it — and the zoom transform, which magnifies this box,
+  /// would then magnify those bars.
   double _aspectRatio(PlayerHandle handle) {
-    final size = handle.geometryController.snapshot.videoSize;
+    final ratio = handle.geometryController.snapshot.aspectRatio;
 
-    if (size == null || size.width <= 0 || size.height <= 0) {
+    if (ratio <= 0 || !ratio.isFinite) {
       return 16 / 9;
     }
 
-    return size.width / size.height;
+    return ratio;
+  }
+
+  /// Drops the zoom controller this view created, if it created one.
+  ///
+  /// A controller handed in by the host is the host's to dispose: it may
+  /// outlive this widget on purpose (a feed remembering an item's zoom).
+  void _releaseOwnedZoom() {
+    if (widget.zoom != null) {
+      return;
+    }
+
+    _zoom.dispose();
   }
 }
