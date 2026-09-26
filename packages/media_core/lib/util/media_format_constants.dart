@@ -177,17 +177,6 @@ abstract final class IjkFormats {
 ///   SRT, FTP or HTTP-over-TLS-variant data source.
 /// - `asset`: this adapter maps assets to `null` on purpose (the installed
 ///   better_player_plus exposes no asset data-source type).
-///
-/// `flv` is listed because Media3 ships `extractor/flv/FlvExtractor` and
-/// registers it in `DefaultExtractorsFactory` — the same factory this
-/// adapter runs (checked in `androidx.media3:media3-extractor:1.11.0`, the
-/// version the plugin resolves). Leaving it out was not conservative but
-/// wrong: a pinned ExoPlayer was dropped from the sweep for a `.flv` source
-/// and the source went to another engine, while an unpinned one silently
-/// lost the format bonus. What `FlvExtractor` does *not* carry is HEVC
-/// inside FLV, which is a codec question this container list cannot answer
-/// (see the FLV legacy-HEVC layer in `source/flv`).
-///
 /// What remains is a container list, not a codec list: Media3 extracts
 /// `ac3`/`eac3`/`flac`/`opus`, but whether a device can *decode* them is a
 /// separate question the declaration cannot answer.
@@ -201,7 +190,6 @@ abstract final class BetterPlayerFormats {
     'mkv',
     'webm',
     'avi',
-    'flv',
     'f4v',
     '3gp',
     '3g2',
