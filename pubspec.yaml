@@ -7,24 +7,24 @@ environment:
 workspace:
   - packages/media_core
   - packages/media_core_media_kit
+  - packages/media_kit
+  - packages/media_kit_video
   - packages/media_core_better_player
   - packages/media_core_native
   - packages/media_core_ijk_player
   - packages/media_core_fvp
   - packages/media_core_audio
   - packages/media_core_presentation
+  - packages/media_core_presentation_mobile
+  - packages/media_core_danmaku
+  - packages/media_core_live
+  - packages/media_core_feed
   - examples/example
 
 dependency_overrides:
   wakelock_plus: ^1.7.0
-  media_kit:
-    git:
-      url: https://github.com/Predidit/media-kit.git
-      ref: main
-      path: media_kit
 
-  media_kit_video:
-    git:
-      url: https://github.com/Predidit/media-kit.git
-      ref: main
-      path: media_kit_video
+# media_kit and media_kit_video are workspace members (packages/media_kit,
+# packages/media_kit_video): the copied sources in this repository resolve
+# them for every package in the workspace, so no override is needed - pub
+# rejects overriding a workspace member.
