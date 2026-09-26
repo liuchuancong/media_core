@@ -6,7 +6,7 @@ final class DownloadConfig {
     this.retryDelay = const Duration(seconds: 30),
     this.timeout = const Duration(seconds: 20),
     this.maxRedirects = 2,
-    this.forceResume = true,
+    this.forceResume = false,
     this.verifyTailBytes = 10,
     this.userAgent =
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '

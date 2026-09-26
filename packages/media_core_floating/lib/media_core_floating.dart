@@ -28,6 +28,7 @@ library;
 
 export 'src/floating_config.dart';
 export 'src/floating_driver.dart';
+export 'src/floating_window_controller.dart';
 export 'src/floating_window_overlay.dart';
 export 'src/floating_window_placement.dart';
 export 'src/floating_window_presenter.dart';

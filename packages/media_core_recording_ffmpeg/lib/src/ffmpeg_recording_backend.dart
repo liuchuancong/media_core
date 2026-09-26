@@ -114,7 +114,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
 
     final directory = config.outputPath ?? _outputDirectory;
-    if (directory == null || directory.trim().isEmpty) {
+    if (directory == null || StringUtils.isBlank(directory)) {
       throw StateError('No recording directory configured. Set one on the backend or in RecordingConfig.outputPath.');
     }
 

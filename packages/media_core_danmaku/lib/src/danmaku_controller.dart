@@ -97,10 +97,11 @@ final class DanmakuController {
 
   DanmakuTransport? _transport;
 
-  /// Serializes connect/stop/replace. Never completes with an error: failures
-  /// are reported through [onFailure] and the state stream so one bad
-  /// transition cannot poison the tail for the next one.
-  Future<void> _operationTail = Future<void>.value();
+  /// Serializes connect/stop/replace with the core's serial executor.
+  ///
+  /// A failed transition is reported to its caller and to the failure stream,
+  /// and the executor keeps going: one bad transition must not stall the next.
+  final SerialExecutor _operations = SerialExecutor();
 
   /// Invalidates every queued operation. Incremented before each request.
   int _requestEpoch = 0;
@@ -379,8 +380,8 @@ final class DanmakuController {
       await _disconnectInternal(clearRenderer: true);
     });
     _clearFilters();
-    await _failureSubject.close();
-    await _stateSubject.close();
+    await DisposeUtils.close(_failureSubject);
+    await DisposeUtils.close(_stateSubject);
   }
 
   // ---------------------------------------------------------------------------
@@ -664,17 +665,18 @@ final class DanmakuController {
   /// The returned future carries the operation's own errors to its caller,
   /// while the tail itself absorbs them so a failed transition cannot stall
   /// every following one.
-  Future<void> _serialize(Future<void> Function() operation) {
-    final next = _operationTail.then((_) => operation());
-    _operationTail = next.catchError((Object error, StackTrace stackTrace) {
+  Future<void> _serialize(Future<void> Function() operation) async {
+    try {
+      await _operations.execute(operation);
+    } catch (error, stackTrace) {
       MediaCoreLog.error(
         LogCategory.danmaku,
         'Danmaku session operation failed',
         error: error,
         stackTrace: stackTrace,
       );
-    });
-    return next;
+      rethrow;
+    }
   }
 }
 

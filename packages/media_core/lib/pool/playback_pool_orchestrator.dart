@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../concurrency/serial_executor.dart';
 import '../resource/resource_pressure.dart';
 import '../source/player_source.dart';
 import 'player_pool_config.dart';
@@ -130,7 +131,8 @@ final class PlaybackPoolOrchestrator {
   int _reportSequence = 0;
   final List<PlayerSource> _sources = <PlayerSource>[];
 
-  Future<void> _operationTail = Future<void>.value();
+  /// Serializes reconciliations with the core's serial executor.
+  final SerialExecutor _operations = SerialExecutor();
   bool _disposed = false;
   bool _viewportVisible = true;
   bool _occluded = false;
@@ -613,11 +615,7 @@ final class PlaybackPoolOrchestrator {
 
   Duration get _now => Duration(milliseconds: _clock().millisecondsSinceEpoch);
 
-  Future<T> _enqueue<T>(Future<T> Function() operation) {
-    final next = _operationTail.then((_) => operation());
-    _operationTail = next.then((_) {}, onError: (Object error, StackTrace stackTrace) {});
-    return next;
-  }
+  Future<T> _enqueue<T>(Future<T> Function() operation) => _operations.execute(operation);
 
   void _ensureNotDisposed() {
     if (_disposed) {

@@ -1,3 +1,5 @@
+import 'package:media_core/media_core.dart' show UriUtils;
+
 import 'ffmpeg_record_config.dart';
 
 /// Builds the FFmpeg argument lists a recording uses.
@@ -172,7 +174,10 @@ final class FfmpegRecordArguments {
   /// FFmpeg and everything else surfaces to the caller, which is the only one
   /// that can fetch a fresh URL.
   List<String> inputProtocolOptions(String rawUrl, {int? rwTimeout}) {
-    final scheme = Uri.tryParse(rawUrl.trim())?.scheme.toLowerCase() ?? '';
+    // Scheme parsing and the network check come from the core's URI helpers, so
+    // this package cannot drift from the framework's idea of what a network
+    // input is.
+    final scheme = UriUtils.scheme(rawUrl)?.toLowerCase() ?? '';
     final seconds = (rwTimeout ?? config.rwTimeout).clamp(1, 3600);
     final timeoutMicros = (seconds * 1000000).clamp(1, 2147483647).toString();
     final options = <String>[];
@@ -205,8 +210,11 @@ final class FfmpegRecordArguments {
 
   /// Whether [rawUrl] is a network input that needs discontinuity handling.
   static bool usesNetworkInput(String rawUrl) {
-    final scheme = Uri.tryParse(rawUrl.trim())?.scheme.toLowerCase() ?? '';
-    return const <String>{'http', 'https', 'rtmp', 'rtmps', 'rtsp', 'rtp', 'udp', 'srt'}.contains(scheme);
+    if (UriUtils.isNetwork(rawUrl)) {
+      return true;
+    }
+    final scheme = UriUtils.scheme(rawUrl)?.toLowerCase() ?? '';
+    return const <String>{'rtmps', 'rtp', 'srt'}.contains(scheme);
   }
 
   /// Normalizes HTTP headers for FFmpeg.

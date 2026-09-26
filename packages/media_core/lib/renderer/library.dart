@@ -18,6 +18,7 @@ library;
 
 export 'media_player_view.dart';
 export 'player_overlay.dart';
+export 'portable_player.dart';
 export 'player_renderer.dart';
 export 'player_surface.dart';
 export 'player_view.dart';

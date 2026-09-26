@@ -1,3 +1,5 @@
+import 'package:media_core/media_core.dart' show TaskId, TaskPriority;
+
 import 'download_config.dart';
 import 'download_progress.dart';
 import 'download_status.dart';
@@ -10,6 +12,7 @@ final class DownloadTask {
   DownloadTask({
     required this.id,
     required this.url,
+    this.priority = TaskPriority.normal,
     required this.filePath,
     this.headers = const <String, String>{},
     this.title,
@@ -18,8 +21,18 @@ final class DownloadTask {
     this.error,
   }) : progress = progress;
 
-  /// Stable identifier, used by every manager call.
-  final String id;
+  /// Task identity, from the core task model.
+  ///
+  /// A [TaskId] rather than a string so a download is the same kind of thing as
+  /// every other task in the framework: the queue, its metrics and any host code
+  /// that already handles task ids work on it unchanged.
+  final TaskId id;
+
+  /// Queue priority.
+  ///
+  /// The core queue orders by this, so a viewer can ask for one item to jump the
+  /// line without the download package inventing its own ordering.
+  final TaskPriority priority;
 
   /// Source URL.
   final String url;
@@ -65,6 +78,7 @@ final class DownloadTask {
   /// Copies the task with new transfer state.
   DownloadTask copyWith({
     DownloadStatus? status,
+    TaskPriority? priority,
     DownloadProgress? progress,
     Object? error,
     bool clearError = false,
@@ -72,6 +86,7 @@ final class DownloadTask {
     return DownloadTask(
       id: id,
       url: url,
+      priority: priority ?? this.priority,
       filePath: filePath,
       headers: headers,
       title: title,

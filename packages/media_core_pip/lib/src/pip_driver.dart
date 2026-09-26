@@ -115,6 +115,12 @@ final class PipDriver implements KernelPresentationDriver {
   /// Picture-in-picture state changes, including system-initiated ones.
   Stream<bool> get onPipChanged => _pipChanges.stream;
 
+  /// Video width fed through [onVideoSize], for the small window's shape.
+  int get videoWidth => _videoWidth;
+
+  /// Video height fed through [onVideoSize], for the small window's shape.
+  int get videoHeight => _videoHeight;
+
   /// Whether picture-in-picture can be entered at all on this host.
   ///
   /// Async on mobile (the platform answers), synchronous on desktop (a window
@@ -200,7 +206,7 @@ final class PipDriver implements KernelPresentationDriver {
     await _systemPip?.dispose();
 
     _isPip = false;
-    await _pipChanges.close();
+    await DisposeUtils.close(_pipChanges);
   }
 
   // ---------------------------------------------------------------------------

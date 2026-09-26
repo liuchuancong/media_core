@@ -14,6 +14,7 @@ library;
 
 export 'src/floating_system_pip.dart';
 export 'src/pip_config.dart';
+export 'src/pip_controller.dart';
 export 'src/pip_driver.dart';
 export 'src/pip_window.dart';
 export 'src/system_pip.dart';

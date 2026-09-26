@@ -135,8 +135,8 @@ final class FloatingDriver implements KernelPresentationDriver {
       _isFloating = false;
     }
 
-    await _floatingChanges.close();
-    await _players.close();
+    await DisposeUtils.close(_floatingChanges);
+    await DisposeUtils.close(_players);
   }
 
   /// Player changes, for a host that binds its surface asynchronously.

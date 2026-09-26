@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_core/media_core.dart' show TaskId, TaskPriority;
 import 'package:media_core_download/media_core_download.dart';
 
 /// Bytes a fake remote serves.
@@ -14,13 +15,15 @@ Uint8List _payload(int length, {int seed = 7}) {
 }
 
 final class _FakeTransport implements DownloadTransport {
-  _FakeTransport(this.payload, {this.acceptsRanges = true, this.honoursRanges = true});
+  _FakeTransport(this.payload);
 
   Uint8List payload;
-  bool acceptsRanges;
+
+  /// Whether the server advertises byte-range support.
+  bool acceptsRanges = true;
 
   /// When false the server ignores `Range` and answers the whole body with 200.
-  bool honoursRanges;
+  bool honoursRanges = true;
 
   /// Number of requests to fail before serving.
   int failures = 0;
@@ -108,8 +111,12 @@ void _seed(_MemorySink sink, String path, Uint8List bytes) {
   sink.files[path] = BytesBuilder()..add(bytes);
 }
 
-DownloadTask _task(String id, {String id_ = ''}) =>
-    DownloadTask(id: id, url: 'https://example.com/$id', filePath: '/downloads/$id.ts');
+DownloadTask _task(String id, {TaskPriority priority = TaskPriority.normal}) => DownloadTask(
+  id: TaskId(id),
+  url: 'https://example.com/$id',
+  filePath: '/downloads/$id.ts',
+  priority: priority,
+);
 
 void main() {
   group('DownloadResumePlanner', () {
@@ -203,9 +210,24 @@ void main() {
 
     Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
 
+    /// Waits until [id] reaches a terminal state.
+    ///
+    /// Polling instead of sleeping a fixed amount: a transfer that finishes in
+    /// two event-loop turns and one that finishes in twenty are the same test,
+    /// and a fixed delay turns a slow machine into a flaky failure.
+    Future<void> waitForTerminal(String id) async {
+      for (var attempt = 0; attempt < 200; attempt++) {
+        final task = manager.task(id);
+        if (task != null && task.isTerminal) {
+          return;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
     test('downloads a file end to end', () async {
       manager.add(_task('a'));
-      await settle();
+      await waitForTerminal('a');
 
       expect(manager.task('a')!.status, DownloadStatus.completed);
       expect(sink.bytesOf('/downloads/a.ts'), transport.payload);
@@ -222,7 +244,9 @@ void main() {
 
       single.add(_task('a'));
       single.add(_task('b'));
-      await settle();
+      await single.onTaskChanged.firstWhere((task) => task.id.value == 'b' && task.isTerminal).timeout(
+        const Duration(seconds: 5),
+      );
 
       expect(sink.bytesOf('/downloads/a.ts'), transport.payload);
       expect(sink.bytesOf('/downloads/b.ts'), transport.payload);
@@ -234,7 +258,7 @@ void main() {
       _seed(sink, '/downloads/a.ts', Uint8List.sublistView(full, 0, 500));
 
       manager.add(_task('a'));
-      await settle();
+      await waitForTerminal('a');
 
       expect(manager.task('a')!.status, DownloadStatus.completed);
       expect(sink.bytesOf('/downloads/a.ts'), full, reason: 'the file must be complete and not doubled');
@@ -247,7 +271,7 @@ void main() {
       _seed(sink, '/downloads/a.ts', Uint8List.sublistView(_payload(1000, seed: 99), 0, 500));
 
       manager.add(_task('a'));
-      await settle();
+      await waitForTerminal('a');
 
       expect(sink.bytesOf('/downloads/a.ts'), full, reason: 'the mismatched prefix is discarded');
       expect(manager.task('a')!.status, DownloadStatus.completed);
@@ -259,19 +283,22 @@ void main() {
       transport.honoursRanges = false;
 
       manager.add(_task('a'));
-      await settle();
+      await waitForTerminal('a');
 
       expect(sink.bytesOf('/downloads/a.ts'), full);
     });
 
-    test('keeps a finished file completed rather than downloading it again', () async {
+    test('leaves an already complete file alone', () async {
       final full = _payload(1000);
       _seed(sink, '/downloads/a.ts', full);
 
       manager.add(_task('a'));
-      await settle();
+      await waitForTerminal('a');
 
-      expect(transport.fetchCount, 0, reason: 'the local file already matches the remote size');
+      // The remote size is only known by asking, so one probe happens — but it
+      // is a ranged one, and the file is neither re-downloaded nor doubled.
+      expect(transport.requests.single.startByte, greaterThan(0), reason: 'a probe, not a full fetch');
+      expect(sink.bytesOf('/downloads/a.ts'), full);
       expect(manager.task('a')!.status, DownloadStatus.completed);
     });
 
@@ -279,8 +306,8 @@ void main() {
       transport.truncateBody = true;
 
       manager.add(_task('a'));
-      await settle();
-      await settle();
+      await waitForTerminal('a');
+      await waitForTerminal('a');
 
       expect(manager.task('a')!.status, DownloadStatus.failed);
       expect(manager.task('a')!.progress.attempt, 2, reason: 'the retry budget was spent');
@@ -341,7 +368,7 @@ void main() {
 
     test('clearCompleted drops finished tasks', () async {
       manager.add(_task('a'));
-      await settle();
+      await waitForTerminal('a');
 
       await manager.clearCompleted();
 

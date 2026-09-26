@@ -122,6 +122,8 @@ adapter 报错后内核自动执行：
 | `media_core_feed` | 抖音式上下滑 | 共用一个播放器换源、滑动吸附、下一项预载 |
 | `media_core_list_playback` | 列表播放 | 单窗口上/下滑切换,按条目记忆进度,返回时续播 |
 | `media_core_audio` | 音频会话 | 音频焦点、会话与后台播放接线 |
+| `media_core_recording_ffmpeg` | 录播 | FFmpegKit 分段 MPEG-TS 录制 + CSV 日志;失败只丢几秒而非整场 |
+| `media_core_download` | 下载 | 有界并发队列、断点续传(先校验再续)、重试预算与进度 |
 
 内核只保留与平台无关的基础设施(缓存、协调器、录制抽象、策略、池、预载等)与各能力共享的状态机。
 
@@ -144,5 +146,7 @@ packages/
   media_core_live/                  直播编排
   media_core_feed/                  抖音式上下滑
   media_core_list_playback/         列表播放(进度续播)
+  media_core_recording_ffmpeg/      录播(FFmpegKit 分段录制)
+  media_core_download/              下载(队列 + 续传 + 重试)
 examples/example/                   示例 App
 ```

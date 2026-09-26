@@ -200,7 +200,7 @@ final class FullscreenDriver implements KernelPresentationDriver {
     _isWindowFullscreen = false;
     _notifyIfChanged(wasAnyFullscreen);
 
-    await _fullscreenChanges.close();
+    await DisposeUtils.close(_fullscreenChanges);
   }
 
   // ---------------------------------------------------------------------------
