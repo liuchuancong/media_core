@@ -91,6 +91,20 @@ adapter 报错后内核自动执行：
 
 播放器来自宿主实现的两个接缝:`PoolPlayerHost`(取用/归还)与 `PoolPlayerHandle`(换源/播放/暂停/回收/音量)。`KernelPoolPlayerHost` 适配内核实例池;`PlayerPoolConfig` 是唯一的配置面,各功能包给出推荐预设(`FeedConfig.recommendedPoolConfig`、`PlaybackListConfig.recommendedPoolConfig`、`LivePoolPolicy.toPoolConfig()`)。
 
+## 多画面同看
+
+`media_core_multiview` 把 N 路直播放进一个网格，处理监控场景真正要处理的事:
+
+- **逐格健康度**:每格独立状态(空/起播/播放中/未开播/恢复中/失败)与失败种类(解析/起播/卡顿),关掉一格的自动重试预算有界——一直重试死流只烧流量和电。
+- **唯一音频归属**:`MultiviewAudioMode` 提供独占(仅焦点格出声)/静音/混合;切换焦点时先静音其余再放开目标,失败格不会漏音。音量与静音走内核的池句柄。
+- **视频焦点与画质**:焦点格取最高档、其余取最低档(可用 `MultiviewQualityResolver` 由宿主接站点换档);`focusFirst`/`uniform` 两种策略。
+- **解码/内存预算**:内核上报 `ResourcePressure`,按 `MultiviewBudgetPolicy` 收缩——超标时只留焦点格、或交给平台丢帧、或直接拒绝新增格子,并在快照里说明原因。
+- **逐格弹幕**:每格一个 `DanmakuOverlaySession`(队列按表面隔离),默认只喂焦点格;`focusedDanmaku` 供宿主的 sink 分流。
+- **巡更轮巡**:`patrolEnabled` 按间隔轮换焦点与音频,可跳过未开播/失败的格子——正是监控墙的轮巡。
+- **逐格播放列表**:某格可绑定一串房间,失败或结束时自动前进到下一个在线房间。
+- **播放器来自内核池**:每格经 `PoolPlayerHost` 取用/归还,换房间复用热播放器;清格即归还。
+- **交接**:`handOverCell(index, handOver)` 把某格播放器交给 PiP/小窗会话控制器,流不重启。
+
 ## 后端适配包
 
 | 包                           | 后端               | 说明                        |
@@ -124,6 +138,7 @@ adapter 报错后内核自动执行：
 | `media_core_audio` | 音频会话 | 音频焦点、会话与后台播放接线 |
 | `media_core_recording_ffmpeg` | 录播 | FFmpegKit 分段 MPEG-TS 录制 + CSV 日志;失败只丢几秒而非整场 |
 | `media_core_download` | 下载 | 有界并发队列、断点续传(先校验再续)、重试预算与进度 |
+| `media_core_multiview` | 多画面同看 | 监控式视频墙:逐格健康度、唯一音频归属、解码预算、逐格弹幕、巡更轮巡、逐格播放列表 |
 
 内核只保留与平台无关的基础设施(缓存、协调器、录制抽象、策略、池、预载等)与各能力共享的状态机。
 
@@ -148,5 +163,6 @@ packages/
   media_core_list_playback/         列表播放(进度续播)
   media_core_recording_ffmpeg/      录播(FFmpegKit 分段录制)
   media_core_download/              下载(队列 + 续传 + 重试)
+  media_core_multiview/             多画面同看(监控式视频墙)
 examples/example/                   示例 App
 ```
