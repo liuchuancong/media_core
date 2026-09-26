@@ -81,13 +81,26 @@ final class RecoveryPolicy {
     return retryCount < maxRetryCount;
   }
 
+  /// Largest exponent used for the exponential multiplier.
+  ///
+  /// The exponent is clamped because `1 << retryCount` stops being a
+  /// multiplier long before the max-delay clamp can help: at 63 bits it turns
+  /// negative on the VM (a negative duration is not a retry delay) and on the
+  /// web the shift wraps modulo 32 into a small positive number instead.
+  static const int _maxBackoffExponent = 30;
+
   /// Calculates retry delay.
+  ///
+  /// The result never exceeds [maxRetryDelay], including for the constant
+  /// delay when backoff is disabled.
   Duration getRetryDelay(int retryCount) {
-    if (!exponentialBackoff) {
-      return retryDelay;
+    if (!exponentialBackoff || retryCount <= 0) {
+      return retryDelay > maxRetryDelay ? maxRetryDelay : retryDelay;
     }
 
-    final multiplier = 1 << retryCount;
+    final exponent = retryCount > _maxBackoffExponent ? _maxBackoffExponent : retryCount;
+
+    final multiplier = 1 << exponent;
 
     final delay = Duration(milliseconds: retryDelay.inMilliseconds * multiplier);
 

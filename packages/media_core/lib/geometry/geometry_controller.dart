@@ -27,13 +27,17 @@ import 'package:rxdart/rxdart.dart';
 /// - call platform APIs
 final class GeometryController {
   GeometryController({GeometryState initialState = const GeometryState.initial()})
-    : _stateSubject = BehaviorSubject<GeometryState>.seeded(initialState);
+    : _stateSubject = BehaviorSubject<GeometryState>.seeded(initialState) {
+    // The counter follows the restored state: starting from zero would make
+    // every later update carry a generation the reducer rejects as stale.
+    _generation = initialState.generation;
+  }
 
   final BehaviorSubject<GeometryState> _stateSubject;
 
   bool _disposed = false;
 
-  int _generation = 0;
+  late int _generation;
 
   /// Current state stream.
   ValueStream<GeometryState> get state => _stateSubject.stream;
@@ -63,7 +67,7 @@ final class GeometryController {
   void update(VideoGeometry geometry) {
     _ensureNotDisposed();
 
-    final generation = ++_generation;
+    final generation = _advanceGeneration();
 
     dispatch(GeometryEvent.changed(geometry, generation));
   }
@@ -99,7 +103,7 @@ final class GeometryController {
   void clear() {
     _ensureNotDisposed();
 
-    final generation = ++_generation;
+    final generation = _advanceGeneration();
 
     dispatch(GeometryEvent.reset(generation));
   }
@@ -123,14 +127,38 @@ final class GeometryController {
       return;
     }
 
-    _generation = state.generation;
+    _generation = state.generation > _generation ? state.generation : _generation;
 
     _stateSubject.add(state);
   }
 
-  /// Creates new generation.
+  /// Starts a new generation without changing the geometry.
+  ///
+  /// The new generation is published, not only counted: a caller that tags an
+  /// asynchronous update with it needs the state to move with the counter, or
+  /// the callback would look stale the moment it arrives. Marking the state
+  /// also means every earlier callback is rejected from here on.
   int nextGeneration() {
-    return ++_generation;
+    _ensureNotDisposed();
+
+    final generation = _advanceGeneration();
+
+    _stateSubject.add(current.withGeneration(generation));
+
+    return generation;
+  }
+
+  /// Advances the generation counter past both the counter and the state.
+  ///
+  /// The two can diverge — a restored state arrives with its own generation —
+  /// and an event below the state's generation is discarded, so the next
+  /// generation has to be strictly newer than both.
+  int _advanceGeneration() {
+    final stateGeneration = current.generation;
+
+    _generation = (_generation > stateGeneration ? _generation : stateGeneration) + 1;
+
+    return _generation;
   }
 
   void _ensureNotDisposed() {

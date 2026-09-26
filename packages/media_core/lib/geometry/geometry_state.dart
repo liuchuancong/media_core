@@ -93,14 +93,14 @@ final class GeometryState extends Equatable {
     );
   }
 
+  /// Same geometry under another generation.
+  GeometryState withGeneration(int value) {
+    return GeometryState(geometry: geometry, generation: value, initialized: initialized, updatedAt: updatedAt);
+  }
+
   /// Increment generation.
   GeometryState nextGeneration() {
-    return GeometryState(
-      geometry: geometry,
-      generation: generation + 1,
-      initialized: initialized,
-      updatedAt: updatedAt,
-    );
+    return withGeneration(generation + 1);
   }
 
   /// Reduce event.

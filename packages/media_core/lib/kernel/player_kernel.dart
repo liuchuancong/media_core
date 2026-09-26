@@ -261,12 +261,31 @@ final class PlayerKernel {
       selector: selector,
     );
 
+    // The config carries playback preferences the handle cannot read from the
+    // adapter context alone; applying them here is what makes
+    // `PlayerConfig(muted: true)` actually silent and keeps
+    // `options.enableFallback` / `config.enableFallback` meaningful.
+    if (config.muted) {
+      await handle.setMute(true);
+    }
+
+    handle.setEngineFallbackEnabled(options.enableFallback && config.enableFallback);
+
     await handle.initialize();
 
     _registerEverywhere(handle);
 
     if (effectiveSource != null) {
-      await handle.open(effectiveSource, autoPlay: config.autoPlay);
+      try {
+        await handle.open(effectiveSource, autoPlay: config.autoPlay);
+      } catch (_) {
+        // The caller never received the handle, so leaving it registered would
+        // strand a live player in the pool and in every coordinator - one that
+        // `acquire()` could later hand out. Release it and rethrow.
+        await release(handle.id);
+
+        rethrow;
+      }
     }
 
     return handle;
@@ -289,7 +308,10 @@ final class PlayerKernel {
 
     final handle = _handles[pooledId];
     if (handle == null || handle.disposed) {
-      _pool.release(pooledId);
+      // Drop the row entirely: releasing it back as "idle" would keep it
+      // available forever, so `allocate` would keep returning a dead player and
+      // the pool's counts would describe decoders that do not exist.
+      _pool.remove(pooledId);
       return null;
     }
 
@@ -560,6 +582,11 @@ final class PlayerKernel {
 
     if (options.enablePool) {
       _pool.add(handle.id);
+      // A freshly created handle belongs to its creator. Without reserving it
+      // the pool counts it as idle, and the next acquire() (e.g. a feed cell
+      // taking a warm player) would hand out - and recycle - the player that is
+      // currently playing.
+      _pool.reserve(handle.id, sessionId: handle.session.context.sessionId);
     }
 
     _coordinator.player.register(handle.player);

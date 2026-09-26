@@ -42,7 +42,10 @@ final class KernelPresentationAdapter extends PresentationAdapterBase {
     // window-level operations do not need one on desktop.
     final playerId = PlayerId('presentation-adapter');
     await driver.apply(playerId, request);
-    emit(PresentationEvent.changed(mode: request.mode));
+    // Echo the request generation: this event reports the outcome of *this*
+    // transition, and a callback left over from an older request must not be
+    // able to overwrite newer presentation state.
+    emit(PresentationEvent.changed(mode: request.mode, generation: request.generation, source: 'kernel-adapter'));
   }
 
   @override

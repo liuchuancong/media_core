@@ -79,15 +79,29 @@ final class LifecycleController implements PlayerLifecycle {
 
   @override
   void dispose() {
+    if (_state.disposed) {
+      return;
+    }
+
     _update(_state.markDisposing(), LifecycleEventType.disposing);
 
     _update(_state.markDisposed(), LifecycleEventType.disposed);
 
-    _snapshotSubject.close();
-    _eventSubject.close();
+    // Observers outlive the streams: a subscriber that never removed itself
+    // must not keep receiving (or be resurrected into) events after disposal.
+    _observers.clear();
+
+    unawaited(_snapshotSubject.close());
+    unawaited(_eventSubject.close());
   }
 
   void _update(LifecycleState state, LifecycleEventType type) {
+    // Lifecycle is one-way: once disposed, no transition may revive it. The
+    // streams are closed at that point, so publishing would also throw.
+    if (_state.disposed) {
+      return;
+    }
+
     _state = state;
 
     final event = LifecycleEvent.now(type);

@@ -37,6 +37,11 @@ final class PresentationService {
     : _controller = controller,
       _adapter = adapter {
     _eventSubscription = _adapter.events.listen(_onEvent);
+    _capabilitySubscription = _adapter.capabilityChanges.listen(_onCapabilities);
+
+    // The state carries the same capabilities the adapter reports, so a reader
+    // that only watches [state] sees the platform it is running on.
+    _controller.updateCapabilities(_adapter.capabilities);
   }
 
   final PresentationController _controller;
@@ -44,6 +49,8 @@ final class PresentationService {
   final PresentationAdapter _adapter;
 
   StreamSubscription<PresentationEvent>? _eventSubscription;
+
+  StreamSubscription<PresentationCapabilities>? _capabilitySubscription;
 
   bool _disposed = false;
 
@@ -82,14 +89,36 @@ final class PresentationService {
   ///  |
   /// PresentationService
   ///  |
-  /// PresentationController
+  /// PresentationController  (logical transition + generation)
   ///  |
-  /// PresentationAdapter
+  /// PresentationAdapter     (platform execution)
   ///
+  /// The adapter executes the request stamped with the generation the
+  /// controller assigned, so the events the adapter reports are matched to
+  /// this transition instead of being discarded as stale. A platform failure
+  /// is recorded in the state and does not escape to the caller: the
+  /// presentation state stream is the observable outcome of a request.
   Future<void> request(PresentationRequest request) async {
     _ensureNotDisposed();
 
-    await _controller.request(request);
+    final generation = await _controller.request(request);
+
+    try {
+      await _adapter.apply(request.copyWith(generation: generation));
+    } catch (error) {
+      _controller.handleEvent(
+        PresentationEvent.failed(
+          mode: request.mode,
+          error: error.toString(),
+          generation: generation,
+          source: request.source,
+        ),
+      );
+
+      return;
+    }
+
+    _settleTransition(request, generation);
   }
 
   /// Enter fullscreen.
@@ -135,6 +164,13 @@ final class PresentationService {
     _ensureNotDisposed();
 
     await _adapter.refreshCapabilities();
+
+    // An adapter that reports through [PresentationAdapter.capabilityChanges]
+    // already updated the state; one that only mutates its own view is synced
+    // here so the state never lags behind the platform.
+    if (!_disposed) {
+      _controller.updateCapabilities(_adapter.capabilities);
+    }
   }
 
   // ============================================================
@@ -148,6 +184,38 @@ final class PresentationService {
     }
 
     _controller.handleEvent(event);
+  }
+
+  /// Receives platform capability changes.
+  void _onCapabilities(PresentationCapabilities capabilities) {
+    if (_disposed) {
+      return;
+    }
+
+    _controller.updateCapabilities(capabilities);
+  }
+
+  /// Completes a transition the adapter returned from without reporting.
+  ///
+  /// Adapters may report through [PresentationAdapter.events], and one that
+  /// does has already cleared the transition by the time [request] resumes.
+  /// When `apply` returns silently the platform operation is nonetheless done,
+  /// so leaving the state transitioning would strand every reader waiting for
+  /// it to settle.
+  void _settleTransition(PresentationRequest request, int generation) {
+    if (_disposed) {
+      return;
+    }
+
+    final state = _controller.current;
+
+    if (state.generation != generation || !state.transitioning) {
+      return;
+    }
+
+    _controller.handleEvent(
+      PresentationEvent.completed(mode: request.mode, generation: generation, source: request.source),
+    );
   }
 
   // ============================================================
@@ -169,6 +237,9 @@ final class PresentationService {
     _disposed = true;
 
     await _eventSubscription?.cancel();
+    _eventSubscription = null;
+    await _capabilitySubscription?.cancel();
+    _capabilitySubscription = null;
 
     await _adapter.dispose();
 

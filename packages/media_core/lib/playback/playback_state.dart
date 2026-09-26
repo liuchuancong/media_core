@@ -29,6 +29,7 @@ final class PlaybackState extends Equatable {
     required this.rate,
     required this.initialized,
     required this.updatedAt,
+    this.buffering = false,
   });
 
   /// Initial state.
@@ -39,7 +40,8 @@ final class PlaybackState extends Equatable {
       volume = 1.0,
       rate = 1.0,
       initialized = false,
-      updatedAt = null;
+      updatedAt = null,
+      buffering = false;
 
   /// Current playback command/state.
   final PlaybackCommand command;
@@ -62,6 +64,16 @@ final class PlaybackState extends Equatable {
   /// Last state update.
   final DateTime? updatedAt;
 
+  /// Whether the engine is currently short of data.
+  ///
+  /// A separate field rather than a command: buffering is a *condition* that
+  /// happens while playing, so it must not replace the transport command. When
+  /// it did, a single `buffering: false` notification left the mirror reading
+  /// `isBuffering == true, isPlaying == false, isPaused == false` for the rest
+  /// of the session - which silently disabled everything that asks the player
+  /// whether it is playing.
+  final bool buffering;
+
   // ---------------------------------------------------------------------------
   // Status
   // ---------------------------------------------------------------------------
@@ -78,7 +90,7 @@ final class PlaybackState extends Equatable {
 
   bool get isCompleted => command.isCompleted;
 
-  bool get isBuffering => command.isBuffering;
+  bool get isBuffering => buffering;
 
   bool get hasDuration => duration > Duration.zero;
 
@@ -104,6 +116,7 @@ final class PlaybackState extends Equatable {
     double? rate,
     bool? initialized,
     DateTime? updatedAt,
+    bool? buffering,
   }) {
     return PlaybackState(
       command: command ?? this.command,
@@ -113,6 +126,7 @@ final class PlaybackState extends Equatable {
       rate: rate ?? this.rate,
       initialized: initialized ?? this.initialized,
       updatedAt: updatedAt ?? this.updatedAt,
+      buffering: buffering ?? this.buffering,
     );
   }
 
@@ -129,7 +143,9 @@ final class PlaybackState extends Equatable {
         return copyWith(command: command, position: Duration.zero, updatedAt: clock.now());
 
       case PlaybackCommandBuffering():
-        return copyWith(command: command, updatedAt: clock.now());
+        // Keeps the transport command on purpose: the player is still playing
+        // (or paused) while it waits for data, and callers ask `isPlaying`.
+        return copyWith(buffering: command.value, updatedAt: clock.now());
 
       case PlaybackCommandLoading():
         return copyWith(command: command, updatedAt: clock.now());
@@ -155,7 +171,7 @@ final class PlaybackState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [command, position, duration, volume, rate, initialized, updatedAt];
+  List<Object?> get props => [command, position, duration, volume, rate, initialized, updatedAt, buffering];
 
   @override
   String toString() {
@@ -164,6 +180,7 @@ final class PlaybackState extends Equatable {
         'position=$position, '
         'duration=$duration, '
         'volume=$volume, '
-        'rate=$rate)';
+        'rate=$rate'
+        '${buffering ? ', buffering' : ''})';
   }
 }

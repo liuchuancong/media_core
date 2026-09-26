@@ -16,15 +16,35 @@ import 'dart:async';
 class AsyncLock {
   Completer<void>? _completer;
 
+  /// Number of acquirers currently waiting for the lock to be released.
+  ///
+  /// A keyed container has to tell "free" apart from "handing the lock over to
+  /// a waiter": [release] clears [_completer] before the waiter resumes, so
+  /// [locked] alone would let the container drop a lock that a queued
+  /// operation still relies on.
+  int _waiters = 0;
+
   /// Whether the lock is currently held.
   bool get locked => _completer != null;
+
+  /// Whether the lock is neither held nor awaited by anyone.
+  bool get isIdle => _completer == null && _waiters == 0;
+
+  /// Number of operations waiting for the lock.
+  int get waiterCount => _waiters;
 
   /// Acquires the lock.
   ///
   /// This method waits until the previous holder releases the lock.
   Future<void> acquire() async {
     while (_completer != null) {
-      await _completer!.future;
+      _waiters++;
+
+      try {
+        await _completer!.future;
+      } finally {
+        _waiters--;
+      }
     }
 
     _completer = Completer<void>();
@@ -83,7 +103,10 @@ class KeyedAsyncLock<K> {
     try {
       return await lock.synchronized(action);
     } finally {
-      if (!lock.locked) {
+      // Only the last operation interested in the key may drop the entry.
+      // Removing it while a waiter is still queued would let the next caller
+      // create a second lock for the same key and run concurrently with it.
+      if (identical(_locks[key], lock) && lock.isIdle) {
         _locks.remove(key);
       }
     }
@@ -91,7 +114,7 @@ class KeyedAsyncLock<K> {
 
   /// Removes all idle locks.
   void cleanup() {
-    _locks.removeWhere((_, lock) => !lock.locked);
+    _locks.removeWhere((_, lock) => lock.isIdle);
   }
 
   /// Clears all locks.

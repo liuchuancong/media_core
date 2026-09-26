@@ -115,18 +115,30 @@ final class KernelPoolPlayerHost implements PoolPlayerHost {
   @override
   Future<void> release(PoolPlayerHandle handle) async {
     if (handle is KernelPoolPlayerHandle) {
-      await kernel.release(handle.handle.id);
+      // The pool's own contract: hand the player back for reuse. Going through
+      // `kernel.release` here would dispose it, so nothing would ever be
+      // reused and every take would pay for a cold player - which is exactly
+      // what the pool exists to avoid.
+      await handle.handle.recycle();
+      kernel.pool.release(handle.handle.id);
+
       return;
     }
+
     await handle.pause();
   }
 
   @override
   Future<void> disposeHandle(PoolPlayerHandle handle) async {
     if (handle is KernelPoolPlayerHandle) {
-      await handle.handle.dispose();
+      // Destruction goes through the kernel so the handle leaves its
+      // registrations and the pool row in one step; calling `dispose()` here
+      // would leave a dead player registered everywhere.
+      await kernel.release(handle.handle.id);
+
       return;
     }
+
     await handle.pause();
   }
 }

@@ -67,6 +67,42 @@ final class VideoGeometry extends Equatable {
   /// Device pixel density.
   final PixelRatioValue pixelRatio;
 
+  /// Video size as displayed, i.e. after [rotation] is applied.
+  ///
+  /// A 90°/270° rotation swaps width and height.
+  static VideoSize _displaySize(VideoSize size, VideoRotationInfo rotation) {
+    if (!rotation.swapsAspectRatio) {
+      return size;
+    }
+
+    return VideoSize(width: size.height, height: size.width);
+  }
+
+  /// Builds geometry whose derived values describe what is displayed.
+  ///
+  /// Every entry point that changes the video size or the rotation funnels
+  /// through here. A phone recording pairs a landscape pixel grid with a 90°
+  /// rotation, so a ratio or orientation derived from the raw grid would
+  /// contradict [effectiveAspectRatio], the orientation accessors and the
+  /// layout the renderer has to produce.
+  static VideoGeometry derived({
+    required VideoSize videoSize,
+    required DisplaySize displaySize,
+    required VideoRotationInfo rotation,
+    required PixelRatioValue pixelRatio,
+  }) {
+    final displayed = _displaySize(videoSize, rotation);
+
+    return VideoGeometry(
+      videoSize: videoSize,
+      displaySize: displaySize,
+      aspectRatio: AspectRatioValue.fromSize(displayed),
+      orientation: VideoOrientationInfo.fromSize(displayed.width, displayed.height),
+      rotation: rotation,
+      pixelRatio: pixelRatio,
+    );
+  }
+
   /// Whether video size is valid.
   bool get hasVideo {
     return videoSize.isValid;
@@ -111,19 +147,28 @@ final class VideoGeometry extends Equatable {
     return effectiveWidth / height;
   }
 
+  /// Orientation as displayed, i.e. after [rotation] is applied.
+  ///
+  /// Derived from the effective dimensions rather than from the stored
+  /// [orientation], so the answer cannot disagree with the ratio the renderer
+  /// lays out.
+  VideoOrientation get displayOrientation {
+    return VideoOrientation.fromSize(effectiveWidth.round(), effectiveHeight.round());
+  }
+
   /// Whether portrait.
   bool get isPortrait {
-    return orientation.effectiveOrientation == VideoOrientation.portrait;
+    return displayOrientation == VideoOrientation.portrait;
   }
 
   /// Whether landscape.
   bool get isLandscape {
-    return orientation.effectiveOrientation == VideoOrientation.landscape;
+    return displayOrientation == VideoOrientation.landscape;
   }
 
   /// Whether square.
   bool get isSquare {
-    return orientation.effectiveOrientation == VideoOrientation.square;
+    return displayOrientation == VideoOrientation.square;
   }
 
   /// Whether rotated.
@@ -138,11 +183,9 @@ final class VideoGeometry extends Equatable {
 
   /// Creates geometry with new video size.
   VideoGeometry copyWithVideoSize(VideoSize size) {
-    return VideoGeometry(
+    return VideoGeometry.derived(
       videoSize: size,
       displaySize: displaySize,
-      aspectRatio: AspectRatioValue.fromSize(size),
-      orientation: VideoOrientationInfo.fromSize(size.width, size.height),
       rotation: rotation,
       pixelRatio: pixelRatio,
     );
@@ -150,11 +193,9 @@ final class VideoGeometry extends Equatable {
 
   /// Creates geometry with new display size.
   VideoGeometry copyWithDisplaySize(DisplaySize size) {
-    return VideoGeometry(
+    return VideoGeometry.derived(
       videoSize: videoSize,
       displaySize: size,
-      aspectRatio: aspectRatio,
-      orientation: orientation,
       rotation: rotation,
       pixelRatio: pixelRatio,
     );
@@ -162,11 +203,9 @@ final class VideoGeometry extends Equatable {
 
   /// Creates geometry with new rotation.
   VideoGeometry copyWithRotation(VideoRotationInfo value) {
-    return VideoGeometry(
+    return VideoGeometry.derived(
       videoSize: videoSize,
       displaySize: displaySize,
-      aspectRatio: aspectRatio,
-      orientation: orientation,
       rotation: value,
       pixelRatio: pixelRatio,
     );
@@ -191,16 +230,10 @@ final class VideoGeometry extends Equatable {
     VideoRotationInfo? rotation,
     PixelRatioValue? pixelRatio,
   }) {
-    final newVideoSize = videoSize ?? this.videoSize;
-
-    final newRotation = rotation ?? this.rotation;
-
-    return VideoGeometry(
-      videoSize: newVideoSize,
+    return VideoGeometry.derived(
+      videoSize: videoSize ?? this.videoSize,
       displaySize: displaySize ?? this.displaySize,
-      aspectRatio: AspectRatioValue.fromSize(newVideoSize),
-      orientation: VideoOrientationInfo.fromSize(newVideoSize.width, newVideoSize.height),
-      rotation: newRotation,
+      rotation: rotation ?? this.rotation,
       pixelRatio: pixelRatio ?? this.pixelRatio,
     );
   }

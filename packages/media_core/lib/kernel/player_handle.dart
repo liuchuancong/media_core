@@ -264,7 +264,16 @@ final class PlayerHandle implements RecoveryTarget {
   ///
   /// A still-running previous operation is cancelled, not abandoned: two
   /// overlapping records would leave one permanently in flight.
+  ///
+  /// Finished records are pruned as the next one starts — a live session opens
+  /// one record per task and the feed one per item, so without a bound the
+  /// registry and the tracker keep every operation of the handle's lifetime.
+  /// Pruning on start (rather than on completion) keeps the most recent
+  /// outcome readable.
   void beginOperation(OperationType type) {
+    _operationRegistry.removeTerminalOperations();
+    _operationTracker.untrackTerminal();
+
     final previous = _currentOperation;
 
     if (previous != null && !previous.isTerminal) {
@@ -938,6 +947,19 @@ final class PlayerHandle implements RecoveryTarget {
     if (!_backendChanges.isClosed) {
       _backendChanges.add(PlayerBackendChange(from: previous.id, to: registration.id, adapter: next));
     }
+
+    // [PlayerRuntime.replaceAdapter] swaps its bindings but deliberately does
+    // not dispose the outgoing adapter - it documents that the caller owns
+    // that. Without this the retired engine keeps its native player, threads
+    // and surface alive for the rest of the process, once per swap.
+    if (!identical(previous, next)) {
+      try {
+        await previous.dispose();
+      } catch (_) {
+        // A backend that refuses to release must not fail the swap that
+        // already succeeded.
+      }
+    }
   }
 
   /// Applies the audio-only preference to [adapter] when it declares
@@ -1303,6 +1325,12 @@ final class PlayerHandle implements RecoveryTarget {
       if (_disposed) return;
       if (source != null && !_isSourceCurrent(source)) return;
 
+      // Nothing is playing any more, so the lifecycle must not keep claiming
+      // the player is active: pause()/deactivate() already do this, and a
+      // stopped player that still reports `isActive` contradicts the session
+      // and playback facts the same handle exposes.
+      _lifecycle.pause();
+
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'stop'});
     }));
   }
@@ -1449,6 +1477,22 @@ final class PlayerHandle implements RecoveryTarget {
     _backendReady = false;
     _playIntent = false;
     _ladder.reset();
+
+    // The session context names the source; a closed player must not keep
+    // reporting a sourceId (and a source) that is no longer open, or every
+    // snapshot contradicts its own `source: null` field.
+    _runtime.session.updateContext(
+      SessionContext(
+        playerId: _player.id,
+        sessionId: _runtime.session.context.sessionId,
+        generationId: _runtime.sessionController.recreateGeneration(),
+        sourceId: PlayerSource.unknown().id,
+        source: PlayerSource.unknown(),
+        policy: policy,
+        platform: _runtime.session.context.platform,
+      ),
+    );
+
     _announceSource(null);
 
     _cancelActiveOperation(StateError('Player close requested.'));
@@ -1473,6 +1517,8 @@ final class PlayerHandle implements RecoveryTarget {
       await _runtime.sessionController.stop();
 
       if (_disposed) return;
+
+      _lifecycle.pause();
 
       _publish(PlayerEventType.playback, const <String, Object?>{'action': 'stop'});
     }));
@@ -1565,7 +1611,20 @@ final class PlayerHandle implements RecoveryTarget {
 
       if (_disposed) return;
 
-      _runtime.sessionController.recreateGeneration();
+      final generationId = _runtime.sessionController.recreateGeneration();
+
+      _runtime.session.updateContext(
+        SessionContext(
+          playerId: _player.id,
+          sessionId: _runtime.session.context.sessionId,
+          generationId: generationId,
+          sourceId: PlayerSource.unknown().id,
+          source: PlayerSource.unknown(),
+          policy: policy,
+          platform: _runtime.session.context.platform,
+        ),
+      );
+
       _runtime.session.updateState(const SessionState.idle());
 
       await _runtime.playback.stop();
@@ -1621,6 +1680,15 @@ final class PlayerHandle implements RecoveryTarget {
       await _sourceChanges.close();
       await _adapterEvents.close();
 
+      // The recovery-target channel and the operation records are handle
+      // scoped as well: leaving their controllers open means `executionEvents`
+      // and `onOperation` never complete, and a subscriber keeps the handle
+      // (and its whole operation history) alive after disposal.
+      await _targetEvents.close();
+
+      _operationTracker.dispose();
+      _operationRegistry.dispose();
+
       _lifecycle.dispose();
     }, allowDisposed: true));
 
@@ -1656,7 +1724,13 @@ final class PlayerHandle implements RecoveryTarget {
       backendCandidates: candidates.backends,
       position: current.position,
       // The caller's intent wins over the adapter mirror. See [_playIntent].
-      wasPlaying: _playIntent ?? current.isPlaying,
+      //
+      // The mirror is the fallback only when the caller never declared an
+      // intent, and it is read from the session rather than from
+      // `current.isPlaying`: a buffering notification replaces the transport
+      // command in the mirror, so a stalled stream can read as "not playing"
+      // and would then skip verification entirely.
+      wasPlaying: _playIntent ?? _runtime.session.state.status == SessionStatus.playing || _runtime.session.state.status == SessionStatus.buffering,
       volume: current.volume,
       rate: current.rate,
       backendId: _registration.id,
@@ -1712,7 +1786,7 @@ final class PlayerHandle implements RecoveryTarget {
   /// not, the step throws like any other failure and the ladder escalates.
   /// This one check is what makes the ladder's "all engines failed" verdict
   /// trustworthy.
-  Future<void> _verifyPlayback(RecoveryStep step, RecoverySession session) async {
+  Future<void> _verifyPlayback(RecoveryStep step, RecoverySession session, {required int operationGeneration}) async {
     if (!session.wasPlaying) {
       // The caller wants the stream paused; there is no progress to
       // expect, and a clean open is the whole contract.
@@ -1726,6 +1800,14 @@ final class PlayerHandle implements RecoveryTarget {
     while (DateTime.now().isBefore(until)) {
       if (_disposed) {
         throw StateError('Recovery step ${step.label} was interrupted by disposal.');
+      }
+
+      // A caller-issued open()/close() invalidates this step. Without this
+      // check the loop would keep polling - and then report success or
+      // failure - for a source that no longer exists, which is exactly the
+      // stale-commit the lifecycle generation exists to prevent.
+      if (!_isOperationCurrent(operationGeneration)) {
+        throw StateError('Recovery step ${step.label} was superseded while verifying playback.');
       }
 
       final current = _runtime.playback.current;
@@ -1772,30 +1854,33 @@ final class PlayerHandle implements RecoveryTarget {
     final operationGeneration = _invalidateOperations();
     final changedSource = _currentSource?.id != source.id;
 
+    // `_currentSource` is set here, before the queued step runs, because every
+    // operation staleness check reads it. The *announcement* and the session
+    // context, however, wait for the step to actually open the source: a step
+    // that is superseded or fails must not tell sourceChanges consumers that a
+    // source they never saw went live.
     _currentSource = source;
     _backendReady = false;
-
-    if (changedSource) {
-      final generationId = _runtime.sessionController.recreateGeneration();
-
-      _runtime.session.updateContext(
-        SessionContext(
-          playerId: _player.id,
-          sessionId: _runtime.session.context.sessionId,
-          generationId: generationId,
-          sourceId: source.id,
-          source: source,
-          policy: policy,
-          platform: _runtime.session.context.platform,
-        ),
-      );
-
-      _announceSource(source);
-    }
 
     return _enqueue(() async {
       if (!_isOperationCurrent(operationGeneration) || _disposed) {
         throw StateError('Recovery reopen of ${source.uri} was superseded.');
+      }
+
+      if (changedSource) {
+        final generationId = _runtime.sessionController.recreateGeneration();
+
+        _runtime.session.updateContext(
+          SessionContext(
+            playerId: _player.id,
+            sessionId: _runtime.session.context.sessionId,
+            generationId: generationId,
+            sourceId: source.id,
+            source: source,
+            policy: policy,
+            platform: _runtime.session.context.platform,
+          ),
+        );
       }
 
       _emitTargetEvent(RecoveryTargetEventKind.stepStarted, step, sourceId: source.id);
@@ -1830,13 +1915,25 @@ final class PlayerHandle implements RecoveryTarget {
         await _runtime.sessionController.open();
         await _runtime.adapter.open(source);
 
+        // The open is the longest await in the framework. Re-check before
+        // committing: a caller-issued open()/close() during it supersedes this
+        // step, and committing `_backendReady` then would hand playback
+        // commands to an adapter that no longer owns the current source.
+        if (!_isOperationCurrent(operationGeneration) || _disposed) {
+          throw StateError('Recovery reopen of ${source.uri} was superseded.');
+        }
+
         _backendReady = true;
+
+        if (changedSource) {
+          _announceSource(source);
+        }
 
         await _restoreSession(session, source: source);
         await _applyAudioOnly(_runtime.adapter);
 
         // Not done until playback is real: see [_verifyPlayback].
-        await _verifyPlayback(step, session);
+        await _verifyPlayback(step, session, operationGeneration: operationGeneration);
 
         _emitTargetEvent(
           RecoveryTargetEventKind.stepSucceeded,
@@ -1852,7 +1949,12 @@ final class PlayerHandle implements RecoveryTarget {
           'backend': _registration.id,
         });
       } catch (error, stackTrace) {
-        _backendReady = false;
+        // Only the operation that still owns the player may clear its ready
+        // flag: a superseded step failing late would otherwise disable the
+        // source the caller opened in the meantime.
+        if (_isOperationCurrent(operationGeneration) && !_disposed) {
+          _backendReady = false;
+        }
 
         _emitTargetEvent(
           RecoveryTargetEventKind.stepFailed,
@@ -1931,6 +2033,16 @@ final class PlayerHandle implements RecoveryTarget {
 
         committed = true;
 
+        // The session followed the *old* engine, and after an adapter error it
+        // is typically sitting in `error` - a status that cannot be played
+        // from. Re-opening the session is what makes the new engine's playback
+        // events meaningful, and it mirrors what a reopen does.
+        await _runtime.sessionController.open();
+
+        if (!_isOperationCurrent(operationGeneration) || _disposed) {
+          throw StateError('Recovery backend swap to ${registration.id} was superseded.');
+        }
+
         _currentSource = source;
         _backendReady = source != null;
 
@@ -1938,7 +2050,7 @@ final class PlayerHandle implements RecoveryTarget {
 
         // Not done until playback is real: see [_verifyPlayback]. The
         // staged adapter was already told to play; this waits for evidence.
-        await _verifyPlayback(step, session);
+        await _verifyPlayback(step, session, operationGeneration: operationGeneration);
 
         _emitTargetEvent(
           RecoveryTargetEventKind.stepSucceeded,
@@ -2201,7 +2313,11 @@ final class PlayerHandle implements RecoveryTarget {
 
       case PlayerAdapterBuffering(buffering: final buffering, progress: final progress):
         // PlaybackController updated by PlayerPlaybackBinding.
-        _runtime.sessionController.buffering();
+        //
+        // The flag is forwarded, not implied: `buffering: false` ends the
+        // condition, and treating it as "enter buffering" left the session in
+        // that status (loading == true) after the stream had recovered.
+        _runtime.sessionController.setBuffering(buffering);
 
         _publish(PlayerEventType.buffering, <String, Object?>{'buffering': buffering, 'progress': progress});
 
@@ -2210,7 +2326,7 @@ final class PlayerHandle implements RecoveryTarget {
 
         _publish(PlayerEventType.playback, const <String, Object?>{'action': 'completed'});
 
-        _handleCompletion();
+        unawaited(_restartForLoop());
 
       case PlayerAdapterPositionChanged():
       case PlayerAdapterDurationChanged():
@@ -2280,6 +2396,30 @@ final class PlayerHandle implements RecoveryTarget {
     }
   }
 
+  /// Restarts a looping source after completion, reporting a failure instead
+  /// of dropping it.
+  ///
+  /// The adapter-event bridge cannot await this, so the error has to go
+  /// somewhere: a failed replay is a playback failure, and it is reported as
+  /// one rather than becoming an unhandled async error.
+  Future<void> _restartForLoop() async {
+    try {
+      await _handleCompletion();
+    } catch (error, stackTrace) {
+      if (_disposed) {
+        return;
+      }
+
+      reportFailure(
+        RecoveryFailure.fromMessage(
+          'loop restart failed on ${_registration.id}: $error',
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
   /// Restarts a looping source after completion.
   Future<void> _handleCompletion() async {
     if (!_isCurrentPlaybackContext()) {
@@ -2294,48 +2434,35 @@ final class PlayerHandle implements RecoveryTarget {
 
     final operationGeneration = _operationGeneration;
     final sourceId = source.id;
-    final token = _createOperationToken();
 
+    // Deliberately no cancellation token: `_createOperationToken` cancels the
+    // *previous* active continuation, so a completion arriving while a user's
+    // play()/seek() is still in flight would cancel that unrelated operation.
+    // The generation and source checks already make this body stale-safe.
     await _enqueue(() async {
-      try {
-        if (!_isOperationCurrent(operationGeneration) ||
-            token.isCancelled ||
-            !_isSourceIdCurrent(sourceId) ||
-            !_backendReady) {
-          return;
-        }
-
-        await token.runChecked(() => _runtime.adapter.seek(Duration.zero));
-
-        if (!_isOperationCurrent(operationGeneration) ||
-            token.isCancelled ||
-            !_isSourceIdCurrent(sourceId) ||
-            !_backendReady) {
-          return;
-        }
-
-        await token.runChecked(() => _runtime.adapter.play());
-
-        if (!_isOperationCurrent(operationGeneration) ||
-            token.isCancelled ||
-            !_isSourceIdCurrent(sourceId) ||
-            !_backendReady) {
-          return;
-        }
-
-        await token.runChecked(() => _runtime.playback.play());
-
-        if (!_isOperationCurrent(operationGeneration) ||
-            token.isCancelled ||
-            !_isSourceIdCurrent(sourceId) ||
-            !_backendReady) {
-          return;
-        }
-
-        await token.runChecked(() => _runtime.sessionController.play());
-      } finally {
-        _releaseOperationToken(token);
+      if (!_isOperationCurrent(operationGeneration) || !_isSourceIdCurrent(sourceId) || !_backendReady) {
+        return;
       }
+
+      await _runtime.adapter.seek(Duration.zero);
+
+      if (!_isOperationCurrent(operationGeneration) || !_isSourceIdCurrent(sourceId) || !_backendReady) {
+        return;
+      }
+
+      await _runtime.adapter.play();
+
+      if (!_isOperationCurrent(operationGeneration) || !_isSourceIdCurrent(sourceId) || !_backendReady) {
+        return;
+      }
+
+      await _runtime.playback.play();
+
+      if (!_isOperationCurrent(operationGeneration) || !_isSourceIdCurrent(sourceId) || !_backendReady) {
+        return;
+      }
+
+      await _runtime.sessionController.play();
     });
   }
 

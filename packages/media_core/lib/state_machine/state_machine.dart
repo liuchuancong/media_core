@@ -106,6 +106,15 @@ final class StateMachine<S extends StateMachineState> {
   Future<StateTransitionResult<S>> dispatch(StateMachineEvent event) async {
     final start = clock.now();
 
+    if (!_state.acceptsEvents) {
+      return StateTransitionResult.rejected(
+        state: _state,
+        event: event,
+        reason: 'State does not accept events',
+        duration: clock.now().difference(start),
+      );
+    }
+
     if (isTerminal) {
       return StateTransitionResult.rejected(
         state: _state,

@@ -97,6 +97,44 @@ final class PlayerSession {
     return _generation.id == id;
   }
 
+  /// Latest playback position reported by the runtime.
+  Duration _position = Duration.zero;
+
+  /// Latest media duration reported by the runtime.
+  Duration? _duration;
+
+  /// Whether the runtime reports a buffering condition.
+  bool _buffering = false;
+
+  /// Message of the last error, cleared when the session opens again.
+  String? _errorMessage;
+
+  /// Records the playback facts the session reports but does not own.
+  ///
+  /// The runtime feeds these in: position and duration belong to the
+  /// playback controller, while the session is the one place a consumer can
+  /// ask for "everything about this session". Without them the snapshot
+  /// published here contradicted itself - `hasError == false` beside a state
+  /// that was `error`, and a position that was always zero.
+  void updateTimeline({Duration? position, Duration? duration, bool? buffering}) {
+    if (position != null) {
+      _position = position;
+    }
+
+    if (duration != null) {
+      _duration = duration;
+    }
+
+    if (buffering != null) {
+      _buffering = buffering;
+    }
+  }
+
+  /// Records the message of the current error.
+  void updateErrorMessage(String? message) {
+    _errorMessage = message;
+  }
+
   /// Creates snapshot.
   SessionSnapshot _createSnapshot() {
     return SessionSnapshot(
@@ -109,6 +147,16 @@ final class PlayerSession {
       sourceId: _context.sourceId,
 
       state: _state,
+
+      position: _position,
+
+      duration: _duration,
+
+      buffering: _buffering,
+
+      hasError: _state.hasError,
+
+      errorMessage: _errorMessage,
 
       timestamp: clock.now(),
     );

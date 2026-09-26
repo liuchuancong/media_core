@@ -38,7 +38,7 @@ final class EventDispatcher {
         .where(effectiveFilter.accepts)
         .listen(listener, onError: (Object error, StackTrace stackTrace) {});
 
-    result = EventSubscription(subscription: subscription, filter: effectiveFilter);
+    result = EventSubscription(subscription: subscription, filter: effectiveFilter, onCancelled: _remove);
 
     _subscriptions.add(result);
 
@@ -66,7 +66,12 @@ final class EventDispatcher {
       await result.cancel();
     });
 
-    result = EventSubscription(subscription: subscription, filter: effectiveFilter, once: true);
+    result = EventSubscription(
+      subscription: subscription,
+      filter: effectiveFilter,
+      once: true,
+      onCancelled: _remove,
+    );
 
     _subscriptions.add(result);
 
@@ -94,7 +99,6 @@ final class EventDispatcher {
   Future<void> unsubscribe(EventSubscription subscription) async {
     _ensureNotDisposed();
 
-    _subscriptions.remove(subscription);
     await subscription.cancel();
   }
 
@@ -129,8 +133,16 @@ final class EventDispatcher {
     }
   }
 
-  EventFilter _combineFilters(EventFilter? filter, EventPriority? minimumPriority) {
-    if (filter == null && minimumPriority == null) {
+  /// Drops a subscription that cancelled itself.
+  ///
+  /// Registered with every subscription so a one-shot that fires — or any
+  /// subscription cancelled by its owner — stops being tracked here instead of
+  /// staying in the registry as a dead entry.
+  void _remove(EventSubscription subscription) {
+    _subscriptions.remove(subscription);
+  }
+
+  EventFilter _combineFilters(EventFilter? filter, EventPriority? minimumPriority) {    if (filter == null && minimumPriority == null) {
       return const AllowAllEventFilter();
     }
 

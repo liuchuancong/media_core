@@ -59,11 +59,13 @@ final class ResourceCoordinator {
   /// Resource pressure is a decision result produced by the resource
   /// subsystem. The coordinator translates that result into the degraded
   /// mode operation exposed by [ResourceManager].
-  void applyPressure({required PlayerId playerId, required ResourcePressure pressure}) {
+  ///
+  /// Returns `false` when no manager is registered for [playerId].
+  bool applyPressure({required PlayerId playerId, required ResourcePressure pressure}) {
     final manager = _managers[playerId];
 
     if (manager == null) {
-      return;
+      return false;
     }
 
     if (pressure.shouldReduceQuality) {
@@ -71,19 +73,25 @@ final class ResourceCoordinator {
     } else {
       manager.leaveDegradedMode();
     }
+
+    return true;
   }
 
   /// Releases player resources.
   ///
   /// Resource cleanup remains delegated to [ResourceManager].
-  Future<void> release(PlayerId playerId) async {
+  ///
+  /// Returns `false` when no manager is registered for [playerId].
+  Future<bool> release(PlayerId playerId) async {
     final manager = _managers[playerId];
 
     if (manager == null) {
-      return;
+      return false;
     }
 
     await manager.release();
+
+    return true;
   }
 
   /// Clears resource manager bindings.

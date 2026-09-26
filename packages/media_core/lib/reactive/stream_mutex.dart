@@ -27,6 +27,13 @@ class StreamMutex {
 
   bool _disposed = false;
 
+  /// Number of operations that are queued or currently running.
+  ///
+  /// [tryRun] needs a synchronous view of "busy": deriving it from [_tail]
+  /// would require awaiting that future, which is exactly what a non-blocking
+  /// attempt must not do.
+  int _pending = 0;
+
   /// Whether this mutex has been disposed.
   bool get isDisposed => _disposed;
 
@@ -44,6 +51,8 @@ class StreamMutex {
       throw StateError('StreamMutex has been disposed.');
     }
 
+    _pending++;
+
     final previous = _tail;
 
     final completer = Completer<void>();
@@ -59,6 +68,8 @@ class StreamMutex {
 
       return await action();
     } finally {
+      _pending--;
+
       if (!completer.isCompleted) {
         completer.complete();
       }
@@ -70,13 +81,11 @@ class StreamMutex {
   /// Returns `null` when the mutex is currently busy.
   ///
   /// Note:
-  /// This does not wait for the current operation.
+  /// This does not wait for the current operation. The busy check and the
+  /// queueing of [action] happen in the same synchronous step, so two
+  /// concurrent attempts cannot both win.
   Future<T?> tryRun<T>(Future<T> Function() action) async {
-    if (_disposed) {
-      return null;
-    }
-
-    if (isLocked) {
+    if (_disposed || isLocked) {
       return null;
     }
 
@@ -88,23 +97,11 @@ class StreamMutex {
   /// This is a lightweight state indicator. It should not be used as a
   /// synchronization primitive by itself.
   bool get isLocked {
-    return !_tailIsComplete;
+    return _pending > 0;
   }
 
-  bool get _tailIsComplete {
-    var complete = false;
-
-    _tail.then(
-      (_) {
-        complete = true;
-      },
-      onError: (_, _) {
-        complete = true;
-      },
-    );
-
-    return complete;
-  }
+  /// Number of operations that are queued or running.
+  int get pendingCount => _pending;
 
   /// Wait until all operations currently queued before this call finish.
   Future<void> wait() {
@@ -155,14 +152,26 @@ class KeyedStreamMutex {
   /// Execute [action] exclusively for [key].
   ///
   /// Operations using different keys can run concurrently.
-  Future<T> run<T>(String key, Future<T> Function() action) {
+  ///
+  /// The per-key entry is dropped once the key becomes idle, so a long-lived
+  /// mutex does not accumulate one entry per key it ever saw.
+  Future<T> run<T>(String key, Future<T> Function() action) async {
     if (_disposed) {
       throw StateError('KeyedStreamMutex has been disposed.');
     }
 
     final mutex = _mutexes.putIfAbsent(key, StreamMutex.new);
 
-    return mutex.run(action);
+    try {
+      return await mutex.run(action);
+    } finally {
+      // The entry may only be dropped by the last operation interested in it.
+      // Removing it while another operation is still queued would let the next
+      // caller create a second mutex for the same key and run alongside it.
+      if (identical(_mutexes[key], mutex) && !mutex.isLocked) {
+        _mutexes.remove(key);
+      }
+    }
   }
 
   /// Wait for all operations associated with [key].

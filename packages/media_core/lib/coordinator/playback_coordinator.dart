@@ -59,14 +59,20 @@ final class PlaybackCoordinator {
   /// The command is converted into a [PlaybackRequest] and forwarded to
   /// [PlaybackController], which remains responsible for serializing and
   /// applying playback operations.
-  Future<void> execute({required PlayerId playerId, required PlaybackCommand command}) async {
+  ///
+  /// Returns `false` when no controller is registered for [playerId]: the
+  /// command was dropped, which a caller of `play()`/`pause()` must be able to
+  /// tell apart from a command that reached a player.
+  Future<bool> execute({required PlayerId playerId, required PlaybackCommand command}) async {
     final controller = _controllers[playerId];
 
     if (controller == null) {
-      return;
+      return false;
     }
 
     await controller.request(PlaybackRequest(command: command));
+
+    return true;
   }
 
   /// Releases all controller bindings.

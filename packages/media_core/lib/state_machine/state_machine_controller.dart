@@ -42,7 +42,7 @@ final class StateMachineController<S extends StateMachineState> {
   final StateMachineContext _context;
 
   /// Pending event queue.
-  final Queue<StateMachineEvent> _queue = Queue<StateMachineEvent>();
+  final Queue<_PendingDispatch<S>> _queue = Queue<_PendingDispatch<S>>();
 
   /// Transition result stream.
   final StreamController<StateTransitionResult<S>> _resultController =
@@ -83,14 +83,22 @@ final class StateMachineController<S extends StateMachineState> {
   ///
   /// The controller guarantees that only one event
   /// is executing at a time.
-  Future<void> dispatch(StateMachineEvent event) async {
+  ///
+  /// The returned future completes when *this* event has been handled, not
+  /// when the queue happens to be free, so two overlapping dispatches cannot
+  /// both resolve while the second event is still waiting.
+  Future<void> dispatch(StateMachineEvent event) {
     if (_disposed) {
-      return;
+      return Future<void>.value();
     }
 
-    _queue.add(event);
+    final pending = _PendingDispatch<S>(event);
 
-    await _processQueue();
+    _queue.add(pending);
+
+    unawaited(_processQueue());
+
+    return pending.done;
   }
 
   /// Processes pending events.
@@ -105,12 +113,20 @@ final class StateMachineController<S extends StateMachineState> {
 
     try {
       while (_queue.isNotEmpty) {
-        final event = _queue.removeFirst();
+        final pending = _queue.removeFirst();
 
-        final result = await _machine.dispatch(event);
+        try {
+          final result = await _machine.dispatch(pending.event);
 
-        if (!_resultController.isClosed) {
-          _resultController.add(result);
+          if (!_resultController.isClosed) {
+            _resultController.add(result);
+          }
+
+          pending.complete();
+        } catch (error, stackTrace) {
+          // A throwing guard or action must not strand the rest of the queue,
+          // and the caller of this event still needs an answer.
+          pending.completeError(error, stackTrace);
         }
       }
     } finally {
@@ -143,8 +159,13 @@ final class StateMachineController<S extends StateMachineState> {
   }
 
   /// Removes all pending events.
+  ///
+  /// The dropped events produce no result; the dispatch futures that were
+  /// waiting on them are completed instead of hanging forever.
   void clearQueue() {
-    _queue.clear();
+    while (_queue.isNotEmpty) {
+      _queue.removeFirst().complete();
+    }
   }
 
   /// Disposes controller resources.
@@ -161,7 +182,7 @@ final class StateMachineController<S extends StateMachineState> {
 
     _disposed = true;
 
-    _queue.clear();
+    clearQueue();
 
     await _resultController.close();
   }
@@ -174,5 +195,31 @@ final class StateMachineController<S extends StateMachineState> {
         'processing=$_processing, '
         'disposed=$_disposed'
         ')';
+  }
+}
+
+/// Event waiting for its turn in the controller queue.
+///
+/// The entry owns the dispatch future so the caller observes the handling of
+/// its own event rather than the state of the shared queue.
+final class _PendingDispatch<S extends StateMachineState> {
+  _PendingDispatch(this.event);
+
+  final StateMachineEvent event;
+
+  final Completer<void> _done = Completer<void>();
+
+  Future<void> get done => _done.future;
+
+  void complete() {
+    if (!_done.isCompleted) {
+      _done.complete();
+    }
+  }
+
+  void completeError(Object error, StackTrace stackTrace) {
+    if (!_done.isCompleted) {
+      _done.completeError(error, stackTrace);
+    }
   }
 }

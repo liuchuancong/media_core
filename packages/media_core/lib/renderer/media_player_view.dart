@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../adapter/player_video_output.dart';
@@ -58,6 +60,18 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
     _bind(widget.handle);
   }
 
+  StreamSubscription<void>? _backendSubscription;
+  StreamSubscription<void>? _geometrySubscription;
+
+  /// The video output currently attached, so its surface lifecycle can be
+  /// released when the widget goes away or the handle changes.
+  PlayerVideo? _attached;
+
+  /// The video output the current build wants.
+  PlayerVideo? _desired;
+
+  bool _surfaceSyncScheduled = false;
+
   @override
   void didUpdateWidget(MediaPlayerView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -67,16 +81,88 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
     }
   }
 
+  @override
+  void dispose() {
+    _unbind();
+
+    super.dispose();
+  }
+
+  /// Follows [handle] for as long as this widget displays it.
+  ///
+  /// Both subscriptions are held and cancelled: without that, a widget whose
+  /// handle changed kept listening to the previous player, and every rebuild
+  /// added another pair that was never released.
   void _bind(PlayerHandle handle) {
-    handle.backendChanges.listen((_) {
+    _unbind();
+
+    _backendSubscription = handle.backendChanges.listen((_) {
       if (mounted) {
         setState(() {});
       }
     });
 
-    handle.geometryController.state.listen((_) {
+    _geometrySubscription = handle.geometryController.state.listen((_) {
       if (mounted) {
         setState(() {});
+      }
+    });
+  }
+
+  void _unbind() {
+    _backendSubscription?.cancel();
+    _backendSubscription = null;
+
+    _geometrySubscription?.cancel();
+    _geometrySubscription = null;
+
+    // `attach`/`detach` exist for surfaces with an explicit lifecycle
+    // (SurfaceTexture / PlatformView based engines); they are no-ops for the
+    // engines that own their texture, which is why calling them
+    // unconditionally is safe.
+    final attached = _attached;
+
+    _attached = null;
+    _desired = null;
+
+    if (attached != null) {
+      unawaited(attached.detach());
+    }
+  }
+
+  /// Attaches/detaches the surface after the frame.
+  ///
+  /// The transition is decided in `build` but performed here: `attach` can hit
+  /// a platform channel, and a build pass must not.
+  void _scheduleSurfaceSync() {
+    if (_surfaceSyncScheduled) {
+      return;
+    }
+
+    _surfaceSyncScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _surfaceSyncScheduled = false;
+
+      if (!mounted) {
+        return;
+      }
+
+      final desired = _desired;
+      final previous = _attached;
+
+      if (identical(desired, previous)) {
+        return;
+      }
+
+      _attached = desired;
+
+      if (previous != null) {
+        unawaited(previous.detach());
+      }
+
+      if (desired != null) {
+        unawaited(desired.attach());
       }
     });
   }
@@ -88,6 +174,12 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
       final PlayerVideo output when output.available => output,
       _ => null,
     };
+
+    _desired = video;
+
+    if (!identical(video, _attached)) {
+      _scheduleSurfaceSync();
+    }
 
     return AspectRatio(
       aspectRatio: _aspectRatio(handle),

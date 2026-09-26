@@ -68,31 +68,31 @@ final class LifecycleState extends Equatable {
   }
 
   LifecycleState markInitialized() {
-    return copyWith(initialized: true, disposed: false);
+    return copyWith(initialized: true);
   }
 
   LifecycleState markActive() {
-    return copyWith(active: true, paused: false, inactive: false);
+    return copyWith(active: true, paused: false, inactive: false, detached: false);
   }
 
   LifecycleState markPaused() {
-    return copyWith(active: false, paused: true);
+    return copyWith(active: false, paused: true, inactive: false);
   }
 
   LifecycleState markInactive() {
-    return copyWith(active: false, inactive: true);
+    return copyWith(active: false, paused: false, inactive: true);
   }
 
   LifecycleState markDetached() {
-    return copyWith(detached: true, active: false);
+    return copyWith(detached: true, active: false, paused: false, inactive: false);
   }
 
   LifecycleState markDisposing() {
-    return copyWith(disposing: true, active: false);
+    return copyWith(disposing: true, active: false, paused: false, inactive: false);
   }
 
   LifecycleState markDisposed() {
-    return copyWith(disposing: false, disposed: true, active: false);
+    return copyWith(disposing: false, disposed: true, active: false, paused: false, inactive: false);
   }
 
   @override

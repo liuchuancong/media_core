@@ -81,6 +81,14 @@ final class PlayerPool {
     return _manager.release(playerId);
   }
 
+  /// Marks a specific player as in use.
+  ///
+  /// Used by the kernel for freshly created handles, which belong to their
+  /// creator and must not be handed out by [allocate].
+  bool reserve(PlayerId playerId, {required SessionId sessionId}) {
+    return _manager.reserve(playerId, sessionId: sessionId);
+  }
+
   /// Gets recycle candidates.
   List<PlayerId> recycleCandidates({int maxCount = 1}) {
     return _manager.recycleCandidates(maxCount: maxCount);

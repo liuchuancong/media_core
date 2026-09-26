@@ -121,13 +121,19 @@ final class PresentationController {
   ///
   /// Actual platform execution is performed
   /// by PresentationAdapter.
-  Future<void> request(PresentationRequest request) {
+  ///
+  /// Returns the generation assigned to the request. Whoever executes it has
+  /// to carry that generation back into the events it reports, otherwise the
+  /// reducer cannot tell the callback apart from a stale one.
+  Future<int> request(PresentationRequest request) {
     return _enqueue(() {
       _ensureNotDisposed();
 
       final generation = ++_generation;
 
       handleEvent(PresentationEvent.started(mode: request.mode, generation: generation, source: request.source));
+
+      return generation;
     });
   }
 
@@ -136,10 +142,15 @@ final class PresentationController {
   // ============================================================
 
   /// Handles lifecycle events.
+  ///
+  /// An event with generation `0` is not tied to any request — the platform
+  /// reporting its own state change, for example — and is always accepted. A
+  /// request-scoped event is accepted only when it is at least as new as the
+  /// state it would replace.
   void handleEvent(PresentationEvent event) {
     _ensureNotDisposed();
 
-    if (event.generation < current.generation) {
+    if (event.generation != 0 && event.generation < current.generation) {
       return;
     }
 
@@ -180,10 +191,10 @@ final class PresentationController {
   // Internal
   // ============================================================
 
-  Future<void> _enqueue(FutureOr<void> Function() action) {
+  Future<T> _enqueue<T>(FutureOr<T> Function() action) {
     final next = _operation.then((_) => action());
 
-    _operation = next.catchError((_) {});
+    _operation = next.then((_) {}, onError: (Object _) {});
 
     return next;
   }

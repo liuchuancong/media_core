@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'player_geometry_binding.dart';
 import 'player_playback_binding.dart';
 import 'package:media_core/adapter/player_adapter.dart';
@@ -5,7 +7,9 @@ import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core/session/player_session.dart';
 import 'package:media_core/session/session_controller.dart';
 import 'package:media_core/geometry/geometry_controller.dart';
+import 'package:media_core/playback/playback_command.dart';
 import 'package:media_core/playback/playback_controller.dart';
+import 'package:media_core/playback/playback_state.dart';
 
 /// Runtime container for one logical player.
 ///
@@ -45,7 +49,20 @@ final class PlayerRuntime {
     _geometryBinding = PlayerGeometryBinding(adapter: adapter, geometry: _geometry);
 
     _playbackBinding = PlayerPlaybackBinding(adapter: adapter, playback: _playback);
+
+    // The session publishes position/duration/buffering in its snapshots but
+    // does not own them; the playback mirror is the owner, and this is the one
+    // place both are in scope.
+    _sessionSubscription = _playback.state.listen((state) {
+      _sessionController.updateTimeline(
+        position: state.position,
+        duration: state.duration,
+        buffering: state.buffering,
+      );
+    }, onError: (Object _) {});
   }
+
+  StreamSubscription<PlaybackState>? _sessionSubscription;
 
   /// Mutable: [replaceAdapter] swaps it during backend fallback.
   PlayerAdapter _adapter;
@@ -115,6 +132,13 @@ final class PlayerRuntime {
     await _geometryBinding.dispose();
     await _playbackBinding.dispose();
 
+    // The previous engine's geometry must not survive the swap: a
+    // video-size event is emitted once per open, so keeping the old size would
+    // letterbox the new engine's picture until it happens to report its own.
+    _geometry.clear();
+
+    _playback.apply(const PlaybackCommand.stop());
+
     _adapter = nextAdapter;
 
     // Rebuild bindings against the new adapter. The controllers
@@ -139,6 +163,9 @@ final class PlayerRuntime {
 
     await _geometryBinding.dispose();
     await _playbackBinding.dispose();
+
+    await _sessionSubscription?.cancel();
+    _sessionSubscription = null;
 
     await _playback.dispose();
     await _geometry.dispose();

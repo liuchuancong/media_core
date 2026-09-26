@@ -46,23 +46,46 @@ final class PlayerVisibilityBinding {
     switch (event.type) {
       case VisibilityEventType.hidden:
       case VisibilityEventType.disappeared:
-        if (!_pausedByInvisibility && _handle.isPlaying) {
-          _pausedByInvisibility = true;
-
-          unawaited(_handle.pause());
-        }
+        _pauseForInvisibility();
 
       case VisibilityEventType.visible:
       case VisibilityEventType.appeared:
-        if (_pausedByInvisibility) {
-          _pausedByInvisibility = false;
-
-          unawaited(_handle.play());
-        }
+        _resumeAfterInvisibility();
 
       case VisibilityEventType.changed:
-        break;
+        // `setViewport(false)` and `setOccluded(true)` publish `changed`, and
+        // both mean "the player is not on screen any more". Acting on the
+        // event *type* alone would leave a scrolled-away or covered player
+        // playing, which is the whole reason this binding exists — so the
+        // decision is made from the controller's state instead.
+        final state = _visibility.snapshot.state;
+
+        if (!state.inViewport || state.occluded || !state.visible) {
+          _pauseForInvisibility();
+        } else {
+          _resumeAfterInvisibility();
+        }
     }
+  }
+
+  void _pauseForInvisibility() {
+    if (_pausedByInvisibility || !_handle.isPlaying) {
+      return;
+    }
+
+    _pausedByInvisibility = true;
+
+    unawaited(_handle.pause());
+  }
+
+  void _resumeAfterInvisibility() {
+    if (!_pausedByInvisibility) {
+      return;
+    }
+
+    _pausedByInvisibility = false;
+
+    unawaited(_handle.play());
   }
 
   /// Stops following visibility.

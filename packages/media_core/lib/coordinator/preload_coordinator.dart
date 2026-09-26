@@ -55,14 +55,20 @@ final class PreloadCoordinator {
   /// Adds a preload request.
   ///
   /// The actual preload task lifecycle is managed by [PreloadManager].
-  void preload({required PlayerId playerId, required PreloadRequest request}) {
+  ///
+  /// Returns `false` when no manager is registered for [playerId] — the
+  /// request was dropped, and a caller that needs to know cannot tell that
+  /// apart from a successful hand-off otherwise.
+  bool preload({required PlayerId playerId, required PreloadRequest request}) {
     final manager = _managers[playerId];
 
     if (manager == null) {
-      return;
+      return false;
     }
 
     manager.add(request);
+
+    return true;
   }
 
   /// Clears all manager bindings.

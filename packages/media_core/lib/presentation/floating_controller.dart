@@ -88,7 +88,9 @@ final class FloatingController {
   void update(FloatingState state) {
     _ensureNotDisposed();
 
-    if (state.generation < _generation) {
+    // Generation 0 means the update is not tied to a request — the platform
+    // reporting its own state — and is always accepted.
+    if (state.generation != 0 && state.generation < _generation) {
       return;
     }
 

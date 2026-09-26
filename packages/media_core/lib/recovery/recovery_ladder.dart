@@ -142,6 +142,21 @@ final class RecoveryLadder {
       return false;
     }
 
+    // A target with nothing to recover (the caller closed the source) cannot
+    // run a single step. Accepting the report would walk straight into the
+    // "cannot execute" branch and declare the player exhausted — a critical
+    // fatal event for a player that is simply closed. Refusing is the honest
+    // answer: there is nothing to recover.
+    if (!target.isRecoveryAvailable) {
+      MediaCoreLog.debug(
+        LogCategory.recovery,
+        'report refused: the target has nothing to recover',
+        fields: <String, Object?>{'stableKey': failure.stableKey, 'code': failure.code.value},
+      );
+
+      return false;
+    }
+
     if (_status == RecoveryLadderStatus.running) {
       MediaCoreLog.debug(
         LogCategory.recovery,
@@ -167,6 +182,10 @@ final class RecoveryLadder {
     _status = RecoveryLadderStatus.running;
     _failure = failure;
     _attempts = 0;
+    // A run that throws before its first step (a candidate provider that
+    // throws) reports `_lastStepFailure ?? failure`; carrying the previous
+    // run's step failure into this one would mislabel the cause.
+    _lastStepFailure = null;
     _run = _sweep(failure, generation);
 
     return true;
@@ -508,6 +527,14 @@ final class RecoveryLadder {
 
     if (wasRunning) {
       MediaCoreLog.debug(LogCategory.recovery, 'sweep cancelled after $_attempts attempt(s): $reason');
+
+      // The run has to land in a *terminal* status. Bumping the generation
+      // alone stops the in-flight sweep, but both terminal finishers bail on
+      // their generation check — so the status would stay `running` forever,
+      // every later report would be refused, and `settled` would never
+      // complete. `idle` is the right terminal value here: nothing was
+      // decided, and the next report may start a fresh sweep.
+      _status = RecoveryLadderStatus.idle;
 
       _emit(RecoveryLadderCancelled(attempt: _attempts, message: reason, failure: _failure));
     }

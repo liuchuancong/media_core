@@ -111,26 +111,28 @@ final class PlayerAudioCoordinator {
   ///
   /// The operation is idempotent. Setting the same volume has no effect.
   ///
-  /// If the player is not registered, this method does nothing.
-  Future<void> setVolume({required PlayerId playerId, required AudioVolume volume}) {
+  /// Returns `false` when the player is not registered: the change was
+  /// dropped, and a caller cannot tell that apart from an applied one
+  /// otherwise.
+  Future<bool> setVolume({required PlayerId playerId, required AudioVolume volume}) {
     return _enqueue(() async {
       _ensureNotDisposed();
 
-      final AudioManager? manager = _managers[playerId];
-
-      if (manager == null) {
-        return;
+      if (!_managers.containsKey(playerId)) {
+        return false;
       }
 
       final AudioVolume currentVolume = _volumes[playerId] ?? AudioVolume.medium;
 
       if (currentVolume == volume) {
-        return;
+        return true;
       }
 
       _volumes[playerId] = volume;
 
       _volumesSubject.add(Map<PlayerId, AudioVolume>.from(_volumes));
+
+      return true;
     });
   }
 
@@ -139,24 +141,24 @@ final class PlayerAudioCoordinator {
   /// The operation is idempotent. Calling this method while already muted
   /// has no effect.
   ///
-  /// If the player is not registered, this method does nothing.
-  Future<void> mute(PlayerId playerId) {
+  /// Returns `false` when the player is not registered.
+  Future<bool> mute(PlayerId playerId) {
     return _enqueue(() async {
       _ensureNotDisposed();
 
-      final AudioManager? manager = _managers[playerId];
-
-      if (manager == null) {
-        return;
+      if (!_managers.containsKey(playerId)) {
+        return false;
       }
 
       if (_mutedStates[playerId] == true) {
-        return;
+        return true;
       }
 
       _mutedStates[playerId] = true;
 
       _mutedStatesSubject.add(Map<PlayerId, bool>.from(_mutedStates));
+
+      return true;
     });
   }
 
@@ -165,38 +167,36 @@ final class PlayerAudioCoordinator {
   /// The operation is idempotent. Calling this method while already unmuted
   /// has no effect.
   ///
-  /// If the player is not registered, this method does nothing.
-  Future<void> unmute(PlayerId playerId) {
+  /// Returns `false` when the player is not registered.
+  Future<bool> unmute(PlayerId playerId) {
     return _enqueue(() async {
       _ensureNotDisposed();
 
-      final AudioManager? manager = _managers[playerId];
-
-      if (manager == null) {
-        return;
+      if (!_managers.containsKey(playerId)) {
+        return false;
       }
 
       if (_mutedStates[playerId] == false) {
-        return;
+        return true;
       }
 
       _mutedStates[playerId] = false;
 
       _mutedStatesSubject.add(Map<PlayerId, bool>.from(_mutedStates));
+
+      return true;
     });
   }
 
   /// Toggles mute state for a specific player.
   ///
-  /// If the player is not registered, this method does nothing.
-  Future<void> toggleMute(PlayerId playerId) {
+  /// Returns `false` when the player is not registered.
+  Future<bool> toggleMute(PlayerId playerId) {
     return _enqueue(() async {
       _ensureNotDisposed();
 
-      final AudioManager? manager = _managers[playerId];
-
-      if (manager == null) {
-        return;
+      if (!_managers.containsKey(playerId)) {
+        return false;
       }
 
       final bool currentMuted = _mutedStates[playerId] ?? false;
@@ -205,8 +205,7 @@ final class PlayerAudioCoordinator {
       _mutedStates[playerId] = nextMuted;
       _mutedStatesSubject.add(Map<PlayerId, bool>.from(_mutedStates));
 
-      // Volume application will be delegated to the audio backend
-      // when a platform-independent volume operation is introduced.
+      return true;
     });
   }
 
@@ -247,10 +246,10 @@ final class PlayerAudioCoordinator {
   /// Every asynchronous operation is chained onto the previous one.
   /// If an earlier operation fails, the queue is reset so a later
   /// operation can still proceed.
-  Future<void> _enqueue(Future<void> Function() operation) {
-    final Future<void> next = _operation.then((_) => operation());
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
+    final Future<T> next = _operation.then((_) => operation());
 
-    _operation = next.catchError((Object _) {});
+    _operation = next.then((_) {}, onError: (Object _) {});
 
     return next;
   }

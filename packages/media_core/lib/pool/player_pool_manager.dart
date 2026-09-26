@@ -51,6 +51,12 @@ final class PlayerPoolManager {
 
   PlayerPoolMetrics _metrics = PlayerPoolMetrics.empty();
 
+  /// Sum of all measured allocation times.
+  ///
+  /// Kept alongside the count so the reported average does not drift with
+  /// rounding, and so it survives a metrics rebuild.
+  Duration _allocationTimeTotal = Duration.zero;
+
   final BehaviorSubject<PlayerPoolState> _stateSubject = BehaviorSubject.seeded(const PlayerPoolState());
 
   /// Current state stream.
@@ -72,6 +78,8 @@ final class PlayerPoolManager {
   void add(PlayerId playerId) {
     _players.add(playerId);
 
+    _syncCounts();
+
     _publish();
   }
 
@@ -83,6 +91,10 @@ final class PlayerPoolManager {
     _sessions.remove(playerId);
 
     if (removed) {
+      _metrics = _metrics.copyWith(destroyedCount: _metrics.destroyedCount + 1);
+
+      _syncCounts();
+
       _publish();
     }
 
@@ -91,36 +103,92 @@ final class PlayerPoolManager {
 
   /// Allocates player.
   PlayerId? allocate({required SessionId sessionId}) {
+    final stopwatch = Stopwatch()..start();
+
     final player = _allocator.allocate(availablePlayers: _availablePlayers, sessionId: sessionId);
 
+    stopwatch.stop();
+
     if (player == null) {
+      _metrics = _metrics.copyWith(allocationFailureCount: _metrics.allocationFailureCount + 1);
+
+      _syncCounts();
+
       return null;
     }
 
     _active.add(player);
     _sessions[player] = sessionId;
 
-    _metrics = _metrics.copyWith(allocationCount: _metrics.allocationCount + 1, allocatedCount: _active.length);
+    _allocationTimeTotal += stopwatch.elapsed;
+
+    _metrics = _metrics.copyWith(allocationCount: _metrics.allocationCount + 1);
+
+    _syncCounts();
 
     _publish();
 
     return player;
   }
 
+  /// Marks [playerId] as in use by [sessionId].
+  ///
+  /// [allocate] takes *any* idle player; this exists for the opposite case — a
+  /// handle that was just created and is owned by its creator. Without it such
+  /// a handle counts as idle, and the next [allocate] hands out (and recycles)
+  /// the player that is currently playing.
+  bool reserve(PlayerId playerId, {required SessionId sessionId}) {
+    if (!_players.contains(playerId)) {
+      return false;
+    }
+
+    _active.add(playerId);
+    _sessions[playerId] = sessionId;
+
+    _syncCounts();
+
+    _publish();
+
+    return true;
+  }
+
   /// Releases player back to pool.
   bool release(PlayerId playerId) {
     if (!_active.contains(playerId)) {
+      _metrics = _metrics.copyWith(recycleFailureCount: _metrics.recycleFailureCount + 1);
+
       return false;
     }
 
     _active.remove(playerId);
     _sessions.remove(playerId);
 
-    _metrics = _metrics.copyWith(recycleCount: _metrics.recycleCount + 1, allocatedCount: _active.length);
+    _metrics = _metrics.copyWith(recycleCount: _metrics.recycleCount + 1);
+
+    _syncCounts();
 
     _publish();
 
     return true;
+  }
+
+  /// Rewrites the metrics that describe the pool right now.
+  ///
+  /// Idle/allocated/peak and the timestamp are derived here instead of at each
+  /// call site, so every metrics snapshot describes the state it was taken
+  /// from.
+  void _syncCounts() {
+    final allocated = _active.length;
+
+    _metrics = _metrics.copyWith(
+      allocatedCount: allocated,
+      idleCount: _availablePlayers.length,
+      peakCount: allocated > _metrics.peakCount ? allocated : _metrics.peakCount,
+      averageAllocationTime: _metrics.allocationCount == 0
+          ? null
+          : Duration(microseconds: _allocationTimeTotal.inMicroseconds ~/ _metrics.allocationCount),
+      updatedAt: clock.now(),
+    );
   }
 
   /// Finds recyclable players.

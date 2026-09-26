@@ -258,7 +258,7 @@ final class TaskManager {
       return false;
     }
 
-    if (task.isRunning) {
+    if (task.isRunning || _scheduler.isRunning(task.id)) {
       throw StateError(
         'A running task cannot be registered directly. '
         'A running task must first acquire a scheduler execution slot.',
@@ -288,7 +288,7 @@ final class TaskManager {
 
     final previous = _tasks[task.id];
 
-    if (previous?.isRunning == true) {
+    if (previous?.isRunning == true || _scheduler.isRunning(task.id)) {
       throw StateError('A running task cannot be replaced.');
     }
 
@@ -644,8 +644,8 @@ final class TaskManager {
   ///
   /// Terminal and non-running tasks can be removed immediately.
   ///
-  /// A running task receives a cancellation request but remains registered
-  /// until its asynchronous execution actually finishes.
+  /// A task that still occupies an execution slot receives a cancellation
+  /// request but remains registered until its handler actually finishes.
   PlayerTask? remove(TaskId id) {
     _checkNotDisposed();
 
@@ -655,7 +655,7 @@ final class TaskManager {
       return null;
     }
 
-    if (task.isRunning) {
+    if (task.isRunning || _scheduler.isRunning(id)) {
       return cancel(id);
     }
 
@@ -671,11 +671,19 @@ final class TaskManager {
 
   /// Removes all terminal tasks.
   ///
+  /// A terminal task that still occupies an execution slot is kept until its
+  /// handler finishes, because that handler registers its result afterwards.
+  ///
   /// Returns the number of removed tasks.
   int removeTerminal() {
     _checkNotDisposed();
 
-    final ids = _tasks.values.where((task) => task.isTerminal).map((task) => task.id).toList(growable: false);
+    final executingIds = _scheduler.runningTaskIds;
+
+    final ids = _tasks.values
+        .where((task) => task.isTerminal && !executingIds.contains(task.id))
+        .map((task) => task.id)
+        .toList(growable: false);
 
     for (final id in ids) {
       _scheduler.unschedule(id);
@@ -693,17 +701,16 @@ final class TaskManager {
   void clear() {
     _checkNotDisposed();
 
-    final ids = _tasks.keys.toList(growable: false);
+    // Execution slots decide which tasks are still running, not lifecycle
+    // state: cancelling a running task rewrites it to a terminal task, so
+    // `isRunning` is false while its handler keeps executing and will write
+    // its result back into the registry when it finishes.
+    final executingIds = _scheduler.runningTaskIds;
 
-    for (final id in ids) {
+    for (final id in _tasks.keys.toList(growable: false)) {
       final task = _tasks[id];
 
       if (task == null) {
-        continue;
-      }
-
-      if (task.isRunning) {
-        cancel(id);
         continue;
       }
 
@@ -714,7 +721,7 @@ final class TaskManager {
 
     _scheduler.clearQueue();
 
-    final removableIds = _tasks.values.where((task) => !task.isRunning).map((task) => task.id).toList(growable: false);
+    final removableIds = _tasks.keys.where((id) => !executingIds.contains(id)).toList(growable: false);
 
     for (final id in removableIds) {
       _disposeToken(id);
@@ -742,7 +749,7 @@ final class TaskManager {
       return false;
     }
 
-    if (previous.isRunning) {
+    if (previous.isRunning || _scheduler.isRunning(task.id)) {
       return false;
     }
 
@@ -852,15 +859,19 @@ final class TaskManager {
   void reset() {
     _checkNotDisposed();
 
-    final runningIds = _tasks.values.where((task) => task.isRunning).map((task) => task.id).toList(growable: false);
+    // Slot ownership — not lifecycle state — decides what is still running.
+    // A cancelled task reports `isRunning == false` while its handler keeps
+    // executing, and that handler registers its final state when it finishes;
+    // dropping it here would resurrect it into a reset manager.
+    final executingIds = _scheduler.runningTaskIds;
 
-    for (final id in runningIds) {
+    for (final id in executingIds) {
       cancel(id);
     }
 
     _scheduler.reset();
 
-    final removableIds = _tasks.values.where((task) => !task.isRunning).map((task) => task.id).toList(growable: false);
+    final removableIds = _tasks.keys.where((id) => !executingIds.contains(id)).toList(growable: false);
 
     for (final id in removableIds) {
       _disposeToken(id);
@@ -930,15 +941,14 @@ final class TaskManager {
     token?.dispose();
   }
 
-  /// Disposes tokens that no longer belong to running tasks.
+  /// Disposes tokens that no longer belong to a still-executing task.
+  ///
+  /// Execution slots are the authority: a cancelled task is terminal, but its
+  /// handler may still be running and still observing its token.
   void _disposeCompletedTokens() {
-    final ids = _cancelTokens.keys
-        .where((id) {
-          final task = _tasks[id];
+    final executingIds = _scheduler.runningTaskIds;
 
-          return task == null || !task.isRunning;
-        })
-        .toList(growable: false);
+    final ids = _cancelTokens.keys.where((id) => !executingIds.contains(id)).toList(growable: false);
 
     for (final id in ids) {
       _disposeToken(id);

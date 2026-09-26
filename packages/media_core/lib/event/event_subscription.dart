@@ -7,11 +7,23 @@ import 'player_event.dart';
 /// A subscription owns only delivery configuration. The event bus remains
 /// responsible for event transport.
 final class EventSubscription {
-  EventSubscription({required StreamSubscription<PlayerEvent> subscription, EventFilter? filter, this.once = false})
-    : _subscription = subscription,
-      filter = filter ?? const AllowAllEventFilter();
+  EventSubscription({
+    required StreamSubscription<PlayerEvent> subscription,
+    EventFilter? filter,
+    this.once = false,
+    void Function(EventSubscription subscription)? onCancelled,
+  }) : _subscription = subscription,
+       _onCancelled = onCancelled,
+       filter = filter ?? const AllowAllEventFilter();
 
   final StreamSubscription<PlayerEvent> _subscription;
+
+  /// Notified once when this subscription is cancelled.
+  ///
+  /// A one-shot subscription cancels itself from inside a listener, so the
+  /// owner cannot learn about it any other way and would keep a dead entry in
+  /// its registry forever.
+  final void Function(EventSubscription subscription)? _onCancelled;
 
   final EventFilter filter;
 
@@ -35,6 +47,9 @@ final class EventSubscription {
     }
 
     _cancelled = true;
+
+    _onCancelled?.call(this);
+
     await _subscription.cancel();
   }
 }

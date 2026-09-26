@@ -99,6 +99,8 @@ final class AudioManager {
   /// remains an explicit lifecycle operation.
   Future<void> setEnabled(bool value) {
     return _enqueue(() async {
+      _ensureNotDisposed();
+
       if (_enabled == value) {
         return;
       }
@@ -124,23 +126,36 @@ final class AudioManager {
     return _enqueue(() async {
       _ensureNotDisposed();
 
-      if (!_enabled || _active) {
+      if (!_enabled || (_active && _focused)) {
         return;
       }
 
-      await _session.activate();
+      // A previous [abandonFocus] can leave the session active without focus.
+      // Reuse it instead of activating twice, and only roll back the session
+      // when this call is the one that activated it.
+      final activatedSession = !_active;
+      if (activatedSession) {
+        await _session.activate();
+        _active = true;
+        _activeSubject.add(true);
+      }
+
+      if (_focused) {
+        return;
+      }
 
       try {
         await _focus.request();
       } catch (_) {
-        await _session.deactivate();
+        if (activatedSession) {
+          _active = false;
+          _activeSubject.add(false);
+          await _session.deactivate();
+        }
         rethrow;
       }
 
-      _active = true;
       _focused = true;
-
-      _activeSubject.add(true);
       _focusedSubject.add(true);
     });
   }
@@ -187,7 +202,11 @@ final class AudioManager {
         return;
       }
 
-      if (!_active) {
+      // Activating the session here makes this method able to bootstrap the
+      // whole subsystem, so a failed focus request has to undo it: otherwise
+      // the manager would report an active session that nobody holds focus for.
+      final activatedSession = !_active;
+      if (activatedSession) {
         await _session.activate();
         _active = true;
         _activeSubject.add(true);
@@ -197,7 +216,16 @@ final class AudioManager {
         return;
       }
 
-      await _focus.request();
+      try {
+        await _focus.request();
+      } catch (_) {
+        if (activatedSession) {
+          _active = false;
+          _activeSubject.add(false);
+          await _session.deactivate();
+        }
+        rethrow;
+      }
 
       _focused = true;
       _focusedSubject.add(true);

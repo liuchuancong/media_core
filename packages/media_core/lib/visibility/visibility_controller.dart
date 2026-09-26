@@ -76,20 +76,36 @@ final class VisibilityController {
       return VisibilityEventType.disappeared;
     }
 
-    return VisibilityEventType.changed;
+    // `appeared`/`disappeared` describe the first/last moment; `visible` and
+    // `hidden` are the steady states. Both were public API that nothing could
+    // ever emit, so a consumer filtering on them saw nothing at all.
+    return newValue ? VisibilityEventType.visible : VisibilityEventType.hidden;
   }
+
+  /// Start of the current hidden stretch, for [VisibilityMetrics.hiddenDuration].
+  DateTime? _hiddenStarted;
 
   void _updateMetrics(bool visible) {
     final now = clock.now();
 
     if (visible) {
       _visibleStarted ??= now;
+
+      if (_hiddenStarted != null) {
+        _metrics = _metrics.copyWith(hiddenDuration: _metrics.hiddenDuration + now.difference(_hiddenStarted!));
+
+        _hiddenStarted = null;
+      }
     } else {
       if (_visibleStarted != null) {
         _metrics = _metrics.copyWith(visibleDuration: _metrics.visibleDuration + now.difference(_visibleStarted!));
 
         _visibleStarted = null;
       }
+
+      // `hiddenDuration` is public and was never written by anyone, so it
+      // always read zero while `visibleDuration` accumulated.
+      _hiddenStarted ??= now;
     }
 
     _metrics = _metrics.copyWith(changeCount: _metrics.changeCount + 1);
