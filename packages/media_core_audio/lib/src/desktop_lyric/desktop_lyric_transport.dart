@@ -38,20 +38,19 @@ enum DesktopLyricAction {
 ///   layered window, an Android `TYPE_APPLICATION_OVERLAY` window);
 /// - [MethodChannelDesktopLyricTransport] is the protocol between the two.
 ///
-/// This package ships both native implementations:
+/// The implementations shipping with this package:
 ///
-/// - **Windows** (`windows/desktop_lyric_window.cc`): a borderless,
-///   always-on-top layered window drawn with GDI+, on its own thread, with
-///   hover controls, dragging and click-through locking;
-/// - **Android** (`android/.../DesktopLyricWindow.java`): a
-///   `TYPE_APPLICATION_OVERLAY` window added through the WindowManager with the
-///   application context, so it survives leaving the player page. It needs
-///   `SYSTEM_ALERT_WINDOW`, requested on the first [show]; that call returns
-///   false and opens the system settings screen, and the host calls show again
-///   once the user is back.
+/// | platform | window | notes |
+/// |---|---|---|
+/// | Windows | `windows/`, layered window drawn with GDI+ on its own thread | hover controls, dragging, click-through locking |
+/// | Android | `android/`, `TYPE_APPLICATION_OVERLAY` added with the application context | needs `SYSTEM_ALERT_WINDOW`: the first [show] opens the system settings screen and returns false, so the host calls it again afterwards; survives leaving the player page, no Service of its own |
+/// | macOS | `macos/`, borderless `NSWindow` at `.floating` level | joins every Space, never takes focus; `ignoresMouseEvents` makes the lock truly click-through |
+/// | Linux | `linux/`, override-redirect GTK popup drawn with Cairo/Pango | click-through uses an empty input shape, which is X11-only: under Wayland a locked overlay hides its controls but still catches input |
+/// | iOS, web | — | no cross-application overlay exists: iOS' equivalent is the lock screen / a Live Activity, and a web page cannot draw outside its own tab. [isSupported] stays false, which is not an error |
 ///
-/// A platform without an implementation reports [isSupported] == false and the
-/// feature simply is not offered.
+/// Every implementation speaks the vocabulary below; a platform without one
+/// reports [isSupported] == false and the host simply does not offer the
+/// feature.
 abstract interface class DesktopLyricTransport {
   /// Whether the current platform/host can draw an overlay.
   Future<bool> isSupported();

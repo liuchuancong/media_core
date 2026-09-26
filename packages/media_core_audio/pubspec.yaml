@@ -46,3 +46,7 @@ flutter:
         pluginClass: MediaCoreAudioPlugin
       windows:
         pluginClass: MediaCoreAudioPluginCApi
+      macos:
+        pluginClass: MediaCoreAudioPlugin
+      linux:
+        pluginClass: MediaCoreAudioPlugin
