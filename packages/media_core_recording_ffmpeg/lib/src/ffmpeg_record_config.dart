@@ -27,7 +27,10 @@ final class FfmpegRecordConfig {
   /// FFmpeg exit code that says nothing. With this on, the recording holds a
   /// background-execution session (foreground service + notification and a wake
   /// lock on Android, a sleep assertion on desktop), released when the
-  /// recording ends — whatever ends it, including a failure.
+  /// recording ends — whatever ends it, including a failure. The notification
+  /// permission is asked for by the platform package on first use, so a host
+  /// needs to do nothing; declining it hides the notification but keeps the
+  /// wake lock.
   ///
   /// Turn it off for a recording that is expected to finish in seconds, or in a
   /// host that already holds a session for the same job.

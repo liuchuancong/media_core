@@ -280,9 +280,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
   /// Holds the process alive for as long as this recording runs.
   ///
-  /// A platform that refuses (no implementation, or a notification permission
-  /// the user declined) leaves the recording unprotected rather than failing
-  /// it: the user asked for a recording, not for a notification.
+  /// A platform that refuses (no implementation, or no permission to run the
+  /// service at all) leaves the recording unprotected rather than failing it:
+  /// the user asked for a recording, not for a notification. A declined
+  /// <em>notification</em> is not even that: the session is still held and only
+  /// the notification stays hidden.
   Future<void> _acquireKeepAlive(String prefix) async {
     if (!config.keepAlive) {
       return;
@@ -292,6 +294,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       title: config.keepAliveTitle ?? 'Recording',
       text: prefix,
       wakeLock: true,
+      kind: BackgroundJobKind.record,
     );
 
     _keepAlive = session;
@@ -409,4 +412,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 /// that the backend's lifecycle (acquire on start, release on *every* end) is
 /// what matters, and that is worth observing without a device.
 typedef BackgroundExecutionStarter =
-    Future<BackgroundExecutionLease?> Function({required String title, String? text, bool wakeLock});
+    Future<BackgroundExecutionLease?> Function({
+      required String title,
+      String? text,
+      bool wakeLock,
+      BackgroundJobKind kind,
+    });

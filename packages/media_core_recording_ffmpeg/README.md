@@ -27,9 +27,9 @@ final result = await backend.stop();     // 用户主动停止是"成功录制"
 录制以一个说明不了任何原因的 FFmpeg 退出码结束。默认开启（`FfmpegRecordConfig.keepAlive`）：
 
 - **Android**：前台服务（API 34+ 声明 `dataSync`）+ 通知 + `PARTIAL_WAKE_LOCK`（屏幕熄灭后 CPU 继续跑）。
-  清单条目由 `media_core_native` 的插件清单合并进应用；**只有 `POST_NOTIFICATIONS` 需要应用在运行时申请**
+  清单条目由 `media_core_native` 的插件清单合并进应用，`POST_NOTIFICATIONS` 也由它在第一次取会话时自己弹窗申请（应用不需要写这一步）
   ——用 `media_core_audio` 的 `AudioPermissionService`（`AudioPermission.notifications`）或自己的权限插件。
-  用户拒绝时 `BackgroundExecution.acquire` 返回 null，录制**照常进行**（只是没有保护），不会因为一条通知失败而挂掉录制。
+  用户拒了通知权限时，前台服务与唤醒锁照旧生效（只是通知不可见），录制**照常进行**；只有平台连服务都不肯起时才拿不到会话（`acquire` 返回 null），录制依然继续，只是没有保护 —— 不会因为一条通知失败而挂掉录制。
 - **macOS / Windows**：持有睡眠断言（系统不睡，屏幕可以关）。
 - **iOS**：只买到过渡窗口（约 30 秒）。要长时间后台录制，需要应用在 `Info.plist` 声明 `audio` 后台模式——
   这是应用的决定，库替不了；声明后录制才能在后台持续。
@@ -42,7 +42,7 @@ final result = await backend.stop();     // 用户主动停止是"成功录制"
 | 项 | 谁声明 |
 | --- | --- |
 | `FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_DATA_SYNC`、`WAKE_LOCK`、`POST_NOTIFICATIONS`、`<service …foregroundServiceType="dataSync">` | `media_core_native` 的库清单（自动合并） |
-| 运行时申请 `POST_NOTIFICATIONS`（API 33+） | 应用 |
+| 运行时申请 `POST_NOTIFICATIONS`（API 33+） | `media_core_native`（第一次取会话时弹出；宿主也可自己先问，授权后不会重复弹） |
 | **明文流**：`android:usesCleartextTraffic="true"` + `res/xml/network_security_config.xml` | 应用 |
 
 最后一条是直播录制最常见的"在模拟器能录、真机不行"的原因：Android 9+ 默认禁止明文 HTTP，

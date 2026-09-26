@@ -6,6 +6,22 @@ import 'package:flutter/services.dart';
 /// Kept in sync with the Android/iOS/macOS plugins and the Windows C++ plugin.
 const String kBackgroundExecutionChannel = 'media_core_native/background';
 
+/// What a session is doing, for the notification that shows it.
+///
+/// Android is the platform that shows one, and an icon is the half of a
+/// notification a user reads before the text — a download arrow on a recording
+/// is a small lie, so the kind is asked for instead of assumed.
+enum BackgroundJobKind {
+  /// Capturing a stream to disk.
+  record,
+
+  /// Fetching a file.
+  download,
+
+  /// Anything else: the generic glyph.
+  task,
+}
+
 /// Keeps a long-running job alive while the app is not in the foreground.
 ///
 /// Recording a stream, or downloading a large one, is work the user asked for
@@ -15,11 +31,20 @@ const String kBackgroundExecutionChannel = 'media_core_native/background';
 ///
 /// | platform | what a session does |
 /// | --- | --- |
-/// | Android | starts a foreground service (`dataSync`) with a notification, plus a partial wake lock so the CPU keeps running with the screen off |
+/// | Android | starts a foreground service (`dataSync`) with a notification the user can see (and tap, which returns to the app), plus a partial wake lock so the CPU keeps running with the screen off |
 /// | iOS | asks for a background task assertion, which buys the transition window rather than unlimited time (see below) |
 /// | macOS | keeps the system from idle-sleeping for as long as the session lives |
 /// | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)`: the system stays awake, the display may still turn off |
 /// | Linux | ⏳ not implemented (logind `Inhibit`); [acquire] reports null there |
+///
+/// ### The Android notification permission
+///
+/// From Android 13 a foreground service shows its notification only with
+/// `POST_NOTIFICATIONS`. The plugin declares it and asks for it on the first
+/// [acquire] that needs it, while an activity is attached, so a host does not
+/// have to know this step exists. A refusal is not a failure: the service and
+/// the wake lock still hold — the user simply sees no notification, which is
+/// their choice rather than something to fail a recording over.
 ///
 /// ### What this cannot do
 ///
@@ -63,22 +88,28 @@ final class BackgroundExecution {
   ///
   /// [title] and [text] are what the platform shows while the job runs — on
   /// Android they are a notification the user can see (and tap, which returns
-  /// to the app); elsewhere they are ignored.
+  /// to the app); elsewhere they are ignored. [kind] picks the notification's
+  /// icon.
   ///
   /// [wakeLock] additionally keeps the *CPU* running, which is what matters on
   /// a phone whose screen turned off. A host that only wants the process
   /// permission (a quick upload, a short download) passes false to avoid the
   /// battery cost.
   ///
-  /// Returns null when the platform has no implementation, or when the
-  /// notification could not be posted (on Android 13+ without
-  /// `POST_NOTIFICATIONS` a foreground service has nothing to show). The caller
-  /// then runs the job without the protection, which is the honest outcome —
-  /// failing the job because the user declined a notification would be worse.
+  /// Several sessions can be held at once — on Android they share one service
+  /// and one notification, and releasing one leaves the others running, so a
+  /// recording and a download do not take each other's protection away.
+  ///
+  /// Returns null when the platform has no implementation, or when it refuses
+  /// to run the service at all. A refused *notification* still returns a
+  /// session: the job keeps its protection and only the notification is hidden,
+  /// which is the honest outcome — failing a recording because the user
+  /// declined a notification would be worse.
   static Future<BackgroundExecutionSession?> acquire({
     required String title,
     String? text,
     bool wakeLock = true,
+    BackgroundJobKind kind = BackgroundJobKind.task,
   }) async {
     if (!isSupported) {
       return null;
@@ -89,6 +120,7 @@ final class BackgroundExecution {
         'title': title,
         'text': text,
         'wakeLock': wakeLock,
+        'kind': kind.name,
       });
 
       if (id == null) {
@@ -97,7 +129,7 @@ final class BackgroundExecution {
 
       return BackgroundExecutionSession._(id);
     } on PlatformException {
-      // The native side refused: no permission, no service, a platform that
+      // The native side refused: no service, no declaration, a platform that
       // declares support and then does not deliver it. The job still runs.
       return null;
     } on MissingPluginException {

@@ -32,9 +32,13 @@ try {
 | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)`：系统不睡（**不**阻止息屏） |
 | Linux | ⏳ 未实现（logind `Inhibit`），`acquire` 返回 null |
 
-会话是**按 id 计数**的，所以两个任务（一个录制 + 一个下载）不会互相拆掉对方的保护；释放是幂等的，平台拒绝（例如 Android 13+ 没给 `POST_NOTIFICATIONS`）时返回 null —— 任务照跑，只是没有保护，而不是因为一条通知失败就挂掉录制。
+会话是**按 id 计数**的：两个任务（一个录制 + 一个下载）共享同一个前台服务与同一条通知（标题是后取的那个，正文标 `+N`），释放一个只退自己 —— 把服务停掉就等于把还在跑的那个任务暴露给系统，所以唤醒锁只在最后一个需要它的会话消失时才放开。释放是幂等的。
 
-Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那个 `<service>`）**已在本插件的清单里声明**，会合并进应用——服务声明可以来自库清单（`audio_service` 那种需要替换 Activity 的才不行）；只有 `POST_NOTIFICATIONS` 仍需应用在运行时申请（`media_core_audio` 的 `AudioPermissionService` 正好提供这一个）。
+`POST_NOTIFICATIONS`（Android 13+）由这个包自己申请：第一次需要它的 `acquire` 会通过当前 Activity 弹窗，Dart 侧只是等结果。**拒绝不等于失败** —— 前台服务与唤醒锁照旧生效，只是用户看不到那条通知，这是用户的选择，不是让录制失败的 reason。平台连服务都不肯起（受限后台启动、清单缺失）时才返回 null。
+
+Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那个 `<service>`）**已在本插件的清单里声明**，会合并进应用——服务声明可以来自库清单（`audio_service` 那种需要替换 Activity 的才不行）。运行时权限也由本插件在第一次 `acquire` 时代为申请，应用不需要知道这一步；宿主若想自己先问（例如启动录制前统一走一遍权限引导），把 `POST_NOTIFICATIONS` 交给自己处理即可，插件发现已授权就不会再弹。
+
+Android 15 给 `dataSync` 前台服务设了**每天 6 小时**的额度：用完系统会停止服务（任务本身还在这个进程里跑，只是失去保护），插件在 `onTimeout` 里干净地收尾，不会让进程因为不响应被杀。
 
 ## 能力探针
 

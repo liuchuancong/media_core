@@ -18,6 +18,7 @@ import 'console/platform_demo.dart';
 import 'console/pool_demo.dart';
 import 'console/probe_demo.dart';
 import 'console/queue_demo.dart';
+import 'console/background_execution_demo.dart';
 import 'console/recording_demo.dart';
 import 'console/source_demo.dart';
 import 'console/task_demo.dart';
@@ -125,6 +126,7 @@ final List<ModuleDemo> moduleDemos = <ModuleDemo>[
   // Capabilities.
   const DownloadDemo(),
   const RecordingDemo(),
+  const BackgroundExecutionDemo(),
   // Domain demos that predate the split.
   const LyricDemo(),
   const QueueDemo(),

@@ -12,31 +12,40 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Keeps a long-running job alive while the app is in the background.
+ * Keeps long-running jobs alive while the app is in the background.
  *
  * A foreground service is the platform's own mechanism for "the user knows this
  * is running": the process is not frozen with the screen off, and the
- * notification is what tells the user why. Two things are started and stopped
- * together here:
+ * notification is what tells the user why. Two things are held here together:
  *
  * <ul>
  *   <li>the service itself, typed {@code dataSync} on API 34+ (a download or a
  *       recording is data transfer, not media playback);
- *   <li>a {@link PowerManager#PARTIAL_WAKE_LOCK}, so the CPU keeps running
- *       after the screen goes off — a TV box or a phone that suspends the CPU
- *       would otherwise stall the writer mid-segment.
+ *   <li>a {@link PowerManager#PARTIAL_WAKE_LOCK}, so the CPU keeps running after
+ *       the screen goes off — a phone or a TV box that suspends the CPU would
+ *       otherwise stall the writer mid-segment.
  * </ul>
  *
- * <p>The service holds nothing about the job: it is started with the text to
- * show and stopped by whoever started it. A session id is returned so several
- * jobs (a recording and a download) do not stop each other's notification.
+ * <p><strong>One service, one notification, several sessions.</strong> A
+ * foreground service is per-service, not per-job, so two jobs (a recording and a
+ * download) share this instance. They are tracked in a register: the
+ * notification describes the newest session and says how many others are
+ * running, and a job that ends removes only itself. Stopping the service on the
+ * first release would silently take the protection away from a job that is still
+ * running, and dropping the wake lock with it would let the device sleep
+ * mid-recording — so the lock is released only once no remaining session wants
+ * it.
  *
  * <p>Declared in this plugin's own manifest, which the app inherits — a plain
  * {@code <service>} merges from a library manifest, unlike audio_service's
- * activity replacement, so the host does not have to copy anything.
+ * activity replacement, so the host does not have to copy anything. The
+ * notification permission is asked for by {@link BackgroundExecutionDelegate}
+ * while an activity is attached.
  */
 public final class BackgroundExecutionService extends Service {
 
@@ -47,33 +56,75 @@ public final class BackgroundExecutionService extends Service {
   static final String EXTRA_TITLE = "title";
   static final String EXTRA_TEXT = "text";
   static final String EXTRA_SESSION_ID = "sessionId";
+  static final String EXTRA_WAKE_LOCK = "wakeLock";
+  static final String EXTRA_KIND = "kind";
+
+  /**
+   * Notification id.
+   *
+   * A constant rather than the session id: the platform associates one
+   * notification with the foreground service, and a per-session id would leave
+   * the previous session's notification behind as an orphan the user cannot
+   * dismiss.
+   */
+  private static final int NOTIFICATION_ID = 0x4D43;
 
   /** Session ids, unique per process. */
   private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
+
+  /**
+   * Running sessions, oldest first.
+   *
+   * Static because the sessions belong to the process rather than to an
+   * instance: a service the platform recreated must not forget what is still
+   * running.
+   */
+  private static final Map<Integer, Session> SESSIONS = new LinkedHashMap<Integer, Session>();
+
+  /** The process's single instance, while it is alive. */
+  private static BackgroundExecutionService instance;
+
+  /** One job that asked not to be frozen. */
+  private static final class Session {
+    final int id;
+    final String title;
+    final String text;
+    final String kind;
+    final boolean wakeLock;
+
+    Session(int id, String title, String text, String kind, boolean wakeLock) {
+      this.id = id;
+      this.title = title;
+      this.text = text;
+      this.kind = kind;
+      this.wakeLock = wakeLock;
+    }
+  }
 
   /** Counter handed to whoever asked for a session. */
   static int nextSessionId() {
     return NEXT_SESSION_ID.getAndIncrement();
   }
 
-  private PowerManager.WakeLock wakeLock;
-
   /**
    * Starts a session.
    *
-   * Returns the session id, or -1 when the notification cannot be posted (on
-   * Android 13+ without {@code POST_NOTIFICATIONS} a foreground service has
-   * nothing to display) — the caller then runs the job unprotected instead of
-   * failing it.
+   * Returns the session id, or -1 when the platform refuses to run the service
+   * at all (a restricted background launch, a missing declaration) — the caller
+   * then runs the job unprotected instead of failing it. A refused
+   * <em>notification</em> is not that case: the service still runs and the wake
+   * lock still holds, only the notification is hidden.
    */
-  static int start(Context context, String title, String text, boolean wakeLock) {
+  static int start(Context context, String title, String text, boolean wakeLock, String kind) {
     final int sessionId = nextSessionId();
 
-    final Intent intent = new Intent(context, BackgroundExecutionService.class)
-        .putExtra(EXTRA_TITLE, title)
-        .putExtra(EXTRA_TEXT, text)
-        .putExtra(EXTRA_SESSION_ID, sessionId)
-        .putExtra("wakeLock", wakeLock);
+    final Intent intent =
+        new Intent(context, BackgroundExecutionService.class)
+            .putExtra(EXTRA_TITLE, title)
+            .putExtra(EXTRA_TEXT, text)
+            .putExtra(EXTRA_SESSION_ID, sessionId)
+            .putExtra(EXTRA_WAKE_LOCK, wakeLock)
+            .putExtra(EXTRA_KIND, kind);
 
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -82,18 +133,34 @@ public final class BackgroundExecutionService extends Service {
         context.startService(intent);
       }
     } catch (Throwable error) {
-      // A platform that refuses to start it (restricted background launch, a
-      // missing permission) means "no protection", not "the job failed".
+      // A platform that refuses to start it means "no protection", not "the job
+      // failed". Nothing was registered, so there is nothing to release.
       return -1;
     }
 
     return sessionId;
   }
 
-  /** Stops the session with [sessionId], leaving other sessions alone. */
-  static void stop(Context context, int sessionId) {
-    context.stopService(
-        new Intent(context, BackgroundExecutionService.class).putExtra(EXTRA_SESSION_ID, sessionId));
+  /**
+   * Ends the session with {@code sessionId}, leaving every other session alone.
+   *
+   * A no-op when the service is already gone: the sessions went with it.
+   */
+  static void stop(int sessionId) {
+    final BackgroundExecutionService service = instance;
+
+    if (service != null) {
+      service.releaseSession(sessionId);
+    }
+  }
+
+  private PowerManager.WakeLock wakeLock;
+
+  @Override
+  public void onCreate() {
+    super.onCreate();
+
+    instance = this;
   }
 
   @Override
@@ -107,11 +174,19 @@ public final class BackgroundExecutionService extends Service {
     }
 
     final String title = intent.getStringExtra(EXTRA_TITLE);
-    final String text = intent.getStringExtra(EXTRA_TEXT);
+    final Session session =
+        new Session(
+            sessionId,
+            title == null ? "Running" : title,
+            intent.getStringExtra(EXTRA_TEXT),
+            intent.getStringExtra(EXTRA_KIND),
+            intent.getBooleanExtra(EXTRA_WAKE_LOCK, false));
 
-    startForegroundInternal(title == null ? "Running" : title, text == null ? "" : text, startId);
+    SESSIONS.put(sessionId, session);
 
-    if (intent.getBooleanExtra("wakeLock", false)) {
+    startForegroundInternal(session, startId);
+
+    if (session.wakeLock) {
       acquireWakeLock();
     }
 
@@ -123,6 +198,13 @@ public final class BackgroundExecutionService extends Service {
   @Override
   public void onDestroy() {
     releaseWakeLock();
+
+    SESSIONS.clear();
+
+    if (instance == this) {
+      instance = null;
+    }
+
     super.onDestroy();
   }
 
@@ -131,19 +213,128 @@ public final class BackgroundExecutionService extends Service {
     return null;
   }
 
+  /**
+   * Android 15 caps {@code dataSync} foreground services at six hours a day.
+   *
+   * When the cap is reached the platform calls this and the service has to stop.
+   * Stopping here is what keeps the process from being killed for not
+   * responding; the job itself keeps running (it is the app's own process), just
+   * without the protection — which is what the recording module documents.
+   */
+  @Override
+  public void onTimeout(int startId, int foregroundServiceType) {
+    stopForegroundAndSelf();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sessions
+  // ---------------------------------------------------------------------------
+
+  private void releaseSession(int sessionId) {
+    if (SESSIONS.remove(sessionId) == null) {
+      return;
+    }
+
+    if (SESSIONS.isEmpty()) {
+      releaseWakeLock();
+      stopForegroundAndSelf();
+
+      return;
+    }
+
+    // Other jobs are still running: keep the service, but stop holding the CPU
+    // for a job that no longer needs it.
+    if (!anySessionWantsWakeLock()) {
+      releaseWakeLock();
+    }
+
+    updateNotification();
+  }
+
+  /** The session the notification describes: the one that started last. */
+  private Session newestSession() {
+    Session newest = null;
+
+    for (Session session : SESSIONS.values()) {
+      newest = session;
+    }
+
+    return newest;
+  }
+
+  private boolean anySessionWantsWakeLock() {
+    for (Session session : SESSIONS.values()) {
+      if (session.wakeLock) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  @SuppressWarnings("deprecation")
+  private void stopForegroundAndSelf() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      stopForeground(STOP_FOREGROUND_REMOVE);
+    } else {
+      stopForeground(true);
+    }
+
+    stopSelf();
+  }
+
   // ---------------------------------------------------------------------------
   // Foreground notification
   // ---------------------------------------------------------------------------
 
-  private void startForegroundInternal(String title, String text, int startId) {
+  private void startForegroundInternal(Session session, int startId) {
+    createChannel();
+
+    final Notification notification = buildNotification();
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+
+      return;
+    }
+
+    startForeground(NOTIFICATION_ID, notification);
+  }
+
+  /** Reposts the notification after a session ended, without re-alerting. */
+  private void updateNotification() {
     final NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager != null) {
-      final NotificationChannel channel =
-          new NotificationChannel(CHANNEL_ID, "Background tasks", NotificationManager.IMPORTANCE_LOW);
-      channel.setShowBadge(false);
-      manager.createNotificationChannel(channel);
+    if (manager != null) {
+      manager.notify(NOTIFICATION_ID, buildNotification());
     }
+  }
+
+  private void createChannel() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      return;
+    }
+
+    final NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+    if (manager == null) {
+      return;
+    }
+
+    final NotificationChannel channel =
+        new NotificationChannel(CHANNEL_ID, "Background tasks", NotificationManager.IMPORTANCE_LOW);
+
+    // Silence and no badge: work the user started, not news.
+    channel.setShowBadge(false);
+
+    manager.createNotificationChannel(channel);
+  }
+
+  // The one-argument Builder is the API < 26 branch; the channel id is the
+  // only way to build one from 26 on.
+  @SuppressWarnings("deprecation")
+  private Notification buildNotification() {
+    final Session visible = newestSession();
 
     final Notification.Builder builder =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -157,30 +348,54 @@ public final class BackgroundExecutionService extends Service {
 
       final PendingIntent pending =
           PendingIntent.getActivity(
-              this,
-              0,
-              launch,
-              PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+              this, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
       builder.setContentIntent(pending);
     }
 
-    final Notification notification =
-        builder
-            .setContentTitle(title)
-            .setContentText(text)
-            .setOngoing(true)
-            .setShowWhen(false)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .build();
+    final String text = visible == null ? null : visible.text;
+    final String others = count(SESSIONS.size() - 1);
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      startForeground(startId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+    builder
+        .setContentTitle(visible == null ? "Running" : visible.title)
+        .setContentText(
+            text == null || text.isEmpty() ? others : others.isEmpty() ? text : text + "  (" + others + ")")
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setShowWhen(false)
+        .setSmallIcon(notificationIcon(visible == null ? null : visible.kind));
 
-      return;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      // Show it now rather than after the platform's grace period for a service
+      // started from the background: a notification that appears ten seconds
+      // late reads as "there is none".
+      builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
     }
 
-    startForeground(startId, notification);
+    return builder.build();
+  }
+
+  /** "+2" for the other running jobs, or empty when this is the only one. */
+  private static String count(int others) {
+    return others <= 0 ? "" : "+" + others;
+  }
+
+  /**
+   * Icon of the notification, by what the job is.
+   *
+   * Shipped as vectors in this plugin's resources (merged into the app), because
+   * borrowing a system drawable would show a download arrow on a recording.
+   */
+  private int notificationIcon(String kind) {
+    if ("record".equals(kind)) {
+      return R.drawable.ic_stat_media_core_record;
+    }
+
+    if ("download".equals(kind)) {
+      return R.drawable.ic_stat_media_core_download;
+    }
+
+    return R.drawable.ic_stat_media_core_task;
   }
 
   // ---------------------------------------------------------------------------

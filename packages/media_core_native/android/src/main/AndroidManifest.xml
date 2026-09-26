@@ -11,9 +11,10 @@
       going to the background): a foreground service keeps the process from
       being frozen, and the wake lock keeps the CPU running with the screen off.
       A plain <service> merges from a library manifest, so the app inherits both
-      without copying anything; POST_NOTIFICATIONS is still the app's to request
-      at runtime on API 33+ (media_core_audio's AudioPermissionService covers
-      exactly that one).
+      without copying anything, and POST_NOTIFICATIONS is asked for by this
+      plugin on the first acquire that needs it (BackgroundExecutionDelegate
+      requests it while an activity is attached) — an app that would rather ask
+      itself can, and the plugin then finds the permission already granted.
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
