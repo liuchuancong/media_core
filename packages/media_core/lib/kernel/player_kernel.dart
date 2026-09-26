@@ -116,6 +116,14 @@ final class PlayerKernel {
        _preloadManager = preloadManager ?? PreloadManager(),
        _coordinator = coordinator ?? GlobalPlayerCoordinator() {
     _trackActivePlayer();
+
+    // A capability package may have installed a process-wide media-session
+    // driver; taking it here is what makes the surfaces automatic for every
+    // player this kernel ever creates. `attachAudio` still wins for a host that
+    // wants a specific driver, and assigning over the same instance is a no-op.
+    if (options.shouldAttachAudio(hasFactory: audioDriverFactory != null)) {
+      _audioDriver = audioDriverFactory!.call();
+    }
   }
 
   /// Registry of available backends.
@@ -143,6 +151,23 @@ final class PlayerKernel {
   KernelPresentationDriver? _presentationDriver;
 
   PlatformProvider? _platformProvider;
+
+  /// The driver a new kernel takes when nothing else was attached.
+  ///
+  /// The platform has exactly one media notification per app, so this slot is
+  /// process-wide and holds one driver: a capability package installs it once
+  /// (`MediaSessionBootstrap.enable()` in `media_core_mediasession`), and every
+  /// kernel created afterwards publishes to it without the host wiring
+  /// anything per player.
+  ///
+  /// Null means the app has not enabled the capability, which is the default:
+  /// posting notifications and starting a foreground service is an app-level
+  /// decision, not something a library does behind a host's back.
+  ///
+  /// A kernel that must stay off the platform surfaces passes
+  /// `KernelOptions(autoAttachAudio: false)`; a kernel created *before* the
+  /// capability was enabled attaches it explicitly with `attachAudio`.
+  static KernelAudioDriver Function()? audioDriverFactory;
   StreamSubscription<PlayerEvent>? _activeTrackingSub;
   PlayerHandle? _activeHandle;
 
@@ -423,16 +448,26 @@ final class PlayerKernel {
   // Audio capability
   // ---------------------------------------------------------------------------
 
+  /// The audio capability driver in use, if any.
+  ///
+  /// Set explicitly by [attachAudio], or taken from [audioDriverFactory] when
+  /// the capability is installed process-wide. Null when this kernel publishes
+  /// nothing to the platform.
+  KernelAudioDriver? get audioDriver => _audioDriver;
+
   /// Attaches an audio capability driver.
   ///
   /// The driver receives active-player notifications; see
   /// [KernelAudioDriver] for the exact semantics. Requires the
   /// event bus, which is enabled by default.
   ///
+  /// An explicit driver wins over the process-wide one, and attaching is what a
+  /// host uses for a kernel that was created before
+  /// `MediaSessionBootstrap.enable()` ran.
+  ///
   /// ```dart
-  /// final audio = MediaCoreAudio();
-  /// await audio.initialize();
-  /// kernel.attachAudio(audio);
+  /// final session = await MediaSessionBootstrap.enable();
+  /// kernel.attachAudio(session);
   /// ```
   void attachAudio(KernelAudioDriver driver) {
     _audioDriver = driver;

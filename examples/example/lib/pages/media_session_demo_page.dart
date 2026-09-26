@@ -9,19 +9,21 @@ import '../ui/demo_log.dart';
 import '../ui/demo_page_scaffold.dart';
 import 'player_demo_page.dart' show kSampleSources;
 
-/// A video player with a system media surface.
+/// A video player with a system media surface — and no wiring on this page.
 ///
-/// The notification, the lock screen, SMTC and MPRIS are one capability, and it
-/// is not an audio feature: this page plays a *video* and publishes it to the
-/// platform. Look at your device's notification shade (or Windows' volume
-/// overlay, or GNOME's media applet) while it plays: the title, the progress and
-/// the controls come from the handle through `MediaSessionDriver`, and pressing
-/// them drives the same handle — which the log below shows as it happens.
+/// The app enabled the surfaces once in `main()`
+/// (`MediaSessionBootstrap.enable()`), and every kernel created afterwards takes
+/// the driver by itself, so this page plays a *video* and still appears in the
+/// notification shade, on the lock screen, in Windows' SMTC overlay and in
+/// GNOME's media applet: the title, the progress and the controls come from the
+/// handle, and pressing them drives the same handle. The log below is that round
+/// trip; the button turns the surfaces off and on again so the difference is one
+/// tap away.
 ///
 /// Android needs the `audio_service` manifest entries and, on API 33+, the
 /// notification permission; the package README lists them. On a platform where
 /// the surface cannot appear, the driver still publishes state, so this page
-/// remains a truthful demonstration of what the host would see.
+/// stays a truthful demonstration of what the host would see.
 class MediaSessionDemoPage extends StatefulWidget {
   /// Creates the page.
   const MediaSessionDemoPage({super.key});
@@ -35,40 +37,38 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
   final TextEditingController _url = TextEditingController(text: kSampleSources.first.url);
 
   late final PlayerKernel _kernel;
-  late final MediaSessionDriver _session;
 
   PlayerHandle? _handle;
-  StreamSubscription<PlaybackState>? _playbackSub;
-  StreamSubscription<void>? _surfaceSub;
+  // Typed as void on purpose: `PlaybackState` exists both in media_core and in
+  // audio_service (the surface's own state), and these are only ever cancelled.
+  StreamSubscription<void>? _playbackSub;
   StreamSubscription<void>? _itemSub;
+  StreamSubscription<void>? _stateSub;
 
-  bool _attached = false;
-  bool _initializing = false;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
 
+    // No attachAudio call: the kernel takes the process-wide driver while it is
+    // being constructed, which is the whole point of this page.
     _kernel = PlayerKernel();
     _kernel.registerBackend(const MediaKitAdapterFactory().registration());
 
-    // A video player has no queue: seek buttons instead of skip buttons, and
-    // its own notification channel so a user can mute "video playback" without
-    // muting music.
-    _session = MediaSessionDriver(config: const MediaSessionConfig.video());
+    _log.add('kernel created — driver attached automatically (${MediaSessionBootstrap.current})');
+    _log.add('the platform was told to show: play/pause · ±'
+        '${const MediaSessionConfig().seekStep.inSeconds}s · stop');
 
-    _log.add('driver created: channel "${const MediaSessionConfig.video().androidNotificationChannelId}"');
-    _log.add('attach it and the platform gets play/pause, ±'
-        '${const MediaSessionConfig.video().seekStep.inSeconds}s and stop');
+    _observeSurface();
   }
 
   @override
   void dispose() {
     _playbackSub?.cancel();
-    _surfaceSub?.cancel();
     _itemSub?.cancel();
+    _stateSub?.cancel();
 
-    _session.dispose();
     _handle?.dispose();
     _kernel.dispose();
     _url.dispose();
@@ -77,57 +77,19 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
     super.dispose();
   }
 
-  /// Starts the platform surface and binds the kernel to it.
-  Future<void> _attach() async {
-    if (_attached || _initializing) {
-      return;
-    }
-
-    setState(() => _initializing = true);
-
-    try {
-      await _session.initialize();
-
-      // The kernel hands over whichever player becomes active; a handle that
-      // was already playing is picked up by `refresh`.
-      _kernel.attachAudio(_session);
-      _session.refresh();
-
-      _observeSurface();
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _attached = true;
-        _initializing = false;
-      });
-
-      _log.add('attached: $_session');
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() => _initializing = false);
-
-      _log.add('initialize failed: $error');
-    }
-  }
-
   /// Logs what the platform is being told.
   ///
-  /// Two streams, deliberately not one: the media item changes when a source
-  /// opens, while the playback state arrives with every progress tick — logging
-  /// all of it would bury the log. So the state is logged on *transitions*
-  /// (playing flag, control set) plus position jumps, which is also exactly
-  /// where a pressed notification button shows up: the platform sends the
-  /// command, the handle acts, and the change comes back here.
+  /// The media item changes when a source opens; the playback state arrives with
+  /// every progress tick, so it is logged on *transitions* (playing flag, control
+  /// count, processing state) plus position jumps — which is also where a pressed
+  /// notification button shows up: the platform sends the command, the handle
+  /// acts, and the change comes back here.
   void _observeSurface() {
-    final handler = _session.handler;
+    final handler = MediaSessionBootstrap.current?.handler;
 
     if (handler == null) {
+      _log.add('no handler: the surfaces are off (or the platform refused to start)');
+
       return;
     }
 
@@ -138,7 +100,7 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
     String lastSignature = '';
     Duration lastPosition = Duration.zero;
 
-    _surfaceSub = handler.playbackState.listen((state) {
+    _stateSub = handler.playbackState.listen((state) {
       final signature = '${state.playing}|${state.controls.length}|${state.processingState.name}';
 
       if (signature != lastSignature) {
@@ -152,8 +114,8 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
         return;
       }
 
-      // A jump bigger than a progress tick means the position was moved —
-      // by the ±10s buttons as much as by the UI.
+      // A jump larger than a progress tick means the position moved — by the
+      // ±10s buttons as much as by the UI.
       final delta = (state.updatePosition - lastPosition).abs();
 
       if (delta > const Duration(milliseconds: 1500)) {
@@ -164,22 +126,33 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
     });
   }
 
-  Future<void> _detach() async {
-    if (!_attached) {
+  Future<void> _toggleSurfaces() async {
+    if (_busy) {
       return;
     }
 
-    _kernel.detachAudio();
+    setState(() => _busy = true);
 
-    await _playbackSub?.cancel();
-    _playbackSub = null;
+    try {
+      if (MediaSessionBootstrap.enabled) {
+        await MediaSessionBootstrap.disable();
 
-    await _surfaceSub?.cancel();
-    _surfaceSub = null;
+        _log.add('surfaces off: the notification clears itself, and this kernel stops publishing '
+            '(it is already created, so re-enabling needs attachTo)');
+      } else {
+        // A kernel created while the surfaces were off does not pick them up by
+        // itself — `attachTo` is the path for exactly that case.
+        final driver = await MediaSessionBootstrap.attachTo(_kernel);
 
-    _log.add('detached (the surface keeps the last state until the app is closed)');
-
-    setState(() => _attached = false);
+        _log.add('surfaces on again: ${driver.active?.id.value ?? 'no active player yet'}');
+      }
+    } catch (error) {
+      _log.add('toggle failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
   }
 
   Future<void> _open() async {
@@ -213,19 +186,20 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
       }
     });
 
-    _log.add('opened ${handle.id.value} (backend ${handle.backendId})');
-    _log.add('active player for the surface: ${_session.active?.id.value ?? 'none'}');
+    _log.add('opened ${handle.id.value} (backend ${handle.backendId}) — the surface follows it automatically');
   }
 
   @override
   Widget build(BuildContext context) {
     final handle = _handle;
+    final driver = MediaSessionBootstrap.current;
 
     return DemoPageScaffold(
-      title: '系统媒体面：通知 / 锁屏 / SMTC',
-      subtitle: '视频播放器同样该有系统媒体控件：标题、进度、播放暂停、±10 秒、停止。接入后播一会儿，'
-          '再看设备的通知栏（Windows 的音量浮层、GNOME 的媒体部件也行）——按上面的按钮，下面的日志会出现对应的状态变化。'
-          ' · The same system surface a music app gets, for a video player: attach it, play, then press the '
+      title: '系统媒体面：自动挂载的通知 / 锁屏 / SMTC',
+      subtitle: 'main() 里一行 enable()，之后每个播放器都自动接上系统媒体面：视频、音乐、feed 都一样。'
+          '播一会儿，再看设备的通知栏（Windows 的音量浮层、GNOME 的媒体部件也行）——按上面的按钮，'
+          '下面的日志会出现对应的状态变化。'
+          ' · One enable() at app start, every player after that publishes itself. Play, then press the '
           "notification's buttons and watch the transitions land in the log below.",
       log: _log,
       actions: <Widget>[
@@ -235,9 +209,11 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
           label: const Text('打开并播放'),
         ),
         OutlinedButton.icon(
-          onPressed: _attached ? _detach : (_initializing ? null : _attach),
-          icon: Icon(_attached ? Icons.notifications_off_outlined : Icons.notifications_active_outlined),
-          label: Text(_attached ? '解除媒体面' : '接入媒体面'),
+          onPressed: _busy ? null : _toggleSurfaces,
+          icon: Icon(
+            MediaSessionBootstrap.enabled ? Icons.notifications_off_outlined : Icons.notifications_active_outlined,
+          ),
+          label: Text(MediaSessionBootstrap.enabled ? '关闭媒体面' : '重新开启媒体面'),
         ),
       ],
       child: Column(
@@ -260,15 +236,20 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  _row('driver', _session.toString()),
-                  _row('platform surface', _attached ? 'attached' : 'not attached'),
-                  _row('active player', _session.active?.id.value ?? 'none'),
-                  _row('controls offered', _attached ? 'play/pause · ±10s · stop' : '—'),
-                  _row('title shown', handle?.source?.hasTitle == true ? handle!.source!.title! : '—'),
+                  _row('surfaces', MediaSessionBootstrap.enabled ? 'enabled (app-wide)' : 'off'),
+                  _row('driver', driver?.toString() ?? 'none'),
+                  _row('active player', driver?.active?.id.value ?? 'none'),
+                  _row('channel', driver?.config.androidNotificationChannelId ?? '—'),
                   _row(
-                    'artwork',
-                    _session.artUriResolver == null ? 'source metadata only' : 'resolver installed',
+                    'controls',
+                    driver == null
+                        ? '—'
+                        : driver.skipToNextHandler != null
+                            ? 'previous · play/pause · next · stop'
+                            : 'play/pause · ±${driver.config.seekStep.inSeconds}s · stop',
                   ),
+                  _row('title shown', handle?.source?.hasTitle == true ? handle!.source!.title! : '—'),
+                  _row('artwork', driver?.artUriResolver == null ? 'source metadata only' : 'resolver installed'),
                 ],
               ),
             ),

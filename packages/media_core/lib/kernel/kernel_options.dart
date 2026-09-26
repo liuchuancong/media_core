@@ -24,6 +24,7 @@ final class KernelOptions {
     this.enableFallback = true,
     this.enablePool = true,
     this.enableEventBus = true,
+    this.autoAttachAudio = true,
     this.maxRecoveryAttempts = PlayerConstants.maxRecoveryAttempts,
     this.maxFallbackAttempts = PlayerConstants.maxFallbackAttempts,
     this.retryBaseDelay = const Duration(seconds: 1),
@@ -60,12 +61,30 @@ final class KernelOptions {
   /// Upper bound for a single recovery retry delay.
   final Duration retryMaxDelay;
 
+  /// Whether this kernel takes the process-wide media-session driver.
+  ///
+  /// A capability package installs one via `PlayerKernel.audioDriverFactory` —
+  /// `MediaSessionBootstrap.enable()` in `media_core_mediasession` does exactly
+  /// that — and every kernel created afterwards attaches it, so a host does not
+  /// have to remember `attachAudio` for each player. Set this to false for a
+  /// kernel that must not publish to the platform's media surfaces: a settings
+  /// preview, a diagnostic player, or a second kernel that would fight the
+  /// first for the single notification.
+  final bool autoAttachAudio;
+
+  /// Whether a driver should be attached to a new kernel.
+  ///
+  /// The rule in one place: the capability has to be installed process-wide
+  /// *and* this kernel has to want it.
+  bool shouldAttachAudio({required bool hasFactory}) => autoAttachAudio && hasFactory;
+
   /// Creates a copy with modifications.
   KernelOptions copyWith({
     bool? enableRecovery,
     bool? enableFallback,
     bool? enablePool,
     bool? enableEventBus,
+    bool? autoAttachAudio,
     int? maxRecoveryAttempts,
     int? maxFallbackAttempts,
     Duration? retryBaseDelay,
@@ -76,6 +95,7 @@ final class KernelOptions {
       enableFallback: enableFallback ?? this.enableFallback,
       enablePool: enablePool ?? this.enablePool,
       enableEventBus: enableEventBus ?? this.enableEventBus,
+      autoAttachAudio: autoAttachAudio ?? this.autoAttachAudio,
       maxRecoveryAttempts: maxRecoveryAttempts ?? this.maxRecoveryAttempts,
       maxFallbackAttempts: maxFallbackAttempts ?? this.maxFallbackAttempts,
       retryBaseDelay: retryBaseDelay ?? this.retryBaseDelay,

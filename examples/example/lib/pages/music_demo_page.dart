@@ -121,7 +121,6 @@ final class _MusicDemoPageState extends State<MusicDemoPage> {
   late final AudioPermissionService _permissions;
   late final MusicDownloadQueue _downloads;
 
-  final MediaCoreAudio _audio = MediaCoreAudio();
   MusicBackgroundBinding? _background;
   StreamSubscription<AudioPlaybackState>? _stateSub;
   StreamSubscription<MusicDownloadTask>? _downloadSub;
@@ -225,9 +224,14 @@ final class _MusicDemoPageState extends State<MusicDemoPage> {
     }
 
     try {
-      await _audio.initialize();
+      // Enabled by main() at startup; this call is idempotent and returns the
+      // same driver, which the binding then uses.
+      // The app-wide driver, not a second one: the platform has a single media
+      // notification, so `AudioService.init` runs once per process — a driver
+      // created here would fight the one main() enabled at startup.
+      final audio = MediaSessionBootstrap.current ?? await MediaSessionBootstrap.enable();
 
-      _background = MusicBackgroundBinding(_player, _audio)..attach();
+      _background = MusicBackgroundBinding(_player, audio)..attach();
 
       _log.add('background binding attached (notification / lock screen / SMTC / MPRIS)');
     } catch (error) {

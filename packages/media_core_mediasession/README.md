@@ -13,7 +13,26 @@ PlayerHandle.playbackStream ──▶ MediaSessionHandler ──▶ 通知 / SMT
 拔耳机                      ──▶ 暂停
 ```
 
-## 用法
+## 用法：应用启动时挂一次，之后全自动
+
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 一行：之后创建的每个内核都自动带上它，每次播放都自动交给它。
+  await MediaSessionBootstrap.enable();
+
+  runApp(const MyApp());
+}
+```
+
+内核本来就负责"谁是活跃播放器、什么时候切换"——所以一个进程一个驱动就够了，宿主不必逐个播放器写 `attachAudio`。想要封面就用 `enable(artUriResolver: ...)`（视频源通常只有 URL 和标题）；想让某个内核不上系统面（设置页预览、诊断播放器）就传 `KernelOptions(autoAttachAudio: false)`；内核在 `enable()` 之前就创建了，用 `MediaSessionBootstrap.attachTo(kernel)` 补挂。
+
+**为什么是一个进程一个驱动**：平台只有一条媒体通知——一个 `AudioService` handler、一个 SMTC 会话、一个 MPRIS 名字；两个驱动会互相抢，而且 `AudioService.init` 第二次调用在 debug 会直接断言失败。所以由 bootstrap 独占那一个实例。
+
+**为什么必须显式开启**：发通知、起前台服务是应用级决定（要清单条目、图标资源、Android 13+ 还要运行时权限）。库在背后替宿主做这件事，轻则意外，重则在那份清单缺失时直接崩。所以不调 `enable()` 就什么都不发生；调了之后才是自动的。
+
+### 手动路径（不用 bootstrap 时）
 
 ```dart
 final kernel = PlayerKernel()..registerBackend(MediaKitAdapterFactory().registration());
@@ -21,9 +40,6 @@ final kernel = PlayerKernel()..registerBackend(MediaKitAdapterFactory().registra
 final session = MediaSessionDriver(config: const MediaSessionConfig.video());
 await session.initialize();      // 一次，早点调用（runApp 之前也行）
 kernel.attachAudio(session);     // 内核把"当前活跃播放器"交给它
-
-// 视频源通常没有封面：告诉它去哪儿找
-session.artUriResolver = (source) => thumbnailFor(source.uri);
 
 final handle = await kernel.create(source: source, config: const PlayerConfig(autoPlay: true));
 // 通知里现在有标题、播放/暂停、±10 秒、停止，按下去就是操作这个 handle。

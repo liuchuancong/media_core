@@ -27,7 +27,7 @@ import 'package:media_core_mediasession/media_core_mediasession.dart';
 /// and mirrors state.
 ///
 /// ```dart
-/// final audio = MediaCoreAudio();
+/// final audio = await MediaSessionBootstrap.enable();
 /// await audio.initialize();
 /// final player = AudioPlaybackController(kernel);
 /// final background = MusicBackgroundBinding(player, audio)..attach();
@@ -40,7 +40,11 @@ final class MusicBackgroundBinding {
   final AudioPlaybackController player;
 
   /// The platform capability driver to publish through.
-  final MediaCoreAudio audio;
+  ///
+  /// The shared [MediaSessionDriver], which the app may have enabled once for
+  /// the whole process ([MediaSessionBootstrap.enable]) — the binding does not
+  /// need the music module's subclass for anything.
+  final MediaSessionDriver audio;
 
   StreamSubscription<AudioPlaybackState>? _stateSub;
 

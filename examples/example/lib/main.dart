@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core_media_kit/media_core_media_kit.dart';
+import 'package:media_core_mediasession/media_core_mediasession.dart';
 
 import 'demos/registry.dart';
 import 'language.dart';
@@ -18,7 +19,7 @@ import 'ui/module_catalog_page.dart';
 ///   runnable function that prints what the module did. Useful for the
 ///   pure-logic modules (lyrics parsing, queue rules, source resolution) that
 ///   need no device and no network to demonstrate.
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // media_kit loads libmpv; the example drives the vendored copy in this repo.
@@ -28,6 +29,23 @@ void main() {
   // The example turns them on so a developer can watch what the framework
   // decides while pressing buttons.
   MediaCoreLog.level = LogLevel.debug;
+
+  // System media surfaces, enabled once for the whole app: every player this
+  // example creates afterwards — the player page, the feed, live, the styles
+  // page, the music player — publishes to the notification / lock screen / SMTC
+  // / MPRIS without any per-page wiring. The 'media-session' page shows the
+  // round trip; this line is the whole integration.
+  //
+  // Caught on purpose: a platform that cannot start audio_service (a missing
+  // manifest entry on Android, an unsupported embedder) must not keep the demo
+  // app from booting — the surfaces are simply off, and the probe/`media-session`
+  // pages say so.
+  try {
+    await MediaSessionBootstrap.enable();
+    MediaCoreLog.info(LogCategory.player, 'media session surfaces enabled');
+  } catch (error) {
+    MediaCoreLog.warning(LogCategory.player, 'media session surfaces unavailable', fields: <String, Object?>{'error': '$error'});
+  }
 
   runApp(const MediaCoreExampleApp());
 }

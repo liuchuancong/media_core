@@ -6,6 +6,19 @@
 /// works for **any** player the kernel owns, video included; that is the reason
 /// it is a package of its own rather than part of the music module.
 ///
+/// The one thing a host has to do is say yes, once, at app start — after that
+/// every player is published automatically:
+///
+/// ```dart
+/// void main() async {
+///   WidgetsFlutterBinding.ensureInitialized();
+///   await MediaSessionBootstrap.enable();   // every kernel takes it from here
+///   runApp(const MyApp());
+/// }
+/// ```
+///
+/// Or drive it explicitly, per kernel:
+///
 /// ```dart
 /// final kernel = PlayerKernel();
 ///
@@ -33,6 +46,13 @@
 /// - drawables for the control icons named in [MediaSessionConfig].
 library;
 
+// The handler extends `BaseAudioHandler` and its streams carry these types, so
+// a host that observes the surfaces would otherwise have to depend on
+// audio_service itself just to name them.
+export 'package:audio_service/audio_service.dart'
+    show AudioProcessingState, BaseAudioHandler, MediaAction, MediaControl, MediaItem, PlaybackState;
+
+export 'src/media_session_bootstrap.dart';
 export 'src/media_session_config.dart';
 export 'src/media_session_driver.dart';
 export 'src/media_session_handler.dart';

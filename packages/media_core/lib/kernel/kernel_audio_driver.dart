@@ -17,12 +17,18 @@ import 'player_handle.dart';
 ///
 /// Implementations:
 ///
-/// - `media_core_audio` (audio_service / audio_session)
+/// - `media_core_mediasession` (audio_service / audio_session) — the media
+///   notification, lock screen, SMTC and MPRIS surfaces for any player, video
+///   included; `media_core_audio` builds on it.
 ///
 /// It does not:
 ///
 /// - decide which player is active
 /// - own playback state
+///
+/// A process installs one driver through `PlayerKernel.audioDriverFactory`
+/// (see that field), and every kernel created afterwards takes it: the
+/// platform has a single media notification, so it is a single driver.
 ///
 /// Those belong to:
 ///
