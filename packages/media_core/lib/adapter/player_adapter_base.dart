@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import 'player_adapter.dart';
 import '../core/player_error.dart';
 import '../core/player_state.dart';
@@ -6,6 +8,7 @@ import 'player_adapter_event.dart';
 import 'player_adapter_context.dart';
 import 'player_adapter_metrics.dart';
 import '../source/player_source.dart';
+import '../screenshot/screenshot_request.dart';
 import 'player_adapter_exception.dart';
 import '../error/player_error_code.dart';
 import 'player_adapter_capabilities.dart';
@@ -328,6 +331,24 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     await onSetAudioOnly(audioOnly);
   }
 
+  /// Captures the current video frame with the backend's own API.
+  ///
+  /// Gated by [PlayerAdapterCapabilities.supportsScreenshot] the same way
+  /// [setAudioOnly] is gated by its own capability: an adapter that cannot
+  /// capture reports `false` and this method answers null without touching the
+  /// engine, so an unsupported backend never throws on a user action.
+  ///
+  /// A null answer means "this route produced nothing" — not that the frame was
+  /// black. The caller falls back to capturing the rendered surface.
+  @override
+  Future<Uint8List?> captureFrame(ScreenshotRequest request) async {
+    if (!_initialized || _disposed || !_capabilities.supportsScreenshot) {
+      return null;
+    }
+
+    return onCaptureFrame(request);
+  }
+
   @override
   Future<void> close() async {
     if (!_initialized || _disposed) return;
@@ -410,6 +431,18 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   /// Only called when the capability is declared and the value changed.
   @protected
   Future<void> onSetAudioOnly(bool audioOnly) async {}
+
+  /// Captures a frame with the engine.
+  ///
+  /// Only called when [PlayerAdapterCapabilities.supportsScreenshot] is
+  /// declared, the adapter is initialized and a source is open.
+  ///
+  /// Returning null is the honest answer for "the engine produced nothing
+  /// here" — a platform where the capture API is unimplemented, an engine that
+  /// cannot encode the requested format, or no decoded frame yet. Implement it
+  /// in adapters that declare the capability.
+  @protected
+  Future<Uint8List?> onCaptureFrame(ScreenshotRequest request) async => null;
 
   @protected
   Future<void> onClose();

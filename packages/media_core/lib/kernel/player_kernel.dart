@@ -19,6 +19,8 @@ import '../preload/preload_manager.dart';
 import '../preload/preload_priority.dart';
 import '../preload/preload_request.dart';
 import '../presentation/presentation_request.dart';
+import '../screenshot/player_screenshot.dart';
+import '../screenshot/screenshot_options.dart';
 import '../session/player_session.dart';
 import '../source/player_source.dart';
 import '../source/source_service.dart';
@@ -493,6 +495,25 @@ final class PlayerKernel {
   /// Leaves the floating window for [playerId].
   Future<void> exitFloating(PlayerId playerId) {
     return _requestPresentation(playerId, PresentationRequest.normal());
+  }
+
+  /// Captures a frame of [playerId].
+  ///
+  /// Returns null when the player is unknown, has no source open, or neither
+  /// capture route could produce an image; see
+  /// [PlayerHandle.captureScreenshot] for which route is tried and why a
+  /// capture can legitimately produce nothing.
+  Future<PlayerScreenshot?> captureScreenshot(
+    PlayerId playerId, {
+    ScreenshotOptions options = ScreenshotOptions.defaults,
+  }) async {
+    final handle = _handles[playerId];
+
+    if (handle == null) {
+      return null;
+    }
+
+    return handle.captureScreenshot(options: options);
   }
 
   Future<void> _requestPresentation(PlayerId playerId, PresentationRequest request) async {

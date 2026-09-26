@@ -45,6 +45,9 @@ import '../identity/operation_id.dart';
 import '../operation/operation_registry.dart';
 import '../operation/operation_tracker.dart';
 import '../operation/operation_type.dart';
+import '../screenshot/player_screenshot.dart';
+import '../screenshot/screenshot_options.dart';
+import '../screenshot/screenshot_surface.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 import '../adapter/player_adapter_capabilities.dart';
 import '../recovery/recovery_ladder_event.dart';
@@ -271,6 +274,10 @@ final class PlayerHandle implements RecoveryTarget {
   /// Pruning on start (rather than on completion) keeps the most recent
   /// outcome readable.
   void beginOperation(OperationType type) {
+    if (!_canRecordOperations) {
+      return;
+    }
+
     _operationRegistry.removeTerminalOperations();
     _operationTracker.untrackTerminal();
 
@@ -304,12 +311,16 @@ final class PlayerHandle implements RecoveryTarget {
       return;
     }
 
+    _currentOperation = null;
+
     final completed = operation.complete();
+
+    if (!_canRecordOperations) {
+      return;
+    }
 
     _operationRegistry.update(completed);
     _operationTracker.update(completed);
-
-    _currentOperation = null;
   }
 
   /// Records the current operation as failed.
@@ -320,12 +331,26 @@ final class PlayerHandle implements RecoveryTarget {
       return;
     }
 
+    _currentOperation = null;
+
     final failed = operation.fail();
+
+    if (!_canRecordOperations) {
+      return;
+    }
 
     _operationRegistry.update(failed);
     _operationTracker.update(failed);
+  }
 
-    _currentOperation = null;
+  /// Whether operation records can still be written.
+  ///
+  /// [dispose] closes the registry and the tracker from inside its own
+  /// operation, so the record written when that operation settles has no
+  /// reader left — and writing it throws. Every other operation that was
+  /// queued before disposal is in the same position.
+  bool get _canRecordOperations {
+    return !_operationRegistry.isDisposed && !_operationTracker.isDisposed;
   }
 
   /// Wraps [future] as a recorded operation of [type].
@@ -1467,9 +1492,102 @@ final class PlayerHandle implements RecoveryTarget {
     }));
   }
 
-  /// Closes the current source without disposing the player.
-  Future<void> close() {
+  // ---------------------------------------------------------------------------
+  // Screenshots
+  // ---------------------------------------------------------------------------
+
+  /// Captures the current video frame.
+  ///
+  /// Two routes exist and the handle picks the best available one: the
+  /// attached engine's own frame capture when it declares
+  /// [PlayerAdapterCapabilities.supportsScreenshot], and otherwise the
+  /// rendered surface of a [MediaPlayerView] currently displaying this player.
+  /// The engine route is preferred because it returns the decoded frame at its
+  /// real resolution and does not need a widget on screen; the surface route is
+  /// what makes screenshots work on engines that have no capture API at all.
+  ///
+  /// Returns null when no route produced an image: no source is open, nothing
+  /// has been decoded yet, no widget renders this player and the engine cannot
+  /// capture, or the capture timed out. Use [canCaptureScreenshot] to offer the
+  /// action only when it can work.
+  ///
+  /// Errors are not thrown: a screenshot is a user initiated convenience, and
+  /// every failure mode has the same answer — no image.
+  Future<PlayerScreenshot?> captureScreenshot({ScreenshotOptions options = ScreenshotOptions.defaults}) {
     _ensureNotDisposed();
+
+    if (_currentSource == null) {
+      return Future<PlayerScreenshot?>.value();
+    }
+
+    return _record(OperationType.captureScreenshot, () async {
+      final screenshot = await _runtime.screenshots.capture(options: options);
+
+      if (_disposed) {
+        return screenshot;
+      }
+
+      if (screenshot != null) {
+        _publish(PlayerEventType.renderer, <String, Object?>{
+          'action': 'screenshot',
+          'source': screenshot.source.name,
+          'format': screenshot.format.name,
+          'bytes': screenshot.sizeInBytes,
+        });
+      }
+
+      return screenshot;
+    }());
+  }
+
+  /// Whether [captureScreenshot] has any route it could take.
+  ///
+  /// False means a capture would return null right now — the engine cannot
+  /// capture and no [MediaPlayerView] is rendering this player.
+  bool get canCaptureScreenshot {
+    if (_disposed || _currentSource == null) {
+      return false;
+    }
+
+    return _runtime.screenshots.canCapture;
+  }
+
+  /// Stream of successful captures.
+  ///
+  /// A host that shows a thumbnail strip subscribes here instead of keeping
+  /// the returned values, so it also sees captures it did not trigger.
+  Stream<PlayerScreenshot> get screenshots => _runtime.screenshots.captures;
+
+  /// Captures kept by this player, newest first.
+  List<PlayerScreenshot> get recentScreenshots => _runtime.screenshots.recent;
+
+  /// The most recent capture, if any.
+  PlayerScreenshot? get latestScreenshot => _runtime.screenshots.latest;
+
+  /// Captures kept by this player, newest first, as a stream.
+  ValueStream<List<PlayerScreenshot>> get screenshotHistory => _runtime.screenshots.history;
+
+  /// Attaches the surface of a widget rendering this player.
+  ///
+  /// Called by [MediaPlayerView] when it binds to this handle. A widget must
+  /// detach what it attached, otherwise a capture keeps trying to read a
+  /// boundary that is no longer mounted.
+  void attachScreenshotSurface(ScreenshotSurface surface) {
+    _runtime.screenshots.attachSurface(surface);
+  }
+
+  /// Detaches a surface previously attached through [attachScreenshotSurface].
+  void detachScreenshotSurface(ScreenshotSurface surface) {
+    _runtime.screenshots.detachSurface(surface);
+  }
+
+  /// Drops the kept captures, releasing their bytes.
+  void clearScreenshotHistory() {
+    _runtime.screenshots.clearHistory();
+  }
+
+  /// Closes the current source without disposing the player.
+  Future<void> close() {    _ensureNotDisposed();
 
     _invalidateOperations();
 

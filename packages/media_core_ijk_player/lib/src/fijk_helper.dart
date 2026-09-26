@@ -52,6 +52,10 @@ class FijkHelper {
     final hostOpts = <String, Object>{
       'request-screen-on': config.requestScreenOn ? 1 : 0,
       'request-audio-focus': (config.requestAudioFocus && !config.disableAudioOutput) ? 1 : 0,
+      // IJKPlayer refuses `snapshot` unless the host enables it, and a
+      // screenshot request arrives long after the open that writes options, so
+      // it is enabled for every source instead of on demand.
+      'enable-snapshot': 1,
       ...config.extraHostOptions,
     };
 

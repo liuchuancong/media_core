@@ -71,6 +71,8 @@ final class OperationType {
 
   static const OperationType startRecording = OperationType._('start_recording', 'Start Recording');
 
+  static const OperationType captureScreenshot = OperationType._('capture_screenshot', 'Capture Screenshot');
+
   static const OperationType stopRecording = OperationType._('stop_recording', 'Stop Recording');
 
   static const OperationType recover = OperationType._('recover', 'Recover');
@@ -104,6 +106,7 @@ final class OperationType {
     'exit_pip',
     'start_recording',
     'stop_recording',
+    'capture_screenshot',
     'recover',
     'fallback',
     'retry',
@@ -131,6 +134,7 @@ final class OperationType {
     exitPip,
     startRecording,
     stopRecording,
+    captureScreenshot,
     recover,
     fallback,
     retry,

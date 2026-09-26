@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:media_core_media_kit/media_core_media_kit.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint, TargetPlatform, ValueListenable;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint, kIsWeb, TargetPlatform, ValueListenable;
 
 export 'media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
 export 'media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
@@ -67,12 +69,21 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// heartbeat can ever arrive makes the watchdog declare a stall on a
   /// perfectly healthy stream, and recovery then tears the stream down
   /// and reopens it on every timeout, forever.
+  ///
+  /// `supportsScreenshot` is narrowed the same way: mpv's `screenshot`
+  /// needs the native backend, so the web build must not claim it.
   static PlayerAdapterCapabilities _honestCapabilities(PlayerAdapterCapabilities capabilities) {
-    if (_frameProgressSupported || !capabilities.supportsVideoFrameProgress) {
-      return capabilities;
+    var result = capabilities;
+
+    if (!_frameProgressSupported && result.supportsVideoFrameProgress) {
+      result = result.copyWith(supportsVideoFrameProgress: false);
     }
 
-    return capabilities.copyWith(supportsVideoFrameProgress: false);
+    if (kIsWeb && result.supportsScreenshot) {
+      result = result.copyWith(supportsScreenshot: false);
+    }
+
+    return result;
   }
 
   /// Whether this platform starts the decoded-frame observer.
@@ -563,6 +574,53 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     await player.setVideoTrack(audioOnly ? mk.VideoTrack.no() : mk.VideoTrack.auto());
   }
 
+  /// Captures the current frame through mpv.
+  ///
+  /// mpv encodes the frame itself, so this returns the decoded picture at the
+  /// stream's resolution — no widget needs to be on screen and no surface must
+  /// be read. `image/jpeg` is what mpv encodes most cheaply, but PNG is
+  /// available too, so both requested formats are honoured.
+  ///
+  /// Subtitles are included only when the adapter runs mpv's own subtitle
+  /// renderer and the caller asked for them: burning them in is a deliberate
+  /// choice, not a side effect of taking a screenshot.
+  @override
+  Future<Uint8List?> onCaptureFrame(ScreenshotRequest request) async {
+    if (!_hasOpened) {
+      return null;
+    }
+
+    final p = _player;
+
+    if (p == null) {
+      return null;
+    }
+
+    try {
+      return await p.screenshot(
+        format: request.mimeType,
+        includeLibassSubtitles: request.includeSubtitles && _libassEnabled,
+      );
+    } catch (error) {
+      // The web backend throws instead of declaring no capability; the caller
+      // falls back to the rendered surface, which is the only route there.
+      debugPrint('[$runtimeType] captureFrame failed: $error');
+
+      return null;
+    }
+  }
+
+  /// Whether mpv renders subtitles itself.
+  ///
+  /// Only then can `screenshot` burn them into the image. Read from the live
+  /// player rather than from this package's config, because libass is a
+  /// media_kit-level setting an injector can change.
+  bool get _libassEnabled {
+    final configuration = _player?.platform?.configuration;
+
+    return configuration?.libass ?? false;
+  }
+
   // ---------------------------------------------------------------------------
   // Platform-aware engine configuration
   // ---------------------------------------------------------------------------
@@ -1024,7 +1082,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     supportsVideoReconfig: false,
     supportsHwdecInfo: false,
     supportsVideoFilters: false,
-    supportsScreenshot: false,
+    supportsScreenshot: true,
 
     // Audio.
     supportsAudioReconfig: false,

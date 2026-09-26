@@ -4,6 +4,8 @@ import 'player_geometry_binding.dart';
 import 'player_playback_binding.dart';
 import 'package:media_core/adapter/player_adapter.dart';
 import 'package:media_core_logging/media_core_logging.dart';
+import 'package:media_core/screenshot/screenshot_config.dart';
+import 'package:media_core/screenshot/screenshot_manager.dart';
 import 'package:media_core/session/player_session.dart';
 import 'package:media_core/session/session_controller.dart';
 import 'package:media_core/geometry/geometry_controller.dart';
@@ -40,15 +42,34 @@ final class PlayerRuntime {
   /// The bindings are attached immediately and stay alive for the
   /// runtime's whole lifetime — except across [replaceAdapter], which
   /// rebinds them to the new backend.
-  PlayerRuntime({required PlayerAdapter adapter, required PlayerSession session})
-    : _adapter = adapter,
-      _session = session,
-      _sessionController = SessionController(session),
-      _playback = PlaybackController(),
-      _geometry = GeometryController() {
+  PlayerRuntime({
+    required PlayerAdapter adapter,
+    required PlayerSession session,
+    ScreenshotConfig screenshotConfig = const ScreenshotConfig(),
+  }) : _adapter = adapter,
+       _session = session,
+       _sessionController = SessionController(session),
+       _playback = PlaybackController(),
+       _geometry = GeometryController() {
     _geometryBinding = PlayerGeometryBinding(adapter: adapter, geometry: _geometry);
 
     _playbackBinding = PlayerPlaybackBinding(adapter: adapter, playback: _playback);
+
+    // Screenshots are assembled here because this is the only place where the
+    // adapter, the geometry and the playback mirror are all in scope. The
+    // closures read them at capture time, so a backend swap during recovery is
+    // transparent to whoever presses "save frame".
+    _screenshots = ScreenshotManager(
+      config: screenshotConfig,
+      context: ScreenshotContext(
+        playerId: session.context.playerId,
+        captureFromEngine: (request) => _adapter.captureFrame(request),
+        engineCaptureAvailable: () => _adapter.capabilities.supportsScreenshot,
+        frameWidth: () => _geometry.current.geometry.videoSize.width,
+        frameHeight: () => _geometry.current.geometry.videoSize.height,
+        position: () => _playback.current.position,
+      ),
+    );
 
     // The session publishes position/duration/buffering in its snapshots but
     // does not own them; the playback mirror is the owner, and this is the one
@@ -78,6 +99,12 @@ final class PlayerRuntime {
   late PlayerGeometryBinding _geometryBinding;
   late PlayerPlaybackBinding _playbackBinding;
 
+  /// Frame capture for this player.
+  ///
+  /// Owned here, not by the handle: it needs the adapter, the geometry and the
+  /// playback mirror, and it must survive a backend swap unchanged.
+  late final ScreenshotManager _screenshots;
+
   bool _disposed = false;
 
   /// The backend adapter.
@@ -94,6 +121,9 @@ final class PlayerRuntime {
 
   /// Geometry state controller.
   GeometryController get geometry => _geometry;
+
+  /// Frame capture for this player.
+  ScreenshotManager get screenshots => _screenshots;
 
   /// Whether this runtime has been disposed.
   bool get disposed => _disposed;
@@ -166,6 +196,10 @@ final class PlayerRuntime {
 
     await _sessionSubscription?.cancel();
     _sessionSubscription = null;
+
+    // Before the adapter goes: a capture in flight must not touch a disposed
+    // engine, and the surfaces belong to widgets that may outlive this call.
+    await _screenshots.dispose();
 
     await _playback.dispose();
     await _geometry.dispose();

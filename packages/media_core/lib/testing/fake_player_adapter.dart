@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import '../core/player_state.dart';
 import '../source/player_source.dart';
 import '../adapter/player_adapter.dart';
+import '../screenshot/screenshot_request.dart';
 import '../adapter/player_adapter_event.dart';
 import '../adapter/player_adapter_context.dart';
 import '../adapter/player_adapter_metrics.dart';
@@ -47,6 +50,9 @@ final class FakePlayerAdapter implements PlayerAdapter {
 
   /// Audio-only values passed to [setAudioOnly].
   final List<bool> audioOnlyValues = <bool>[];
+
+  /// Capture requests received by [captureFrame].
+  final List<ScreenshotRequest> screenshotRequests = <ScreenshotRequest>[];
 
   /// Positions passed to [seek].
   final List<Duration> seeks = <Duration>[];
@@ -181,6 +187,20 @@ final class FakePlayerAdapter implements PlayerAdapter {
     behavior.maybeFail('setAudioOnly');
     audioOnlyValues.add(audioOnly);
     _mirror = _mirror.copyWith(audioOnly: audioOnly);
+  }
+
+  @override
+  Future<Uint8List?> captureFrame(ScreenshotRequest request) async {
+    calls.add('captureFrame');
+    behavior.maybeFail('captureFrame');
+
+    if (!behavior.capabilities.supportsScreenshot) {
+      return null;
+    }
+
+    screenshotRequests.add(request);
+
+    return behavior.screenshotBytes;
   }
 
   @override
@@ -446,6 +466,7 @@ final class FakePlayerAdapterBehavior {
     this.openHeight,
     this.applyInitialConfig = true,
     this.failureError,
+    this.screenshotBytes,
   });
 
   /// Default capabilities advertised by the fake.
@@ -546,6 +567,14 @@ final class FakePlayerAdapterBehavior {
 
   /// Error object thrown on failing methods.
   final Object? failureError;
+
+  /// Bytes [FakePlayerAdapter.captureFrame] returns.
+  ///
+  /// Null (the default) means the fake cannot capture, which is what makes the
+  /// caller fall back to capturing the rendered surface. Set it together with
+  /// `capabilities.supportsScreenshot: true` to exercise the engine route, and
+  /// leave it null to exercise the fallback.
+  final Uint8List? screenshotBytes;
 
   /// Throws when [method] is configured to fail.
   void maybeFail(String method) {

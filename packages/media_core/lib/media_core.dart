@@ -116,6 +116,9 @@ export 'resource/library.dart';
 /// Unified result and asynchronous result abstractions..
 export 'result/library.dart';
 
+/// Frame capture: engine capture, surface capture, captured-frame value, file writing..
+export 'screenshot/library.dart';
+
 /// Player session lifecycle, context, state and operations..
 export 'session/library.dart';
 

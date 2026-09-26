@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import '../core/player_state.dart';
 import 'player_adapter_event.dart';
 import 'player_adapter_context.dart';
 import 'player_adapter_metrics.dart';
 import '../source/player_source.dart';
+import '../screenshot/screenshot_request.dart';
 import 'player_adapter_capabilities.dart';
 
 /// Abstract media player backend adapter.
@@ -95,6 +98,23 @@ abstract interface class PlayerAdapter {
   /// across later [open] calls, because recovery replays a source
   /// without going back through the application.
   Future<void> setAudioOnly(bool audioOnly);
+
+  /// Captures the current video frame with the backend's own API.
+  ///
+  /// Returns the encoded image bytes, or null when this backend cannot
+  /// capture — see [PlayerAdapterCapabilities.supportsScreenshot] — or cannot
+  /// encode [request]'s format.
+  ///
+  /// An implementation must not silently substitute another format: the caller
+  /// treats null as "this route produced nothing" and falls back to capturing
+  /// the rendered surface, which *does* produce a different format and says so
+  /// on the result. Returning PNG bytes for a JPEG request would be
+  /// indistinguishable from a backend that lied about the format.
+  ///
+  /// The engine's own capture is preferred where it exists: it returns the
+  /// decoded frame at its real resolution, without the widget layer's fit,
+  /// scaling or absence from the tree.
+  Future<Uint8List?> captureFrame(ScreenshotRequest request);
 
   /// Closes current source.
   Future<void> close();

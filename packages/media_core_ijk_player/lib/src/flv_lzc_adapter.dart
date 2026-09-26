@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flv_lzc/fijkplayer.dart';
 import 'package:media_core/media_core.dart';
@@ -280,6 +282,32 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     await _player.setOption(FijkOption.playerCategory, 'disable-vid', audioOnly ? 1 : 0);
   }
 
+  /// Captures the current frame through IJKPlayer.
+  ///
+  /// IJKPlayer's native snapshot is encoded as JPEG, so a PNG request is
+  /// answered with null instead of mislabelled bytes: the kernel then falls
+  /// back to capturing the rendered surface, which really does produce PNG.
+  ///
+  /// The engine only serves snapshots when the `enable-snapshot` host option is
+  /// set, which [FijkHelper.applyConfig] does for every open. Platforms whose
+  /// native implementation is missing answer with an error, which is reported
+  /// as "no frame" as well.
+  @override
+  Future<Uint8List?> onCaptureFrame(ScreenshotRequest request) async {
+    if (isDisposed) return null;
+    if (request.format != ScreenshotFormat.jpeg) return null;
+
+    try {
+      final bytes = await _player.takeSnapShot();
+
+      return bytes.isEmpty ? null : bytes;
+    } catch (error) {
+      debugPrint('[$runtimeType] captureFrame failed: $error');
+
+      return null;
+    }
+  }
+
   /// The underlying FijkPlayer.
   FijkPlayer get fijkPlayer => _player;
 
@@ -378,7 +406,10 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportsVideoReconfig: false,
     supportsHwdecInfo: false,
     supportsVideoFilters: false,
-    supportsScreenshot: false,
+    // IJKPlayer's native snapshot returns a JPEG. The kernel asks for PNG by
+    // default and falls back to the rendered surface when this adapter answers
+    // null, so declaring the capability does not mean "any format".
+    supportsScreenshot: true,
     supportsAudioReconfig: false,
     supportsAudioDeviceSelection: false,
     supportsAudioFilters: false,

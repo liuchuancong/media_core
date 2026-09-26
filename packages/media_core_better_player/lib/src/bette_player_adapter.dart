@@ -569,6 +569,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportsVideoReconfig: false,
     supportsHwdecInfo: false,
     supportsVideoFilters: false,
+    // This backend has no frame-capture API of its own: screenshots are served
+    // by capturing the rendered surface of a MediaPlayerView instead, so the
+    // capability stays false and `captureFrame` inherits its null answer.
     supportsScreenshot: false,
 
     // Audio.
