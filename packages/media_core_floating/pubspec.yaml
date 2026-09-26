@@ -1,0 +1,18 @@
+name: media_core_floating
+description: In-app small window for media_core - a draggable, edge-snapping video overlay inside the app, with pure geometry logic.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  media_core:
+    path: ../media_core
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

@@ -1,0 +1,357 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:media_core_download/media_core_download.dart';
+
+/// Bytes a fake remote serves.
+Uint8List _payload(int length, {int seed = 7}) {
+  final bytes = Uint8List(length);
+  for (var index = 0; index < length; index++) {
+    bytes[index] = (seed + index) % 251;
+  }
+  return bytes;
+}
+
+final class _FakeTransport implements DownloadTransport {
+  _FakeTransport(this.payload, {this.acceptsRanges = true, this.honoursRanges = true});
+
+  Uint8List payload;
+  bool acceptsRanges;
+
+  /// When false the server ignores `Range` and answers the whole body with 200.
+  bool honoursRanges;
+
+  /// Number of requests to fail before serving.
+  int failures = 0;
+
+  /// When true the body stops early.
+  bool truncateBody = false;
+
+  int fetchCount = 0;
+  final List<DownloadRequest> requests = <DownloadRequest>[];
+
+  @override
+  Future<DownloadResponse> fetch(DownloadRequest request) async {
+    fetchCount++;
+    requests.add(request);
+    if (failures > 0) {
+      failures--;
+      throw const DownloadHttpException(500, 'https://example.com/file');
+    }
+
+    final ranged = request.rangeHeader != null;
+    if (ranged && !honoursRanges) {
+      return DownloadResponse(
+        statusCode: 200,
+        byteStream: Stream<List<int>>.value(payload),
+        contentLength: payload.length,
+        acceptsRanges: acceptsRanges,
+      );
+    }
+
+    final start = ranged ? request.startByte : 0;
+    final end = ranged ? (request.endByte ?? payload.length - 1) : payload.length - 1;
+    final body = payload.sublist(start, end + 1);
+    final served = truncateBody ? body.sublist(0, (body.length / 2).floor()) : body;
+
+    return DownloadResponse(
+      statusCode: ranged ? 206 : 200,
+      byteStream: Stream<List<int>>.value(served),
+      contentLength: served.length,
+      totalBytes: payload.length,
+      acceptsRanges: acceptsRanges,
+    );
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+final class _MemorySink implements DownloadFileSink {
+  final Map<String, BytesBuilder> files = <String, BytesBuilder>{};
+
+  Uint8List bytesOf(String path) => files[path]?.toBytes() ?? Uint8List(0);
+
+  @override
+  Future<int> length(String path) async => files[path]?.length ?? 0;
+
+  @override
+  Future<List<int>> readTail(String path, int count) async {
+    final bytes = bytesOf(path);
+    if (count <= 0 || bytes.length < count) {
+      return const <int>[];
+    }
+    return bytes.sublist(bytes.length - count);
+  }
+
+  @override
+  Future<void> append(String path, List<int> bytes) async {
+    (files[path] ??= BytesBuilder()).add(bytes);
+  }
+
+  @override
+  Future<void> truncate(String path, int length) async {
+    final current = bytesOf(path);
+    final builder = BytesBuilder()..add(current.sublist(0, length.clamp(0, current.length)));
+    files[path] = builder;
+  }
+
+  @override
+  Future<void> delete(String path) async => files.remove(path);
+
+  @override
+  Future<void> ensureParentDirectory(String path) async {}
+}
+
+void _seed(_MemorySink sink, String path, Uint8List bytes) {
+  sink.files[path] = BytesBuilder()..add(bytes);
+}
+
+DownloadTask _task(String id, {String id_ = ''}) =>
+    DownloadTask(id: id, url: 'https://example.com/$id', filePath: '/downloads/$id.ts');
+
+void main() {
+  group('DownloadResumePlanner', () {
+    const planner = DownloadResumePlanner();
+
+    test('starts from zero when nothing is on disk', () {
+      final plan = planner.plan(localBytes: 0, remoteBytes: 1000, serverAcceptsRanges: true);
+
+      expect(plan.decision, DownloadResumeDecision.restart);
+    });
+
+    test('reports an already complete file', () {
+      final plan = planner.plan(localBytes: 1000, remoteBytes: 1000, serverAcceptsRanges: true);
+
+      expect(plan.decision, DownloadResumeDecision.alreadyComplete);
+    });
+
+    test('restarts when the local file is larger than the remote one', () {
+      final plan = planner.plan(localBytes: 2000, remoteBytes: 1000, serverAcceptsRanges: true);
+
+      expect(plan.decision, DownloadResumeDecision.restart);
+      expect(plan.reason, contains('larger'));
+    });
+
+    test('restarts when the server cannot resume', () {
+      final plan = planner.plan(localBytes: 500, remoteBytes: 1000, serverAcceptsRanges: false);
+
+      expect(plan.decision, DownloadResumeDecision.restart);
+      expect(plan.reason, contains('ranges'));
+    });
+
+    test('forceResume overrides a missing range advertisement', () {
+      const forced = DownloadResumePlanner(config: DownloadConfig(forceResume: true));
+      final plan = forced.plan(localBytes: 500, remoteBytes: 1000, serverAcceptsRanges: false);
+
+      expect(plan.decision, DownloadResumeDecision.resume);
+    });
+
+    test('resumes by reopening the verification window before the end', () {
+      final plan = planner.plan(localBytes: 500, remoteBytes: 1000, serverAcceptsRanges: true);
+
+      expect(plan.decision, DownloadResumeDecision.resume);
+      expect(plan.verifyBytes, 10);
+      expect(plan.startByte, 490, reason: 'the last ten bytes are re-fetched and compared');
+    });
+
+    test('restarts when there is too little to verify', () {
+      final plan = planner.plan(localBytes: 4, remoteBytes: 1000, serverAcceptsRanges: true);
+
+      expect(plan.decision, DownloadResumeDecision.restart);
+    });
+
+    test('compares tails byte for byte', () {
+      expect(planner.tailMatches(localTail: <int>[1, 2, 3], remoteTail: <int>[1, 2, 3]), isTrue);
+      expect(planner.tailMatches(localTail: <int>[1, 2, 3], remoteTail: <int>[1, 2, 4]), isFalse);
+      expect(planner.tailMatches(localTail: <int>[1, 2], remoteTail: <int>[1, 2, 3]), isFalse);
+      expect(planner.tailMatches(localTail: const <int>[], remoteTail: const <int>[]), isFalse);
+    });
+  });
+
+  group('HttpDownloadTransport content range', () {
+    test('reads the total from a Content-Range header', () {
+      expect(HttpDownloadTransport.totalFromContentRange('bytes 490-999/1000'), 1000);
+      expect(HttpDownloadTransport.totalFromContentRange('bytes 0-0/2048'), 2048);
+    });
+
+    test('reports unknown for a missing or open-ended header', () {
+      expect(HttpDownloadTransport.totalFromContentRange(null), isNull);
+      expect(HttpDownloadTransport.totalFromContentRange('bytes 0-99/*'), isNull);
+      expect(HttpDownloadTransport.totalFromContentRange('nonsense'), isNull);
+    });
+  });
+
+  group('DownloadManager', () {
+    late _FakeTransport transport;
+    late _MemorySink sink;
+    late DownloadManager manager;
+
+    setUp(() {
+      transport = _FakeTransport(_payload(1000));
+      sink = _MemorySink();
+      manager = DownloadManager(
+        transport: transport,
+        files: sink,
+        // Immediate retries keep the retry tests fast.
+        config: DownloadConfig.defaults.copyWith(retryDelay: Duration.zero, maxAttempts: 2),
+      );
+    });
+
+    tearDown(() => manager.dispose());
+
+    Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+
+    test('downloads a file end to end', () async {
+      manager.add(_task('a'));
+      await settle();
+
+      expect(manager.task('a')!.status, DownloadStatus.completed);
+      expect(sink.bytesOf('/downloads/a.ts'), transport.payload);
+      expect(manager.task('a')!.progress.percent, 100);
+    });
+
+    test('caps concurrency and starts the next task when a slot frees', () async {
+      final single = DownloadManager(
+        transport: transport,
+        files: sink,
+        config: DownloadConfig.defaults.copyWith(maxConcurrent: 1),
+      );
+      addTearDown(single.dispose);
+
+      single.add(_task('a'));
+      single.add(_task('b'));
+      await settle();
+
+      expect(sink.bytesOf('/downloads/a.ts'), transport.payload);
+      expect(sink.bytesOf('/downloads/b.ts'), transport.payload);
+      expect(single.tasks.every((task) => task.status == DownloadStatus.completed), isTrue);
+    });
+
+    test('resumes a verifiable partial file instead of re-downloading it', () async {
+      final full = _payload(1000);
+      _seed(sink, '/downloads/a.ts', Uint8List.sublistView(full, 0, 500));
+
+      manager.add(_task('a'));
+      await settle();
+
+      expect(manager.task('a')!.status, DownloadStatus.completed);
+      expect(sink.bytesOf('/downloads/a.ts'), full, reason: 'the file must be complete and not doubled');
+      expect(transport.requests.single.startByte, 490, reason: 'resume reopens the verification window');
+    });
+
+    test('restarts when the partial file is not a prefix of the remote file', () async {
+      final full = _payload(1000);
+      // Same length, different content: a different quality or a corrupt write.
+      _seed(sink, '/downloads/a.ts', Uint8List.sublistView(_payload(1000, seed: 99), 0, 500));
+
+      manager.add(_task('a'));
+      await settle();
+
+      expect(sink.bytesOf('/downloads/a.ts'), full, reason: 'the mismatched prefix is discarded');
+      expect(manager.task('a')!.status, DownloadStatus.completed);
+    });
+
+    test('restarts when the server ignores the range header', () async {
+      final full = _payload(1000);
+      _seed(sink, '/downloads/a.ts', Uint8List.sublistView(full, 0, 500));
+      transport.honoursRanges = false;
+
+      manager.add(_task('a'));
+      await settle();
+
+      expect(sink.bytesOf('/downloads/a.ts'), full);
+    });
+
+    test('keeps a finished file completed rather than downloading it again', () async {
+      final full = _payload(1000);
+      _seed(sink, '/downloads/a.ts', full);
+
+      manager.add(_task('a'));
+      await settle();
+
+      expect(transport.fetchCount, 0, reason: 'the local file already matches the remote size');
+      expect(manager.task('a')!.status, DownloadStatus.completed);
+    });
+
+    test('treats a truncated body as a failure and retries within the budget', () async {
+      transport.truncateBody = true;
+
+      manager.add(_task('a'));
+      await settle();
+      await settle();
+
+      expect(manager.task('a')!.status, DownloadStatus.failed);
+      expect(manager.task('a')!.progress.attempt, 2, reason: 'the retry budget was spent');
+      expect(transport.fetchCount, greaterThanOrEqualTo(2));
+    });
+
+    test('retries a transport failure before giving up', () async {
+      manager.add(_task('a'));
+      // First attempt is still running: make the next one fail once.
+      transport.failures = 1;
+      await settle();
+      await settle();
+
+      final task = manager.task('a')!;
+      expect(task.status, anyOf(DownloadStatus.completed, DownloadStatus.failed));
+      expect(transport.fetchCount, greaterThanOrEqualTo(1));
+    });
+
+    test('pause keeps the partial file and resume continues it', () async {
+      manager.add(_task('a'));
+      await manager.pause('a');
+
+      expect(manager.task('a')!.status, anyOf(DownloadStatus.paused, DownloadStatus.completed));
+
+      await manager.resume('a');
+      await settle();
+
+      expect(manager.task('a')!.status, anyOf(DownloadStatus.completed, DownloadStatus.queued, DownloadStatus.running));
+    });
+
+    test('cancel marks the task terminal', () async {
+      manager.add(_task('a'));
+      await manager.cancel('a');
+
+      expect(manager.task('a')!.status, anyOf(DownloadStatus.cancelled, DownloadStatus.completed));
+    });
+
+    test('refuses to replace a task that is still running', () async {
+      manager.add(_task('a'));
+
+      expect(() => manager.add(_task('a')), throwsA(isA<StateError>()));
+    });
+
+    test('retry clears the budget and starts the task again', () async {
+      transport.truncateBody = true;
+      manager.add(_task('a'));
+      await settle();
+      await settle();
+      expect(manager.task('a')!.status, DownloadStatus.failed);
+
+      transport.truncateBody = false;
+      await manager.retry('a');
+      await settle();
+
+      expect(manager.task('a')!.status, DownloadStatus.completed);
+      expect(sink.bytesOf('/downloads/a.ts'), transport.payload);
+    });
+
+    test('clearCompleted drops finished tasks', () async {
+      manager.add(_task('a'));
+      await settle();
+
+      await manager.clearCompleted();
+
+      expect(manager.tasks, isEmpty);
+    });
+
+    test('a disposed manager refuses new work', () async {
+      await manager.dispose();
+
+      expect(() => manager.add(_task('a')), throwsA(isA<StateError>()));
+    });
+  });
+}

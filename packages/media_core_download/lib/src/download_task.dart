@@ -1,0 +1,86 @@
+import 'download_config.dart';
+import 'download_progress.dart';
+import 'download_status.dart';
+
+/// One file to download.
+///
+/// The task is the unit the viewer sees: it carries what to fetch, where it
+/// goes, how far along it is and why it stopped. The manager owns when it runs.
+final class DownloadTask {
+  DownloadTask({
+    required this.id,
+    required this.url,
+    required this.filePath,
+    this.headers = const <String, String>{},
+    this.title,
+    this.status = DownloadStatus.idle,
+    DownloadProgress progress = const DownloadProgress(),
+    this.error,
+  }) : progress = progress;
+
+  /// Stable identifier, used by every manager call.
+  final String id;
+
+  /// Source URL.
+  final String url;
+
+  /// Absolute destination path.
+  ///
+  /// A path, not a directory plus a name: file naming is a template decision
+  /// made by the host before the task exists, and splitting it here would make
+  /// the manager second-guess the template.
+  final String filePath;
+
+  /// Extra request headers (referer, cookies, tokens).
+  final Map<String, String> headers;
+
+  /// Display label.
+  final String? title;
+
+  /// Current status.
+  DownloadStatus status;
+
+  /// Transfer state.
+  DownloadProgress progress;
+
+  /// Last failure, cleared when the task is retried.
+  Object? error;
+
+  /// Whether the task is moving bytes.
+  bool get isRunning => status.isRunning;
+
+  /// Whether it has finished, one way or another.
+  bool get isTerminal => status.isTerminal;
+
+  /// File name without the directory.
+  String get fileName {
+    final separator = filePath.contains(r'\') ? r'\' : '/';
+    final index = filePath.lastIndexOf(separator);
+    return index < 0 ? filePath : filePath.substring(index + 1);
+  }
+
+  /// Whether a retry is still allowed under [config].
+  bool canRetry(DownloadConfig config) => progress.attempt < config.maxAttempts;
+
+  /// Copies the task with new transfer state.
+  DownloadTask copyWith({
+    DownloadStatus? status,
+    DownloadProgress? progress,
+    Object? error,
+    bool clearError = false,
+  }) {
+    return DownloadTask(
+      id: id,
+      url: url,
+      filePath: filePath,
+      headers: headers,
+      title: title,
+      status: status ?? this.status,
+      progress: progress ?? this.progress,
+      error: clearError ? null : (error ?? this.error),
+    );
+  }
+
+  @override
+  String toString() => 'DownloadTask($id, ${status.name}, $fileName)';
+}
