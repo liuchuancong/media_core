@@ -14,17 +14,13 @@ dependencies:
   media_core:
     path: ../media_core
 
+  # 本仓库自带的副本(含 PureLive 补丁, 见 media_kit_video/PURELIVE_PATCH.md):
+  # 与 workspace 成员同源, 不再从 Predidit/media-kit 拉取。
   media_kit:
-    git:
-      url: https://github.com/Predidit/media-kit.git
-      ref: main
-      path: media_kit          # 仓库内子目录
+    path: ../media_kit
 
   media_kit_video:
-    git:
-      url: https://github.com/Predidit/media-kit.git
-      ref: main
-      path: media_kit_video    # 仓库内子目录
+    path: ../media_kit_video
 
   device_info_plus: ^13.2.0
 
