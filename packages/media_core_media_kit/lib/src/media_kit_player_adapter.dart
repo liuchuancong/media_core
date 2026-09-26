@@ -154,6 +154,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   bool _privateInput = false;
   bool _softwareDecoderNextOpen = false;
 
+  /// Loopback relay for the source being opened when the bundled FFmpeg
+  /// cannot read it as served. See [FlvLegacyHevcRelay].
+  FlvLegacyHevcRelay? _hevcRelay;
+
   // ignore: unused_field
   bool _audioOutputSuppressed = false;
 
@@ -348,15 +352,73 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _softwareDecoderNextOpen = sameSource;
 
+    await _prepareHevcRelay(source);
     await _applyDecoderPolicy();
     await _applyProxy();
   }
 
+  /// Routes [source] through a loopback FLV rewrite when the bundled libmpv
+  /// would otherwise drop its video stream, and exempts the relay from the
+  /// native proxy: the relay owns the CDN connection, libmpv only talks to
+  /// loopback.
+  ///
+  /// The relay belongs to the open that created it, so a source that does not
+  /// need one also retires the previous source's relay.
+  Future<void> _prepareHevcRelay(PlayerSource source) async {
+    await _closeHevcRelay();
+
+    final url = source.uri.toString();
+    if (!FlvLegacyHevcRelay.appliesTo(url)) return;
+
+    try {
+      _hevcRelay = await FlvLegacyHevcRelay.start(
+        url,
+        source.hasHeaders ? source.headers!.values : const <String, String>{},
+        findProxy: (_) => _relayProxyDirective(),
+      );
+      _privateInput = true;
+    } catch (error) {
+      // A failed relay must not fail the open: fall back to the direct URL.
+      _hevcRelay = null;
+      debugPrint('FlvLegacyHevcRelay start failed: $error');
+    }
+  }
+
+  /// The `findProxy` directive for the relay's own CDN connection, derived
+  /// from the same resolver the native player uses.
+  String _relayProxyDirective() {
+    final value = proxyUrlResolver?.call(privateInput: false) ?? '';
+
+    if (value.isEmpty) return 'DIRECT';
+
+    final uri = Uri.tryParse(value.contains('://') ? value : 'http://$value');
+
+    if (uri == null || uri.host.isEmpty) return 'DIRECT';
+
+    return 'PROXY ${uri.host}:${uri.port}';
+  }
+
+  Future<void> _closeHevcRelay() async {
+    final relay = _hevcRelay;
+
+    _hevcRelay = null;
+
+    if (relay != null) await relay.close();
+  }
+
   @override
   Future<void> onOpen(PlayerSource source) async {
-    final headers = source.hasHeaders ? source.headers!.values : null;
+    final relay = _hevcRelay;
 
-    await player.open(mk.Media(source.uri.toString(), httpHeaders: headers), play: true);
+    // The relay holds the source headers and carries them upstream itself;
+    // handing them to a loopback request would only leak them into the
+    // native player's logs.
+    await player.open(
+      relay == null
+          ? mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null)
+          : mk.Media(relay.inputUri.toString()),
+      play: true,
+    );
 
     _hasOpened = true;
 
@@ -380,6 +442,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   @override
   Future<void> onStop() async {
     await player.stop();
+    await _closeHevcRelay();
 
     _playingNow = false;
     _bufferingNow = false;
@@ -431,6 +494,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     await Future.wait(_subscriptions.map((subscription) => subscription.cancel()));
 
     _subscriptions.clear();
+
+    await _closeHevcRelay();
 
     // Stop the frame heartbeat clock before tearing down the player.
     if (_frameHeartbeatClock.isRunning) {
