@@ -7,8 +7,34 @@
 [media_core](../media_core) 主包刻意与平台解耦（见 `platform`、`audio` 等模块的接口定义）。本包承担各平台的原生实现，已实现第一项：
 
 - ✅ **平台能力查询**（`platform` 模块的 `PlatformProvider` 接口）——见下方"能力探针"
+- ✅ **后台执行**（`BackgroundExecution`）——长时间任务（录制、下载）在应用退到后台时不被冻结/睡眠
 - ⏳ 音频焦点 / 音频会话（`audio` 模块的 `AudioFocus` / `AudioSession` 接口）
 - ⏳ 呈现适配（系统级 PiP 的**帧投递层**：`SystemPip` 在 Android 由 `floating` 插件覆盖，iOS 要 `AVSampleBufferDisplayLayer` 才能进系统 PiP，探针已能如实回答平台是否支持）
+
+## 后台执行
+
+录制或下载是"用户让它做，然后就不看了"的活。没有这层保护，屏幕一关，进程几秒内就被冻结或杀掉，FFmpeg 退出码说不了任何原因。
+
+```dart
+final session = await BackgroundExecution.acquire(title: '正在录制', text: roomName);
+try {
+  await startTheJob();
+} finally {
+  await session?.release();   // 会话对象就是"谁来负责收回"的答案
+}
+```
+
+| 平台 | 会话做了什么 |
+| --- | --- |
+| Android | 起一个前台服务（API 34+ 声明为 `dataSync`）并显示通知（点击回到应用），同时持有 `PARTIAL_WAKE_LOCK`，屏幕熄灭后 CPU 继续跑 |
+| iOS | 申请后台任务断言：买到的是"过渡窗口"（约 30 秒）而不是无限时间——长录制需要应用自己声明 `audio` 后台模式，这个库替不了 |
+| macOS | `beginActivity(.idleSystemSleepDisabled)`：系统不睡，屏幕可以关 |
+| Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)`：系统不睡（**不**阻止息屏） |
+| Linux | ⏳ 未实现（logind `Inhibit`），`acquire` 返回 null |
+
+会话是**按 id 计数**的，所以两个任务（一个录制 + 一个下载）不会互相拆掉对方的保护；释放是幂等的，平台拒绝（例如 Android 13+ 没给 `POST_NOTIFICATIONS`）时返回 null —— 任务照跑，只是没有保护，而不是因为一条通知失败就挂掉录制。
+
+Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那个 `<service>`）**已在本插件的清单里声明**，会合并进应用——服务声明可以来自库清单（`audio_service` 那种需要替换 Activity 的才不行）；只有 `POST_NOTIFICATIONS` 仍需应用在运行时申请（`media_core_audio` 的 `AudioPermissionService` 正好提供这一个）。
 
 ## 能力探针
 

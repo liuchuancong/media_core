@@ -11,6 +11,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # Background execution: a recording outlives the app being in the foreground,
+  # and the platform has to be told that (foreground service + wake lock on
+  # Android, sleep assertions elsewhere).
+  media_core_native:
+    path: ../media_core_native
   media_core:
     path: ../media_core
 

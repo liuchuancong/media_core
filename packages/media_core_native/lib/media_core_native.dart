@@ -1,4 +1,4 @@
-/// Native platform capability probe for `media_core`.
+/// Native platform capabilities for `media_core`.
 ///
 /// `media_core` can describe what a *backend* supports, but only the platform
 /// knows what the *device* can do: whether HEVC decodes on a dedicated block or
@@ -21,6 +21,8 @@
 /// | direction | method | arguments | result |
 /// |---|---|---|---|
 /// | Dart → platform | `probe` | – | report map |
+/// | Dart → platform | `acquire` | {title, text, wakeLock} | background-execution session id |
+/// | Dart → platform | `release` | {id} | – |
 ///
 /// The report map has up to four sections, every one of them optional:
 ///
@@ -40,6 +42,7 @@
 /// streams the device could play.
 library;
 
+export 'src/background_execution.dart';
 export 'src/media_core_native_platform.dart';
 export 'src/method_channel_media_core_native.dart';
 export 'src/native_platform_provider.dart';

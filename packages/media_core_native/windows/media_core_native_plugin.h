@@ -42,6 +42,7 @@ class MediaCoreNativePlugin : public flutter::Plugin {
                         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> background_channel_;
 };
 
 }  // namespace media_core_native

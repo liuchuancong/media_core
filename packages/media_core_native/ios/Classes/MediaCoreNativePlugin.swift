@@ -27,6 +27,13 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
   /// Channel name; kept in sync with the Dart side.
   private static let channelName = "media_core_native"
 
+  /// Background-execution channel: its own capability, its own channel.
+  private static let backgroundChannelName = "media_core_native/background"
+
+  /// Background task assertions in flight, by session.
+  private var tasks: [Int: UIBackgroundTaskIdentifier] = [:]
+  private var nextSessionId = 1
+
   /// Method the probe is requested through.
   private static let probeMethod = "probe"
 
@@ -36,6 +43,67 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
     let instance = MediaCoreNativePlugin()
 
     registrar.addMethodCallDelegate(instance, channel: channel)
+
+    let background = FlutterMethodChannel(name: backgroundChannelName, binaryMessenger: registrar.messenger())
+
+    background.setMethodCallHandler { [weak instance] call, result in
+      instance?.handleBackground(call, result: result) ?? result(nil)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background execution
+  // ---------------------------------------------------------------------------
+
+  /// Asks for a background task assertion.
+  ///
+  /// This is what iOS gives an app that has no background mode: a bounded
+  /// window (about thirty seconds, and it ends earlier under memory pressure)
+  /// rather than unlimited time, which is exactly what a recording needs to
+  /// survive the app *transitioning* to the background instead of being frozen
+  /// mid-segment.
+  ///
+  /// A recording that must keep running for minutes needs the app to declare
+  /// the `audio` background mode, and only the app can do that — so this
+  /// method does not pretend to cover it, and the recording module documents
+  /// the limit.
+  private func handleBackground(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "acquire":
+      let sessionId = nextSessionId
+
+      nextSessionId += 1
+
+      let identifier = UIApplication.shared.beginBackgroundTask(withName: "media_core background job") {
+        // Expiration: the platform is about to suspend us. The writer's own
+        // finalization is what protects the segments already written, and the
+        // assertion cannot be extended from here.
+        self.endTask(sessionId)
+      }
+
+      tasks[sessionId] = identifier
+
+      result(sessionId)
+
+    case "release":
+      if let arguments = call.arguments as? [String: Any],
+        let sessionId = arguments["id"] as? Int {
+        endTask(sessionId)
+      }
+
+      result(nil)
+
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func endTask(_ sessionId: Int) {
+    guard let identifier = tasks.removeValue(forKey: sessionId) else {
+      return
+    }
+
+    UIApplication.shared.endBackgroundTask(identifier)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

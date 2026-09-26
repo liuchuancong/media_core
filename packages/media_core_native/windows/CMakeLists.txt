@@ -4,7 +4,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(PLUGIN_NAME "media_core_native_plugin")
 add_library(${PLUGIN_NAME} SHARED
   "media_core_native_plugin.cc" "media_core_native_plugin_c_api.cc"
-  "platform_probe.cc")
+  "platform_probe.cc"
+  "background_execution.cc")
 apply_standard_settings(${PLUGIN_NAME})
 set_target_properties(${PLUGIN_NAME} PROPERTIES CXX_VISIBILITY_PRESET hidden)
 target_compile_definitions(${PLUGIN_NAME} PRIVATE

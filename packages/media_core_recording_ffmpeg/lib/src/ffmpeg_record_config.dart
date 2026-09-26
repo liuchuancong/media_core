@@ -13,10 +13,32 @@ final class FfmpegRecordConfig {
     this.includeTimestampPrefix = true,
     this.segmentSuffix = '.clock-v1.ts',
     this.journalSuffix = '.clock-v1.csv',
+    this.keepAlive = true,
+    this.keepAliveTitle,
   });
 
   /// Caller-accepted defaults.
   static const FfmpegRecordConfig defaults = FfmpegRecordConfig();
+
+  /// Whether the process is kept alive while a recording runs.
+  ///
+  /// A recording is work the user asked for and then stopped watching, and a
+  /// phone that freezes the process when the screen goes off ends it with an
+  /// FFmpeg exit code that says nothing. With this on, the recording holds a
+  /// background-execution session (foreground service + notification and a wake
+  /// lock on Android, a sleep assertion on desktop), released when the
+  /// recording ends — whatever ends it, including a failure.
+  ///
+  /// Turn it off for a recording that is expected to finish in seconds, or in a
+  /// host that already holds a session for the same job.
+  final bool keepAlive;
+
+  /// Title of the notification shown while [keepAlive] holds the process.
+  ///
+  /// Null uses a neutral "Recording". The body is the file prefix, which is
+  /// usually the room or programme name the host chose — that is what a user
+  /// needs to recognise, not a timestamp.
+  final String? keepAliveTitle;
 
   /// Length of each segment, in seconds.
   ///

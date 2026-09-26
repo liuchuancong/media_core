@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Live sources are mostly cleartext: `http://` FLV, HLS over http, RTMP. Android
+  9 (API 28) blocks cleartext by default, and the failure looks like a dead
+  stream rather than a policy: the connection is refused before any bytes are
+  read, so the player reports a network error and the recording never starts.
+
+  A media host that plays what its users paste has to permit cleartext. The
+  safer shape — a `<domain-config>` listing the hosts that need it — is not
+  possible here, because the hosts are the rooms' own CDNs and change per
+  deployment.
+
+  This file is the example app's; an application copies it (and the two
+  manifest attributes next to it) to get the same behaviour. See
+  packages/media_core_recording_ffmpeg/README.md for the whole checklist.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

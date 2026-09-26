@@ -26,6 +26,17 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
   /// Channel name; kept in sync with the Dart side.
   private static let channelName = "media_core_native"
 
+  /// Background-execution channel: its own capability, its own channel.
+  private static let backgroundChannelName = "media_core_native/background"
+
+  /// Platform activities holding the system awake, by session.
+  ///
+  /// Keyed rather than flagged, so two jobs (a recording and a download) cannot
+  /// end each other's protection — the assertion stays in force until the last
+  /// one releases it.
+  private var activities: [Int: NSObjectProtocol] = [:]
+  private var nextSessionId = 1
+
   /// Method the probe is requested through.
   private static let probeMethod = "probe"
 
@@ -35,6 +46,12 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
     let instance = MediaCoreNativePlugin()
 
     registrar.addMethodCallDelegate(instance, channel: channel)
+
+    let background = FlutterMethodChannel(name: backgroundChannelName, binaryMessenger: registrar.messenger)
+
+    background.setMethodCallHandler { [weak instance] call, result in
+      instance?.handleBackground(call, result: result) ?? result(nil)
+    }
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -45,6 +62,49 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
     }
 
     result(probe())
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background execution
+  // ---------------------------------------------------------------------------
+
+  /// Keeps the system awake while a job runs.
+  ///
+  /// `beginActivity` with `.idleSystemSleepDisabled` is the platform's own
+  /// mechanism: the process stays scheduled and the machine does not sleep,
+  /// while the display may still turn off. Unlike screen dimming or a caffeinate
+  /// subprocess, the assertion is owned by the process that asked for it and
+  /// dies with it.
+  private func handleBackground(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "acquire":
+      let sessionId = nextSessionId
+
+      nextSessionId += 1
+
+      let activity = ProcessInfo.processInfo.beginActivity(
+        options: [.idleSystemSleepDisabled, .userInitiated],
+        reason: "media_core background job"
+      )
+
+      activities[sessionId] = activity
+
+      result(sessionId)
+
+    case "release":
+      // Released by id, and only that id: an unknown or already released
+      // session leaves the other jobs' activity in place.
+      if let arguments = call.arguments as? [String: Any],
+        let sessionId = arguments["id"] as? Int,
+        let activity = activities.removeValue(forKey: sessionId) {
+        ProcessInfo.processInfo.endActivity(activity)
+      }
+
+      result(nil)
+
+    default:
+      result(FlutterMethodNotImplemented)
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:media_core/media_core.dart';
+import 'package:media_core_native/media_core_native.dart';
 
 import 'ffmpeg_executor.dart';
 import 'ffmpeg_record_arguments.dart';
@@ -69,15 +70,24 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// [executor] defaults to the FFmpegKit implementation; pass a fake in tests.
   /// [outputDirectory] is the default location for recordings, overridable per
   /// start through `RecordingConfig.outputPath`.
-  FfmpegRecordingBackend({FfmpegExecutor? executor, this.config = FfmpegRecordConfig.defaults, String? outputDirectory})
-    : _executor = executor,
-      _outputDirectory = outputDirectory;
+  FfmpegRecordingBackend({
+    FfmpegExecutor? executor,
+    this.config = FfmpegRecordConfig.defaults,
+    String? outputDirectory,
+    BackgroundExecutionStarter? keepAliveStarter,
+  }) : _executor = executor,
+       _outputDirectory = outputDirectory,
+       _keepAliveStarter = keepAliveStarter ?? BackgroundExecution.acquire;
 
   /// Recording tunables.
   final FfmpegRecordConfig config;
 
   FfmpegExecutor? _executor;
   String? _outputDirectory;
+  final BackgroundExecutionStarter _keepAliveStarter;
+
+  /// The session holding this recording's process alive, if any.
+  BackgroundExecutionLease? _keepAlive;
 
   final StreamController<RecordingState> _stateController = StreamController<RecordingState>.broadcast();
 
@@ -171,12 +181,18 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _log.debug('ffmpeg arguments', fields: <String, Object?>{'argv': arguments.join(' ')});
 
     try {
+      // The lease is taken before the process exists. The wake lock must not
+      // begin a moment after the recording does, and with nothing running yet
+      // there is no process to unwind when a platform refuses or throws.
+      await _acquireKeepAlive(prefix);
+
       final execution = await _executorOf().start(arguments: arguments, onStatistics: _handleStatistics);
       _execution = execution;
       _emit(_state.copyWith(status: RecordingStatus.recording));
       _log.info('recording started', fields: <String, Object?>{'session': identityHashCode(execution)});
       _exitWatcher = execution.exitCode.asStream().listen(_handleExit);
     } catch (error, stackTrace) {
+      await _releaseKeepAlive();
       _log.error('could not start the recording', error: error, fields: <String, Object?>{'url': source.value});
       _emit(_state.copyWith(status: RecordingStatus.error, error: error));
       Error.throwWithStackTrace(error, stackTrace);
@@ -198,6 +214,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _emit(_state.copyWith(status: RecordingStatus.stopping));
     await execution.stop();
     await _awaitExit(execution);
+    await _releaseKeepAlive();
 
     _log.info(
       'recording stopped',
@@ -228,6 +245,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _intent = _StopIntent.cancel;
     await execution.cancel();
     await _awaitExit(execution);
+    await _releaseKeepAlive();
     _emit(_state.copyWith(status: RecordingStatus.cancelled));
   }
 
@@ -244,6 +262,8 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       await _awaitExit(execution);
     }
 
+    await _releaseKeepAlive();
+
     _disposed = true;
     _memory.withdraw(_memoryKey);
     await _exitWatcher?.cancel();
@@ -257,6 +277,39 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   // ---------------------------------------------------------------------------
 
   FfmpegExecutor _executorOf() => _executor ??= FfmpegKitExecutor();
+
+  /// Holds the process alive for as long as this recording runs.
+  ///
+  /// A platform that refuses (no implementation, or a notification permission
+  /// the user declined) leaves the recording unprotected rather than failing
+  /// it: the user asked for a recording, not for a notification.
+  Future<void> _acquireKeepAlive(String prefix) async {
+    if (!config.keepAlive) {
+      return;
+    }
+
+    final session = await _keepAliveStarter(
+      title: config.keepAliveTitle ?? 'Recording',
+      text: prefix,
+      wakeLock: true,
+    );
+
+    _keepAlive = session;
+
+    if (session == null) {
+      _log.debug('no background execution on this platform; the recording is unprotected');
+    } else {
+      _log.info('background execution held', fields: <String, Object?>{'session': session.id});
+    }
+  }
+
+  Future<void> _releaseKeepAlive() async {
+    final session = _keepAlive;
+
+    _keepAlive = null;
+
+    await session?.release();
+  }
 
   void _handleStatistics(FfmpegStatistics statistics) {
     if (_disposed) {
@@ -287,6 +340,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _execution = null;
     _memory.withdraw(_memoryKey);
+    // A process that ended on its own releases its own protection: the
+    // notification must not outlive the job it described.
+    unawaited(_releaseKeepAlive());
     final succeeded = code == 0;
     if (succeeded) {
       _log.info(
@@ -345,3 +401,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
   }
 }
+
+/// Starts a background-execution session for a recording.
+///
+/// A function rather than a direct call so a host — or a test, which has no
+/// platform to hold a wake lock — can supply its own: the point of the seam is
+/// that the backend's lifecycle (acquire on start, release on *every* end) is
+/// what matters, and that is worth observing without a device.
+typedef BackgroundExecutionStarter =
+    Future<BackgroundExecutionLease?> Function({required String title, String? text, bool wakeLock});

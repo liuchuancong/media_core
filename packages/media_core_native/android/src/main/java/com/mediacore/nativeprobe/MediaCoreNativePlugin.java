@@ -66,6 +66,13 @@ public final class MediaCoreNativePlugin implements FlutterPlugin, MethodChannel
 
     MethodChannel channel = new MethodChannel(binding.getBinaryMessenger(), CHANNEL_NAME);
     channel.setMethodCallHandler(this);
+
+    // Background execution has its own channel: it is a second capability, and
+    // folding its methods into the probe would make the probe answer for
+    // something it does not describe.
+    MethodChannel background =
+        new MethodChannel(binding.getBinaryMessenger(), BackgroundExecutionDelegate.CHANNEL_NAME);
+    background.setMethodCallHandler(new BackgroundExecutionDelegate(context));
   }
 
   @Override
