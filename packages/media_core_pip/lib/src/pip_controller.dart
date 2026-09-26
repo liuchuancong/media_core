@@ -13,6 +13,14 @@ import 'pip_driver.dart';
 /// player was already gone, or because the platform refused?
 final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
+/// Ledger of the small window's surface.
+///
+/// Picture-in-picture holds one extra surface on top of the player the kernel
+/// already counts: on desktop a second window with its own texture, on mobile the
+/// system's own surface. One item is the whole footprint, which is the point —
+/// it is small, and a report that omits it would suggest the mode is free.
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.pip);
+
 /// When the small window should open on its own.
 ///
 /// Each flag is a decision the viewer makes in settings, and each is separate:
@@ -111,6 +119,11 @@ final class PipSession {
 /// side can be wired to the core's `AppLifecycleDriver`, which already observes
 /// the platform lifecycle.
 final class PipSessionController {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
   PipSessionController({
     required PipDriver driver,
     required PortablePlayerRegistry registry,
@@ -211,6 +224,7 @@ final class PipSessionController {
     await _driver.initialize();
     await _driver.apply(playerId, PresentationRequest.pip());
 
+    _reportMemory(active: _driver.isPip, playerId: playerId);
     _log.debug('pip window applied', fields: <String, Object?>{'active': _driver.isPip});
   }
 
@@ -221,6 +235,7 @@ final class PipSessionController {
     await _driver.initialize();
     await _driver.apply(_playerId ?? PlayerId('pip-idle'), PresentationRequest.normal());
     _emit(PipSession(playerId: _playerId, active: false, reason: reason));
+    _reportMemory(active: false, playerId: _playerId);
   }
 
   /// Enters if idle, leaves if active.
@@ -279,6 +294,7 @@ final class PipSessionController {
       return;
     }
     _disposed = true;
+    _memory.withdraw(_memoryKey);
     await DisposeUtils.close(_sessionController);
   }
 
@@ -304,6 +320,15 @@ final class PipSessionController {
     }
     await enter(playerId, reason: reason);
     return true;
+  }
+
+  /// Reports the carried surface.
+  void _reportMemory({required bool active, PlayerId? playerId}) {
+    _memory.report(_memoryKey, 
+      items: active ? 1 : 0,
+      bytes: active ? MemoryEstimates.videoSurface : 0,
+      note: active ? 'carrying ${playerId?.value}' : 'idle',
+    );
   }
 
   void _emit(PipSession session) {

@@ -10,6 +10,13 @@ import 'package:media_core/media_core.dart';
 /// abandoned open look the same.
 final LogModule _log = MediaCoreLog.of(LogCategory.playback);
 
+/// Ledger of the feed's item list.
+///
+/// Metadata only: the media itself belongs to whichever player is playing it.
+/// This is here so a report can distinguish "the feed is holding a long list"
+/// from "a player is decoding".
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.playback);
+
 /// How a feed item is currently being played.
 enum FeedItemState {
   /// The item is not attached to a player.
@@ -52,6 +59,11 @@ enum FeedItemState {
 /// module's job — attach a [LivePlaybackController]-style sweep on top if
 /// the feed serves live streams.
 final class FeedPlayerController {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
   FeedPlayerController(this.kernel, {this.preloadAhead = true, this.pool});
 
   /// The kernel providing the player and the preload bookkeeping.
@@ -134,6 +146,7 @@ final class FeedPlayerController {
       ..clear()
       ..addAll(items);
 
+    _reportMemory();
     _log.debug(
       'feed loaded',
       fields: <String, Object?>{'items': items.length, 'initialIndex': initialIndex, 'throughPool': pool != null},
@@ -319,6 +332,7 @@ final class FeedPlayerController {
     }
 
     _disposed = true;
+    _memory.withdraw(_memoryKey);
 
     final handle = _handle;
     _handle = null;
@@ -337,6 +351,15 @@ final class FeedPlayerController {
     await _indexController.close();
     await _stateController.close();
     await _errorController.close();
+  }
+
+  /// Reports the retained item list.
+  void _reportMemory() {
+    _memory.report(_memoryKey, 
+      items: _items.length,
+      bytes: _items.length * MemoryEstimates.playbackItem,
+      note: '${_items.length} feed item(s), at $_index',
+    );
   }
 
   void _emitIndex(int index) {

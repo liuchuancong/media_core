@@ -99,6 +99,26 @@ final class LivePlaybackController {
   int _playGeneration = 0;
 
   LiveSourceRequest? _request;
+  /// Ledger of the candidate lines and engines this sweep holds.
+  ///
+  /// The player being watched is counted by the kernel, not here: what this
+  /// module owns is the fallback list, and the list is what tells a reader how
+  /// many signed URLs are being kept alive.
+  /// This instance's key in the shared account.
+  late final String _memoryKey = memoryContributorKey(this);
+
+  final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.live);
+
+  /// Reports the candidate lines and engines the sweep is holding.
+  void _reportMemory() {
+    final entries = _sources.length + _engines.length;
+    _memory.report(_memoryKey, 
+      items: entries,
+      bytes: entries * MemoryEstimates.cacheEntry,
+      note: '${_sources.length} line(s), ${_engines.length} engine(s) in the sweep',
+    );
+  }
+
   List<PlayerSource> _sources = const <PlayerSource>[];
   List<String> _engines = const <String>[];
   int _engineIndex = 0;
@@ -172,6 +192,7 @@ final class LivePlaybackController {
   Future<void> play(LiveSourceRequest request, {String? preferredBackend}) {
     _request = request;
     _sources = request.sources;
+    _reportMemory();
     _preferredBackend = preferredBackend;
     _engineFallbackAllowed = request.allowEngineFallback ?? true;
     // Engine escalation is allowed for every request unless the caller
@@ -348,6 +369,8 @@ final class LivePlaybackController {
 
     watchdogs.dispose();
 
+    _memory.withdraw(_memoryKey);
+
     _tasks.dispose();
     await _stateController.close();
     await _handleController.close();
@@ -378,6 +401,7 @@ final class LivePlaybackController {
     }
 
     _engines = engines;
+    _reportMemory();
     _engineIndex = 0;
     _sourceIndex = 0;
 

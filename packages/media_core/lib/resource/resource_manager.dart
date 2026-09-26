@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'resource_state.dart';
-import 'memory_manager.dart';
+import 'package:media_core_memory/media_core_memory.dart';
 import 'decoder_manager.dart';
 import 'thermal_manager.dart';
 import 'resource_metrics.dart';
 import 'resource_snapshot.dart';
+import 'memory_pressure_bridge.dart';
 import 'resource_pressure.dart';
 import 'bandwidth_manager.dart';
 import 'package:clock/clock.dart';
@@ -191,7 +192,7 @@ final class ResourceManager {
 
     result = ResourcePressure.max(result, decoderManager.pressure);
 
-    result = ResourcePressure.max(result, memoryManager.pressure);
+    result = ResourcePressure.max(result, memoryManager.resourcePressure);
 
     result = ResourcePressure.max(result, bandwidthManager.pressure);
 

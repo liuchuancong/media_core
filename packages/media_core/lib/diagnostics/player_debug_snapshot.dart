@@ -1,4 +1,4 @@
-import 'memory_snapshot.dart';
+import 'package:media_core_memory/media_core_memory.dart';
 import 'network_snapshot.dart';
 import 'performance_sample.dart';
 import 'package:equatable/equatable.dart';

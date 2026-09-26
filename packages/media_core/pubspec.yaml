@@ -23,6 +23,10 @@ dependencies:
   media_core_logging:
     path: ../media_core_logging
 
+  # Memory accounting and pressure
+  media_core_memory:
+    path: ../media_core_memory
+
   # Value equality
   equatable: ^2.1.0
 

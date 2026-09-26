@@ -18,6 +18,14 @@ import 'download_transport.dart';
 /// not retryable).
 final LogModule _log = MediaCoreLog.of(LogCategory.download);
 
+/// Ledger of the in-flight transfers.
+///
+/// Reported in measured bytes rather than estimates: a download knows exactly
+/// how much it has written, so this account is one of the few that is a real
+/// number — and it is the one that explains a process growing while a large file
+/// is being fetched.
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.download);
+
 /// The download queue.
 ///
 /// Responsibilities:
@@ -64,6 +72,11 @@ final LogModule _log = MediaCoreLog.of(LogCategory.download);
 /// queue pins its capacity at construction, so changing the limit means building
 /// a new manager rather than quietly keeping the old one.
 final class DownloadManager {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
   DownloadManager({
     DownloadTransport? transport,
     DownloadFileSink? files,
@@ -251,6 +264,27 @@ final class DownloadManager {
   ///
   /// Running transfers are paused, not cancelled: the partial files are valid
   /// work, and a host that rebuilds the manager resumes them.
+  /// Reports the bytes held by the tasks still transferring.
+  ///
+  /// A buffered chunk per running transfer, plus whatever the partial files
+  /// hold. The totals are what a report shows for this module; a paused task
+  /// stops counting, because a paused transfer holds nothing.
+  void _reportMemory() {
+    var bytes = 0;
+    var active = 0;
+    for (final id in _inFlight) {
+      final task = _tasks[id.value];
+      if (task == null) {
+        continue;
+      }
+      active++;
+      bytes += task.progress.receivedBytes == 0
+          ? MemoryEstimates.downloadTransferBuffer
+          : task.progress.receivedBytes;
+    }
+    _memory.report(_memoryKey, items: active, bytes: bytes, note: '$active transferring');
+  }
+
   Future<void> dispose() async {
     if (_disposed) {
       return;
@@ -263,6 +297,7 @@ final class DownloadManager {
     }
     _retryTimers.clear();
     _disposed = true;
+    _memory.withdraw(_memoryKey);
     // TaskManager.dispose is synchronous.
     _queue.dispose();
     await _transport.dispose();
@@ -515,6 +550,7 @@ final class DownloadManager {
     if (current == null || current.status != DownloadStatus.running) {
       return;
     }
+    _reportMemory();
     final lastReceived = current.progress.receivedBytes;
     final elapsed = _clock().difference(_lastTick);
     var speed = current.progress.speedBytesPerSecond;
@@ -539,6 +575,7 @@ final class DownloadManager {
     if (task == null || task.status.isTerminal) {
       return;
     }
+    _reportMemory();
     _log.info(
       'download completed',
       fields: <String, Object?>{'id': id, 'bytes': task.progress.receivedBytes, 'filePath': task.filePath},

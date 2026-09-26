@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:media_core_memory/media_core_memory.dart';
 import 'player_pool_state.dart';
 import 'player_pool_config.dart';
 import 'player_pool_manager.dart';
@@ -50,14 +52,23 @@ final class PlayerPool {
     return state.totalPlayers;
   }
 
+  /// Ledger of the players held by this pool.
+  /// This instance's key in the shared account.
+  late final String _memoryKey = memoryContributorKey(this);
+
+  final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.pool);
+
   /// Adds player into pool.
   void add(PlayerId playerId) {
     _manager.add(playerId);
+    _reportMemory();
   }
 
   /// Removes player.
   bool remove(PlayerId playerId) {
-    return _manager.remove(playerId);
+    final removed = _manager.remove(playerId);
+    _reportMemory();
+    return removed;
   }
 
   /// Allocates player for session.
@@ -75,8 +86,23 @@ final class PlayerPool {
     return _manager.recycleCandidates(maxCount: maxCount);
   }
 
+  /// Reports how many players the pool holds.
+  ///
+  /// The pool reuses players rather than opening them, so this is the count that
+  /// answers "how many decoders is the pool keeping alive?" — the number that
+  /// grows when recycling stops working.
+  void _reportMemory() {
+    final players = _manager.state.totalPlayers;
+    _memory.report(_memoryKey, 
+      items: players,
+      bytes: players * MemoryEstimates.videoStream720p,
+      note: '$players pooled player(s)',
+    );
+  }
+
   /// Disposes pool.
   Future<void> dispose() async {
     await _manager.dispose();
+    _memory.withdraw(_memoryKey);
   }
 }

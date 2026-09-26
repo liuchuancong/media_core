@@ -149,7 +149,7 @@ abstract final class MediaCoreLog {
   /// The form used by modules: `MediaCoreLog.of(LogCategory.playback).debug(...)`
   /// keeps a call site from repeating its own category on every line, which is
   /// what makes per-module levels worth having.
-  static LogModule of(LogCategory category) => LogModule(category, _logger);
+  static LogModule of(LogCategory category) => LogModule(category, () => _logger);
 
   /// Runs [body] with [fields] attached to every record inside it.
   static R scoped<R>(Map<String, Object?> fields, R Function() body) => LogScope.run(fields, body);

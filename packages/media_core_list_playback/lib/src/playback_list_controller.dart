@@ -2,7 +2,17 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart' show Equatable;
 import 'package:media_core/media_core.dart'
-    show LogCategory, LogModule, MediaCoreLog, PlaybackPoolOrchestrator, PoolPlayerHandle;
+    show
+        LogCategory,
+        LogModule,
+        MediaCoreLog,
+        MemoryAccount,
+        MemoryEstimates,
+        MemoryModule,
+        MediaCoreMemory,
+        PlaybackPoolOrchestrator,
+        PoolPlayerHandle,
+        memoryContributorKey;
 
 import 'playback_list_config.dart';
 import 'playback_list_item.dart';
@@ -16,6 +26,12 @@ import 'playback_progress_store.dart';
 /// whether the item was opened through the pool or by the list's own player.
 /// Both are recorded on every open.
 final LogModule _log = MediaCoreLog.of(LogCategory.playback);
+
+/// Ledger of the list's items and remembered positions.
+///
+/// Both are metadata: the list drives a player it does not own, so what it can
+/// account for is the list itself plus the progress entries it keeps for resume.
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.playback);
 
 /// Immutable snapshot of a playback list.
 final class PlaybackListState extends Equatable {
@@ -112,6 +128,12 @@ final class PlaybackListState extends Equatable {
 /// almost certainly finished it, and restoring the last five seconds reads as a
 /// broken player rather than a feature.
 final class PlaybackListController {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
+
   PlaybackListController({
     PlaybackListPlayer? player,
     List<PlaybackListItem> items = const <PlaybackListItem>[],
@@ -332,6 +354,7 @@ final class PlaybackListController {
     }
     await savePosition().catchError((Object _) {});
     _disposed = true;
+    _memory.withdraw(_memoryKey);
     await _stateController.close();
   }
 
@@ -432,7 +455,17 @@ final class PlaybackListController {
     return duration - position <= config.completionThreshold;
   }
 
+  /// Reports the retained items and remembered positions.
+  void _reportMemory() {
+    _memory.report(_memoryKey, 
+      items: _items.length,
+      bytes: _items.length * MemoryEstimates.playbackItem,
+      note: '${_items.length} item(s), position $_index',
+    );
+  }
+
   void _emit(PlaybackListState next) {
+    _reportMemory();
     _state = next;
     if (!_stateController.isClosed) {
       _stateController.add(next);

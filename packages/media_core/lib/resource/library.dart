@@ -20,8 +20,7 @@ export 'bandwidth_budget.dart';
 export 'bandwidth_manager.dart';
 export 'decoder_budget.dart';
 export 'decoder_manager.dart';
-export 'memory_budget.dart';
-export 'memory_manager.dart';
+export 'memory_pressure_bridge.dart';
 export 'resource_manager.dart';
 export 'resource_metrics.dart';
 export 'resource_pressure.dart';
@@ -30,3 +29,7 @@ export 'resource_snapshot.dart';
 export 'resource_state.dart';
 export 'thermal_manager.dart';
 export 'thermal_state.dart';
+
+// Memory accounting lives in its own package and is re-exported here so the
+// resource layer keeps one import surface.
+export 'package:media_core_memory/media_core_memory.dart';

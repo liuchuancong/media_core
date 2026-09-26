@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:media_core_memory/media_core_memory.dart';
+
 import 'danmaku_message.dart';
 import 'danmaku_overlay_config.dart';
 
@@ -87,6 +89,16 @@ final class DanmakuOverlaySession {
 
   /// Insertion-ordered so the oldest message can be dropped in O(1).
   final LinkedHashMap<int, DanmakuOverlayItem> _items = LinkedHashMap<int, DanmakuOverlayItem>();
+
+  /// Ledger of the queued messages.
+  ///
+  /// An overlay queue is small by design ([DanmakuOverlayConfig.maxMessages]),
+  /// which is exactly why it is worth counting: a wall of cells each holding
+  /// their own queue is where "small by design" stops being small.
+  /// This instance's key in the shared account.
+  late final String _memoryKey = memoryContributorKey(this);
+
+  final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.danmaku);
 
   final StreamController<bool> _activeController = StreamController<bool>.broadcast();
 
@@ -178,6 +190,7 @@ final class DanmakuOverlaySession {
     }
 
     _items[_sequence++] = item;
+    _reportMemory();
     return true;
   }
 
@@ -196,11 +209,26 @@ final class DanmakuOverlaySession {
       expired.add(item);
       return true;
     });
+    if (expired.isNotEmpty) {
+      _reportMemory();
+    }
     return expired;
   }
 
   /// Empties the overlay.
-  void clear() => _items.clear();
+  void clear() {
+    _items.clear();
+    _reportMemory(note: 'overlay cleared');
+  }
+
+  /// Reports the queued messages and their estimated cost.
+  void _reportMemory({String? note}) {
+    _memory.report(_memoryKey, 
+      items: _items.length,
+      bytes: _items.length * MemoryEstimates.danmakuMessage,
+      note: note ?? '${_items.length}/${_config.maxMessages} queued',
+    );
+  }
 
   /// Font size for a surface of [surfaceWidth] logical pixels.
   ///
@@ -228,6 +256,7 @@ final class DanmakuOverlaySession {
     _visibilitySubscription = null;
     _disposed = true;
     clear();
+    _memory.withdraw(_memoryKey);
     await _activeController.close();
   }
 

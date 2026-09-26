@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../concurrency/serial_executor.dart';
 import '../diagnostics/library.dart' show LogCategory, LogModule, MediaCoreLog;
+import 'package:media_core_memory/media_core_memory.dart';
 import '../resource/resource_pressure.dart';
 import '../source/player_source.dart';
 import 'player_pool_config.dart';
@@ -142,6 +143,16 @@ final class PlaybackPoolOrchestrator {
 
   /// Serializes reconciliations with the core's serial executor.
   final SerialExecutor _operations = SerialExecutor();
+
+  /// Ledger of the players this pool holds.
+  ///
+  /// The pool is the module that decides how many decoders exist at once, so when
+  /// memory is tight this is the account that says whether the pool is respecting
+  /// its own limits (warm size, max players) or quietly growing past them.
+  final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.pool);
+
+  /// This instance's key in the shared pool account.
+  late final String _memoryKey = memoryContributorKey(this);
   bool _disposed = false;
   bool _viewportVisible = true;
   bool _occluded = false;
@@ -274,6 +285,7 @@ final class PlaybackPoolOrchestrator {
       }
       _activeIndex = null;
       _lastActiveIndex = null;
+      _reportMemory();
       _log.debug('released every pooled player', fields: <String, Object?>{'released': released.length});
       return _buildPlan(const <int>{}, const <int>{}, released);
     });
@@ -295,6 +307,7 @@ final class PlaybackPoolOrchestrator {
       // orchestrator usable would only repeat the failure.
     }
     _disposed = true;
+    _memory.withdraw(_memoryKey);
   }
 
   // ---------------------------------------------------------------------------
@@ -350,6 +363,8 @@ final class PlaybackPoolOrchestrator {
     if (target != null) {
       _lastActiveIndex = target;
     }
+
+    _reportMemory();
 
     _log.debug(
       'pool reconciled',
@@ -667,6 +682,32 @@ final class PlaybackPoolOrchestrator {
       return;
     }
     await _host.disposeHandle(assignment.handle);
+  }
+
+  /// Reports how many players the pool is holding, and in which roles.
+  void _reportMemory() {
+    var active = 0;
+    var warming = 0;
+    var idle = 0;
+    for (final assignment in _assignments.values) {
+      switch (assignment.role) {
+        case PooledItemRole.active:
+          active++;
+        case PooledItemRole.warming:
+          warming++;
+        case PooledItemRole.idle:
+          idle++;
+        case PooledItemRole.released:
+          break;
+      }
+    }
+
+    final held = active + warming + idle;
+    _memory.report(_memoryKey, 
+      items: held,
+      bytes: held * MemoryEstimates.videoStream720p,
+      note: '$active active, $warming warm, $idle idle',
+    );
   }
 
   PlaybackPoolPlan _buildPlan(Set<int> playing, Set<int> warming, Set<int> released) {

@@ -16,14 +16,21 @@ import 'player_logger.dart';
 /// [isEnabled] exists for the hot paths: a record that would be filtered out
 /// still costs whatever it took to build its fields, and a per-frame call site
 /// should not format a map per frame just to have it dropped.
+///
+/// The logger is resolved per call rather than captured at construction: a host
+/// that replaces the hub's logger ([MediaCoreLog.reset], [MediaCoreLog.install])
+/// would otherwise leave every module logging into the logger it replaced, and
+/// the module's records would silently stop reaching the new sinks.
 final class LogModule {
   /// Creates a module logger.
-  const LogModule(this.category, this._logger);
+  const LogModule(this.category, this._loggerOf);
 
   /// Category every record from this logger is tagged with.
   final LogCategory category;
 
-  final PlayerLogger _logger;
+  final PlayerLogger Function() _loggerOf;
+
+  PlayerLogger get _logger => _loggerOf();
 
   /// Whether [level] would be emitted for this category.
   bool isEnabled(LogLevel level) => _logger.isEnabledFor(category, level);

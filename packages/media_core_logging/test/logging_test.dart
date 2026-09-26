@@ -209,8 +209,8 @@ void main() {
     });
 
     test('tags every record with its own category', () {
-      final playback = LogModule(LogCategory.playback, logger);
-      final session = LogModule(LogCategory.session, logger);
+      final playback = LogModule(LogCategory.playback, () => logger);
+      final session = LogModule(LogCategory.session, () => logger);
 
       playback.debug('opened');
       session.error('failed');
@@ -220,7 +220,7 @@ void main() {
     });
 
     test('reports whether a level is worth building fields for', () {
-      final playback = LogModule(LogCategory.playback, logger);
+      final playback = LogModule(LogCategory.playback, () => logger);
 
       expect(playback.isDebugEnabled, isTrue);
       expect(playback.isTraceEnabled, isFalse);
@@ -412,6 +412,25 @@ void main() {
       expect(MediaCoreLog.minimumLevelFor(LogCategory.download), LogLevel.trace);
       expect(MediaCoreLog.isEnabled(LogCategory.download, LogLevel.trace), isTrue);
       expect(MediaCoreLog.isEnabled(LogCategory.playback, LogLevel.debug), isFalse);
+    });
+
+    test('a module logger follows a replaced hub logger', () {
+      final module = MediaCoreLog.of(LogCategory.pool);
+      final collector = _Collector();
+      MediaCoreLog.level = LogLevel.info;
+      MediaCoreLog.clearSinks();
+      MediaCoreLog.addSink(collector.call);
+
+      module.info('before reset');
+      MediaCoreLog.reset();
+      MediaCoreLog.level = LogLevel.info;
+      final after = _Collector();
+      MediaCoreLog.clearSinks();
+      MediaCoreLog.addSink(after.call);
+      module.info('after reset');
+
+      expect(collector.messages, <String>['before reset']);
+      expect(after.messages, <String>['after reset'], reason: 'the module must not keep logging into the replaced logger');
     });
 
     test('resolves a level from its name', () {

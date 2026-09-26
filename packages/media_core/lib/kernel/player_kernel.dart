@@ -23,6 +23,7 @@ import '../session/player_session.dart';
 import '../source/player_source.dart';
 import '../source/source_service.dart';
 import 'package:media_core_logging/media_core_logging.dart';
+import 'package:media_core_memory/media_core_memory.dart';
 import '../adapter/player_adapter_selector.dart';
 import 'kernel_audio_driver.dart';
 import 'kernel_options.dart';
@@ -125,6 +126,12 @@ final class PlayerKernel {
   final KernelOptions options;
 
   final Map<PlayerId, PlayerHandle> _handles = {};
+
+  /// Ledger of the players this kernel holds.
+  /// This instance's key in the shared account.
+  late final String _memoryKey = memoryContributorKey(this);
+
+  final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.kernel);
 
   KernelAudioDriver? _audioDriver;
   KernelPresentationDriver? _presentationDriver;
@@ -321,6 +328,7 @@ final class PlayerKernel {
     if (handle == null) {
       return;
     }
+    _reportMemory();
 
     if (_activeHandle?.id == playerId) {
       _activeHandle = null;
@@ -548,6 +556,7 @@ final class PlayerKernel {
 
   void _registerEverywhere(PlayerHandle handle) {
     _handles[handle.id] = handle;
+    _reportMemory();
 
     if (options.enablePool) {
       _pool.add(handle.id);
@@ -557,6 +566,21 @@ final class PlayerKernel {
     _coordinator.player.attachSession(playerId: handle.id, session: handle.session);
     _coordinator.playback.register(playerId: handle.id, controller: handle.playbackController);
     _coordinator.lifecycle.register(playerId: handle.id, lifecycle: handle.lifecycleController);
+  }
+
+  /// Reports how many players this kernel is holding.
+  ///
+  /// One entry per open handle: the kernel owns the players, so this is the
+  /// count every other module's players ultimately come from. The byte figure is
+  /// a declared estimate (the kernel does not know each player's resolution
+  /// without asking every snapshot), which is why the item count is reported
+  /// alongside it.
+  void _reportMemory() {
+    _memory.report(_memoryKey, 
+      items: _handles.length,
+      bytes: _handles.length * MemoryEstimates.videoStream720p,
+      note: '${_handles.length} open player(s)',
+    );
   }
 
   /// Disposes the kernel and every live player.
@@ -569,6 +593,8 @@ final class PlayerKernel {
     await _activeTrackingSub?.cancel();
     _activeTrackingSub = null;
     _audioDriver = null;
+
+    _memory.withdraw(_memoryKey);
 
     await _preloadManager.dispose();
     await _coordinator.dispose();

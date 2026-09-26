@@ -15,6 +15,13 @@ import 'multiview_layout.dart';
 /// that dropped a cell, restarted one, or never opened one says which.
 final LogModule _log = MediaCoreLog.of(LogCategory.multiview);
 
+/// Ledger of the wall.
+///
+/// A wall multiplies everything the player does by the cell count, including its
+/// cost: this account is what answers "how much does this 3x3 grid hold?" and
+/// what makes the decode budget auditable after the fact.
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.multiview);
+
 /// How much quality a cell wants, relative to the best available.
 enum MultiviewQualityPreference {
   /// Best available: worth looking at.
@@ -111,6 +118,11 @@ final class MultiviewSnapshot {
 /// the host can show *why* cells went quiet instead of leaving them looking
 /// broken.
 final class MultiviewController {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
   MultiviewController({
     required PoolPlayerHost players,
     MultiviewConfig config = MultiviewConfig.defaults,
@@ -882,9 +894,36 @@ final class MultiviewController {
   }
 
   void _emit() {
+    _reportMemory();
     if (!_snapshotController.isClosed) {
       _snapshotController.add(_buildSnapshot());
     }
+  }
+
+  /// Reports the cells and what they hold.
+  ///
+  /// Counts every assigned cell, not only the playing ones: a paused cell keeps
+  /// its player open (that is what makes resuming it cheap), so it is still
+  /// holding a decoder.
+  void _reportMemory() {
+    var playing = 0;
+    var held = 0;
+    var danmaku = 0;
+    for (final cell in _cells) {
+      if (cell.isPlaying) {
+        playing++;
+      }
+      if (!cell.isEmpty) {
+        held++;
+      }
+      danmaku += cell.danmaku?.length ?? 0;
+    }
+
+    _memory.report(_memoryKey, 
+      items: held,
+      bytes: held * MemoryEstimates.videoStream720p + danmaku * MemoryEstimates.danmakuMessage,
+      note: '$held cell(s), $playing playing, $danmaku danmaku queued',
+    );
   }
 
   /// Releases the wall: every cell's player goes back to the host.
@@ -908,6 +947,7 @@ final class MultiviewController {
       cell.danmaku = null;
     }
 
+    _memory.withdraw(_memoryKey);
     await DisposeUtils.close(_snapshotController);
   }
 

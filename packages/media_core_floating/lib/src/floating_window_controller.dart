@@ -11,6 +11,13 @@ import 'floating_window_placement.dart';
 /// Decision trail for the in-app small window's session.
 final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
+/// Ledger of the in-app small window's surface.
+///
+/// The overlay is a widget in the host's own tree, so its cost is one more
+/// composited surface over the page — small, but it is a real allocation and a
+/// report that leaves it out would not add up.
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.floating);
+
 /// When the in-app small window should open on its own.
 ///
 /// The same two triggers as picture-in-picture, kept separate because a viewer
@@ -99,6 +106,11 @@ final class FloatingSession {
 /// special requirements mounts one widget. A host that wants its own chrome
 /// calls [buildSurface] and places it itself.
 final class FloatingSessionController {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
   FloatingSessionController({
     required FloatingDriver driver,
     required PortablePlayerRegistry registry,
@@ -193,6 +205,7 @@ final class FloatingSessionController {
     _driver.onVideoSize(player.videoWidth, player.videoHeight);
     await _driver.initialize();
     await _driver.apply(playerId, PresentationRequest.floating());
+    _reportMemory(active: _driver.isFloating, playerId: playerId);
   }
 
   /// Hides the small window.
@@ -205,6 +218,7 @@ final class FloatingSessionController {
     await _driver.initialize();
     await _driver.apply(_playerId ?? PlayerId('floating-idle'), PresentationRequest.normal());
     _emit(FloatingSession(playerId: _playerId, active: false, reason: reason));
+    _reportMemory(active: false, playerId: _playerId);
   }
 
   /// Shows the window if hidden, hides it if shown.
@@ -280,6 +294,7 @@ final class FloatingSessionController {
       return;
     }
     _disposed = true;
+    _memory.withdraw(_memoryKey);
     await DisposeUtils.close(_sessionController);
   }
 
@@ -305,6 +320,15 @@ final class FloatingSessionController {
     }
     await show(playerId, reason: reason);
     return true;
+  }
+
+  /// Reports the overlay surface.
+  void _reportMemory({required bool active, PlayerId? playerId}) {
+    _memory.report(_memoryKey, 
+      items: active ? 1 : 0,
+      bytes: active ? MemoryEstimates.videoSurface : 0,
+      note: active ? 'overlay over ${playerId?.value}' : 'idle',
+    );
   }
 
   void _emit(FloatingSession session) {

@@ -1,4 +1,5 @@
 import 'cache_key.dart';
+import 'package:media_core_memory/media_core_memory.dart';
 import 'cache_entry.dart';
 import 'cache_storage.dart';
 import 'cache_eviction.dart';
@@ -20,6 +21,16 @@ final class MemoryCache<T> implements CacheStorage<T> {
   final CacheEviction<T> eviction;
 
   final Map<CacheKey, CacheEntry<T>> _entries = <CacheKey, CacheEntry<T>>{};
+
+  /// Ledger of the entries held in memory.
+  ///
+  /// Unlike most modules this one reports measured bytes: [CacheEntry.sizeBytes]
+  /// knows what it holds, so the cache is the one consumer whose report is a
+  /// real number rather than an estimate.
+  /// This instance's key in the shared account.
+  late final String _memoryKey = memoryContributorKey(this);
+
+  final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.cache);
 
   bool _initialized = false;
   bool _disposed = false;
@@ -43,6 +54,7 @@ final class MemoryCache<T> implements CacheStorage<T> {
 
     if (entry.isExpired) {
       _entries.remove(key);
+      _reportMemory();
       return null;
     }
 
@@ -58,13 +70,17 @@ final class MemoryCache<T> implements CacheStorage<T> {
 
     _entries[entry.key] = entry;
     _evictIfNeeded();
+    _reportMemory();
   }
 
   @override
   Future<bool> remove(CacheKey key) async {
     _ensureReady();
 
-    return _entries.remove(key) != null;
+    final bool removed = _entries.remove(key) != null;
+    _reportMemory();
+
+    return removed;
   }
 
   @override
@@ -72,6 +88,7 @@ final class MemoryCache<T> implements CacheStorage<T> {
     _ensureReady();
 
     _entries.clear();
+    _reportMemory();
   }
 
   @override
@@ -136,6 +153,15 @@ final class MemoryCache<T> implements CacheStorage<T> {
     return _entries.values.fold<int>(0, (int total, CacheEntry<T> entry) => total + entry.sizeBytes);
   }
 
+  /// Reports the entries and their measured size.
+  void _reportMemory() {
+    _memory.report(_memoryKey, 
+      items: _entries.length,
+      bytes: sizeBytes,
+      note: '${_entries.length} entr(y|ies)${maxBytes == 0 ? '' : ', limit ${maxBytes ~/ 1024}KB'}',
+    );
+  }
+
   @override
   Future<void> dispose() async {
     if (_disposed) {
@@ -144,6 +170,7 @@ final class MemoryCache<T> implements CacheStorage<T> {
 
     _disposed = true;
     _entries.clear();
+    _memory.withdraw(_memoryKey);
   }
 
   void _evictIfNeeded() {

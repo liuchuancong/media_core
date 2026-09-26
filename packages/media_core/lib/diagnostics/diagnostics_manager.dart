@@ -1,4 +1,4 @@
-import 'memory_monitor.dart';
+import 'package:media_core_memory/media_core_memory.dart';
 import 'network_diagnostics.dart';
 import 'performance_monitor.dart';
 import 'player_debug_snapshot.dart';

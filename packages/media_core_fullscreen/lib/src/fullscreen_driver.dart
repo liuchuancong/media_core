@@ -15,6 +15,12 @@ import 'window_manager_fullscreen_window.dart';
 /// the video's orientation selected. Both are recorded on every transition.
 final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
+// Fullscreen deliberately has no memory account: it is a layout and window-state
+// change over the *same* surface the page already had, so it allocates nothing a
+// report could attribute to it. The player it renders is counted by the kernel,
+// and the video surface by whichever module built it. A zero-valued entry here
+// would suggest the mode was measured instead of saying it holds nothing.
+
 /// Which fullscreen variants the host can actually present.
 enum FullscreenPlatform {
   /// Windows, macOS, Linux: system fullscreen is a window state.

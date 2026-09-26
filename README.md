@@ -140,6 +140,7 @@ adapter 报错后内核自动执行：
 | `media_core_download` | 下载 | 有界并发队列、断点续传(先校验再续)、重试预算与进度 |
 | `media_core_multiview` | 多画面同看 | 监控式视频墙:逐格健康度、唯一音频归属、解码预算、逐格弹幕、巡更轮巡、逐格播放列表 |
 | `media_core_logging` | 分级日志 | 全局日志枢纽:分级/分类开关、多 sink 并行(控制台/内存环形缓冲/文件轮转)、开发者过滤与节流、Zone 作用域字段 |
+| `media_core_memory` | 内存记账 | 双视角内存监控:各模块按实例申报占用(可求和/可撤回) + 设备实测快照;预算阈值驱动的四级压力与资源层桥接 |
 
 内核只保留与平台无关的基础设施(缓存、协调器、录制抽象、策略、池、预载等)与各能力共享的状态机。
 
@@ -165,6 +166,24 @@ if (_log.isDebugEnabled) _log.debug('cell assigned', fields: {'index': index});
 
 分类(`LogCategory`)与模块一一对应:内核与生命周期(`player`/`lifecycle`)、播放与缓冲(`playback`/`buffering`)、源解析(`source`)、呈现与三个小窗包(`presentation`)、恢复与回退(`recovery`/`fallback`)、录制(`recording`)、下载(`download`)、弹幕(`danmaku`)、多画面(`multiview`)、播放器池(`pool`)、资源与内存(`memory`/`performance`)、日志子系统自身(`logging`)。因此排查单个问题时只需把对应分类调高,而不是被其它模块的 trace 淹没。
 
+### 内存监控
+
+两个视角,一个回答"谁在用",一个回答"一共用了多少":
+
+```dart
+final _memory = MediaCoreMemory.of(MemoryModule.pool);           // 模块侧:取账本
+_memory.report(_key, items: players, bytes: estimated, note: '4 active, 6 warm');
+
+if (MediaCoreMemory.pressure.shouldStopPreload) return;          // 策略侧:先问压力
+
+MediaCoreMemory.attachDeviceProvider(myPlatformMemoryReader);    // 诊断侧:设备真值
+print(MediaCoreMemory.report().describe());
+```
+
+没有任何 Dart API 能报出解码器、纹理或原生播放器占了多少字节,所以模块上报的是**申报值**(`MemoryEstimates` 中刻意保守的估算),用途是排序与驱动预算;设备真值来自宿主安装的平台 provider;而磁盘缓存、下载、录像是**实测值**——它们本来就知道自己写了多少字节。压力按 512 MiB / 70% / 85% 折算成四级,等级变化写进 `memory` 分类日志;资源层通过桥接把它折算进自己的 `ResourcePressure`,与解码器、带宽、温度压力取最大值。
+
+模块账户按**贡献者**分别记账再求和:一面 3×3 视频墙的 9 个弹幕队列相加,而不是只留最后一个;实例销毁时 `withdraw` 撤掉自己那一份。
+
 ## Workspace 布局
 
 ```text
@@ -188,5 +207,6 @@ packages/
   media_core_download/              下载(队列 + 续传 + 重试)
   media_core_multiview/             多画面同看(监控式视频墙)
   media_core_logging/               分级日志(枢纽 + sink + 过滤/节流/作用域)
+  media_core_memory/                内存记账(模块账本 + 压力预算 + 设备快照)
 examples/example/                   示例 App
 ```

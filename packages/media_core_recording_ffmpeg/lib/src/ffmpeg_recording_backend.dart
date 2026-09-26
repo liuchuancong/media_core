@@ -14,6 +14,14 @@ import 'ffmpeg_record_config.dart';
 /// The list is what a developer pastes into a shell to reproduce it.
 final LogModule _log = MediaCoreLog.of(LogCategory.recording);
 
+/// Ledger of the running recording.
+///
+/// Reported in measured bytes: FFmpeg's statistics say how much has been written,
+/// so a recording in progress shows up in a memory report as a real number —
+/// which is what makes it possible to tell a recording that is writing a lot
+/// from a queue that is holding a lot.
+final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.recording);
+
 /// What the caller asked for when a recording ended.
 ///
 /// FFmpeg reports `255` both for a stream that died and for a process that was
@@ -51,6 +59,11 @@ enum _StopIntent { none, stop, cancel }
 /// therefore tracks why it ended the process instead of inferring it from the
 /// code, and reports [RecordingResult.success] accordingly.
 final class FfmpegRecordingBackend implements RecordingBackend {
+
+  /// This instance's key in the shared account: a module can have several
+  /// live instances, and a report sums their contributions rather than
+  /// keeping whichever reported last.
+  late final String _memoryKey = memoryContributorKey(this);
   /// Creates the backend.
   ///
   /// [executor] defaults to the FFmpegKit implementation; pass a fake in tests.
@@ -232,6 +245,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
 
     _disposed = true;
+    _memory.withdraw(_memoryKey);
     await _exitWatcher?.cancel();
     _exitWatcher = null;
     await _executor?.dispose();
@@ -250,6 +264,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
     _lastMediaTime = Duration(milliseconds: statistics.timeMs);
     _lastBytes = statistics.sizeBytes;
+    _memory.report(_memoryKey, 
+      items: 1,
+      bytes: _lastBytes,
+      note: 'recording, ${_lastMediaTime.inSeconds}s written',
+    );
     if (_state.status != RecordingStatus.recording) {
       return;
     }
@@ -267,6 +286,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
 
     _execution = null;
+    _memory.withdraw(_memoryKey);
     final succeeded = code == 0;
     if (succeeded) {
       _log.info(
