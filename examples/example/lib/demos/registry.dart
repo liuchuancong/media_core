@@ -4,6 +4,7 @@ import '../pages/memory_demo_page.dart';
 import '../pages/music_demo_page.dart';
 import '../pages/multiview_demo_page.dart';
 import '../pages/player_demo_page.dart';
+import '../pages/ui_styles_demo_page.dart';
 import '../pages/presentation_demo_page.dart';
 import 'console/cache_demo.dart';
 import 'console/download_demo.dart';
@@ -14,6 +15,7 @@ import 'console/lyric_demo.dart';
 import 'console/memory_demo.dart';
 import 'console/platform_demo.dart';
 import 'console/pool_demo.dart';
+import 'console/probe_demo.dart';
 import 'console/queue_demo.dart';
 import 'console/recording_demo.dart';
 import 'console/source_demo.dart';
@@ -36,6 +38,14 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
     purposeZh: 'kernel → 注册后端 → create → open → play；含 seek / 音量 / 倍速 / 静音 / 循环与操作记录。',
     purposeEn: 'kernel → register backend → create → open → play; with seek, volume, rate, mute, loop and operation records.',
     builder: (_) => const PlayerDemoPage(),
+  ),
+  RunnableDemo(
+    id: 'ui-styles',
+    nameZh: '界面风格：六套设计语言',
+    nameEn: 'UI styles: six design languages',
+    purposeZh: 'material / cupertino / fluent / macos / yaru / neumorphic 共用一层控制逻辑，播放中切换风格不重置状态、进度与显隐策略；同页演示双指缩放、双击缩放与截图落盘。',
+    purposeEn: 'material / cupertino / fluent / macos / yaru / neumorphic share one control layer, so switching mid-playback keeps state, position and visibility policy; the same page shows pinch/double-tap zoom and a saved screenshot.',
+    builder: (_) => const UiStylesDemoPage(),
   ),
   RunnableDemo(
     id: 'live',
@@ -111,6 +121,8 @@ final List<ModuleDemo> moduleDemos = <ModuleDemo>[
   const QueueDemo(),
   const SourceDemo(),
   const PlatformDemo(),
+  // What the platform itself says about this device.
+  const ProbeDemo(),
 ];
 
 /// Everything the catalog shows: runnable pages first, module tour second.

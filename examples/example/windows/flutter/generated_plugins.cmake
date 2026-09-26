@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   audio_service_win
   ffmpeg_kit_extended_flutter
   media_core_audio
+  media_core_native
   media_kit_video
   screen_retriever_windows
   window_manager
