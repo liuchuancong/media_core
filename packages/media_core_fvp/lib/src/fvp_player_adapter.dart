@@ -86,6 +86,12 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   /// Whether the current source is a live (non-seekable) stream.
   bool _liveSource = false;
 
+  /// URL of the source the engine is holding, for the geometry retry.
+  String? _currentUrl;
+
+  /// Whether the current source already had its one geometry retry.
+  bool _geometryRetried = false;
+
   double _volume = 1.0;
   double _lastEmittedVolume = -1.0;
 
@@ -133,6 +139,7 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   Future<void> onBeforeOpen(PlayerSource source) async {
     _liveSource = source.isLive;
     _openFailed = false;
+    _geometryRetried = false;
     _playingNow = false;
     _bufferingNow = false;
     _lastEmittedVolume = -1.0;
@@ -140,8 +147,10 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
   @override
   Future<void> onOpen(PlayerSource source) async {
-    final player = await _createEngine();
     final url = source.uri.toString();
+    final player = await _createEngine(url);
+
+    _currentUrl = url;
 
     player
       ..setProperty('avio.headers', encodeHeaders(source.hasHeaders ? source.headers!.values : const <String, String>{}))
@@ -322,9 +331,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   // Engine
   // ---------------------------------------------------------------------------
 
-  /// Creates the engine for the source about to open, releasing the previous
-  /// one.
-  Future<mdk.Player> _createEngine() async {
+  /// Creates the engine for [url], releasing the previous one.
+  Future<mdk.Player> _createEngine(String url) async {
     await _disposeEngine();
 
     final player = mdk.Player();
@@ -335,7 +343,13 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     _softwareDecoderNextOpen = false;
 
-    player.videoDecoders = config.videoDecoders ?? videoDecoders(hardware: !softwareOnly && config.enableCodec);
+    player.videoDecoders =
+        config.videoDecoders ??
+        videoDecodersFor(url, hardware: !softwareOnly && config.enableCodec, hosts: config.legacyHevcFlvHosts);
+
+    final backends = config.audioBackends ?? audioBackends();
+
+    if (backends != null) player.audioBackends = backends;
 
     for (final entry in FvpPlayerConfig.defaultLiveProperties.entries) {
       player.setProperty(entry.key, entry.value);
@@ -380,6 +394,34 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     return const <String>['VAAPI', 'VDPAU', 'FFmpeg', 'dav1d'];
   }
+
+  /// Video decoder priority for one source.
+  ///
+  /// Legacy codec-id-12 HEVC FLV goes to software on Android: some hardware HEVC
+  /// decoders reject it ("Unsupported input buffer") without an error that would
+  /// advance the engine to its next decoder, so audio plays while every frame is
+  /// dropped. AVC streams from the same hosts are unaffected by the priority
+  /// order.
+  static List<String> videoDecodersFor(
+    String url, {
+    required bool hardware,
+    required Iterable<String> hosts,
+    bool? android,
+  }) {
+    if ((android ?? Platform.isAndroid) && FlvLegacyHevcRelay.appliesTo(url, hostSuffixes: hosts)) {
+      return const <String>['FFmpeg', 'dav1d'];
+    }
+
+    return videoDecoders(hardware: hardware);
+  }
+
+  /// Audio output backends, or null where the engine's default is fine.
+  ///
+  /// Android goes through OpenSL first: libmdk's AAudio output crashes on
+  /// dispose, stutters on devices with a coarse clock and dies on output routing
+  /// changes, while OpenSL does not.
+  static List<String>? audioBackends({bool? android}) =>
+      (android ?? Platform.isAndroid) ? const <String>['OpenSL', 'AudioTrack', 'AAudio'] : null;
 
   /// `avio.headers` takes CRLF-terminated lines; values that would inject extra
   /// header lines are dropped.
@@ -663,7 +705,10 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     // A source without a video stream: the engine still plays audio, and there
     // is nothing to paint.
-    if (size == null || size.width <= 0 || size.height <= 0) return;
+    if (size == null || size.width <= 0 || size.height <= 0) {
+      if (size == null) await _retryGeometryOnce(player);
+      return;
+    }
 
     final textureId = await player.updateTexture(
       width: _videoConfig.maxWidth,
@@ -683,6 +728,32 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     _sizeNotifier.value = size;
 
     emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
+  }
+
+  /// Re-prepares the current source once when the engine settled its geometry as
+  /// null.
+  ///
+  /// libmdk completes `textureSize` with null when a live stream stalls or
+  /// reports invalid while still loading, and never revisits it: no texture is
+  /// created and every decoded frame is dropped while audio keeps playing. One
+  /// re-prepare gives the engine another chance; a repeated null is accepted.
+  Future<void> _retryGeometryOnce(mdk.Player player) async {
+    final url = _currentUrl;
+
+    if (_geometryRetried || url == null || audioOnly || isDisposed || _player != player) return;
+
+    _geometryRetried = true;
+
+    player.state = mdk.PlaybackState.stopped;
+    player.media = url;
+
+    final result = await player.prepare();
+
+    if (isDisposed || _player != player || result < 0) return;
+
+    player.state = mdk.PlaybackState.playing;
+
+    await _attachTexture(player);
   }
 
   /// Releases the texture and its geometry.

@@ -41,9 +41,22 @@ FvpPlayerConfig(
   proxyUrlResolver: ({required bool privateInput}) => privateInput ? '' : 'http://127.0.0.1:7897',
   enableCodec: true,
   extraProperties: const {'avformat.fflags': '+nobuffer'},
+  // The defaults cover Android's audio backends and the legacy-HEVC hosts.
+  legacyHevcFlvHosts: FvpPlayerConfig.defaultLegacyHevcFlvHosts,
+  audioBackends: FvpPlayerAdapter.audioBackends(),
 );
 FvpVideoConfig(maxWidth: 1920, maxHeight: 1080, fit: BoxFit.contain);
 ```
+
+Two platform rules are built in and can be overridden through the config:
+
+- **Audio backends.** Android asks for OpenSL first, then AudioTrack, then AAudio:
+  libmdk's AAudio output crashes on dispose, stutters on devices with a coarse
+  clock and dies on output routing changes, while OpenSL does not.
+- **Legacy HEVC FLV.** Streams from the hosts in `legacyHevcFlvHosts` decode in
+  software on Android: some hardware HEVC decoders reject codec-id-12 HEVC FLV
+  ("Unsupported input buffer") without reporting an error, so the engine would
+  keep the failing decoder and play audio only. An empty set disables the rule.
 
 ## Notes
 
