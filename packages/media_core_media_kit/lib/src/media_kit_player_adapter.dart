@@ -190,6 +190,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// [MediaKitPlayerConfig.legacyHevcFlvHosts]. See [FlvLegacyHevcRelay].
   FlvLegacyHevcRelay? _hevcRelay;
 
+  /// Loopback relay that keeps a leased FLV source (Douyu's `expire=300`)
+  /// streaming across URL renewals. The lease is attached by the application
+  /// as [PlayerSource.flvSpliceLease]; the mechanism lives in `media_core`'s
+  /// source layer. See [FlvSpliceRelay].
+  FlvSpliceRelay? _spliceRelay;
+
   // ignore: unused_field
   bool _audioOutputSuppressed = false;
 
@@ -387,9 +393,50 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _softwareDecoderNextOpen = sameSource;
 
+    await _prepareSpliceRelay(source);
     await _prepareHevcRelay(source);
     await _applyDecoderPolicy();
     await _applyProxy();
+  }
+
+  /// Routes a leased FLV source (Douyu's `expire=300`) through a loopback
+  /// relay that renews the URL underneath one continuous stream.
+  ///
+  /// The lease travels on the source ([PlayerSource.flvSpliceLease]) because it
+  /// is per source; the application attached it when it resolved the URL, and
+  /// it owns the renewer. Like the rewrite relay, this one owns the CDN
+  /// connection, so it also exempts the loopback URI from the native proxy.
+  Future<void> _prepareSpliceRelay(PlayerSource source) async {
+    await _closeSpliceRelay();
+
+    final lease = source.flvSpliceLease;
+    if (lease == null) return;
+
+    final url = source.uri.toString();
+    if (!FlvSpliceRelay.appliesTo(url, refreshAt: lease.refreshAt)) return;
+
+    try {
+      _spliceRelay = await FlvSpliceRelay.start(
+        FlvLeasedSource(source.uri, refreshAt: lease.refreshAt),
+        renew: lease.renew,
+        headers: source.hasHeaders ? source.headers!.values : const <String, String>{},
+        findProxy: (_) => _relayProxyDirective(),
+      );
+      _privateInput = true;
+    } catch (error) {
+      // A failed relay must not fail the open: fall back to the direct URL,
+      // whose expiry the player's own recovery still handles.
+      _spliceRelay = null;
+      debugPrint('FlvSpliceRelay start failed: $error');
+    }
+  }
+
+  Future<void> _closeSpliceRelay() async {
+    final relay = _spliceRelay;
+
+    _spliceRelay = null;
+
+    if (relay != null) await relay.close();
   }
 
   /// Routes [source] through a loopback FLV rewrite when the bundled libmpv
@@ -401,6 +448,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// need one also retires the previous source's relay.
   Future<void> _prepareHevcRelay(PlayerSource source) async {
     await _closeHevcRelay();
+
+    // The spliced relay already serves this source; rewriting would only see
+    // loopback bytes.
+    if (_spliceRelay != null) return;
 
     final url = source.uri.toString();
     if (!FlvLegacyHevcRelay.appliesTo(url, hostSuffixes: config.legacyHevcFlvHosts)) return;
@@ -449,8 +500,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // The relay holds the source headers and carries them upstream itself;
     // handing them to a loopback request would only leak them into the
     // native player's logs.
+    final splice = _spliceRelay;
+
     await player.open(
-      relay == null
+      splice != null
+          ? mk.Media(splice.inputUri.toString())
+          : relay == null
           ? mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null)
           : mk.Media(relay.inputUri.toString()),
       play: true,
@@ -478,6 +533,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   @override
   Future<void> onStop() async {
     await player.stop();
+    await _closeSpliceRelay();
     await _closeHevcRelay();
 
     _playingNow = false;
@@ -531,6 +587,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _subscriptions.clear();
 
+    await _closeSpliceRelay();
     await _closeHevcRelay();
 
     // Stop the frame heartbeat clock before tearing down the player.
