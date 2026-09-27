@@ -6,6 +6,8 @@ Changes to this project (the `media_core` workspace), newest first. Every packag
 
 - **Dependencies**: `media_kit` and `media_kit_video` now resolve from `Predidit/media-kit` pinned at `803c4a27`, and `fvp` from pub.dev as `^0.38.1`. The copies that used to live in `packages/` are gone. The pinned revision does **not** contain the PureLive fork patches (`VideoController.setVideoOutputEnabled`, the Android Surface/`vid` ownership, the Windows `frameRevision` signal), so no package may call them.
 - **Consequence for Android natives**: with the upstream bundles the bundled libmpv is back on FFmpeg 7.1, so legacy codec-id-12 HEVC FLV is handled by the relay in `media_core`'s source layer (`legacyHevcFlvHosts`, defaulting to the Shopee/17LIVE CDNs); the self-built FFmpeg 9 bundles are no longer shipped here.
+- **Adapter re-exports**: `media_core_media_kit` now re-exports `media_kit` and `media_kit_video`, so a host gets the engine API from its single adapter dependency (`Player` and `PlayerState` are hidden — `media_core` owns those names).
+- **No business logic in the packages**: the Douyu FLV continuation relay (URL leases and renewal) was removed from `media_core`'s source layer and from all four adapters; the legacy-HEVC rewrite relay stays, since it is a container/codec mechanism whose CDN allowlist is caller policy.
 
 ## 1.0.0
 

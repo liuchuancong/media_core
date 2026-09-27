@@ -1,3 +1,7 @@
+## Unreleased
+
+- Re-exports `package:media_kit/media_kit.dart` and `package:media_kit_video/media_kit_video.dart`, so a host that depends on this adapter alone gets the upstream API (`Media`, `Video`, `VideoController`, `PlayerConfiguration`, `MediaKit.ensureInitialized()`, …) without declaring them itself. `Player` and `PlayerState` stay hidden: `media_core` exports its own types under those names and an importer of both barrels would be ambiguous — import `package:media_kit/media_kit.dart` directly for those two.
+
 ## 0.1.0
 
 Initial release.
