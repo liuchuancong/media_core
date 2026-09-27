@@ -1,3 +1,7 @@
+## Unreleased
+
+- Re-exports the engine: `package:flv_lzc/fijkplayer.dart` (`FijkPlayer`, `FijkView`, `FijkValue`, `FijkOption`, …), so a host reaches it from its single dependency on this adapter. No name clashes with `media_core`.
+
 ## 0.1.0
 
 Initial release.

@@ -21,3 +21,14 @@ export 'package:media_core_fvp/src/fvp_video_config.dart' show FvpVideoConfig;
 export 'package:media_core_fvp/src/fvp_video_view.dart' show FvpVideoView;
 export 'package:media_core_fvp/src/fvp_adapter_factory.dart'
     show FvpAdapterFactory, kFvpPlayerBackendId, registerFvpFactory, registerFvpRegistry;
+
+// The engine this adapter is built on, re-exported so a host reaches it from
+// its single dependency on this adapter: `package:fvp/mdk.dart` is the player
+// API (`FvpPlayer`, `MediaInfo`, …) and `package:fvp/fvp.dart` the
+// registration entry points.
+//
+// `Player`, `PlaybackState` and `MediaType` are hidden because media_core
+// exports its own types under those names; an importer of both barrels would
+// be ambiguous about them.
+export 'package:fvp/mdk.dart' hide MediaType, PlaybackState, Player;
+export 'package:fvp/fvp.dart';

@@ -7,3 +7,7 @@ library;
 export 'package:media_core_better_player/src/bette_player_adapter.dart';
 export 'package:media_core_better_player/src/better_player_config.dart';
 export 'package:media_core_better_player/src/better_player_adapter_factory.dart';
+
+// The engine this adapter is built on, re-exported so a host reaches it from
+// its single dependency on this adapter. No name clashes with media_core.
+export 'package:better_player_plus/better_player_plus.dart';

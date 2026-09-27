@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flv_lzc/fijkplayer.dart';
+// The package barrel carries the engine too (`flv_lzc` is re-exported from it),
+// so this file does not import the engine directly.
 import 'package:media_core/media_core.dart';
 import 'package:media_core_ijk_player/media_core_ijk_player.dart';
 

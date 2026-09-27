@@ -1,3 +1,7 @@
+## Unreleased
+
+- Re-exports the engine: `package:better_player_plus/better_player_plus.dart` (`BetterPlayerController`, `BetterPlayerConfiguration`, `BetterPlayerDataSource`, …), so a host reaches it from its single dependency on this adapter. No name clashes with `media_core`.
+
 ## 0.1.0
 
 Initial release.
