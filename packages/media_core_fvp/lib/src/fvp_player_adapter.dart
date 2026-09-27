@@ -408,11 +408,27 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     required Iterable<String> hosts,
     bool? android,
   }) {
-    if ((android ?? Platform.isAndroid) && FlvLegacyHevcRelay.appliesTo(url, hostSuffixes: hosts)) {
+    if ((android ?? Platform.isAndroid) && _isLegacyHevcFlv(url, hosts)) {
       return const <String>['FFmpeg', 'dav1d'];
     }
 
     return videoDecoders(hardware: hardware);
+  }
+
+  /// Whether [url] is a plain FLV from one of [hosts].
+  ///
+  /// Kept local to this adapter: the list itself is the caller's configuration
+  /// ([FvpPlayerConfig.legacyHevcFlvHosts]), and nothing here reroutes the
+  /// source — this only decides which decoders to try first.
+  static bool _isLegacyHevcFlv(String url, Iterable<String> hosts) {
+    final uri = Uri.tryParse(url);
+
+    if (uri == null || !const <String>{'http', 'https'}.contains(uri.scheme.toLowerCase())) return false;
+    if (!uri.path.toLowerCase().endsWith('.flv')) return false;
+
+    final host = uri.host.toLowerCase();
+
+    return hosts.any(host.endsWith);
   }
 
   /// Audio output backends, or null where the engine's default is fine.

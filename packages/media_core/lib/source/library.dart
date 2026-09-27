@@ -16,9 +16,6 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/source/flv/flv_legacy_hevc_relay.dart';
-export 'package:media_core/source/flv/flv_legacy_hevc_rewriter.dart';
-export 'package:media_core/source/flv/flv_tag_framer.dart';
 export 'package:media_core/source/player_source.dart';
 export 'package:media_core/source/source_descriptor.dart';
 export 'package:media_core/source/source_format.dart';
