@@ -14,13 +14,22 @@ dependencies:
   media_core:
     path: ../media_core
 
-  # 本仓库自带的副本(含 PureLive 补丁, 见 media_kit_video/PURELIVE_PATCH.md):
-  # 与 workspace 成员同源, 不再从 Predidit/media-kit 拉取。
+  # Upstream Predidit/media-kit, pinned. The repository no longer carries copies
+  # of these two packages: the fork patches described in pure_live's
+  # media_kit_video/PURELIVE_PATCH.md (Android Surface/vid ownership,
+  # setVideoOutputEnabled, Windows frameRevision) are NOT in this revision, so
+  # nothing here may depend on them.
   media_kit:
-    path: ../media_kit
+    git:
+      url: https://github.com/Predidit/media-kit.git
+      ref: 803c4a27912091db6f839d48d1b984a0d9f588c7
+      path: ./media_kit
 
   media_kit_video:
-    path: ../media_kit_video
+    git:
+      url: https://github.com/Predidit/media-kit.git
+      ref: 803c4a27912091db6f839d48d1b984a0d9f588c7
+      path: ./media_kit_video
 
 dev_dependencies:
   flutter_lints: ^6.0.0

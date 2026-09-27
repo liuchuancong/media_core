@@ -417,9 +417,10 @@ packages:
   fvp:
     dependency: transitive
     description:
-      path: "packages/fvp"
-      relative: true
-    source: path
+      name: fvp
+      sha256: c6db09d88a6c84ba84fb047b4082a03987199e968273da9ad051660e18cfca55
+      url: "https://pub.dev"
+    source: hosted
     version: "0.38.1"
   glob:
     dependency: transitive
@@ -605,6 +606,24 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.0"
+  media_kit:
+    dependency: transitive
+    description:
+      path: media_kit
+      ref: "803c4a27912091db6f839d48d1b984a0d9f588c7"
+      resolved-ref: "803c4a27912091db6f839d48d1b984a0d9f588c7"
+      url: "https://github.com/Predidit/media-kit.git"
+    source: git
+    version: "1.1.11"
+  media_kit_video:
+    dependency: transitive
+    description:
+      path: media_kit_video
+      ref: "803c4a27912091db6f839d48d1b984a0d9f588c7"
+      resolved-ref: "803c4a27912091db6f839d48d1b984a0d9f588c7"
+      url: "https://github.com/Predidit/media-kit.git"
+    source: git
+    version: "1.2.5"
   meta:
     dependency: transitive
     description:

@@ -34,8 +34,8 @@ dependencies:
   media_core:
     path: ../packages/media_core
 
-  # The backend this example plays through (media_kit is vendored in this
-  # repository, so no external fork is needed).
+  # The backend this example plays through (it brings media_kit /
+  # media_kit_video in from the pinned upstream revision).
   media_core_media_kit:
     path: ../packages/media_core_media_kit
 

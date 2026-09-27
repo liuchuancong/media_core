@@ -11,8 +11,6 @@ workspace:
   - packages/media_core_logging
   - packages/media_core_memory
   - packages/media_core_media_kit
-  - packages/media_kit
-  - packages/media_kit_video
   - packages/media_core_better_player
   - packages/media_core_native
   - packages/media_core_ijk_player
@@ -42,7 +40,7 @@ dependency_overrides:
   code_assets: ^2.1.0
   hooks: ^2.2.0
 
-# media_kit and media_kit_video are workspace members (packages/media_kit,
-# packages/media_kit_video): the copied sources in this repository resolve
-# them for every package in the workspace, so no override is needed - pub
-# rejects overriding a workspace member.
+# media_kit, media_kit_video and fvp are ordinary dependencies now: the first two
+# come from Predidit/media-kit pinned in packages/media_core_media_kit, fvp from
+# pub.dev. This repository does not carry copies of them, and no override may
+# reintroduce one.

@@ -14,8 +14,11 @@ dependencies:
   media_core:
     path: ../media_core
 
-  fvp: 
-    path: ../fvp
+  # Published package. Note that pure_live vendors a stripped copy (android/ios
+  # plugin platforms only) to keep libmdk off desktop; that copy is not used
+  # here, so desktop builds resolve the published plugin and its native
+  # dependency themselves.
+  fvp: ^0.38.1
 
 dev_dependencies:
   flutter_lints: ^6.0.0

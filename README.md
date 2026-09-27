@@ -211,9 +211,12 @@ packages/
   media_core_download/              下载（队列 + 续传 + 重试）
   media_core_logging/               分级日志
   media_core_memory/                内存记账
-  media_kit/ media_kit_video/       vendored 的 media_kit（含本仓库的补丁）
 examples/example/                   示例 App：9 个可运行页面 + 14 个模块速览
 ```
+
+`media_kit`、`media_kit_video` 与 `fvp` 不随本仓库分发：前两个按 `packages/media_core_media_kit` 里固定的 ref
+从 `Predidit/media-kit` 取，`fvp` 取 pub.dev 的 `^0.38.1`。所以这里**没有** PureLive 分支的那些补丁
+（`setVideoOutputEnabled`、Windows 的 `frameRevision` 等），适配器不得依赖它们。
 
 示例应用把上面每一件都做成可点、可看的面：`player`（生命周期与操作记录）、`live`（多线路与引擎回退）、
 `feed`（上下滑）、`media-session`（自动挂载的系统媒体面）、`ui-styles`（六套风格实时切换 + 缩放 + 截图）、
