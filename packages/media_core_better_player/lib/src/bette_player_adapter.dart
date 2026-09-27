@@ -75,10 +75,6 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// are ignored — there is no meaningful playback speed for a broadcast.
   bool _liveSource = false;
 
-  /// Loopback relay that keeps a leased FLV source (Douyu's `expire=300`)
-  /// streaming across URL renewals; see [FlvSpliceRelay].
-  FlvSpliceRelay? _spliceRelay;
-
   // Value-diff state. BetterPlayerEvent only carries *transitions*;
   // position / duration / buffered change silently between events and
   // are diffed off the wrapped controller's value below.
@@ -198,16 +194,6 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   }
 
   @override
-  Future<void> onBeforeOpen(PlayerSource source) async {
-    await _closeSpliceRelay();
-
-    // A relay that cannot start leaves the source on its direct connection,
-    // whose expiry the player's own recovery still handles. Exo configures no
-    // proxy of its own, so there is nothing to exempt loopback from here.
-    _spliceRelay = await FlvSpliceRelay.prepare(source, findProxy: (_) => 'DIRECT');
-  }
-
-  @override
   Future<void> onOpen(PlayerSource source) async {
     // A new source starts a new error reporting scope.
     _lastReportedError = null;
@@ -232,19 +218,10 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         );
       }
 
-      // The relay holds the source headers and carries them upstream itself;
-      // handing them to a loopback request would only leak them into the
-      // native player's logs.
-      final relay = _spliceRelay;
-
       dataSource = BetterPlayerDataSource(
         resolved.$1,
-        relay?.inputUri.toString() ?? resolved.$2,
-        headers: relay != null
-            ? null
-            : source.hasHeaders
-            ? Map<String, String>.from(source.headers!.values)
-            : null,
+        resolved.$2,
+        headers: source.hasHeaders ? Map<String, String>.from(source.headers!.values) : null,
         // `isLive` is a source-level hint; do not hardcode it.
         liveStream: source.isLive,
       );
@@ -328,7 +305,6 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onStop() async {
-    await _closeSpliceRelay();
     await controller.pause();
 
     if (isDisposed) return;
@@ -380,8 +356,6 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onDispose() async {
-    await _closeSpliceRelay();
-
     // better_player returns early from dispose() when autoDispose is false,
     // and this adapter sets it false to own the lifecycle itself. Without
     // forceDispose the native  BetterPlayer survives — decoder, surface and
@@ -424,14 +398,6 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // ---------------------------------------------------------------------------
   // Source resolution
   // ---------------------------------------------------------------------------
-
-  Future<void> _closeSpliceRelay() async {
-    final relay = _spliceRelay;
-
-    _spliceRelay = null;
-
-    if (relay != null) await relay.close();
-  }
 
   /// Maps a [PlayerSource] onto a better_player data-source type + URI.
   ///
