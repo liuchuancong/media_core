@@ -36,8 +36,13 @@ flutter:
         package: com.mediacore.nativeprobe
         pluginClass: MediaCoreNativePlugin
       # Windows: MFTEnumEx, DXGI, GlobalMemoryStatusEx.
+      #
+      # The C API entry point, not the C++ class: Flutter's generated Windows
+      # registrant derives the symbol *and* the header name from this value, and
+      # only `include/media_core_native/media_core_native_plugin_c_api.h` is
+      # exported. Same choice as media_core_audio.
       windows:
-        pluginClass: MediaCoreNativePlugin
+        pluginClass: MediaCoreNativePluginCApi
       # Linux: /proc, /sys/class/drm, /dev/dri.
       linux:
         pluginClass: MediaCoreNativePlugin

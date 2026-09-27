@@ -449,9 +449,6 @@ LRESULT DesktopLyricWindow::WindowProc(UINT message, WPARAM wparam,
     }
 
     case WM_MOUSEMOVE: {
-      const int x = GET_X_LPARAM(lparam);
-      const int y = GET_Y_LPARAM(lparam);
-
       if (dragging_) {
         POINT cursor{};
         ::GetCursorPos(&cursor);

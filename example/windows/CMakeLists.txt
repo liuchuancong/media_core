@@ -53,6 +53,13 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# audio_service_win (0.0.3, the newest published) still includes the deprecated
+# <experimental/coroutine> header, which MSVC 14.4x and newer turn into a hard
+# error. It is a pub dependency, so the escape hatch named by that error has to
+# be set here, before the plugin targets are added below. Consumer apps that
+# build for Windows need the same definition while they depend on that package.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
