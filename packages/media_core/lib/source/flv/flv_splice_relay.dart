@@ -409,6 +409,39 @@ class FlvSpliceRelay {
     return relay;
   }
 
+  /// Starts a relay for [source] when its lease says the URL expires before the
+  /// room does, or returns null when it does not apply.
+  ///
+  /// This is the whole contract an adapter needs: call it in the open's
+  /// preparation step, open [inputUri] instead of the source URL when it
+  /// returns a relay (with no source headers — the relay carries them
+  /// upstream), exempt loopback from any proxy the adapter configures, and
+  /// close the relay with the player. A relay that fails to start leaves the
+  /// source on its direct connection, where the player's own recovery still
+  /// handles the expiry.
+  static Future<FlvSpliceRelay?> prepare(
+    PlayerSource source, {
+    required String Function(Uri) findProxy,
+  }) async {
+    final lease = source.flvSpliceLease;
+
+    if (lease == null) return null;
+
+    if (!appliesTo(source.uri.toString(), refreshAt: lease.refreshAt)) return null;
+
+    try {
+      return await start(
+        FlvLeasedSource(source.uri, refreshAt: lease.refreshAt),
+        renew: lease.renew,
+        headers: source.hasHeaders ? source.headers!.values : const <String, String>{},
+        findProxy: findProxy,
+      );
+    } catch (error) {
+      debugPrint('FlvSpliceRelay start failed: $error');
+      return null;
+    }
+  }
+
   /// Concurrent sessions (a native reconnect overlapping the old request)
   /// share one resolver call per lease.
   Future<FlvLeasedSource> _renewShared(FlvLeasedSource current) {

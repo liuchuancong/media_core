@@ -78,6 +78,10 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   bool _hasOpened = false;
   bool _openFailed = false;
   bool _privateInput = false;
+
+  /// Loopback relay that keeps a leased FLV source (Douyu's `expire=300`)
+  /// streaming across URL renewals; see [FlvSpliceRelay].
+  FlvSpliceRelay? _spliceRelay;
   bool _softwareDecoderNextOpen = false;
   bool _playingNow = false;
   bool _bufferingNow = false;
@@ -137,6 +141,14 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
   @override
   Future<void> onBeforeOpen(PlayerSource source) async {
+    await _closeSpliceRelay();
+
+    // A relay that cannot start leaves the source on its direct connection,
+    // whose expiry the player's own recovery still handles.
+    _spliceRelay = await FlvSpliceRelay.prepare(source, findProxy: (_) => _relayProxyDirective());
+
+    if (_spliceRelay != null) _privateInput = true;
+
     _liveSource = source.isLive;
     _openFailed = false;
     _geometryRetried = false;
@@ -148,18 +160,32 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   @override
   Future<void> onOpen(PlayerSource source) async {
     final url = source.uri.toString();
+
+    // The engine still decides its decoders from the CDN host, so it is created
+    // with the source URL; only the media it plays is the relay's loopback URI.
+    // The relay holds the source headers and carries them upstream itself.
+    final relay = _spliceRelay;
     final player = await _createEngine(url);
 
     _currentUrl = url;
 
     player
-      ..setProperty('avio.headers', encodeHeaders(source.hasHeaders ? source.headers!.values : const <String, String>{}))
+      ..setProperty(
+        'avio.headers',
+        encodeHeaders(
+          relay != null
+              ? const <String, String>{}
+              : source.hasHeaders
+              ? source.headers!.values
+              : const <String, String>{},
+        ),
+      )
       // FFmpeg ignores an empty `http_proxy`, which is what a loopback relay
       // wants: the relay owns the proxied connection.
       ..setProperty('avio.http_proxy', _proxyUrl())
       ..setActiveTracks(mdk.MediaType.video, audioOnly ? const <int>[] : const <int>[0])
       ..volume = _volume
-      ..media = url;
+      ..media = relay?.inputUri.toString() ?? url;
 
     _hasOpened = true;
 
@@ -229,6 +255,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
   @override
   Future<void> onStop() async {
+    await _closeSpliceRelay();
+
     _hasOpened = false;
     _playingNow = false;
     _bufferingNow = false;
@@ -317,6 +345,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
   @override
   Future<void> onDispose() async {
+    await _closeSpliceRelay();
+
     _stopPositionPolling();
 
     await _releaseTexture();
@@ -332,6 +362,28 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   // ---------------------------------------------------------------------------
 
   /// Creates the engine for [url], releasing the previous one.
+  Future<void> _closeSpliceRelay() async {
+    final relay = _spliceRelay;
+
+    _spliceRelay = null;
+
+    if (relay != null) await relay.close();
+  }
+
+  /// The `findProxy` directive for the relay's own CDN connection, derived from
+  /// the same resolver the engine uses.
+  String _relayProxyDirective() {
+    final value = config.proxyUrlResolver?.call(privateInput: false) ?? '';
+
+    if (value.isEmpty) return 'DIRECT';
+
+    final uri = Uri.tryParse(value.contains('://') ? value : 'http://$value');
+
+    if (uri == null || uri.host.isEmpty) return 'DIRECT';
+
+    return 'PROXY ${uri.host}:${uri.port}';
+  }
+
   Future<mdk.Player> _createEngine(String url) async {
     await _disposeEngine();
 

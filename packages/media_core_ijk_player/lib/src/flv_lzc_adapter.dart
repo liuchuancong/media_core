@@ -61,6 +61,10 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   bool _sourceBuffering = false;
   bool _privateInput = false;
 
+  /// Loopback relay that keeps a leased FLV source (Douyu's `expire=300`)
+  /// streaming across URL renewals; see [FlvSpliceRelay].
+  FlvSpliceRelay? _spliceRelay;
+
   /// Whether the current source is live. Rate changes and seeks are
   /// ignored for live streams — there is no rewindable timeline and no
   /// meaningful playback speed for a broadcast.
@@ -149,9 +153,25 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   bool get engineReportsOpenFailure => _player.value.state == FijkState.error;
 
   @override
+  Future<void> onBeforeOpen(PlayerSource source) async {
+    await _closeSpliceRelay();
+
+    // A relay that cannot start leaves the source on its direct connection,
+    // whose expiry the player's own recovery still handles.
+    _spliceRelay = await FlvSpliceRelay.prepare(source, findProxy: (_) => _relayProxyDirective());
+
+    if (_spliceRelay != null) _privateInput = true;
+  }
+
+  @override
   Future<void> onOpen(PlayerSource source) async {
     final privateInput = _privateInput;
     _privateInput = false;
+
+    // The relay holds the source headers and carries them upstream itself;
+    // handing them to a loopback request would only leak them into the
+    // native player's logs.
+    final relay = _spliceRelay;
 
     _lastPosition = Duration.zero;
     _lastDuration = Duration.zero;
@@ -178,7 +198,11 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     await FijkHelper.applyConfig(
       _player,
       config,
-      sourceHeaders: source.hasHeaders ? Map<String, String>.from(source.headers!.values) : null,
+      sourceHeaders: relay != null
+          ? null
+          : source.hasHeaders
+          ? Map<String, String>.from(source.headers!.values)
+          : null,
       proxyUrl: proxyUrl,
     );
     if (isDisposed) return;
@@ -190,7 +214,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     }
     if (isDisposed) return;
 
-    await _player.setDataSource(source.uri.toString(), autoPlay: false);
+    await _player.setDataSource(relay?.inputUri.toString() ?? source.uri.toString(), autoPlay: false);
     if (isDisposed) return;
 
     await _player.start();
@@ -207,6 +231,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     _sourceBuffering = false;
     _playingNow = false;
     _completedNow = false;
+    await _closeSpliceRelay();
     await _player.stop();
   }
 
@@ -254,6 +279,8 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   Future<void> onDispose() async {
     _player.removeListener(_onPlayerValue);
 
+    await _closeSpliceRelay();
+
     await _positionSubscription?.cancel();
     _positionSubscription = null;
 
@@ -270,6 +297,28 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // ---------------------------------------------------------------------------
   // Extensions
   // ---------------------------------------------------------------------------
+
+  Future<void> _closeSpliceRelay() async {
+    final relay = _spliceRelay;
+
+    _spliceRelay = null;
+
+    if (relay != null) await relay.close();
+  }
+
+  /// The `findProxy` directive for the relay's own CDN connection, derived from
+  /// the same resolver the native player uses.
+  String _relayProxyDirective() {
+    final value = config.proxyUrlResolver?.call(privateInput: false) ?? config.proxyUrl;
+
+    if (value.isEmpty) return 'DIRECT';
+
+    final uri = Uri.tryParse(value.contains('://') ? value : 'http://$value');
+
+    if (uri == null || uri.host.isEmpty) return 'DIRECT';
+
+    return 'PROXY ${uri.host}:${uri.port}';
+  }
 
   /// Marks the next open as an app-owned loopback input so
   /// [proxyUrlResolver] can decide whether to bypass the proxy.

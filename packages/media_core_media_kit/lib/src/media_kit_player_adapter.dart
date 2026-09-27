@@ -409,26 +409,11 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   Future<void> _prepareSpliceRelay(PlayerSource source) async {
     await _closeSpliceRelay();
 
-    final lease = source.flvSpliceLease;
-    if (lease == null) return;
+    // A relay that cannot start leaves the source on its direct connection,
+    // whose expiry the player's own recovery still handles.
+    _spliceRelay = await FlvSpliceRelay.prepare(source, findProxy: (_) => _relayProxyDirective());
 
-    final url = source.uri.toString();
-    if (!FlvSpliceRelay.appliesTo(url, refreshAt: lease.refreshAt)) return;
-
-    try {
-      _spliceRelay = await FlvSpliceRelay.start(
-        FlvLeasedSource(source.uri, refreshAt: lease.refreshAt),
-        renew: lease.renew,
-        headers: source.hasHeaders ? source.headers!.values : const <String, String>{},
-        findProxy: (_) => _relayProxyDirective(),
-      );
-      _privateInput = true;
-    } catch (error) {
-      // A failed relay must not fail the open: fall back to the direct URL,
-      // whose expiry the player's own recovery still handles.
-      _spliceRelay = null;
-      debugPrint('FlvSpliceRelay start failed: $error');
-    }
+    if (_spliceRelay != null) _privateInput = true;
   }
 
   Future<void> _closeSpliceRelay() async {
