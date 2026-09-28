@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:fvp/mdk.dart' as mdk;
 import 'package:media_core/media_core.dart';
@@ -476,7 +477,7 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
         // tries the next decoder in the list, so these are informational:
         // MediaStatus.invalid is the terminal signal.
         if (event.error < 0) {
-          debugPrint('fvp: ${event.category} ${event.error} ${event.detail}');
+          MediaCoreLog.debug(LogCategory.renderer, 'engine event: ${event.category} ${event.error} ${event.detail}');
         }
       }),
     );
@@ -788,7 +789,7 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     try {
       await player.updateTexture(width: -1).timeout(_geometryTimeout);
     } on TimeoutException {
-      debugPrint('fvp: releasing the video texture timed out');
+      MediaCoreLog.warning(LogCategory.renderer, 'releasing the video texture timed out');
     }
   }
 

@@ -307,7 +307,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       return bytes.isEmpty ? null : bytes;
     } catch (error) {
-      debugPrint('[$runtimeType] captureFrame failed: $error');
+      MediaCoreLog.warning(LogCategory.renderer, 'captureFrame failed: \$error', error: error);
 
       return null;
     }
