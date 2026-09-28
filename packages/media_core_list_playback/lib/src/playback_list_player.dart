@@ -1,4 +1,4 @@
-import 'package:media_core/media_core.dart' show PlayerHandle, PlayerSource;
+import 'package:media_core/media_core.dart' show PlayerHandle, PlayerHandlePlayback, PlayerSource;
 
 /// The player a list drives.
 ///
