@@ -19,6 +19,7 @@ library;
 export 'package:media_core/task/player_task.dart';
 export 'package:media_core/task/task_cancel_token.dart';
 export 'package:media_core/task/task_context.dart';
+export 'package:media_core/task/task_errors.dart';
 export 'package:media_core/task/task_id.dart';
 export 'package:media_core/task/task_json_converters.dart';
 export 'package:media_core/task/task_manager.dart';
