@@ -4,7 +4,7 @@
 /// are not supported: better_player_plus exposes no asset data-source type.
 library;
 
-export 'package:media_core_better_player/src/bette_player_adapter.dart';
+export 'package:media_core_better_player/src/better_player_adapter.dart';
 export 'package:media_core_better_player/src/better_player_config.dart';
 export 'package:media_core_better_player/src/better_player_adapter_factory.dart';
 
