@@ -23,3 +23,4 @@ export 'package:media_core_multiview/src/multiview_cell.dart';
 export 'package:media_core_multiview/src/multiview_config.dart';
 export 'package:media_core_multiview/src/multiview_controller.dart';
 export 'package:media_core_multiview/src/multiview_layout.dart';
+export 'package:media_core_multiview/src/multiview_snapshot.dart';
