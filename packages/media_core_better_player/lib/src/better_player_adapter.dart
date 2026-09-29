@@ -257,6 +257,18 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       if (size != null && size.width > 0 && size.height > 0) {
         emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
       }
+
+      // A progressive source (mp4 over https) finishes initialization inside
+      // setupDataSource, so its duration is already present in the value
+      // above. Seeding the diff latch with it means _onValueChange can never
+      // observe a duration CHANGE, and emitDurationChanged would never fire
+      // for the whole playback. The gate is open inside onOpen, so the
+      // known duration is emitted here — mirroring the size handling above.
+      final duration = value.duration;
+
+      if (duration != null && duration > Duration.zero) {
+        emitDurationChanged(duration);
+      }
     }
 
     if (isDisposed) return;
