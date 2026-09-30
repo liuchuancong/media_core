@@ -120,6 +120,17 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     }
   }
 
+  /// Resizes the native render target without recreating the player.
+  ///
+  /// Pass null to return to the intrinsic decoded size. Delegates to the
+  /// video controller's native resize; the surface picks the change up in
+  /// place.
+  Future<void> setRenderTargetSize({int? width, int? height}) async {
+    final controller = _videoController;
+    if (controller == null) return;
+    await controller.setSize(width: width, height: height);
+  }
+
   // Convenience accessors — kept for callers that used the old fields.
   MediaKitProxyUrlResolver? get proxyUrlResolver => config.proxyUrlResolver;
   set proxyUrlResolver(MediaKitProxyUrlResolver? value) => config = config.copyWith(proxyUrlResolver: value);
