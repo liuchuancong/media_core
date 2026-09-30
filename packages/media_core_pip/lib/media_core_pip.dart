@@ -19,3 +19,4 @@ export 'package:media_core_pip/src/pip_driver.dart';
 export 'package:media_core_pip/src/pip_window.dart';
 export 'package:media_core_pip/src/system_pip.dart';
 export 'package:media_core_pip/src/window_manager_pip_window.dart';
+export 'package:media_core_pip/src/display_pip_window.dart';
