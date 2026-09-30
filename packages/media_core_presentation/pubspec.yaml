@@ -15,7 +15,7 @@ dependencies:
     path: ../media_core
 
   # Desktop fullscreen / always-on-top floating window (Windows, macOS, Linux)
-  window_manager: ^0.5.1
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_lints: ^6.0.0
