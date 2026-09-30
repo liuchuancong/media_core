@@ -26,8 +26,6 @@ export 'package:media_core_media_kit/src/media_kit_video_view.dart';
 // Public utils: settings UIs, diagnostics, tuning.
 export 'package:media_core_media_kit/src/utils/player_consts.dart' show PlayerConsts;
 export 'package:media_core_media_kit/src/utils/mpv_platform_profile.dart' show MpvPlatformProfile;
-export 'package:media_core_media_kit/src/utils/mpv_decode_policy.dart' show MpvDecodePolicy;
-export 'package:media_core_media_kit/src/utils/live_buffer_policy.dart' show LiveBufferPolicy;
 
 // The upstream packages this adapter is built on, re-exported so a host gets
 // them from its single dependency on this adapter.

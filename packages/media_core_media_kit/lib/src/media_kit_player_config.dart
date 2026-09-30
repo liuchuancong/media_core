@@ -24,8 +24,6 @@ const String kMediaKitCustomInputKey = 'mediaCore.customInput';
 /// ignored elsewhere, so a value persisted on one device cannot corrupt
 /// the picture on another:
 ///
-/// - [playerCompatMode] — Android only. Forces `vo=mediacodec_embed`
-///   and `hwdec=mediacodec`, bypassing the SurfaceProducer path.
 /// - [enableRtxVsr] — Windows only. Enables RTX Video Super Resolution
 ///   through `d3d11vpp`.
 ///
@@ -35,9 +33,8 @@ final class MediaKitPlayerConfig {
     this.proxyUrlResolver,
     this.customInputOpener,
     this.enableCodec = true,
-    this.playerCompatMode = false,
     this.customPlayerOutput = false,
-    this.videoHardwareDecoder = 'auto-safe',
+    this.videoHardwareDecoder,
     this.videoOutputDriver = 'auto',
     this.audioOutputDriver,
     this.enableRtxVsr = false,
@@ -59,24 +56,19 @@ final class MediaKitPlayerConfig {
   /// error, so the recovery ladder can react.
   final MediaKitCustomInputOpener? customInputOpener;
 
-  /// Master hardware-decoding switch when no expert output is selected.
-  ///
-  /// Ignored on macOS — the platform profile pins `hwdec=no`.
+  /// The host's hardware-decoding switch, used when it declared no explicit
+  /// decoder.
   final bool enableCodec;
-
-  /// Android-only expert switch.
-  ///
-  /// Silently ignored on every other platform.
-  final bool playerCompatMode;
 
   /// Uses [videoOutputDriver] / [videoHardwareDecoder] verbatim
   /// (still passed through the platform normaliser).
   final bool customPlayerOutput;
 
-  /// User-picked hardware decoder (used when [customPlayerOutput]).
+  /// Hardware decoder the host picked, or null to leave the adapter's own
+  /// choice alone.
   ///
-  /// Normalised per-platform; unsupported values fall back to `auto`.
-  final String videoHardwareDecoder;
+  /// Normalised per-platform before it is written.
+  final String? videoHardwareDecoder;
 
   /// User-picked video output driver (used when [customPlayerOutput]).
   ///
@@ -125,26 +117,16 @@ final class MediaKitPlayerConfig {
   /// Useful for performance reasons.
   final int? videoOutputHeight;
 
-  /// Android only. Whether to use Flutter's `SurfaceProducer` API.
-  ///
-  /// When `true`, the Android implementation uses the newer
-  /// `SurfaceProducer` code path. When `false`, it falls back to the
-  /// legacy `SurfaceTexture` path, which is only effective with the
-  /// Android Skia backend.
-  ///
-  /// Silently ignored on every other platform.
-  ///
-  /// Forced to `false` when [playerCompatMode] is on, because compat
-  /// mode targets the legacy `vo=mediacodec_embed` path.
-  final bool enableAndroidSurfaceProducer;
-
   /// Whether to attach `android.view.Surface` after video parameters
   /// are known.
   ///
   /// libmpv's own default is `true` when `vo == gpu`, `false` otherwise.
   /// Set this only when you need to override that heuristic.
   ///
-  /// Forced to `false` when [playerCompatMode] is on.
+  /// Host flag, passed to the engine as declared.
+  final bool enableAndroidSurfaceProducer;
+
+  /// Used as declared by the host.
   final bool androidAttachSurfaceAfterVideoParameters;
 
   static const Object _noChange = Object();
@@ -152,27 +134,25 @@ final class MediaKitPlayerConfig {
   MediaKitPlayerConfig copyWith({
     Object? proxyUrlResolver = _noChange,
     bool? enableCodec,
-    bool? playerCompatMode,
     bool? customPlayerOutput,
     String? videoHardwareDecoder,
     String? videoOutputDriver,
     Object? audioOutputDriver = _noChange,
     bool? enableRtxVsr,
+    bool? enableAndroidSurfaceProducer,
+    bool? androidAttachSurfaceAfterVideoParameters,
     Map<String, String>? extraProperties,
 
     // VideoControllerConfiguration passthrough.
     double? videoScale,
     Object? videoOutputWidth = _noChange,
     Object? videoOutputHeight = _noChange,
-    bool? enableAndroidSurfaceProducer,
-    bool? androidAttachSurfaceAfterVideoParameters,
   }) {
     return MediaKitPlayerConfig(
       proxyUrlResolver: identical(proxyUrlResolver, _noChange)
           ? this.proxyUrlResolver
           : proxyUrlResolver as MediaKitProxyUrlResolver?,
       enableCodec: enableCodec ?? this.enableCodec,
-      playerCompatMode: playerCompatMode ?? this.playerCompatMode,
       customPlayerOutput: customPlayerOutput ?? this.customPlayerOutput,
       videoHardwareDecoder: videoHardwareDecoder ?? this.videoHardwareDecoder,
       videoOutputDriver: videoOutputDriver ?? this.videoOutputDriver,

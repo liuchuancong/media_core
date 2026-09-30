@@ -11,74 +11,25 @@ extension _MediaKitEngineConfig on MediaKitPlayerAdapter {
   ///
   /// Precedence, top to bottom:
   ///
-  /// 1. **macOS** — always `no`. The bundled libmpv's VideoToolbox path
-  ///    is unstable with the Flutter texture surface, and the platform
-  ///    profile pins this regardless of what was persisted on another
-  ///    device.
-  /// 2. **Android compat mode** — `mediacodec` (see [_isCompatMode]).
-  /// 3. **Windows RTX VSR** — `d3d11va`, required by the filter chain.
-  /// 4. **Expert output** — the user-picked decoder, normalised for
-  ///    the current platform.
-  /// 5. **Default** — `auto-safe` when [enableCodec] is on, else `no`.
+  /// 1. **Host pick** — the decoder the host declared, normalised for the
+  ///    current platform.
+  /// 2. **Default** — `auto-safe` when [enableCodec] is on, else `no`.
   void _resolvePreferredHardwareDecoder() {
     final platform = defaultTargetPlatform;
 
-    if (platform == TargetPlatform.macOS) {
-      _preferredHardwareDecoder = 'no';
-      return;
-    }
-
-    if (_isCompatMode) {
-      _preferredHardwareDecoder = 'mediacodec';
-      return;
-    }
-
-    // RTX VSR requires the D3D11VA decode path; it takes precedence
-    // over a user pick because the filter chain cannot run otherwise.
-    if (platform == TargetPlatform.windows && enableRtxVsr) {
-      _preferredHardwareDecoder = 'd3d11va';
-      return;
-    }
-
-    if (customPlayerOutput) {
-      _preferredHardwareDecoder = MpvPlatformProfile.normalizeHardwareDecoderForPlatform(
-        videoHardwareDecoder,
-        platform,
-      );
+    // The decoder is the host's call: its pick, or its on/off switch. The
+    // adapter never picks a tuning value on its own.
+    final hostPick = videoHardwareDecoder;
+    if (hostPick != null && hostPick.isNotEmpty) {
+      _preferredHardwareDecoder = MpvPlatformProfile.normalizeHardwareDecoderForPlatform(hostPick, platform);
       return;
     }
 
     _preferredHardwareDecoder = enableCodec ? 'auto-safe' : 'no';
   }
 
-  /// Builds the video controller.
-  ///
-  /// The three-way branch is platform-gated: compat mode only ever
-  /// fires on Android, RTX VSR only ever fires on Windows, and the
-  /// driver / decoder strings always pass through the platform
-  /// normaliser so a persisted Android choice cannot leak into an
-  /// iOS build.
-  ///
-  /// The `scale` / `width` / `height` / `SurfaceProducer` fields come
-  /// straight from [MediaKitPlayerConfig]; they are ignored by the
-  /// compat-mode branch, which intentionally pins the legacy surface
-  /// path.
   mkv.VideoController _buildVideoController() {
     final platform = defaultTargetPlatform;
-
-    if (_isCompatMode) {
-      return mkv.VideoController(
-        player,
-        configuration: const mkv.VideoControllerConfiguration(
-          vo: 'mediacodec_embed',
-          hwdec: 'mediacodec',
-          enableAndroidSurfaceProducer: false,
-          androidAttachSurfaceAfterVideoParameters: false,
-        ),
-      );
-    }
-
-    final isMacOS = platform == TargetPlatform.macOS;
 
     if (customPlayerOutput) {
       final normalizedVideoOutput = MpvPlatformProfile.normalizeVideoOutputDriverForPlatform(
@@ -86,9 +37,10 @@ extension _MediaKitEngineConfig on MediaKitPlayerAdapter {
         platform,
       );
 
-      final normalizedHardwareDecoder = isMacOS
-          ? 'no'
-          : MpvPlatformProfile.normalizeHardwareDecoderForPlatform(videoHardwareDecoder, platform);
+      final hostPick = videoHardwareDecoder;
+      final normalizedHardwareDecoder = hostPick == null || hostPick.isEmpty
+          ? null
+          : MpvPlatformProfile.normalizeHardwareDecoderForPlatform(hostPick, platform);
 
       return mkv.VideoController(
         player,
@@ -98,129 +50,71 @@ extension _MediaKitEngineConfig on MediaKitPlayerAdapter {
           scale: config.videoScale,
           width: config.videoOutputWidth,
           height: config.videoOutputHeight,
-          enableHardwareAcceleration: !isMacOS && normalizedHardwareDecoder != 'no',
-          enableAndroidSurfaceProducer: config.enableAndroidSurfaceProducer,
+          enableHardwareAcceleration: normalizedHardwareDecoder != 'no',
           androidAttachSurfaceAfterVideoParameters: config.androidAttachSurfaceAfterVideoParameters,
         ),
       );
     }
 
+    // No preset: the host's own flags and picks, or mpv's defaults.
     return mkv.VideoController(
       player,
       configuration: mkv.VideoControllerConfiguration(
         scale: config.videoScale,
         width: config.videoOutputWidth,
         height: config.videoOutputHeight,
-        enableHardwareAcceleration: isMacOS ? false : enableCodec,
-        hwdec: isMacOS ? 'no' : null,
-        enableAndroidSurfaceProducer: config.enableAndroidSurfaceProducer,
+        enableHardwareAcceleration: enableCodec,
+        hwdec: videoHardwareDecoder,
         androidAttachSurfaceAfterVideoParameters: config.androidAttachSurfaceAfterVideoParameters,
       ),
     );
   }
 
-  /// Applies the native live-stream property contract to mpv.
+  /// Applies the properties the host declared, and nothing else.
   ///
-  /// Platform-specific blocks are fenced by explicit
-  /// [defaultTargetPlatform] checks so cross-platform settings never
-  /// bleed.
-  Future<void> _applyNativeLiveProperties() async {
+  /// Every tuning value a live-stream host wants (demuxer probes, buffer
+  /// budget, timeouts, decoder fallbacks, platform quirks) belongs to that
+  /// host: it travels in [MediaKitPlayerConfig.extraProperties] and is written
+  /// verbatim, last. The adapter itself only applies
+  /// what the host set through its own config fields.
+  Future<void> _applyHostDeclaredProperties() async {
     if (_player?.platform == null) return;
 
     final platform = defaultTargetPlatform;
-    final profile = _device;
 
-    await _setNativeProperty(
-      'protocol_whitelist',
-      'httpproxy,udp,rtp,tcp,tls,data,file,http,https,crypto,rtmp,rtmps,rtsp,srt',
-    );
+    // A host-picked decoder wins; a requested software fallback forces "no"
+    // for this open so the retry can prove whether software decoding helps.
+    final forcedSoftware = _softwareDecoderNextOpen;
+    _softwareDecoderNextOpen = false;
 
-    await _setNativeProperty('demuxer-lavf-probesize', '2097152');
-
-    await _setNativeProperty('demuxer-lavf-analyzeduration', '2');
-
-    await LiveBufferPolicy.apply(_setNativeProperty, profile: profile);
-
-    await _setNativeProperty('network-timeout', '15');
-
-    // Drop a failing hw decoder after one bad frame.
-    await _setNativeProperty('hwdec-software-fallback', '1');
-
-    await _applyDecodeCostPolicy(
-      MpvDecodePolicy.resolve(
-        preferredHwdec: _preferredHardwareDecoder,
-        codec: _videoCodec,
-        width: _width ?? 0,
-        height: _height ?? 0,
-        device: _device,
-        codecs: _codecs,
-      ),
-    );
-
-    if (profile.isLowEnd) {
-      await _setNativeProperty('audio-buffer', '0.4');
-
-      await _setNativeProperty(
-        'stream-lavf-o',
-        'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,'
-            'reconnect_delay_max=2',
-      );
-    }
-
-    // --- Android-only: mediacodec direct surface rendering ---------------
-    if (platform == TargetPlatform.android) {
-      await _setNativeProperty('mediacodec-surface-iostream', 'yes');
-
-      await _setNativeProperty('mediacodec-embed-surface-landscape', 'yes');
-    }
-
-    // --- macOS-only: force software decoding -----------------------------
-    if (platform == TargetPlatform.macOS) {
+    if (forcedSoftware) {
       await _setNativeProperty('hwdec', 'no');
+    } else if (videoHardwareDecoder != null && videoHardwareDecoder!.isNotEmpty) {
+      final normalized = MpvPlatformProfile.normalizeHardwareDecoderForPlatform(videoHardwareDecoder!, platform);
+      await _setNativeProperty('hwdec', normalized);
     }
 
-    // --- Windows-only: optional RTX Video Super Resolution ---------------
-    if (platform == TargetPlatform.windows && enableRtxVsr) {
-      await _setNativeProperty('hwdec', 'd3d11va');
-
-      await _setNativeProperty('vf', 'd3d11vpp=scale=2:scaling-mode=nvidia');
-    }
-
-    // --- Audio output driver (per-platform default) ----------------------
-    final audioOutput = MpvPlatformProfile.effectiveAudioOutputDriverForPlatform(
-      customOutput: customPlayerOutput,
-      configuredDriver: audioOutputDriver ?? 'auto',
-      platform: platform,
-    );
-
-    if (audioOutput != null) {
+    final audioOutput = audioOutputDriver;
+    if (audioOutput != null && audioOutput.isNotEmpty && audioOutput != 'auto') {
       await _setNativeProperty('ao', audioOutput);
     }
 
-    // --- Escape hatch: user-supplied properties applied last -------------
+    if (platform == TargetPlatform.windows && enableRtxVsr) {
+      await _setNativeProperty('hwdec', 'd3d11va');
+      await _setNativeProperty('vf', 'd3d11vpp=scale=2:scaling-mode=nvidia');
+    }
+
+    final videoOutput = videoOutputDriver;
+    if (customPlayerOutput && videoOutput.isNotEmpty && videoOutput != 'auto') {
+      await _setNativeProperty(
+        'vo',
+        MpvPlatformProfile.normalizeVideoOutputDriverForPlatform(videoOutput, platform),
+      );
+    }
+
     for (final entry in config.extraProperties.entries) {
       await _setNativeProperty(entry.key, entry.value);
     }
-  }
-
-  Future<void> _applyDecodeCostPolicy(MpvDecodePolicy policy) async {
-    final threads = policy.threads;
-
-    if (threads != null) {
-      await _setNativeProperty('vd-lavc-threads', threads.toString());
-    }
-
-    if (policy.tuneForSmallDevice) {
-      await _setNativeProperty('vd-lavc-o', 'lowres=1');
-
-      await _setNativeProperty('vd-lavc-skiploopfilter', 'nonref');
-
-      return;
-    }
-
-    await _setNativeProperty('vd-lavc-o', 'lowres=0');
-
-    await _setNativeProperty('vd-lavc-skiploopfilter', 'default');
   }
 
   Future<void> _setNativeProperty(String name, String value) async {
@@ -237,30 +131,9 @@ extension _MediaKitEngineConfig on MediaKitPlayerAdapter {
   }
 
   Future<void> _applyDecoderPolicy() async {
-    final forced = _softwareDecoderNextOpen;
-
-    _softwareDecoderNextOpen = false;
-
-    final policy = MpvDecodePolicy.resolve(
-      preferredHwdec: _preferredHardwareDecoder,
-      forceSoftware: forced,
-      codec: _videoCodec,
-      width: _width ?? 0,
-      height: _height ?? 0,
-      device: _device,
-      codecs: _codecs,
-    );
-
-    await _setNativeProperty('hwdec', policy.hwdec);
-
-    await _applyDecodeCostPolicy(policy);
-
-    MediaCoreLog.debug(
-      LogCategory.renderer,
-      'decode policy: ${policy.rationale} '
-      '(hwdec=${policy.hwdec}, codec=$_videoCodec, threads=${policy.threads}, '
-      'lowEnd=${_device.isLowEnd}, deviceKnown=${_device.isKnown})',
-    );
+    // The decoder a host picked travels in its config; a software fallback
+    // requested by the host is applied by _applyHostDeclaredProperties on the
+    // next open. Nothing here decides a tuning value on the host's behalf.
   }
 
   Future<void> _applyProxy() async {

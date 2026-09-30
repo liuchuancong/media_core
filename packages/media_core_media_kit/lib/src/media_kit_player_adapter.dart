@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -25,7 +24,7 @@ export 'package:media_core_media_kit/src/media_kit_video_config.dart' show Media
 /// everywhere else so a setting that was persisted on one device
 /// cannot corrupt the picture on another:
 ///
-/// - [MediaKitPlayerConfig.playerCompatMode] — Android only. Forces
+/// - the host's own `vo` / `hwdec` picks via `extraProperties` / config —
 ///   `vo=mediacodec_embed` and `hwdec=mediacodec`, bypassing the
 ///   SurfaceProducer path.
 /// - [MediaKitPlayerConfig.enableRtxVsr] — Windows only. Enables the
@@ -108,7 +107,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   ///
   /// Assigning a new value takes effect on the next open. Tweak
   /// individual entries through the convenience setters below
-  /// (`enableCodec`, `playerCompatMode`, ...).
+  /// (`enableCodec`, `customPlayerOutput`, ...).
   MediaKitPlayerConfig config;
 
   MediaKitVideoConfig _videoConfig;
@@ -138,14 +137,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   bool get enableCodec => config.enableCodec;
   set enableCodec(bool v) => config = config.copyWith(enableCodec: v);
 
-  bool get playerCompatMode => config.playerCompatMode;
-  set playerCompatMode(bool v) => config = config.copyWith(playerCompatMode: v);
 
   bool get customPlayerOutput => config.customPlayerOutput;
   set customPlayerOutput(bool v) => config = config.copyWith(customPlayerOutput: v);
 
-  String get videoHardwareDecoder => config.videoHardwareDecoder;
-  set videoHardwareDecoder(String v) => config = config.copyWith(videoHardwareDecoder: v);
+  String? get videoHardwareDecoder => config.videoHardwareDecoder;
+  set videoHardwareDecoder(String? v) => config = config.copyWith(videoHardwareDecoder: v);
 
   String get videoOutputDriver => config.videoOutputDriver;
   set videoOutputDriver(String v) => config = config.copyWith(videoOutputDriver: v);
@@ -165,9 +162,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   int? get videoOutputHeight => config.videoOutputHeight;
   set videoOutputHeight(int? v) => config = config.copyWith(videoOutputHeight: v);
-
-  bool get enableAndroidSurfaceProducer => config.enableAndroidSurfaceProducer;
-  set enableAndroidSurfaceProducer(bool v) => config = config.copyWith(enableAndroidSurfaceProducer: v);
 
   bool get androidAttachSurfaceAfterVideoParameters => config.androidAttachSurfaceAfterVideoParameters;
   set androidAttachSurfaceAfterVideoParameters(bool v) =>
@@ -189,19 +183,17 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   ///
   /// Falls back to the process's own CPU count when nothing was probed, which
   /// is the one device fact a Dart process can read by itself.
-  PlatformDeviceProfile _device = PlatformDeviceProfile.unknown;
 
   /// What the device can decode, and in hardware or not.
   ///
-  /// Unknown when the host attached no provider; [MpvDecodePolicy] then keeps
-  /// the engine's own behaviour instead of guessing.
+  /// Unknown when the host attached no provider; the adapter then leaves the
+  /// engine's own behaviour alone instead of guessing.
   PlatformCodecCapabilities _codecs = PlatformCodecCapabilities.unknown;
 
   /// Codec of the video track mpv reported for the current source.
   ///
   /// The container says nothing about this: an MP4 carries H.264, HEVC or AV1,
   /// and which decoder to reach for depends on the codec.
-  String? _videoCodec;
 
   // ignore: unused_field
   bool _audioOutputSuppressed = false;
@@ -338,7 +330,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   String _preferredHardwareDecoder = 'auto-safe';
 
   /// Whether the current platform drives the compat-mode surface.
-  bool get _isCompatMode => playerCompatMode && defaultTargetPlatform == TargetPlatform.android;
 
   /// Whether the current platform supports the video frame progress
   /// heartbeat implementation.
@@ -365,7 +356,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // native property contract are built, because both branch on it. It now
     // arrives with the adapter context: the kernel stamps what the platform
     // probe answered into every session.
-    _device = _resolveDevice(context);
     _codecs = context.codecs;
 
     _resolvePreferredHardwareDecoder();
@@ -379,7 +369,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       _observeDecodedFrames();
     }
 
-    await _applyNativeLiveProperties();
+    await _applyHostDeclaredProperties();
   }
 
   @override
@@ -656,7 +646,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         continue;
       }
 
-      _videoCodec = track.codec;
 
       final hardware = _codecs.canDecodeInHardware(codec, width: _width ?? 0, height: _height ?? 0);
 
@@ -673,29 +662,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       }
 
       return;
-    }
-  }
-
-  /// The device profile this adapter works from.
-  ///
-  /// A probed device is used as-is. Without one, the process's own CPU count is
-  /// applied to the unknown profile: that count is real even when nobody asked
-  /// the platform, and it is what sizes the software decoder's thread pool.
-  PlatformDeviceProfile _resolveDevice(PlayerAdapterContext context) {
-    final device = context.device;
-
-    if (device.isKnown) {
-      return device;
-    }
-
-    return device.copyWith(cpuCores: _cpuCores(), reported: true);
-  }
-
-  int _cpuCores() {
-    try {
-      return Platform.numberOfProcessors;
-    } catch (_) {
-      return PlatformDeviceProfile.unknown.cpuCores;
     }
   }
 
