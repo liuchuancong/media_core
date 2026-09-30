@@ -42,6 +42,7 @@ extension _MultiviewControllerInternals on MultiviewController {
     _emit();
 
     try {
+      await _renewSourceIfExpired(cell);
       final resolved = await _resolveForCell(cell);
       final handle = await _handleFor(cell.index);
       await handle.open(resolved.source, autoPlay: true);
@@ -76,6 +77,24 @@ extension _MultiviewControllerInternals on MultiviewController {
     }
   }
 
+  Future<void> _renewSourceIfExpired(MultiviewCell cell) async {
+    final source = cell.source;
+    if (source == null) {
+      return;
+    }
+    if (!source.isExpired(_clock())) {
+      return;
+    }
+    final renew = source.renew;
+    if (renew == null) {
+      return;
+    }
+    final renewed = await renew(source);
+    if (renewed != null) {
+      cell.source = renewed;
+    }
+  }
+
   Future<MultiviewCellSource> _resolveForCell(MultiviewCell cell) async {
     final resolver = qualityResolver;
     final source = cell.source!;
@@ -106,6 +125,7 @@ extension _MultiviewControllerInternals on MultiviewController {
     final subscription = _progressSubscriptions.remove(index);
     await subscription?.cancel();
     _progress.remove(index);
+    _cellVolumes.remove(index);
     final handle = _handles.remove(index);
     if (handle == null) {
       return;
@@ -147,7 +167,7 @@ extension _MultiviewControllerInternals on MultiviewController {
         continue;
       }
 
-      final desired = switch (_config.audioMode) {
+      final desired = _cellVolumes[cell.index] ?? switch (_config.audioMode) {
         MultiviewAudioMode.muted => 0.0,
         MultiviewAudioMode.mixed => _config.focusedVolume,
         MultiviewAudioMode.exclusive =>

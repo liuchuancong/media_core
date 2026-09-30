@@ -12,6 +12,9 @@ enum MultiviewCellStatus {
   /// Playing.
   playing,
 
+  /// Paused by the host; the stall watchdog skips it.
+  paused,
+
   /// The room is known to be offline.
   ///
   /// A business state, not a failure: the platform said the stream is not
@@ -25,6 +28,12 @@ enum MultiviewCellStatus {
   /// Failed; no further automatic attempts.
   failed,
 }
+
+/// Produces a fresh source for one whose signed URL has expired.
+///
+/// Returning null keeps the current source; throwing fails the open.
+typedef MultiviewSourceRenew = Future<MultiviewCellSource?> Function(MultiviewCellSource current);
+
 
 /// Why a cell failed.
 enum MultiviewCellFailureKind {
@@ -62,6 +71,8 @@ final class MultiviewCellSource {
     this.roomId,
     this.qualityLabel,
     this.isLive = true,
+    this.expiresAt,
+    this.renew,
   });
 
   /// Media to open.
@@ -78,6 +89,18 @@ final class MultiviewCellSource {
 
   /// Whether the room is live. `false` marks the cell [MultiviewCellStatus.offline].
   final bool isLive;
+
+  /// When the source's URL stops being valid, for signed URLs.
+  final DateTime? expiresAt;
+
+  /// Produces a fresh source once [expiresAt] has passed.
+  ///
+  /// The wall invokes it before every (re)open of an expired source: stall
+  /// restarts, quality switches and playlist advances all go through it.
+  /// Returning null keeps the current source; throwing fails the open.
+  final MultiviewSourceRenew? renew;
+
+  bool isExpired(DateTime now) => expiresAt != null && !now.isBefore(expiresAt!);
 
   @override
   String toString() => 'MultiviewCellSource(${title ?? roomId ?? source.uri})';
@@ -137,6 +160,8 @@ final class MultiviewCell {
   bool get isEmpty => status == MultiviewCellStatus.empty;
 
   bool get isPlaying => status == MultiviewCellStatus.playing;
+
+  bool get isPaused => status == MultiviewCellStatus.paused;
 
   /// Whether the cell is in a state that can still become playing.
   bool get isActive =>

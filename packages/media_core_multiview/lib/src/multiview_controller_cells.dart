@@ -137,6 +137,64 @@ extension MultiviewControllerCells on MultiviewController {
     _emit();
   }
 
+  /// Pauses [index]; the stall watchdog skips paused cells.
+  Future<void> pauseCell(int index) async {
+    _ensureNotDisposed();
+    final handle = _handles[index];
+    final cell = _cellAt(index);
+    if (handle == null || !cell.isPlaying) {
+      return;
+    }
+    await handle.pause();
+    cell.status = MultiviewCellStatus.paused;
+    _emit();
+  }
+
+  /// Resumes a [MultiviewCellStatus.paused] cell and restarts its stall clock.
+  Future<void> resumeCell(int index) async {
+    _ensureNotDisposed();
+    final handle = _handles[index];
+    final cell = _cellAt(index);
+    if (handle == null || !cell.isPaused) {
+      return;
+    }
+    _progress[index] = (position: _progress[index]?.position ?? Duration.zero, at: _clock());
+    await handle.play();
+    cell.status = MultiviewCellStatus.playing;
+    await _applyAudio();
+    _emit();
+  }
+
+  /// Overrides the audio-mode volume of [index].
+  ///
+  /// The override survives focus changes and audio re-application until the
+  /// cell is cleared or [clearCellVolume] removes it.
+  Future<void> setCellVolume(int index, double volume) async {
+    _ensureNotDisposed();
+    final cell = _cellAt(index);
+    if (cell.isEmpty) {
+      return;
+    }
+    _cellVolumes[index] = volume.clamp(0.0, 1.0);
+    final handle = _handles[index];
+    if (handle != null) {
+      await handle.setVolume(volume.clamp(0.0, 1.0));
+      await handle.setMute(volume <= 0);
+    }
+    await _applyAudio();
+    _emit();
+  }
+
+  /// Removes the manual volume of [index]; the audio mode decides again.
+  Future<void> clearCellVolume(int index) async {
+    _ensureNotDisposed();
+    if (_cellVolumes.remove(index) == null) {
+      return;
+    }
+    await _applyAudio();
+    _emit();
+  }
+
   // ---------------------------------------------------------------------------
   // Budget
   // ---------------------------------------------------------------------------

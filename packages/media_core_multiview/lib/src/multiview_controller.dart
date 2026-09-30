@@ -112,6 +112,9 @@ final class MultiviewController {
   /// Cell index → last observed playback position and when it changed.
   final Map<int, ({Duration position, DateTime at})> _progress = <int, ({Duration position, DateTime at})>{};
 
+  /// Cell index → a host-set manual volume that overrides the audio-mode one.
+  final Map<int, double> _cellVolumes = <int, double>{};
+
   final StreamController<MultiviewSnapshot> _snapshotController = StreamController<MultiviewSnapshot>.broadcast();
 
   Timer? _tick;
