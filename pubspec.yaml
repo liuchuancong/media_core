@@ -30,17 +30,40 @@ workspace:
   - packages/media_core_download
   - packages/media_core_multiview
   - example
+dev_dependencies:
+  melos: ^8.9.0
 
 dependency_overrides:
   wakelock_plus: ^1.7.0
-
-  # FFmpegKit 0.6.2 pins code_assets ^1.2.1, media_kit's Native Assets hook
-  # needs ^2.1.0. Both use the hooks API, and 2.x is the version that keeps
-  # working for both, so the workspace pins it here the same way the app does.
   code_assets: ^2.1.0
   hooks: ^2.2.0
 
-# media_kit, media_kit_video and fvp are ordinary dependencies now: the first two
-# come from Predidit/media-kit pinned in packages/media_core_media_kit, fvp from
-# pub.dev. This repository does not carry copies of them, and no override may
-# reintroduce one.
+melos:
+  scripts:
+    upgrade:
+      description: Upgrade workspace dependencies within current constraints
+      run: flutter pub upgrade
+
+    upgrade:major:
+      description: Upgrade dependencies and allow major version changes
+      run: flutter pub upgrade --major-versions
+
+    outdated:
+      description: Show outdated dependencies
+      run: flutter pub outdated
+
+    get:
+      description: Resolve workspace dependencies
+      run: flutter pub get
+
+    analyze:
+      description: Analyze all workspace packages
+      exec:
+        command: flutter analyze
+        concurrency: 1
+
+    test:
+      description: Run tests in all workspace packages
+      exec:
+        command: flutter test
+        concurrency: 1
