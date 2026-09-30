@@ -3,6 +3,17 @@
 /// Empty string means DIRECT and the property is skipped.
 typedef MediaKitProxyUrlResolver = String Function({required bool privateInput});
 
+/// Opens a source whose payload is not a URL.
+///
+/// Hosts that own private protocol inputs (relay sessions, custom transports)
+/// put the recipe object into `PlayerSource.metadata[kMediaKitCustomInputKey]`
+/// and register this opener on the factory config. The player is already
+/// bound; the opener drives it however the recipe requires.
+typedef MediaKitCustomInputOpener = Future<void> Function(dynamic player, Object recipe);
+
+/// `PlayerSource.metadata` key holding a custom-input recipe.
+const String kMediaKitCustomInputKey = 'mediaCore.customInput';
+
 /// Open-time configuration for [MediaKitPlayerAdapter].
 ///
 /// Every field is applied to libmpv before `open()` runs. Surface
@@ -22,6 +33,7 @@ typedef MediaKitProxyUrlResolver = String Function({required bool privateInput})
 final class MediaKitPlayerConfig {
   const MediaKitPlayerConfig({
     this.proxyUrlResolver,
+    this.customInputOpener,
     this.enableCodec = true,
     this.playerCompatMode = false,
     this.customPlayerOutput = false,
@@ -41,6 +53,11 @@ final class MediaKitPlayerConfig {
 
   /// Resolver for the `http-proxy` property; empty string = DIRECT.
   final MediaKitProxyUrlResolver? proxyUrlResolver;
+
+  /// Opens `PlayerSource.metadata[kMediaKitCustomInputKey]` recipes instead
+  /// of a URL. Absent opener + custom recipe = open failure with a clear
+  /// error, so the recovery ladder can react.
+  final MediaKitCustomInputOpener? customInputOpener;
 
   /// Master hardware-decoding switch when no expert output is selected.
   ///

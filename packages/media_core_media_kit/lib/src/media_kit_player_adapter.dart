@@ -395,10 +395,22 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   @override
   Future<void> onOpen(PlayerSource source) async {
-    await player.open(
-      mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
-      play: true,
-    );
+    final recipe = source.metadata[kMediaKitCustomInputKey];
+    final opener = config.customInputOpener;
+    if (recipe != null || source.protocol == SourceProtocol.custom) {
+      if (opener == null || recipe == null) {
+        throw UnsupportedError(
+          'Source carries a $kMediaKitCustomInputKey recipe but no '
+          'MediaKitPlayerConfig.customInputOpener is registered.',
+        );
+      }
+      await opener(player, recipe);
+    } else {
+      await player.open(
+        mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
+        play: true,
+      );
+    }
 
     _hasOpened = true;
 
