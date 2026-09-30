@@ -18,7 +18,7 @@ dependencies:
   rxdart: ^0.28.0
 
   # Immutable session snapshot
-  equatable: ^2.1.0
+  equatable: ^3.0.0
 
   # Similarity scoring for the fuzzy duplicate filter
   fuzzywuzzy: ^1.1.6

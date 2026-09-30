@@ -17,7 +17,7 @@ dependencies:
     path: ../media_core_logging
 
   # Value equality for snapshots and reports
-  equatable: ^2.1.0
+  equatable: ^3.0.0
 
 dev_dependencies:
   flutter_test:

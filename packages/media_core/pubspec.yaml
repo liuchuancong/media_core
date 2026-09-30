@@ -28,7 +28,7 @@ dependencies:
     path: ../media_core_memory
 
   # Value equality
-  equatable: ^2.1.0
+  equatable: ^3.0.0
 
   # Immutable models / JSON
   freezed_annotation: ^3.1.0
@@ -41,7 +41,7 @@ dependencies:
   meta: ^1.19.0
 
   # MIME
-  mime: ^1.0.6
+  mime: ^2.1.0
 
   # Async primitives
   async: ^2.13.1
