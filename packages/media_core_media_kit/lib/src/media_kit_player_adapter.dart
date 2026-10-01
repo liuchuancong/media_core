@@ -47,6 +47,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     mk.Player? player,
     this.playerConfiguration,
     this.videoControllerConfiguration,
+    this.customInputOpener,
   }) : _injectedPlayer = player,
        super(capabilities: _honestCapabilities(capabilities));
 
@@ -60,6 +61,16 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// Native media_kit_video controller configuration, applied verbatim
   /// at engine creation.
   final mkv.VideoControllerConfiguration? videoControllerConfiguration;
+
+  /// Opener for app-owned inputs, injected by the host.
+  ///
+  /// A source carrying the [kMediaKitCustomInputKey] recipe in its
+  /// metadata is opened through this callback instead of
+  /// `player.open(Media)` — the host owns the input (a loopback lease,
+  /// a relay socket) and hands it to the engine itself. Contract glue,
+  /// not configuration: the adapter stores nothing and decides nothing
+  /// about the input's contents.
+  final Future<void> Function(mk.Player player, Object recipe)? customInputOpener;
 
   /// Narrows [capabilities] to what this platform actually implements.
   ///
@@ -336,10 +347,24 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   @override
   Future<void> onOpen(PlayerSource source) async {
-    await player.open(
-      mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
-      play: true,
-    );
+    final recipe = source.metadata[kMediaKitCustomInputKey];
+    final opener = customInputOpener;
+
+    if (recipe != null || source.protocol == SourceProtocol.custom) {
+      if (opener == null || recipe == null) {
+        throw UnsupportedError(
+          'Source carries a $kMediaKitCustomInputKey recipe but no '
+          'customInputOpener is registered on the adapter.',
+        );
+      }
+
+      await opener(player, recipe);
+    } else {
+      await player.open(
+        mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
+        play: true,
+      );
+    }
 
     _hasOpened = true;
 

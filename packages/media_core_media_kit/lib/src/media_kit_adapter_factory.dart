@@ -5,6 +5,10 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 const String kMediaKitPlayerBackendId = 'mpv';
 
+/// Metadata key carrying an app-owned input recipe; a source with it is
+/// opened through the adapter's injected `customInputOpener`.
+const String kMediaKitCustomInputKey = 'media_kit.custom_input';
+
 /// [PlayerAdapterFactory] that creates [MediaKitPlayerAdapter] instances.
 ///
 /// [playerConfiguration] and [videoControllerConfiguration] are media_kit's
@@ -17,6 +21,7 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
     this.capabilities = MediaKitPlayerAdapter.defaultCapabilities,
     this.playerConfiguration,
     this.videoControllerConfiguration,
+    this.customInputOpener,
     this.configure,
   });
 
@@ -28,6 +33,7 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
   /// Native media_kit_video controller configuration; null uses engine
   /// defaults.
   final mkv.VideoControllerConfiguration? videoControllerConfiguration;
+  final Future<void> Function(mk.Player player, Object recipe)? customInputOpener;
 
   final void Function(MediaKitPlayerAdapter adapter)? configure;
 
@@ -38,6 +44,7 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
       capabilities: capabilities,
       playerConfiguration: playerConfiguration,
       videoControllerConfiguration: videoControllerConfiguration,
+      customInputOpener: customInputOpener,
     );
 
     configure?.call(adapter);
@@ -69,6 +76,7 @@ void registerMediaKitFactory(
   PlayerAdapterCapabilities capabilities = MediaKitPlayerAdapter.defaultCapabilities,
   mk.PlayerConfiguration? playerConfiguration,
   mkv.VideoControllerConfiguration? videoControllerConfiguration,
+  Future<void> Function(mk.Player player, Object recipe)? customInputOpener,
   void Function(MediaKitPlayerAdapter adapter)? configure,
 }) {
   factory.register(id, () {
@@ -77,6 +85,7 @@ void registerMediaKitFactory(
       capabilities: capabilities,
       playerConfiguration: playerConfiguration,
       videoControllerConfiguration: videoControllerConfiguration,
+      customInputOpener: customInputOpener,
     );
 
     configure?.call(adapter);
@@ -92,6 +101,7 @@ void registerMediaKitRegistry(
   PlayerAdapterCapabilities capabilities = MediaKitPlayerAdapter.defaultCapabilities,
   mk.PlayerConfiguration? playerConfiguration,
   mkv.VideoControllerConfiguration? videoControllerConfiguration,
+  Future<void> Function(mk.Player player, Object recipe)? customInputOpener,
   void Function(MediaKitPlayerAdapter adapter)? configure,
 }) {
   registry.register(
@@ -99,6 +109,7 @@ void registerMediaKitRegistry(
       capabilities: capabilities,
       playerConfiguration: playerConfiguration,
       videoControllerConfiguration: videoControllerConfiguration,
+      customInputOpener: customInputOpener,
       configure: configure,
     ).registration(priority: priority),
   );

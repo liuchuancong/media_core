@@ -13,6 +13,13 @@ abstract interface class PlayerVideo {
   /// Whether video rendering is currently available.
   bool get available;
 
+  /// Applies the viewport fit for the current source.
+  ///
+  /// Part of the presentation contract: every video-capable adapter owns
+  /// a fit notifier its surface listens to, so a host drives the fit
+  /// through here instead of reaching into adapter-specific config.
+  void setVideoFit(BoxFit fit);
+
   /// Builds the video rendering widget.
   ///
   /// The returned widget is owned by the adapter and should be inserted into
