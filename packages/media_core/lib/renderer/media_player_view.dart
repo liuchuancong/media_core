@@ -6,7 +6,6 @@ import 'package:media_core/adapter/player_video.dart';
 import 'package:media_core/kernel/player_handle.dart';
 import 'package:media_core/screenshot/screenshot_surface.dart';
 import 'package:media_core/source/player_source.dart';
-import 'package:media_core/renderer/player_view.dart';
 import 'package:media_core/renderer/video_zoom_controller.dart';
 
 /// Application-facing video widget for a [PlayerHandle].
@@ -21,33 +20,43 @@ import 'package:media_core/renderer/video_zoom_controller.dart';
 /// - re-builds when the recovery ladder swaps the backend, because it
 ///   follows [PlayerHandle.backendChanges] instead of holding on to the
 ///   previous adapter instance,
-/// - fits the surface according to the geometry controller's aspect
-///   ratio when the backend reports the video size,
+/// - hands the viewport fit to the adapter through the [PlayerVideo]
+///   contract, so the surface is fitted by the same engine widget that
+///   renders it,
 /// - offers its video layer as a screenshot surface, so
 ///   [PlayerHandle.captureScreenshot] works on engines that have no
 ///   frame-capture API of their own,
 /// - magnifies the video on request, through [zoom] and [enablePinchZoom].
 ///
-/// The view never controls playback. Pausing, muting, recovery and
+/// The view never controls playback. Pausing, recovery and
 /// lifecycle belong to the handle; this widget only renders.
+///
+/// ### Layout
+///
+/// The view does not impose a second layout system on the adapter's widget.
+/// Earlier revisions wrapped the surface in an [AspectRatio] plus a
+/// fitted [PlayerSurface], but an adapter's video widget already fits
+/// itself (and a live stream arriving through the wrapped path could end
+/// up composited black while audio played). The adapter's widget now
+/// expands into the constraints the host gives this view — a host that
+/// wants a letterboxed 16:9 box wraps this view in its own [AspectRatio].
 ///
 /// ### Zooming
 ///
-/// Magnification is a transform of the rendered surface, applied *inside* the
-/// aspect-ratio box and the capture boundary:
+/// Magnification is a transform of the rendered surface, applied *inside*
+/// the capture boundary:
 ///
 /// ```text
-/// AspectRatio            the box matches the video, so a magnified picture
-///  └ GestureDetector      only when gestures are enabled
-///     └ RepaintBoundary   screenshots capture what the user sees
-///        └ ClipRect       crops what the magnification pushed outside
-///           └ Transform   scale + translation
-///              └ PlayerView (fit, mirror) → adapter video widget
+/// RepaintBoundary   screenshots capture what the user sees
+///  └ GestureDetector
+///     └ ClipRect       crops what the magnification pushed outside
+///        └ Transform   scale + translation
+///           └ adapter video widget (fit, mirror, zoom)
 /// ```
 ///
-/// The order matters. The transform sits outside `mirror` so a drag always
-/// moves the picture with the finger, and inside the clip so magnifying crops
-/// the edges instead of painting over the host's UI.
+/// The order matters. The transform sits outside the adapter's own mirror
+/// so a drag always moves the picture with the finger, and inside the clip
+/// so magnifying crops the edges instead of painting over the host's UI.
 final class MediaPlayerView extends StatefulWidget {
   const MediaPlayerView({
     required this.handle,
@@ -67,6 +76,10 @@ final class MediaPlayerView extends StatefulWidget {
   final PlayerHandle handle;
 
   /// How the video is fitted into the view.
+  ///
+  /// Applied through the [PlayerVideo.setVideoFit] contract — the adapter's
+  /// own surface widget performs the fitting. Re-applied when the value
+  /// changes and when the recovery ladder swaps in another backend.
   final BoxFit fit;
 
   /// Alignment of the rendered content.
@@ -190,6 +203,10 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
       return;
     }
 
+    if (oldWidget.fit != widget.fit) {
+      _applyFit(widget.handle);
+    }
+
     // The capture boundary may have been switched off (or on) for the same
     // handle; the surface has to follow, or a capture would read a boundary
     // that is no longer in the tree.
@@ -229,8 +246,12 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
 
     _syncSurfaceAttachment(handle);
 
+    _applyFit(handle);
+
     _backendSubscription = handle.backendChanges.listen((_) {
       if (mounted) {
+        // The replacement adapter must not inherit the old engine's fit.
+        _applyFit(handle);
         setState(() {});
       }
     });
@@ -268,6 +289,17 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
     _surfaceHost = handle;
 
     handle.attachScreenshotSurface(_surface);
+  }
+
+  /// Hands the viewport fit to the active adapter.
+  ///
+  /// Called from lifecycle callbacks and the backend-change stream — never
+  /// during build — because notifying the adapter's fit listeners mid-frame
+  /// would mark widgets dirty while the frame is being built.
+  void _applyFit(PlayerHandle handle) {
+    if (handle.adapter case final PlayerVideo video) {
+      video.setVideoFit(widget.fit);
+    }
   }
 
   void _releaseSurface() {
@@ -353,35 +385,37 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
       _scheduleSurfaceSync();
     }
 
-    // Without a video widget there is nothing to fit: [PlayerSurface] would
-    // hand an expanding placeholder to a [FittedBox], which lays its child out
-    // unbounded and asserts on the infinite scale that follows. An adapter
-    // without video — an audio-only player, or one whose surface is not ready
-    // yet — must render its background instead of crashing the frame.
+    // Without a video widget there is nothing to render: an audio-only
+    // player, or one whose surface is not ready yet, paints its background.
     final Widget picture = video == null
         ? ColoredBox(color: _backgroundColor, child: const SizedBox.expand())
-        : PlayerView(
-            fit: widget.fit,
-            alignment: widget.alignment,
-            mirror: widget.mirror,
-            backgroundColor: widget.backgroundColor,
+        // Keyed per adapter instance: on a backend swap the old surface
+        // unmounts instead of being updated onto a foreign controller.
+        : KeyedSubtree(
+            key: ValueKey('${video.runtimeType}_${identityHashCode(video)}'),
             child: video.build(),
           );
 
-    return AspectRatio(
-      aspectRatio: _aspectRatio(handle),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          _trackViewSize(constraints.biggest);
+    Widget content = picture;
 
-          // Outermost first: the capture boundary has to see the magnification
-          // (a screenshot is "what I see"), the gesture layer has to work in
-          // view coordinates — inside the transform its focal points would be
-          // content coordinates — and the clip has to crop what the transform
-          // pushed outside the box.
-          return _withCaptureBoundary(_withGestures(_withZoom(picture)));
-        },
-      ),
+    if (widget.mirror) {
+      content = Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()..scaleByDouble(-1.0, 1.0, 1.0, 1.0),
+        child: content,
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _trackViewSize(constraints.biggest);
+
+        // Outermost first: the capture boundary has to see the magnification
+        // (a screenshot is "what I see"), and the gesture layer has to work
+        // in view coordinates — inside the transform its focal points would
+        // be content coordinates.
+        return _withCaptureBoundary(_withGestures(_withZoom(content)));
+      },
     );
   }
 
@@ -476,24 +510,6 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
   }
 
   Color get _backgroundColor => widget.backgroundColor ?? const Color(0xFF000000);
-
-  /// Aspect ratio of the box the video is rendered into.
-  ///
-  /// Read from the geometry snapshot rather than from its raw video size: the
-  /// geometry module derives the ratio from the size *after* rotation, and a
-  /// phone recording is a landscape pixel grid plus a 90° rotation. Using the
-  /// raw size would open a 16:9 box for a portrait video and letterbox the
-  /// picture inside it — and the zoom transform, which magnifies this box,
-  /// would then magnify those bars.
-  double _aspectRatio(PlayerHandle handle) {
-    final ratio = handle.geometryController.snapshot.aspectRatio;
-
-    if (ratio <= 0 || !ratio.isFinite) {
-      return 16 / 9;
-    }
-
-    return ratio;
-  }
 
   /// Drops the zoom controller this view created, if it created one.
   ///
