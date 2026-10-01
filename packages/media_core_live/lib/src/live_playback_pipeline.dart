@@ -88,6 +88,8 @@ extension _LivePlaybackPipeline on LivePlaybackController {
     // paused itself mid-open (mpv does) even though playback is on.
     watchdogs.onPlayingChanged(_playbackRequested, fromUserIntent: false);
 
+    _seedPlaybackState(handle);
+
     _adapterSub?.cancel();
     _adapterSub = handle.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
 
@@ -182,6 +184,26 @@ extension _LivePlaybackPipeline on LivePlaybackController {
 
   Future<void> _runRecoverTask(TaskCancelToken token) {
     return _sweep(startAtCurrent: true);
+  }
+
+  /// Mirrors the playback state an engine reached before it was attached.
+  ///
+  /// A staged engine is opened and plays while it is still being verified,
+  /// so its `Playing` event — a one-shot edge on engines with a state latch
+  /// — fires before this pipeline subscribes to [PlayerHandle.adapterEvents].
+  /// Without this seed the mirrored [PlayerCoreState] stays at `opening`
+  /// even though audio and video are out, and every consumer that trusts
+  /// the mirror (UI play/pause state, `isPlayingNow`) reads the room as
+  /// paused forever.
+  void _seedPlaybackState(PlayerHandle handle) {
+    switch (handle.adapter.state.playback) {
+      case PlayerPlaybackState.playing:
+        _setState(_liveState(PlayerPlaybackState.playing));
+      case PlayerPlaybackState.paused:
+        _setState(_liveState(PlayerPlaybackState.paused));
+      default:
+        break;
+    }
   }
 
   void _onAdapterEvent(PlayerAdapterEvent event) {
