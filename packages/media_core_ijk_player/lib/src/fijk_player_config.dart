@@ -13,7 +13,7 @@ typedef FijkProxyUrlResolver = String Function({required bool privateInput});
 ///   built-in key or add IJK options this class does not wrap yet
 ///   (`ijkio`, `dns_cache`, `rtmp_live`, ...).
 /// - The whole object can be assigned to `adapter.config` or injected
-///   through [IjkPlayerAdapterFactory].
+///   through [FlvLzcPlayerAdapterFactory].
 final class FijkPlayerConfig {
   const FijkPlayerConfig({
     // player category

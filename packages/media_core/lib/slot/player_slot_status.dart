@@ -17,14 +17,14 @@ enum PlayerSlotStatus {
   /// Slot has no assigned player.
   empty,
 
-  /// Player has been assigned to slot.
+  /// PlayerIdentity has been assigned to slot.
   ///
   /// The player may not have started playback yet.
   assigned,
 
   /// Slot is currently active.
   ///
-  /// Player and session are running.
+  /// PlayerIdentity and session are running.
   active,
 
   /// Slot is being released.

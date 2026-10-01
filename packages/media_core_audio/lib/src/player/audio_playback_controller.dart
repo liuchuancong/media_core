@@ -11,7 +11,7 @@ import 'package:media_core_audio/src/player/audio_playback_config.dart';
 import 'package:media_core_audio/src/track/music_quality.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
 import 'package:media_core_audio/src/track/track_source.dart';
-import 'package:media_core_audio/src/player/audio_player_state.dart';
+import 'package:media_core_audio/src/player/audio_playback_state.dart';
 
 
 /// decides how that looks.
@@ -47,7 +47,7 @@ final class AudioPlaybackController {
   AudioPlaybackState _state = AudioPlaybackState.idle;
   PlayerHandle? _handle;
   StreamSubscription<PlayerAdapterEvent>? _adapterSub;
-  StreamSubscription<PlaybackState>? _playbackSub;
+  StreamSubscription<PlayerTransportState>? _playbackSub;
 
   /// Resolutions cached by track key; value carries its own expiry.
   final Map<String, TrackSource> _resolved = <String, TrackSource>{};
@@ -395,7 +395,7 @@ final class AudioPlaybackController {
 
       return handle;
     } catch (error) {
-      _publish(loading: false, error: 'Player creation failed: $error');
+      _publish(loading: false, error: 'PlayerIdentity creation failed: $error');
 
       return null;
     }
@@ -511,7 +511,7 @@ final class AudioPlaybackController {
     }
   }
 
-  void _onPlaybackState(PlaybackState playback) {
+  void _onPlaybackState(PlayerTransportState playback) {
     _publish(
       playing: playback.isPlaying,
       position: playback.position,

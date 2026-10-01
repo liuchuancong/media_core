@@ -136,7 +136,7 @@ final class KernelPlayerControlActions extends PlayerControlActions {
   /// Kernel holding the presentation driver.
   final PlayerKernel kernel;
 
-  /// Player the actions address.
+  /// PlayerIdentity the actions address.
   final PlayerId playerId;
 
   /// Whether a presentation driver is attached to the kernel.

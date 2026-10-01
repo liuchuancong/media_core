@@ -1,6 +1,6 @@
 /// Semantic status of a player.
 ///
-/// [PlayerStatus] is a derived, high-level view of [PlayerState].
+/// [PlayerStatus] is a derived, high-level view of [PlayerCoreState].
 ///
 /// It does not own or duplicate runtime state.
 enum PlayerStatus {

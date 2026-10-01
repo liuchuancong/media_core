@@ -54,7 +54,7 @@ final class PlayerControlsController extends ChangeNotifier {
        _hideDelay = hideDelay,
        _autoHide = autoHide,
        _controlsVisible = controlsVisible {
-    _playback = ValueNotifier<PlaybackState>(handle.playback);
+    _playback = ValueNotifier<PlayerTransportState>(handle.playback);
     _playbackSubscription = handle.stateChanges.listen(_onPlayback, onError: (Object _) {});
     _sourceSubscription = handle.sourceChanges.listen((_) => _onSourceChanged(), onError: (Object _) {});
 
@@ -79,8 +79,8 @@ final class PlayerControlsController extends ChangeNotifier {
   /// the controls then would leave them guessing.
   bool keepVisibleWhenPaused;
 
-  late final ValueNotifier<PlaybackState> _playback;
-  StreamSubscription<PlaybackState>? _playbackSubscription;
+  late final ValueNotifier<PlayerTransportState> _playback;
+  StreamSubscription<PlayerTransportState>? _playbackSubscription;
   StreamSubscription<PlayerSource?>? _sourceSubscription;
   Timer? _hideTimer;
 
@@ -99,10 +99,10 @@ final class PlayerControlsController extends ChangeNotifier {
   ///
   /// The progress bar and the time labels listen here; the rest of a bar
   /// listens to the controller itself.
-  ValueListenable<PlaybackState> get playbackListenable => _playback;
+  ValueListenable<PlayerTransportState> get playbackListenable => _playback;
 
   /// Current playback state.
-  PlaybackState get playback => handle.playback;
+  PlayerTransportState get playback => handle.playback;
 
   /// Whether the player is playing.
   bool get isPlaying => handle.playback.isPlaying;
@@ -498,7 +498,7 @@ final class PlayerControlsController extends ChangeNotifier {
     return position;
   }
 
-  void _onPlayback(PlaybackState state) {
+  void _onPlayback(PlayerTransportState state) {
     if (_disposed) {
       return;
     }

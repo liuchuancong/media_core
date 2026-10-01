@@ -14,7 +14,7 @@ final class FloatingWindowRequest {
     this.closeOnVideoEnd = true,
   });
 
-  /// Player the window should present.
+  /// PlayerIdentity the window should present.
   ///
   /// A string rather than the kernel's typed id so a host can key its own
   /// navigation or service state without importing the kernel.

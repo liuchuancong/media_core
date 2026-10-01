@@ -8,5 +8,5 @@ library;
 export 'package:media_core_live/src/live_playback_controller.dart';
 export 'package:media_core_live/src/live_playback_models.dart';
 export 'package:media_core_live/src/live_pool_policy.dart';
-export 'package:media_core_live/src/live_request.dart';
+export 'package:media_core_live/src/live_source_request.dart';
 export 'package:media_core_live/src/live_watchdogs.dart';

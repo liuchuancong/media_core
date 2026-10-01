@@ -40,13 +40,13 @@ final class ErrorContext extends Equatable {
     this.metadata = const <String, Object?>{},
   });
 
-  /// Player instance associated with the failure.
+  /// PlayerIdentity instance associated with the failure.
   final PlayerId? playerId;
 
-  /// Player session associated with the failure.
+  /// PlayerIdentity session associated with the failure.
   final SessionId? sessionId;
 
-  /// Player slot associated with the failure.
+  /// PlayerIdentity slot associated with the failure.
   final SlotId? slotId;
 
   /// Media source associated with the failure.
@@ -88,7 +88,7 @@ final class ErrorContext extends Equatable {
   /// Adapter identifier.
   final String? adapter;
 
-  /// Player state at the time of the failure.
+  /// PlayerIdentity state at the time of the failure.
   final String? state;
 
   /// Additional structured diagnostic metadata.

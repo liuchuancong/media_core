@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
+import 'package:media_core/core/player_lifecycle_state.dart';
+import 'package:media_core/core/player_playback_state.dart';
 
 void main() {
-  group('PlayerState', () {
+  group('PlayerCoreState', () {
     test('default state is idle', () {
-      const state = PlayerState();
+      const state = PlayerCoreState();
       expect(state.isIdle, isTrue);
       expect(state.lifecycle, PlayerLifecycleState.idle);
       expect(state.playback, PlayerPlaybackState.idle);
@@ -12,16 +14,16 @@ void main() {
     });
 
     test('state helpers reflect playback enum', () {
-      expect(PlayerState.idle.playingState().playing, isTrue);
-      expect(PlayerState.idle.pausedState().paused, isTrue);
-      expect(PlayerState.idle.bufferingState().buffering, isTrue);
-      expect(PlayerState.idle.seekingState().seeking, isTrue);
-      expect(PlayerState.idle.completedState().completed, isTrue);
-      expect(PlayerState.idle.stoppedState().stopped, isTrue);
+      expect(PlayerCoreState.idle.playingState().playing, isTrue);
+      expect(PlayerCoreState.idle.pausedState().paused, isTrue);
+      expect(PlayerCoreState.idle.bufferingState().buffering, isTrue);
+      expect(PlayerCoreState.idle.seekingState().seeking, isTrue);
+      expect(PlayerCoreState.idle.completedState().completed, isTrue);
+      expect(PlayerCoreState.idle.stoppedState().stopped, isTrue);
     });
 
     test('error state marks hasError and blocks control', () {
-      final state = PlayerState.idle.readyState().errorState();
+      final state = PlayerCoreState.idle.readyState().errorState();
       expect(state.hasError, isTrue);
       expect(state.canControl, isFalse);
       expect(state.ready, isFalse);
@@ -29,7 +31,7 @@ void main() {
     });
 
     test('disposed is terminal and clears outputs', () {
-      final state = PlayerState.idle.withAudioEnabled(true).playingState().disposedState();
+      final state = PlayerCoreState.idle.withAudioEnabled(true).playingState().disposedState();
       expect(state.disposed, isTrue);
       expect(state.isTerminal, isTrue);
       expect(state.hasSource, isFalse);
@@ -38,7 +40,7 @@ void main() {
 
     group('transitions', () {
       test('initializing to ready', () {
-        final state = PlayerState.idle.initializingState();
+        final state = PlayerCoreState.idle.initializingState();
         expect(state.lifecycle, PlayerLifecycleState.initializing);
 
         final ready = state.readyState();
@@ -47,7 +49,7 @@ void main() {
       });
 
       test('ready to opening to playing', () {
-        final opening = PlayerState.idle.initializingState().readyState().openingState();
+        final opening = PlayerCoreState.idle.initializingState().readyState().openingState();
         expect(opening.opening, isTrue);
         expect(opening.isTransitioning, isTrue);
 
@@ -58,19 +60,19 @@ void main() {
       });
 
       test('withSource false resets playback to idle', () {
-        final state = PlayerState.idle.playingState().withSource(false);
+        final state = PlayerCoreState.idle.playingState().withSource(false);
         expect(state.hasSource, isFalse);
         expect(state.playback, PlayerPlaybackState.idle);
       });
 
       test('clearError restores idle playback', () {
-        final state = PlayerState.idle.readyState().errorState().clearError();
+        final state = PlayerCoreState.idle.readyState().errorState().clearError();
         expect(state.hasError, isFalse);
         expect(state.playback, PlayerPlaybackState.idle);
       });
 
       test('reset keeps lifecycle but clears playback', () {
-        final state = PlayerState.idle.playingState().reset();
+        final state = PlayerCoreState.idle.playingState().reset();
         expect(state.lifecycle, PlayerLifecycleState.ready);
         expect(state.playback, PlayerPlaybackState.idle);
       });
@@ -78,9 +80,9 @@ void main() {
 
     group('capability gates', () {
       test('canPlay requires source and readiness', () {
-        expect(PlayerState.idle.canPlay, isFalse);
+        expect(PlayerCoreState.idle.canPlay, isFalse);
 
-        final ready = PlayerState.idle.initializingState().readyState();
+        final ready = PlayerCoreState.idle.initializingState().readyState();
         expect(ready.canPlay, isFalse, reason: 'no source yet');
 
         final withSource = ready.withSource(true);
@@ -91,24 +93,24 @@ void main() {
       });
 
       test('canPause only while playing', () {
-        final withSource = PlayerState.idle.readyState().withSource(true);
+        final withSource = PlayerCoreState.idle.readyState().withSource(true);
         expect(withSource.canPause, isFalse);
         expect(withSource.playingState().canPause, isTrue);
       });
 
       test('canStop during active playback transitions', () {
-        expect(PlayerState.idle.canStop, isFalse);
-        expect(PlayerState.idle.readyState().withSource(true).playingState().canStop, isTrue);
-        expect(PlayerState.idle.readyState().openingState().canStop, isTrue);
+        expect(PlayerCoreState.idle.canStop, isFalse);
+        expect(PlayerCoreState.idle.readyState().withSource(true).playingState().canStop, isTrue);
+        expect(PlayerCoreState.idle.readyState().openingState().canStop, isTrue);
       });
     });
 
     group('output modes', () {
       test('audio only / video only / both', () {
-        final audioOnly = PlayerState.idle.withAudioEnabled(true);
+        final audioOnly = PlayerCoreState.idle.withAudioEnabled(true);
         expect(audioOnly.isAudioOnly, isTrue);
 
-        final videoOnly = PlayerState.idle.withVideoEnabled(true);
+        final videoOnly = PlayerCoreState.idle.withVideoEnabled(true);
         expect(videoOnly.isVideoOnly, isTrue);
 
         final both = audioOnly.withVideoEnabled(true);
@@ -116,14 +118,14 @@ void main() {
       });
 
       test('muted toggling', () {
-        expect(PlayerState.idle.withMuted(true).muted, isTrue);
+        expect(PlayerCoreState.idle.withMuted(true).muted, isTrue);
       });
     });
 
     test('serialization round trip', () {
-      final state = PlayerState.idle.playingState().withSource(true).withMuted(true);
+      final state = PlayerCoreState.idle.playingState().withSource(true).withMuted(true);
       final json = state.toJson();
-      final restored = PlayerState.fromJson(json);
+      final restored = PlayerCoreState.fromJson(json);
       expect(restored, state);
     });
   });

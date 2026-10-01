@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'player_state.dart';
+part of 'player_core_state.dart';
 
 // **************************************************************************
 // JsonSerializableGenerator

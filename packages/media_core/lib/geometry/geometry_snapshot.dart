@@ -15,7 +15,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// - UI
 /// - Renderer
-/// - Player snapshot
+/// - PlayerIdentity snapshot
 /// - Diagnostics
 ///
 /// Does not:

@@ -2,7 +2,7 @@
 
 /// Public library for the `visibility` module.
 ///
-/// Player visibility observation, state and management..
+/// PlayerIdentity visibility observation, state and management..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/visibility/`.

@@ -2,7 +2,7 @@
 
 /// Public library for the `event` module.
 ///
-/// Player event definitions, dispatching and subscriptions..
+/// PlayerIdentity event definitions, dispatching and subscriptions..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/event/`.

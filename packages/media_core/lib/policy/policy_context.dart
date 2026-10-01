@@ -94,7 +94,7 @@ final class PolicyContext {
     );
   }
 
-  /// Player policy.
+  /// PlayerIdentity policy.
   final PlayerPolicy player;
 
   /// Playback policy.

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
-import 'package:media_core_live/src/live_request.dart';
+import 'package:media_core_live/src/live_source_request.dart';
 import 'package:media_core_live/src/live_watchdogs.dart';
 
 // The implementation of [LivePlaybackController] is split by concern
@@ -142,21 +142,21 @@ final class LivePlaybackController {
   bool _engineFallbackAllowed = true;
   bool _playbackRequested = false;
   bool _audioOnly = false;
-  PlayerState state = PlayerState.idle;
+  PlayerCoreState state = PlayerCoreState.idle;
 
   /// Line each engine's sweep starts from: the line that was being played
   /// when the previous engine failed, so a fresh engine first retries the
   /// line the user was watching.
   int _sweepStart = 0;
 
-  final StreamController<PlayerState> _stateController = StreamController<PlayerState>.broadcast();
+  final StreamController<PlayerCoreState> _stateController = StreamController<PlayerCoreState>.broadcast();
   final StreamController<PlayerHandle> _handleController = StreamController<PlayerHandle>.broadcast();
   final StreamController<PlayerFailure> _failureController = StreamController<PlayerFailure>.broadcast();
   StreamSubscription<PlayerAdapterEvent>? _adapterSub;
   StreamSubscription<PlayerBackendChange>? _backendSub;
 
   /// Playback state stream.
-  Stream<PlayerState> get onStateChanged => _stateController.stream;
+  Stream<PlayerCoreState> get onStateChanged => _stateController.stream;
 
   /// Emitted whenever the attached handle changes - an engine switch
   /// committed a staged player, or the player was released. Consumers that
@@ -355,7 +355,7 @@ final class LivePlaybackController {
 
     await _enqueue(TaskType.close, (token) async {
       await _releaseHandle();
-      _setState(PlayerState.idle);
+      _setState(PlayerCoreState.idle);
     });
   }
 
@@ -393,11 +393,11 @@ final class LivePlaybackController {
   // State mirroring
   // ---------------------------------------------------------------------------
 
-  PlayerState _liveState(PlayerPlaybackState playback) {
-    return PlayerState(lifecycle: PlayerLifecycleState.ready, playback: playback, hasSource: _sources.isNotEmpty);
+  PlayerCoreState _liveState(PlayerPlaybackState playback) {
+    return PlayerCoreState(lifecycle: PlayerLifecycleState.ready, playback: playback, hasSource: _sources.isNotEmpty);
   }
 
-  void _setState(PlayerState next) {
+  void _setState(PlayerCoreState next) {
     if (state == next) {
       return;
     }
@@ -414,7 +414,7 @@ final class LivePlaybackController {
     }
   }
 
-  SessionState _toSessionState(PlayerState playerState) {
+  SessionState _toSessionState(PlayerCoreState playerState) {
     return switch (playerState.playback) {
       PlayerPlaybackState.idle => const SessionState.idle(),
       PlayerPlaybackState.opening => const SessionState.opening(),

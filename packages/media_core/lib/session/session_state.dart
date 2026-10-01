@@ -15,7 +15,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// - PlayerSession
 /// - PlayerAdapter
-/// - PlaybackState
+/// - PlayerTransportState
 final class SessionState extends Equatable {
   /// Creates a session state.
   const SessionState(this.status);

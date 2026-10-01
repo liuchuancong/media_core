@@ -46,7 +46,7 @@ final class SessionContext extends Equatable {
     this.platform = const PlatformCapabilities(),
   });
 
-  /// Player identity.
+  /// PlayerIdentity identity.
   final PlayerId playerId;
 
   /// Session identity.
@@ -61,7 +61,7 @@ final class SessionContext extends Equatable {
   /// Current media source.
   final PlayerSource source;
 
-  /// Player policies.
+  /// PlayerIdentity policies.
   final PlayerPolicy policy;
 
   /// Platform capabilities.

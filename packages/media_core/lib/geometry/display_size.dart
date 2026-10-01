@@ -16,7 +16,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// - GeometryController
 /// - Renderer
-/// - Player snapshot
+/// - PlayerIdentity snapshot
 final class DisplaySize extends Equatable {
   const DisplaySize({required this.width, required this.height});
 

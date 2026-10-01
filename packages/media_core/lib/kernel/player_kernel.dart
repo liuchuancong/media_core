@@ -4,7 +4,7 @@ import 'package:media_core/adapter/player_adapter_config.dart';
 import 'package:media_core/adapter/player_adapter_context.dart';
 import 'package:media_core/adapter/player_adapter_registry.dart';
 import 'package:media_core/coordinator/global_player_coordinator.dart';
-import 'package:media_core/core/player.dart';
+import 'package:media_core/core/player_identity.dart';
 import 'package:media_core/core/player_config.dart';
 import 'package:media_core/event/event_context.dart';
 import 'package:media_core/event/event_priority.dart';
@@ -229,7 +229,7 @@ final class PlayerKernel {
   }
 
   // ---------------------------------------------------------------------------
-  // Player lifecycle
+  // PlayerIdentity lifecycle
   // ---------------------------------------------------------------------------
 
   /// Creates a new player.
@@ -267,7 +267,7 @@ final class PlayerKernel {
       },
     );
 
-    final player = Player.create();
+    final player = PlayerIdentity.create();
     final sessionId = SessionId.generate();
     final adapter = registration.factory.create(registration.id);
     final platform = _platformProvider;

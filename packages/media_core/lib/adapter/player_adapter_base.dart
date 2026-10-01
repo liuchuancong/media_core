@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:media_core/adapter/player_adapter.dart';
 import 'package:media_core/core/player_error.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
 import 'package:media_core/adapter/player_adapter_event.dart';
 import 'package:media_core/adapter/player_adapter_context.dart';
 import 'package:media_core/adapter/player_adapter_metrics.dart';
@@ -88,7 +88,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   final String _id;
   final PlayerAdapterCapabilities _capabilities;
 
-  PlayerState _state = PlayerState.idle;
+  PlayerCoreState _state = PlayerCoreState.idle;
   PlayerAdapterMetrics _metrics = const PlayerAdapterMetrics();
 
   Duration _position = Duration.zero;
@@ -117,7 +117,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   PlayerAdapterCapabilities get capabilities => _capabilities;
 
   @override
-  PlayerState get state => _state;
+  PlayerCoreState get state => _state;
 
   @override
   Duration get position => _position;

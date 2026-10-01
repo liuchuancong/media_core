@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/core/player_snapshot.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
 import 'package:media_core/core/player_status.dart';
 import 'package:media_core/identity/player_id.dart';
 import 'package:media_core/identity/session_id.dart';
 
-PlayerSnapshot snapshotFor(PlayerState state) {
+PlayerSnapshot snapshotFor(PlayerCoreState state) {
   return PlayerSnapshot(playerId: PlayerId('p1'), state: state);
 }
 
@@ -21,29 +21,29 @@ void main() {
     });
 
     test('playerStatus follows playback state', () {
-      expect(snapshotFor(PlayerState.idle.playingState()).playerStatus, PlayerStatus.playing);
-      expect(snapshotFor(PlayerState.idle.pausedState()).playerStatus, PlayerStatus.paused);
-      expect(snapshotFor(PlayerState.idle.bufferingState()).playerStatus, PlayerStatus.buffering);
-      expect(snapshotFor(PlayerState.idle.seekingState()).playerStatus, PlayerStatus.seeking);
-      expect(snapshotFor(PlayerState.idle.completedState()).playerStatus, PlayerStatus.completed);
-      expect(snapshotFor(PlayerState.idle.stoppedState()).playerStatus, PlayerStatus.stopped);
+      expect(snapshotFor(PlayerCoreState.idle.playingState()).playerStatus, PlayerStatus.playing);
+      expect(snapshotFor(PlayerCoreState.idle.pausedState()).playerStatus, PlayerStatus.paused);
+      expect(snapshotFor(PlayerCoreState.idle.bufferingState()).playerStatus, PlayerStatus.buffering);
+      expect(snapshotFor(PlayerCoreState.idle.seekingState()).playerStatus, PlayerStatus.seeking);
+      expect(snapshotFor(PlayerCoreState.idle.completedState()).playerStatus, PlayerStatus.completed);
+      expect(snapshotFor(PlayerCoreState.idle.stoppedState()).playerStatus, PlayerStatus.stopped);
     });
 
     test('terminal states dominate playerStatus', () {
-      expect(snapshotFor(PlayerState.idle.disposedState()).playerStatus, PlayerStatus.disposed);
-      expect(snapshotFor(PlayerState.idle.disposingState()).playerStatus, PlayerStatus.disposing);
+      expect(snapshotFor(PlayerCoreState.idle.disposedState()).playerStatus, PlayerStatus.disposed);
+      expect(snapshotFor(PlayerCoreState.idle.disposingState()).playerStatus, PlayerStatus.disposing);
       expect(
-        snapshotFor(PlayerState.idle.readyState().errorState()).playerStatus,
+        snapshotFor(PlayerCoreState.idle.readyState().errorState()).playerStatus,
         PlayerStatus.error,
       );
     });
 
     test('ready state without source maps to ready', () {
-      expect(snapshotFor(PlayerState.idle.readyState()).playerStatus, PlayerStatus.ready);
+      expect(snapshotFor(PlayerCoreState.idle.readyState()).playerStatus, PlayerStatus.ready);
     });
 
     test('delegates state helpers', () {
-      final snapshot = snapshotFor(PlayerState.idle.playingState());
+      final snapshot = snapshotFor(PlayerCoreState.idle.playingState());
       expect(snapshot.isPlaying, isTrue);
 
       final withSession = PlayerSnapshot(

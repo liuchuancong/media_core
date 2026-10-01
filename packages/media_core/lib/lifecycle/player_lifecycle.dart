@@ -1,7 +1,7 @@
 import 'package:media_core/lifecycle/lifecycle_event.dart';
 import 'package:media_core/lifecycle/lifecycle_snapshot.dart';
 
-/// Player lifecycle abstraction.
+/// PlayerIdentity lifecycle abstraction.
 abstract interface class PlayerLifecycle {
   LifecycleSnapshot get snapshot;
 

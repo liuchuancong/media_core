@@ -14,7 +14,7 @@ part 'presentation_snapshot.freezed.dart';
 ///
 /// - UI layer
 /// - PlayerManager
-/// - Player widgets
+/// - PlayerIdentity widgets
 /// - settings pages
 ///
 /// Snapshot does not:

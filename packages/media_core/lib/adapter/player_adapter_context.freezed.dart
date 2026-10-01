@@ -15,10 +15,10 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PlayerAdapterContext {
 
-/// Player identifier.
+/// PlayerIdentity identifier.
  PlayerId get playerId;/// Playback session identifier.
  SessionId get sessionId;/// Adapter configuration.
- PlayerAdapterConfig get config;/// Player configuration.
+ PlayerAdapterConfig get config;/// PlayerIdentity configuration.
  PlayerConfig? get playerConfig;/// Backend specific options.
  Map<String, Object?> get options;/// Capabilities reported by the running device.
 ///
@@ -245,13 +245,13 @@ class _PlayerAdapterContext implements PlayerAdapterContext {
   const _PlayerAdapterContext({required this.playerId, required this.sessionId, this.config = const PlayerAdapterConfig(), this.playerConfig,  Map<String, Object?> options = const {}, this.platform = const PlatformCapabilities(), this.device = PlatformDeviceProfile.unknown, this.codecs = PlatformCodecCapabilities.unknown, this.debug = false}): _options = options;
   
 
-/// Player identifier.
+/// PlayerIdentity identifier.
 @override final  PlayerId playerId;
 /// Playback session identifier.
 @override final  SessionId sessionId;
 /// Adapter configuration.
 @override@JsonKey() final  PlayerAdapterConfig config;
-/// Player configuration.
+/// PlayerIdentity configuration.
 @override final  PlayerConfig? playerConfig;
 /// Backend specific options.
  final  Map<String, Object?> _options;

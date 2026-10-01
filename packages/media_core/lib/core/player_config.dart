@@ -1,4 +1,4 @@
-import 'package:media_core/core/media_type.dart';
+import 'package:media_core/core/player_media_type.dart';
 import 'package:media_core/core/player_constants.dart';
 import 'package:media_core/core/media_capabilities.dart';
 import 'package:media_core/identity/source_id.dart';
@@ -9,7 +9,7 @@ import 'package:equatable/equatable.dart';
 /// [PlayerConfig] describes how a player should be created and its initial
 /// operating preferences.
 ///
-/// Runtime state belongs to [PlayerState].
+/// Runtime state belongs to [PlayerCoreState].
 /// Implementation capabilities belong to [PlayerCapabilities].
 /// Runtime policy and orchestration belong to their respective modules.
 ///
@@ -56,7 +56,7 @@ final class PlayerConfig extends Equatable {
   final String? name;
 
   /// Declared media type.
-  final MediaType? mediaType;
+  final PlayerMediaType? mediaType;
 
   /// Detailed media capabilities.
   final MediaCapabilities? mediaCapabilities;
@@ -257,7 +257,7 @@ final class PlayerConfig extends Equatable {
   /// Null values retain the existing values.
   PlayerConfig copyWith({
     String? name,
-    MediaType? mediaType,
+    PlayerMediaType? mediaType,
     MediaCapabilities? mediaCapabilities,
     SourceId? sourceId,
     bool? autoInitialize,
@@ -313,7 +313,7 @@ final class PlayerConfig extends Equatable {
   }
 
   /// Returns a configuration for the supplied media type.
-  PlayerConfig withMediaType(MediaType value) {
+  PlayerConfig withMediaType(PlayerMediaType value) {
     return copyWith(mediaType: value);
   }
 
@@ -444,7 +444,7 @@ final class PlayerConfig extends Equatable {
   /// Returns an audio-only configuration.
   PlayerConfig asAudioOnly() {
     return copyWith(
-      mediaType: MediaType.audio,
+      mediaType: PlayerMediaType.audio,
       mediaCapabilities: MediaCapabilities.audioOnly,
       enableAudio: true,
       enableVideo: false,
@@ -455,7 +455,7 @@ final class PlayerConfig extends Equatable {
   /// Returns a video-only configuration.
   PlayerConfig asVideoOnly() {
     return copyWith(
-      mediaType: MediaType.video,
+      mediaType: PlayerMediaType.video,
       mediaCapabilities: MediaCapabilities.videoOnly,
       enableAudio: false,
       enableVideo: true,
@@ -465,7 +465,7 @@ final class PlayerConfig extends Equatable {
   /// Returns an audio-video configuration.
   PlayerConfig asAudioVideo() {
     return copyWith(
-      mediaType: MediaType.audioVideo,
+      mediaType: PlayerMediaType.audioVideo,
       mediaCapabilities: MediaCapabilities.audioVideo,
       enableAudio: true,
       enableVideo: true,
@@ -500,7 +500,7 @@ final class PlayerConfig extends Equatable {
 
   /// Audio-only player configuration.
   static const PlayerConfig audioOnly = PlayerConfig(
-    mediaType: MediaType.audio,
+    mediaType: PlayerMediaType.audio,
     mediaCapabilities: MediaCapabilities.audioOnly,
     enableAudio: true,
     enableVideo: false,
@@ -509,7 +509,7 @@ final class PlayerConfig extends Equatable {
 
   /// Video-only player configuration.
   static const PlayerConfig videoOnly = PlayerConfig(
-    mediaType: MediaType.video,
+    mediaType: PlayerMediaType.video,
     mediaCapabilities: MediaCapabilities.videoOnly,
     enableAudio: false,
     enableVideo: true,
@@ -517,7 +517,7 @@ final class PlayerConfig extends Equatable {
 
   /// Audio-video player configuration.
   static const PlayerConfig audioVideo = PlayerConfig(
-    mediaType: MediaType.audioVideo,
+    mediaType: PlayerMediaType.audioVideo,
     mediaCapabilities: MediaCapabilities.audioVideo,
     enableAudio: true,
     enableVideo: true,

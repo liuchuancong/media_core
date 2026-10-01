@@ -55,7 +55,7 @@ final class _FakeHandle implements PoolPlayerHandle {
   Future<void> setMute(bool muted) async => this.muted = muted;
 
   @override
-  Stream<PlaybackState> get playbackStream => const Stream<PlaybackState>.empty();
+  Stream<PlayerTransportState> get playbackStream => const Stream<PlayerTransportState>.empty();
 }
 
 final class _FakeHost implements PoolPlayerHost {

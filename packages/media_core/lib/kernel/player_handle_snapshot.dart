@@ -49,7 +49,7 @@ final class PlayerHandleSnapshot extends Equatable {
     DateTime? timestamp,
   }) : timestamp = timestamp ?? clock.now();
 
-  /// Player identity.
+  /// PlayerIdentity identity.
   final PlayerId playerId;
 
   /// Session identity.

@@ -124,7 +124,7 @@ extension PlayerHandleLifecycle on PlayerHandle {
 
     _announceSource(null);
 
-    _cancelActiveOperation(StateError('Player close requested.'));
+    _cancelActiveOperation(StateError('PlayerIdentity close requested.'));
 
     return _record(OperationType.close, _enqueue(() async {
       if (_disposed) return;
@@ -176,7 +176,7 @@ extension PlayerHandleLifecycle on PlayerHandle {
     _playIntent = false;
 
     _ladder.suspend();
-    _cancelActiveOperation(StateError('Player deactivation requested.'));
+    _cancelActiveOperation(StateError('PlayerIdentity deactivation requested.'));
 
     return _enqueue(() async {
       if (_disposed) return;

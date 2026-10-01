@@ -25,7 +25,7 @@ final class PlayerErrorCategory extends Equatable implements Comparable<PlayerEr
     final normalized = value.trim();
 
     if (normalized.isEmpty) {
-      throw ArgumentError.value(value, 'value', 'Player error category cannot be empty.');
+      throw ArgumentError.value(value, 'value', 'PlayerIdentity error category cannot be empty.');
     }
 
     return PlayerErrorCategory._(normalized, normalized);
@@ -348,11 +348,11 @@ final class PlayerErrorCategory extends Equatable implements Comparable<PlayerEr
     final nextName = (name ?? this.name).trim();
 
     if (nextValue.isEmpty) {
-      throw ArgumentError.value(value, 'value', 'Player error category cannot be empty.');
+      throw ArgumentError.value(value, 'value', 'PlayerIdentity error category cannot be empty.');
     }
 
     if (nextName.isEmpty) {
-      throw ArgumentError.value(name, 'name', 'Player error category name cannot be empty.');
+      throw ArgumentError.value(name, 'name', 'PlayerIdentity error category name cannot be empty.');
     }
 
     return PlayerErrorCategory._(nextValue, nextName);

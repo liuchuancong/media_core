@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:media_core/adapter/player_adapter_event.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
 
 /// Common expectations shared by media_core tests.
 ///
@@ -26,49 +26,49 @@ final class TestAssertions {
   }
 
   /// Expects [state] to be the idle state.
-  static void isIdle(PlayerState state) {
+  static void isIdle(PlayerCoreState state) {
     if (!state.isIdle) {
       throw StateError('expected idle state, got $state');
     }
   }
 
   /// Expects [state] to report playing.
-  static void isPlaying(PlayerState state) {
+  static void isPlaying(PlayerCoreState state) {
     if (!state.playing) {
       throw StateError('expected playing state, got $state');
     }
   }
 
   /// Expects [state] to report paused.
-  static void isPaused(PlayerState state) {
+  static void isPaused(PlayerCoreState state) {
     if (!state.paused) {
       throw StateError('expected paused state, got $state');
     }
   }
 
   /// Expects [state] to report buffering.
-  static void isBuffering(PlayerState state) {
+  static void isBuffering(PlayerCoreState state) {
     if (!state.buffering) {
       throw StateError('expected buffering state, got $state');
     }
   }
 
   /// Expects [state] to report completed.
-  static void isCompleted(PlayerState state) {
+  static void isCompleted(PlayerCoreState state) {
     if (!state.completed) {
       throw StateError('expected completed state, got $state');
     }
   }
 
   /// Expects [state] to report an error.
-  static void hasError(PlayerState state) {
+  static void hasError(PlayerCoreState state) {
     if (!state.hasError) {
       throw StateError('expected error state, got $state');
     }
   }
 
   /// Expects [state] to be disposed.
-  static void isDisposed(PlayerState state) {
+  static void isDisposed(PlayerCoreState state) {
     if (!state.disposed) {
       throw StateError('expected disposed state, got $state');
     }

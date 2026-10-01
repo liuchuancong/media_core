@@ -6,7 +6,7 @@ part 'player_info.g.dart';
 /// Descriptive information about the current player and media.
 ///
 /// [PlayerInfo] contains relatively stable descriptive data. Runtime state
-/// belongs to [PlayerState], while the complete observable state belongs to
+/// belongs to [PlayerCoreState], while the complete observable state belongs to
 /// [PlayerSnapshot].
 @freezed
 abstract class PlayerInfo with _$PlayerInfo {

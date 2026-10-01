@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$SessionSnapshot {
 
-/// Player identity.
+/// PlayerIdentity identity.
  PlayerId get playerId;/// Session identity.
  SessionId get sessionId;/// Current generation identity.
  GenerationId get generationId;/// Current source identity.
@@ -236,7 +236,7 @@ class _SessionSnapshot implements SessionSnapshot {
   const _SessionSnapshot({required this.playerId, required this.sessionId, required this.generationId, this.sourceId, this.state = const SessionState.idle(), this.position = Duration.zero, this.duration, this.buffering = false, this.hasError = false, this.errorMessage, required this.timestamp});
   
 
-/// Player identity.
+/// PlayerIdentity identity.
 @override final  PlayerId playerId;
 /// Session identity.
 @override final  SessionId sessionId;

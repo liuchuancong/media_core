@@ -1,4 +1,4 @@
-import 'package:media_core/playback/playback_state.dart';
+import 'package:media_core/playback/player_transport_state.dart';
 import 'package:equatable/equatable.dart';
 
 /// Immutable playback snapshot.
@@ -7,7 +7,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// Used by:
 ///
-/// - Player API
+/// - PlayerIdentity API
 /// - UI layer
 /// - Diagnostics
 ///
@@ -28,7 +28,7 @@ final class PlaybackSnapshot extends Equatable {
   });
 
   /// Creates snapshot from state.
-  factory PlaybackSnapshot.fromState(PlaybackState state) {
+  factory PlaybackSnapshot.fromState(PlayerTransportState state) {
     return PlaybackSnapshot(
       command: state.command,
       position: state.position,

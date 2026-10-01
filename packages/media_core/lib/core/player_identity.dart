@@ -4,18 +4,18 @@ import 'package:equatable/equatable.dart';
 
 /// Represents the stable identity of a player.
 ///
-/// [Player] contains only information that belongs to the lifetime of the
+/// [PlayerIdentity] contains only information that belongs to the lifetime of the
 /// player identity itself. Runtime associations such as session, request,
 /// operation, and generation are intentionally kept outside this object.
 ///
-/// Player equality is determined exclusively by [id].
-final class Player extends Equatable {
+/// PlayerIdentity equality is determined exclusively by [id].
+final class PlayerIdentity extends Equatable {
   /// Creates a player from an existing [PlayerId].
-  const Player({required this.id, required this.createdAt});
+  const PlayerIdentity({required this.id, required this.createdAt});
 
   /// Creates a new player with a generated unique identifier.
-  factory Player.create({DateTime? createdAt}) {
-    return Player(id: PlayerId.generate(), createdAt: createdAt ?? clock.now());
+  factory PlayerIdentity.create({DateTime? createdAt}) {
+    return PlayerIdentity(id: PlayerId.generate(), createdAt: createdAt ?? clock.now());
   }
 
   /// Stable identifier of this player instance.
@@ -29,13 +29,13 @@ final class Player extends Equatable {
 
   /// Returns whether [other] represents the same player identity.
   ///
-  /// Player identity is determined exclusively by [id].
-  bool isSamePlayer(Player other) {
+  /// PlayerIdentity identity is determined exclusively by [id].
+  bool isSamePlayer(PlayerIdentity other) {
     return id == other.id;
   }
 
   /// Returns whether [other] represents a different player identity.
-  bool isDifferentPlayer(Player other) {
+  bool isDifferentPlayer(PlayerIdentity other) {
     return id != other.id;
   }
 
@@ -44,7 +44,7 @@ final class Player extends Equatable {
 
   @override
   String toString() {
-    return 'Player('
+    return 'PlayerIdentity('
         'id: $id, '
         'createdAt: $createdAt'
         ')';

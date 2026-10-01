@@ -48,7 +48,7 @@ final class ErrorFormatter {
   /// Diagnostic context is included when available.
   static String formatLog(PlayerFailure failure) {
     final buffer = StringBuffer()
-      ..write('Player failure')
+      ..write('PlayerIdentity failure')
       ..write(' [code=${failure.code.value}]');
 
     final category = failure.effectiveCategory;
@@ -216,7 +216,7 @@ final class ErrorFormatter {
     'authentication': 'Authentication error',
     'security': 'Security error',
 
-    'adapter': 'Player adapter error',
+    'adapter': 'PlayerIdentity adapter error',
     'backend': 'Playback backend error',
 
     'decoder': 'Decoder error',
@@ -238,7 +238,7 @@ final class ErrorFormatter {
     'recording': 'Recording error',
     'cache': 'Cache error',
 
-    'lifecycle': 'Player lifecycle error',
+    'lifecycle': 'PlayerIdentity lifecycle error',
     'recovery': 'Recovery error',
     'fallback': 'Fallback error',
   };
@@ -278,10 +278,10 @@ final class ErrorFormatter {
     'AUTHORIZATION_FAILED': 'Authorization failed',
     'TLS_ERROR': 'Secure connection failed',
 
-    'ADAPTER_UNAVAILABLE': 'Player adapter is unavailable',
-    'ADAPTER_UNSUPPORTED': 'Player adapter is not supported',
-    'ADAPTER_INITIALIZATION_FAILED': 'Player adapter initialization failed',
-    'ADAPTER_DISPOSED': 'Player adapter has been disposed',
+    'ADAPTER_UNAVAILABLE': 'PlayerIdentity adapter is unavailable',
+    'ADAPTER_UNSUPPORTED': 'PlayerIdentity adapter is not supported',
+    'ADAPTER_INITIALIZATION_FAILED': 'PlayerIdentity adapter initialization failed',
+    'ADAPTER_DISPOSED': 'PlayerIdentity adapter has been disposed',
 
     'BACKEND_UNAVAILABLE': 'Playback backend is unavailable',
     'BACKEND_INITIALIZATION_FAILED': 'Playback backend initialization failed',
@@ -342,9 +342,9 @@ final class ErrorFormatter {
     'CONCURRENCY_LIMIT_EXCEEDED': 'Concurrency limit was exceeded',
     'LOCK_UNAVAILABLE': 'Required lock is unavailable',
 
-    'PLAYER_DISPOSED': 'Player has been disposed',
-    'LIFECYCLE_INACTIVE': 'Player lifecycle is inactive',
-    'LIFECYCLE_TRANSITION_FAILED': 'Player lifecycle transition failed',
+    'PLAYER_DISPOSED': 'PlayerIdentity has been disposed',
+    'LIFECYCLE_INACTIVE': 'PlayerIdentity lifecycle is inactive',
+    'LIFECYCLE_TRANSITION_FAILED': 'PlayerIdentity lifecycle transition failed',
 
     'FALLBACK_UNAVAILABLE': 'Fallback is unavailable',
     'FALLBACK_SELECTION_FAILED': 'Fallback selection failed',

@@ -57,7 +57,7 @@ final class PipAutoEnterPolicy {
 final class PipSession {
   const PipSession({this.playerId, this.active = false, this.reason});
 
-  /// Player being carried, or `null` when nothing is.
+  /// PlayerIdentity being carried, or `null` when nothing is.
   final PlayerId? playerId;
 
   /// Whether the small window is up.
@@ -172,7 +172,7 @@ final class PipSessionController {
   PlayerId? _playerId;
   bool _disposed = false;
 
-  /// Player currently carried, or `null`.
+  /// PlayerIdentity currently carried, or `null`.
   PlayerId? get playerId => _playerId;
 
   /// Whether the small window is up.
@@ -204,7 +204,7 @@ final class PipSessionController {
         'cannot enter pip: player is gone',
         fields: <String, Object?>{'playerId': playerId.value, 'reason': reason},
       );
-      throw StateError('Player $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.');
+      throw StateError('PlayerIdentity $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.');
     }
 
     _log.info(
@@ -278,7 +278,7 @@ final class PipSessionController {
     final handle = _registry.find(playerId)?.handle;
     if (handle == null) {
       throw StateError(
-        'Player $playerId has no framework handle; supply surfaceBuilder to render a host-owned player.',
+        'PlayerIdentity $playerId has no framework handle; supply surfaceBuilder to render a host-owned player.',
       );
     }
     return MediaPlayerView(handle: handle, fit: fit);

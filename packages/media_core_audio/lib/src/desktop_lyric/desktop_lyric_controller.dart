@@ -7,7 +7,7 @@ import 'package:media_core_audio/src/permission/audio_permission.dart';
 import 'package:media_core_audio/src/permission/audio_permission_service.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
 import 'package:media_core_audio/src/player/audio_playback_controller.dart';
-import 'package:media_core_audio/src/player/audio_player_state.dart';
+import 'package:media_core_audio/src/player/audio_playback_state.dart';
 import 'package:media_core_audio/src/desktop_lyric/desktop_lyric_state.dart';
 import 'package:media_core_audio/src/desktop_lyric/desktop_lyric_transport.dart';
 

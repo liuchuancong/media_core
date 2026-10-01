@@ -2,7 +2,7 @@
 
 /// Public library for the `renderer` module.
 ///
-/// Player rendering abstraction and rendering state..
+/// PlayerIdentity rendering abstraction and rendering state..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/renderer/`.

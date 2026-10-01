@@ -6,7 +6,7 @@ import 'package:media_core_logging/src/log_formatter.dart';
 import 'package:media_core_logging/src/log_level.dart';
 import 'package:media_core_logging/src/log_category.dart';
 import 'package:media_core_logging/src/player_logger.dart';
-import 'package:media_core_logging/src/log_console_sink.dart';
+import 'package:media_core_logging/src/memory_log_sink.dart';
 import 'package:media_core_logging/src/log_module.dart';
 import 'package:media_core_logging/src/log_scope.dart';
 

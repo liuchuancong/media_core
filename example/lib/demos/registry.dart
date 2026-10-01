@@ -36,7 +36,7 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
   RunnableDemo(
     id: 'player',
     nameZh: '播放器与生命周期',
-    nameEn: 'Player & lifecycle',
+    nameEn: 'PlayerIdentity & lifecycle',
     purposeZh: 'kernel → 注册后端 → create → open → play；含 seek / 音量 / 倍速 / 静音 / 循环与操作记录。',
     purposeEn: 'kernel → register backend → create → open → play; with seek, volume, rate, mute, loop and operation records.',
     builder: (_) => const PlayerDemoPage(),

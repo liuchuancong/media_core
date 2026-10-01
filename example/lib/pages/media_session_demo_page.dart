@@ -39,7 +39,7 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
   late final PlayerKernel _kernel;
 
   PlayerHandle? _handle;
-  // Typed as void on purpose: `PlaybackState` exists both in media_core and in
+  // Typed as void on purpose: `PlayerTransportState` exists both in media_core and in
   // audio_service (the surface's own state), and these are only ever cancelled.
   StreamSubscription<void>? _playbackSub;
   StreamSubscription<void>? _itemSub;

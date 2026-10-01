@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/media_core.dart' show PlaybackPoolOrchestrator, PlaybackState, PlayerSource, PoolPlayerHandle, PoolPlayerHost, SourceFormat, SourceId, SourceProtocol;
+import 'package:media_core/media_core.dart' show PlaybackPoolOrchestrator, PlayerTransportState, PlayerSource, PoolPlayerHandle, PoolPlayerHost, SourceFormat, SourceId, SourceProtocol;
 import 'package:media_core_list_playback/media_core_list_playback.dart';
 
 final class _FakePlayer implements PlaybackListPlayer {
@@ -346,7 +346,7 @@ final class _PoolHandle implements PoolPlayerHandle {
   Future<void> setMute(bool muted) async {}
 
   @override
-  Stream<PlaybackState> get playbackStream => const Stream<PlaybackState>.empty();
+  Stream<PlayerTransportState> get playbackStream => const Stream<PlayerTransportState>.empty();
 }
 
 final class _PoolHost implements PoolPlayerHost {
@@ -366,7 +366,7 @@ final class _PoolHost implements PoolPlayerHost {
   Future<void> disposeHandle(PoolPlayerHandle handle) async {}
 }
 
-/// Player bound to a pooled handle, recording what the list does through it.
+/// PlayerIdentity bound to a pooled handle, recording what the list does through it.
 final class _PooledListPlayer implements PlaybackListPlayer {
   _PooledListPlayer(this.handle);
 

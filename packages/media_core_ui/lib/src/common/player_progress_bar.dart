@@ -126,7 +126,7 @@ final class _PlayerProgressBarState extends State<PlayerProgressBar> {
 
     Widget track = SizedBox(
       height: barHeight,
-      child: ValueListenableBuilder<PlaybackState>(
+      child: ValueListenableBuilder<PlayerTransportState>(
         valueListenable: widget.controller.playbackListenable,
         builder: (context, playback, _) {
           return CustomPaint(
@@ -338,7 +338,7 @@ final class _PlayerTimelineState extends State<PlayerTimeline> {
     final theme = widget.theme;
     final spacing = widget.spacing ?? theme.barGap;
 
-    return ValueListenableBuilder<PlaybackState>(
+    return ValueListenableBuilder<PlayerTransportState>(
       valueListenable: widget.controller.playbackListenable,
       builder: (context, playback, _) {
         final duration = playback.duration;

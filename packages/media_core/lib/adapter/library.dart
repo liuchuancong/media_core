@@ -2,7 +2,7 @@
 
 /// Public library for the `adapter` module.
 ///
-/// Player backend adapter abstraction and adapter lifecycle..
+/// PlayerIdentity backend adapter abstraction and adapter lifecycle..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/adapter/`.
@@ -29,4 +29,4 @@ export 'package:media_core/adapter/player_adapter_metrics.dart';
 export 'package:media_core/adapter/player_adapter_registry.dart';
 export 'package:media_core/adapter/player_adapter_selector.dart';
 export 'package:media_core/adapter/player_adapter_state.dart';
-export 'package:media_core/adapter/player_video_output.dart';
+export 'package:media_core/adapter/player_video.dart';

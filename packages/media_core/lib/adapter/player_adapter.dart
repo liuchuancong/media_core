@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
 import 'package:media_core/adapter/player_adapter_event.dart';
 import 'package:media_core/adapter/player_adapter_context.dart';
 import 'package:media_core/adapter/player_adapter_metrics.dart';
@@ -45,7 +45,7 @@ abstract interface class PlayerAdapter {
   PlayerAdapterCapabilities get capabilities;
 
   /// Current adapter state.
-  PlayerState get state;
+  PlayerCoreState get state;
 
   /// Current playback position.
   Duration get position;

@@ -18,7 +18,7 @@
 /// Those belong to:
 ///
 /// - PlaybackController
-/// - PlaybackState
+/// - PlayerTransportState
 /// - PlayerSession
 final class PlaybackPolicy {
   /// Creates playback policy.

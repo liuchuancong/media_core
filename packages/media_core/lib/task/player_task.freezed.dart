@@ -25,7 +25,7 @@ mixin _$PlayerTask {
 ///
 /// The task may carry operation-level identity, but it does not own
 /// operation lifecycle management.
-@OperationContextJsonConverter() OperationContext? get operationContext;/// Player associated with this task.
+@OperationContextJsonConverter() OperationContext? get operationContext;/// PlayerIdentity associated with this task.
 @PlayerIdJsonConverter() PlayerId? get playerId;/// Request associated with this task.
 @RequestIdJsonConverter() RequestId? get requestId;/// Generation associated with this task.
 ///
@@ -278,7 +278,7 @@ class _PlayerTask extends PlayerTask {
 /// The task may carry operation-level identity, but it does not own
 /// operation lifecycle management.
 @override@OperationContextJsonConverter() final  OperationContext? operationContext;
-/// Player associated with this task.
+/// PlayerIdentity associated with this task.
 @override@PlayerIdJsonConverter() final  PlayerId? playerId;
 /// Request associated with this task.
 @override@RequestIdJsonConverter() final  RequestId? requestId;

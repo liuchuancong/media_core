@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import 'package:media_core/adapter/player_video_output.dart';
+import 'package:media_core/adapter/player_video.dart';
 import 'package:media_core/kernel/player_handle.dart';
 import 'package:media_core/screenshot/screenshot_surface.dart';
 import 'package:media_core/source/player_source.dart';

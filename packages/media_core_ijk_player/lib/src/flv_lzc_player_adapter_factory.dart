@@ -1,4 +1,4 @@
-import 'package:media_core_ijk_player/src/flv_lzc_adapter.dart';
+import 'package:media_core_ijk_player/src/flv_lzc_player_adapter.dart';
 import 'package:media_core/media_core.dart';
 
 export 'package:media_core_ijk_player/src/fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
@@ -6,11 +6,11 @@ export 'package:media_core_ijk_player/src/fijk_player_config.dart' show FijkPlay
 const String kIjkPlayerBackendId = 'ijk';
 
 /// [PlayerAdapterFactory] that creates [FlvLzcPlayerAdapter] instances.
-final class IjkPlayerAdapterFactory implements PlayerAdapterFactory {
+final class FlvLzcPlayerAdapterFactory implements PlayerAdapterFactory {
   /// [capabilities] and [config] are shared by every adapter this
   /// factory creates. [configure] runs once per instance after
   /// construction for per-instance customisation.
-  const IjkPlayerAdapterFactory({
+  const FlvLzcPlayerAdapterFactory({
     this.capabilities = FlvLzcPlayerAdapter.defaultCapabilities,
     this.config = const FijkPlayerConfig(),
     this.configure,
@@ -68,7 +68,7 @@ void registerIjkRegistry(
   void Function(FlvLzcPlayerAdapter adapter)? configure,
 }) {
   registry.register(
-    IjkPlayerAdapterFactory(
+    FlvLzcPlayerAdapterFactory(
       capabilities: capabilities,
       config: config,
       configure: configure,

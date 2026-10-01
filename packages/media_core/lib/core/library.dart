@@ -17,8 +17,8 @@ library;
 // ============================================================================
 
 export 'package:media_core/core/media_capabilities.dart';
-export 'package:media_core/core/media_type.dart';
-export 'package:media_core/core/player.dart';
+export 'package:media_core/core/player_media_type.dart';
+export 'package:media_core/core/player_identity.dart';
 export 'package:media_core/core/player_capabilities.dart';
 export 'package:media_core/core/player_config.dart';
 export 'package:media_core/core/player_constants.dart';
@@ -27,5 +27,7 @@ export 'package:media_core/core/player_info.dart';
 export 'package:media_core/core/player_metrics.dart';
 export 'package:media_core/core/player_options.dart';
 export 'package:media_core/core/player_snapshot.dart';
-export 'package:media_core/core/player_state.dart';
+export 'package:media_core/core/player_lifecycle_state.dart';
+export 'package:media_core/core/player_playback_state.dart';
+export 'package:media_core/core/player_core_state.dart';
 export 'package:media_core/core/player_status.dart';

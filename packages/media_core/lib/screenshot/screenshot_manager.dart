@@ -32,7 +32,7 @@ final class ScreenshotContext {
     required this.position,
   });
 
-  /// Player the captures belong to.
+  /// PlayerIdentity the captures belong to.
   final PlayerId playerId;
 
   /// Asks the currently attached adapter for a frame.

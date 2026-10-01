@@ -31,10 +31,10 @@ final class _LiveDemoPageState extends State<LiveDemoPage> {
   late final PlayerKernel _kernel;
   late final LivePlaybackController _controller;
 
-  StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<PlayerCoreState>? _stateSub;
   StreamSubscription<PlayerFailure>? _failureSub;
 
-  PlayerState _state = const PlayerState();
+  PlayerCoreState _state = const PlayerCoreState();
 
   @override
   void initState() {

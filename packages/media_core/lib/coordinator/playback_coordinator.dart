@@ -26,7 +26,7 @@ import 'package:media_core/playback/playback_controller.dart';
 /// - PlaybackController
 /// - PlayerSession
 /// - PlayerAdapter
-/// - PlaybackState
+/// - PlayerTransportState
 final class PlaybackCoordinator {
   /// Creates playback coordinator.
   PlaybackCoordinator();

@@ -2,7 +2,7 @@
 
 /// Public library for the `pool` module.
 ///
-/// Player instance pooling, allocation and recycling..
+/// PlayerIdentity instance pooling, allocation and recycling..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/pool/`.

@@ -21,7 +21,7 @@
 library;
 
 export 'package:media_core_logging/src/log_category.dart';
-export 'package:media_core_logging/src/log_console_sink.dart';
+export 'package:media_core_logging/src/memory_log_sink.dart';
 export 'package:media_core_logging/src/log_file_sink.dart';
 export 'package:media_core_logging/src/log_filter.dart';
 export 'package:media_core_logging/src/log_formatter.dart';

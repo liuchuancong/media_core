@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:media_core/kernel/player_handle.dart';
-import 'package:media_core/playback/playback_state.dart';
+import 'package:media_core/playback/player_transport_state.dart';
 import 'package:media_core/kernel/player_kernel.dart';
 import 'package:media_core/source/player_source.dart';
 
@@ -41,7 +41,7 @@ abstract interface class PoolPlayerHandle {
   Future<void> setMute(bool muted);
 
   /// Playback state stream of the player.
-  Stream<PlaybackState> get playbackStream;
+  Stream<PlayerTransportState> get playbackStream;
 }
 
 /// Where the pool gets players and where it puts them back.
@@ -88,7 +88,7 @@ final class KernelPoolPlayerHandle implements PoolPlayerHandle {
   Future<void> setMute(bool muted) => handle.setMute(muted);
 
   @override
-  Stream<PlaybackState> get playbackStream => handle.playbackStream;
+  Stream<PlayerTransportState> get playbackStream => handle.playbackStream;
 }
 
 /// [PoolPlayerHost] backed by [PlayerKernel].

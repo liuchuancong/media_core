@@ -22,7 +22,7 @@ import 'package:media_core/policy/concurrency_policy.dart';
 ///
 /// Those belong to:
 ///
-/// - Player
+/// - PlayerIdentity
 /// - Session
 /// - Factory
 final class PlayerPolicy {

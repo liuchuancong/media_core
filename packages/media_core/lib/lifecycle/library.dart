@@ -2,7 +2,7 @@
 
 /// Public library for the `lifecycle` module.
 ///
-/// Player, page and application lifecycle management..
+/// PlayerIdentity, page and application lifecycle management..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/lifecycle/`.

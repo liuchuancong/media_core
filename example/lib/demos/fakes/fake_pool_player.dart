@@ -38,7 +38,7 @@ final class FakePoolPlayerHandle implements PoolPlayerHandle {
   /// failure, so a fake that cannot fail cannot demonstrate them.
   int failuresBeforeSuccess;
 
-  final StreamController<PlaybackState> _playback = StreamController<PlaybackState>.broadcast();
+  final StreamController<PlayerTransportState> _playback = StreamController<PlayerTransportState>.broadcast();
 
   Timer? _ticker;
   PlayerSource? _source;
@@ -134,10 +134,10 @@ final class FakePoolPlayerHandle implements PoolPlayerHandle {
   }
 
   @override
-  Stream<PlaybackState> get playbackStream => _playback.stream;
+  Stream<PlayerTransportState> get playbackStream => _playback.stream;
 
   /// Current playback state.
-  PlaybackState get state => PlaybackState(
+  PlayerTransportState get state => PlayerTransportState(
     command: _command,
     position: _position,
     duration: const Duration(minutes: 2),

@@ -39,7 +39,7 @@ final class _PoolHandle implements PoolPlayerHandle {
   Future<void> setMute(bool muted) async {}
 
   @override
-  Stream<PlaybackState> get playbackStream => const Stream<PlaybackState>.empty();
+  Stream<PlayerTransportState> get playbackStream => const Stream<PlayerTransportState>.empty();
 }
 
 final class _PoolHost implements PoolPlayerHost {

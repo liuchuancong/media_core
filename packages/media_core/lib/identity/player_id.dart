@@ -28,7 +28,7 @@ final class PlayerId extends Equatable implements Comparable<PlayerId> {
     final normalized = value.trim();
 
     if (normalized.isEmpty) {
-      throw ArgumentError.value(value, 'value', 'Player ID must not be empty.');
+      throw ArgumentError.value(value, 'value', 'PlayerIdentity ID must not be empty.');
     }
 
     return PlayerId._(normalized);

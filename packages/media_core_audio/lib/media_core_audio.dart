@@ -91,7 +91,7 @@ export 'package:media_core_audio/src/permission/audio_permission_service.dart';
 // Music player.
 export 'package:media_core_audio/src/player/audio_playback_config.dart';
 export 'package:media_core_audio/src/player/audio_playback_controller.dart';
-export 'package:media_core_audio/src/player/audio_player_state.dart';
+export 'package:media_core_audio/src/player/audio_playback_state.dart';
 
 // Queue and play modes.
 export 'package:media_core_audio/src/queue/play_mode.dart';

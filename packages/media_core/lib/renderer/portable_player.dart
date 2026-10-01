@@ -24,7 +24,7 @@ final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 /// it can build the framework's own video surface over the *same* player, so the
 /// stream, the position and the decoder are reused rather than re-created.
 abstract interface class PortablePlayer {
-  /// Player identity.
+  /// PlayerIdentity identity.
   PlayerId get id;
 
   /// Whether the player is gone.

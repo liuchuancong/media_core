@@ -49,7 +49,7 @@ final class PlayerError extends Equatable {
   /// Stack trace associated with the error.
   final StackTrace? stackTrace;
 
-  /// Player associated with this error.
+  /// PlayerIdentity associated with this error.
   final PlayerId? playerId;
 
   /// Session associated with this error.

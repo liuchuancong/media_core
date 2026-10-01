@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:media_core_audio/src/player/audio_playback_controller.dart';
-import 'package:media_core_audio/src/player/audio_player_state.dart';
+import 'package:media_core_audio/src/player/audio_playback_state.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
 import 'package:media_core_audio/src/media_core_audio.dart';
 import 'package:media_core_mediasession/media_core_mediasession.dart';

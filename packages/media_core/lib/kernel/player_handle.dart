@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'package:media_core/core/player.dart';
+import 'package:media_core/core/player_identity.dart';
 import 'package:media_core/kernel/kernel_options.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:media_core/core/player_config.dart';
 import 'package:media_core/event/player_event.dart';
@@ -19,7 +19,7 @@ import 'package:media_core/event/player_event_bus.dart';
 import 'package:media_core/identity/generation_id.dart';
 import 'package:media_core/session/player_session.dart';
 import 'package:media_core/event/player_event_type.dart';
-import 'package:media_core/playback/playback_state.dart';
+import 'package:media_core/playback/player_transport_state.dart';
 import 'package:media_core/session/session_context.dart';
 import 'package:media_core/recovery/recovery_step.dart';
 import 'package:media_core/session/session_snapshot.dart';
@@ -152,7 +152,7 @@ final class PlayerHandle implements RecoveryTarget {
   /// Creates a handle. Prefer [PlayerKernel.create] over calling
   /// this directly.
   PlayerHandle({
-    required Player player,
+    required PlayerIdentity player,
     required PlayerAdapter adapter,
     required PlayerAdapterRegistration registration,
     required PlayerAdapterContext adapterContext,
@@ -194,7 +194,7 @@ final class PlayerHandle implements RecoveryTarget {
     _subscribeAdapter(_runtime.adapter);
   }
 
-  final Player _player;
+  final PlayerIdentity _player;
   final PlayerAdapterContext _adapterContext;
   final PlayerEventBus _eventBus;
   final KernelOptions _options;
@@ -317,10 +317,10 @@ final class PlayerHandle implements RecoveryTarget {
   /// lifecycle operation.
   OperationCancelToken? _activeCancelToken;
 
-  /// Player configuration applied to this handle.
+  /// PlayerIdentity configuration applied to this handle.
   final PlayerConfig config;
 
-  /// Player policy applied to this handle.
+  /// PlayerIdentity policy applied to this handle.
   final PlayerPolicy policy;
 
   /// Volume queued by a caller before the source was ready.
@@ -358,7 +358,7 @@ final class PlayerHandle implements RecoveryTarget {
   // ---------------------------------------------------------------------------
 
   /// The logical player identity.
-  Player get player => _player;
+  PlayerIdentity get player => _player;
 
   /// Identifier of this player.
   PlayerId get id => _player.id;
@@ -379,7 +379,7 @@ final class PlayerHandle implements RecoveryTarget {
   PlayerAdapter get adapter => _runtime.adapter;
 
   /// Semantic state reported by the adapter.
-  PlayerState get state => _runtime.adapter.state;
+  PlayerCoreState get state => _runtime.adapter.state;
 
   /// Metrics reported by the adapter.
   PlayerAdapterMetrics get metrics => _runtime.adapter.metrics;
@@ -388,10 +388,10 @@ final class PlayerHandle implements RecoveryTarget {
   PlayerSource? get source => _currentSource;
 
   /// Current playback state.
-  PlaybackState get playback => _runtime.playback.current;
+  PlayerTransportState get playback => _runtime.playback.current;
 
   /// Playback state stream.
-  ValueStream<PlaybackState> get playbackStream => _runtime.playback.state;
+  ValueStream<PlayerTransportState> get playbackStream => _runtime.playback.state;
 
   /// Session snapshots stream.
   Stream<SessionSnapshot> get snapshots => _runtime.session.snapshots;
@@ -521,7 +521,7 @@ final class PlayerHandle implements RecoveryTarget {
 
   /// Typed playback-state stream. Identical to [playbackStream]; kept as
   /// the conventional name consumers reach for first.
-  ValueStream<PlaybackState> get stateChanges => _runtime.playback.state;
+  ValueStream<PlayerTransportState> get stateChanges => _runtime.playback.state;
 
 
   // ---------------------------------------------------------------------------

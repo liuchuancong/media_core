@@ -11,7 +11,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// Used by:
 ///
-/// - Player
+/// - PlayerIdentity
 /// - Renderer
 /// - UI
 ///
@@ -20,8 +20,8 @@ import 'package:equatable/equatable.dart';
 /// - control backend
 /// - call platform APIs
 /// - manage decoder
-final class PlaybackState extends Equatable {
-  const PlaybackState({
+final class PlayerTransportState extends Equatable {
+  const PlayerTransportState({
     required this.command,
     required this.position,
     required this.duration,
@@ -33,7 +33,7 @@ final class PlaybackState extends Equatable {
   });
 
   /// Initial state.
-  const PlaybackState.initial()
+  const PlayerTransportState.initial()
     : command = const PlaybackCommand.idle(),
       position = Duration.zero,
       duration = Duration.zero,
@@ -108,7 +108,7 @@ final class PlaybackState extends Equatable {
   // Update
   // ---------------------------------------------------------------------------
 
-  PlaybackState copyWith({
+  PlayerTransportState copyWith({
     PlaybackCommand? command,
     Duration? position,
     Duration? duration,
@@ -118,7 +118,7 @@ final class PlaybackState extends Equatable {
     DateTime? updatedAt,
     bool? buffering,
   }) {
-    return PlaybackState(
+    return PlayerTransportState(
       command: command ?? this.command,
       position: position ?? this.position,
       duration: duration ?? this.duration,
@@ -131,7 +131,7 @@ final class PlaybackState extends Equatable {
   }
 
   /// Reduce command.
-  PlaybackState reduce(PlaybackCommand command) {
+  PlayerTransportState reduce(PlaybackCommand command) {
     switch (command) {
       case PlaybackCommandPlay():
         return copyWith(command: command, initialized: true, updatedAt: clock.now());
@@ -175,7 +175,7 @@ final class PlaybackState extends Equatable {
 
   @override
   String toString() {
-    return 'PlaybackState('
+    return 'PlayerTransportState('
         'command=$command, '
         'position=$position, '
         'duration=$duration, '

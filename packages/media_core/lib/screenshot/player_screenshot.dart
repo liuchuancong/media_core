@@ -70,7 +70,7 @@ final class PlayerScreenshot extends Equatable {
   /// Which route produced the image.
   final ScreenshotSource source;
 
-  /// Player the frame belongs to, when the capture went through a handle.
+  /// PlayerIdentity the frame belongs to, when the capture went through a handle.
   final PlayerId? playerId;
 
   /// Format that was requested, set only when it differs from [format].

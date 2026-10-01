@@ -26,7 +26,7 @@ final class PlayerErrorCode extends Equatable implements Comparable<PlayerErrorC
     final normalized = value.trim();
 
     if (normalized.isEmpty) {
-      throw ArgumentError.value(value, 'value', 'Player error code cannot be empty.');
+      throw ArgumentError.value(value, 'value', 'PlayerIdentity error code cannot be empty.');
     }
 
     return PlayerErrorCode._(normalized, normalized);
@@ -528,11 +528,11 @@ final class PlayerErrorCode extends Equatable implements Comparable<PlayerErrorC
     final nextName = (name ?? this.name).trim();
 
     if (nextValue.isEmpty) {
-      throw ArgumentError.value(value, 'value', 'Player error code cannot be empty.');
+      throw ArgumentError.value(value, 'value', 'PlayerIdentity error code cannot be empty.');
     }
 
     if (nextName.isEmpty) {
-      throw ArgumentError.value(name, 'name', 'Player error code name cannot be empty.');
+      throw ArgumentError.value(name, 'name', 'PlayerIdentity error code name cannot be empty.');
     }
 
     return PlayerErrorCode._(nextValue, nextName);

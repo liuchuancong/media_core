@@ -23,7 +23,7 @@ class PoolDemo extends ModuleDemo {
   String get nameZh => '播放器池：可见性驱动的复用';
 
   @override
-  String get nameEn => 'Player pool: visibility-driven reuse';
+  String get nameEn => 'PlayerIdentity pool: visibility-driven reuse';
 
   @override
   String get purposeZh =>

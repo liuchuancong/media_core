@@ -11,7 +11,7 @@ final class _FakeHandle implements PoolPlayerHandle {
   @override
   final String id;
 
-  final StreamController<PlaybackState> _states = StreamController<PlaybackState>.broadcast();
+  final StreamController<PlayerTransportState> _states = StreamController<PlayerTransportState>.broadcast();
 
   String? openedSource;
   double volume = 1;
@@ -25,11 +25,11 @@ final class _FakeHandle implements PoolPlayerHandle {
   bool isDisposed = false;
 
   @override
-  Stream<PlaybackState> get playbackStream => _states.stream;
+  Stream<PlayerTransportState> get playbackStream => _states.stream;
 
   /// Emits a position, which is what the stall watchdog watches.
   void emitPosition(Duration position) {
-    _states.add(PlaybackState.initial().copyWith(position: position));
+    _states.add(PlayerTransportState.initial().copyWith(position: position));
   }
 
   @override

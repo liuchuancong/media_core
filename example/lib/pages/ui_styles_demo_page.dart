@@ -42,7 +42,7 @@ final class _UiStylesDemoPageState extends State<UiStylesDemoPage> {
   /// Null means "whatever the platform expects"; the picker sets a language.
   PlayerControlsStyle? _style;
 
-  StreamSubscription<PlaybackState>? _playbackSub;
+  StreamSubscription<PlayerTransportState>? _playbackSub;
   StreamSubscription<PlayerScreenshot>? _screenshotSub;
 
   @override
@@ -149,7 +149,7 @@ final class _UiStylesDemoPageState extends State<UiStylesDemoPage> {
     final effective = style ?? PlayerControlsStyle.resolve();
 
     return DemoPageScaffold(
-      title: '播放器界面风格 / Player UI styles',
+      title: '播放器界面风格 / PlayerIdentity UI styles',
       subtitle: '六套设计语言共用一层控制逻辑：切换风格时播放状态、进度与显隐策略都不重置。'
           ' · Six design languages over one control layer; switching keeps state, position and visibility policy.',
       log: _log,

@@ -46,7 +46,7 @@ final class GlobalPlayerCoordinator {
        lifecycle = lifecycle ?? LifecycleCoordinator(),
        presentation = presentation ?? PresentationCoordinator();
 
-  /// Player identity and session coordination.
+  /// PlayerIdentity identity and session coordination.
   final PlayerCoordinator player;
 
   /// Playback coordination.

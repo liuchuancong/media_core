@@ -2,72 +2,72 @@ import 'package:equatable/equatable.dart';
 
 /// Describes the media type currently represented by a player.
 ///
-/// [MediaType] is a small immutable value object used by the core player
+/// [PlayerMediaType] is a small immutable value object used by the core player
 /// model. It describes the capabilities of the current media itself,
 /// rather than the transport protocol or source declaration.
 ///
 /// Source-level media information belongs to `SourceMediaType`.
-final class MediaType extends Equatable implements Comparable<MediaType> {
+final class PlayerMediaType extends Equatable implements Comparable<PlayerMediaType> {
   /// Creates a media type from a raw value.
   ///
   /// Empty values are not allowed.
-  factory MediaType(String value) {
+  factory PlayerMediaType(String value) {
     final normalized = value.trim();
 
     if (normalized.isEmpty) {
       throw ArgumentError.value(value, 'value', 'Media type must not be empty.');
     }
 
-    return MediaType._(normalized);
+    return PlayerMediaType._(normalized);
   }
 
   /// Creates a custom media type.
-  factory MediaType.custom(String value) {
-    return MediaType(value);
+  factory PlayerMediaType.custom(String value) {
+    return PlayerMediaType(value);
   }
 
   /// Creates a media type from a JSON value.
-  factory MediaType.fromJson(Object? json) {
+  factory PlayerMediaType.fromJson(Object? json) {
     if (json is! String) {
-      throw FormatException('MediaType JSON value must be a String.');
+      throw FormatException('PlayerMediaType JSON value must be a String.');
     }
 
-    return MediaType(json);
+    return PlayerMediaType(json);
   }
 
   /// Parses a media type from a string.
-  static MediaType parse(String value) {
-    return MediaType(value);
+  static PlayerMediaType parse(String value) {
+    return PlayerMediaType(value);
   }
 
   /// Attempts to parse a media type.
   ///
   /// Returns `null` when [value] is empty or invalid.
-  static MediaType? tryParse(String? value) {
+  static PlayerMediaType? tryParse(String? value) {
     if (value == null || value.trim().isEmpty) {
       return null;
     }
 
     try {
-      return MediaType(value);
+      return PlayerMediaType(value);
     } on ArgumentError {
       return null;
     }
   }
 
-  const MediaType._(this.value);
+  const PlayerMediaType._(this.value);
 
   /// Represents an unknown media type.
-  static const MediaType unknown = MediaType._('unknown');
+  static const PlayerMediaType unknown = PlayerMediaType._('unknown');
 
   /// Represents audio-only media.
-  static const MediaType audio = MediaType._('audio');
+  static const PlayerMediaType audio = PlayerMediaType._('audio');
 
   /// Represents video-only media.
-  static const MediaType video = MediaType._('video');
+  static const PlayerMediaType video = PlayerMediaType._('video');
 
   /// Represents media containing both audio and video.
-  static const MediaType audioVideo = MediaType._('audio_video');
+  static const PlayerMediaType audioVideo = PlayerMediaType._('audio_video');
 
   /// Returns the raw media type value.
   final String value;
@@ -143,22 +143,22 @@ final class MediaType extends Equatable implements Comparable<MediaType> {
   }
 
   /// Returns all built-in media types.
-  static const List<MediaType> builtIns = <MediaType>[unknown, audio, video, audioVideo];
+  static const List<PlayerMediaType> builtIns = <PlayerMediaType>[unknown, audio, video, audioVideo];
 
   /// Returns all playable built-in media types.
-  static const List<MediaType> builtIn = <MediaType>[audio, video, audioVideo];
+  static const List<PlayerMediaType> builtIn = <PlayerMediaType>[audio, video, audioVideo];
 
   /// Returns whether [value] is a built-in media type.
   static bool isBuiltInValue(String value) {
     final normalized = value.trim();
 
-    return builtIns.any((MediaType type) => type.value == normalized);
+    return builtIns.any((PlayerMediaType type) => type.value == normalized);
   }
 
   /// Returns the corresponding built-in type for [value].
   ///
   /// Unknown values are represented by [unknown].
-  static MediaType builtInFor(String value) {
+  static PlayerMediaType builtInFor(String value) {
     final normalized = value.trim();
 
     for (final type in builtIns) {
@@ -171,28 +171,28 @@ final class MediaType extends Equatable implements Comparable<MediaType> {
   }
 
   /// Creates a copy with a different raw value.
-  MediaType copyWith({String? value}) {
-    return MediaType(value ?? this.value);
+  PlayerMediaType copyWith({String? value}) {
+    return PlayerMediaType(value ?? this.value);
   }
 
   /// Returns whether this type is equal to [other].
-  bool isSameAs(MediaType other) {
+  bool isSameAs(PlayerMediaType other) {
     return this == other;
   }
 
   /// Returns whether this type differs from [other].
-  bool isDifferentFrom(MediaType other) {
+  bool isDifferentFrom(PlayerMediaType other) {
     return this != other;
   }
 
   /// Returns whether this type has the same audio/video capabilities
   /// as [other].
-  bool hasSameCapabilitiesAs(MediaType other) {
+  bool hasSameCapabilitiesAs(PlayerMediaType other) {
     return hasAudio == other.hasAudio && hasVideo == other.hasVideo;
   }
 
   @override
-  int compareTo(MediaType other) {
+  int compareTo(PlayerMediaType other) {
     return value.compareTo(other.value);
   }
 

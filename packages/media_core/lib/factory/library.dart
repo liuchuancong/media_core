@@ -2,7 +2,7 @@
 
 /// Public library for the `factory` module.
 ///
-/// Player and backend factory, registration and selection..
+/// PlayerIdentity and backend factory, registration and selection..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/factory/`.

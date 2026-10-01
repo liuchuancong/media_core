@@ -319,8 +319,8 @@ final class FeedPlayerController {
   Future<void> setMute(bool muted) => _handle?.setMute(muted) ?? _pooledPlayer?.setMute(muted) ?? Future<void>.value();
 
   /// Playback state stream of the visible item's player.
-  Stream<PlaybackState> get onPlaybackStateChanged =>
-      _handle?.playbackStream ?? _pooledPlayer?.playbackStream ?? const Stream<PlaybackState>.empty();
+  Stream<PlayerTransportState> get onPlaybackStateChanged =>
+      _handle?.playbackStream ?? _pooledPlayer?.playbackStream ?? const Stream<PlayerTransportState>.empty();
 
   /// Releases the shared player and the feed.
   ///

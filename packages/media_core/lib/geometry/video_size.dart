@@ -16,7 +16,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// - GeometryController
 /// - Renderer
-/// - Player snapshot
+/// - PlayerIdentity snapshot
 final class VideoSize extends Equatable {
   const VideoSize({required this.width, required this.height});
 

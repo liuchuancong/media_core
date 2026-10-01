@@ -11,7 +11,7 @@ import 'package:media_core/session/session_controller.dart';
 import 'package:media_core/geometry/geometry_controller.dart';
 import 'package:media_core/playback/playback_command.dart';
 import 'package:media_core/playback/playback_controller.dart';
-import 'package:media_core/playback/playback_state.dart';
+import 'package:media_core/playback/player_transport_state.dart';
 
 /// Runtime container for one logical player.
 ///
@@ -83,7 +83,7 @@ final class PlayerRuntime {
     }, onError: (Object _) {});
   }
 
-  StreamSubscription<PlaybackState>? _sessionSubscription;
+  StreamSubscription<PlayerTransportState>? _sessionSubscription;
 
   /// Mutable: [replaceAdapter] swaps it during backend fallback.
   PlayerAdapter _adapter;

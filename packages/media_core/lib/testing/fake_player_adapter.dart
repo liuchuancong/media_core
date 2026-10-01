@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
+import 'package:media_core/core/player_lifecycle_state.dart';
+import 'package:media_core/core/player_playback_state.dart';
 import 'package:media_core/source/player_source.dart';
 import 'package:media_core/adapter/player_adapter.dart';
 import 'package:media_core/screenshot/screenshot_request.dart';
@@ -69,7 +71,7 @@ final class FakePlayerAdapter implements PlayerAdapter {
   PlayerAdapterCapabilities get capabilities => behavior.capabilities;
 
   @override
-  PlayerState get state => _mirror.toPlayerState();
+  PlayerCoreState get state => _mirror.toPlayerState();
 
   @override
   PlayerAdapterMetrics get metrics => behavior.metrics;
@@ -381,10 +383,10 @@ final class PlayerAdapterStateMirror {
   final bool audioOnly;
   final String? errorMessage;
 
-  /// Maps the mirror onto the semantic core [PlayerState].
-  PlayerState toPlayerState() {
+  /// Maps the mirror onto the semantic core [PlayerCoreState].
+  PlayerCoreState toPlayerState() {
     if (!initialized) {
-      return PlayerState.idle;
+      return PlayerCoreState.idle;
     }
 
     final PlayerPlaybackState playback;
@@ -402,7 +404,7 @@ final class PlayerAdapterStateMirror {
       playback = PlayerPlaybackState.stopped;
     }
 
-    return PlayerState(
+    return PlayerCoreState(
       lifecycle: PlayerLifecycleState.ready,
       playback: playback,
       hasSource: opened,

@@ -35,7 +35,7 @@ part 'player_adapter_context.freezed.dart';
 abstract class PlayerAdapterContext with _$PlayerAdapterContext {
   /// Creates adapter context.
   const factory PlayerAdapterContext({
-    /// Player identifier.
+    /// PlayerIdentity identifier.
     required PlayerId playerId,
 
     /// Playback session identifier.
@@ -44,7 +44,7 @@ abstract class PlayerAdapterContext with _$PlayerAdapterContext {
     /// Adapter configuration.
     @Default(PlayerAdapterConfig()) PlayerAdapterConfig config,
 
-    /// Player configuration.
+    /// PlayerIdentity configuration.
     PlayerConfig? playerConfig,
 
     /// Backend specific options.

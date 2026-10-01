@@ -2,7 +2,7 @@
 
 /// Public library for the `session` module.
 ///
-/// Player session lifecycle, context, state and operations..
+/// PlayerIdentity session lifecycle, context, state and operations..
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/session/`.

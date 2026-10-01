@@ -270,7 +270,7 @@ final class _MultiviewDemoPageState extends State<MultiviewDemoPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            isZh ? '播放器账本：${_host.summary()}' : 'Player ledger: ${_host.summary()}',
+            isZh ? '播放器账本：${_host.summary()}' : 'PlayerIdentity ledger: ${_host.summary()}',
             style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
           ),
         ],

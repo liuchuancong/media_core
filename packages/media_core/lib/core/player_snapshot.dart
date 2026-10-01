@@ -1,5 +1,5 @@
-import 'package:media_core/core/media_type.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_media_type.dart';
+import 'package:media_core/core/player_core_state.dart';
 import 'package:media_core/core/player_status.dart';
 import 'package:media_core/core/player_metrics.dart';
 import 'package:media_core/core/player_options.dart';
@@ -42,7 +42,7 @@ final class PlayerSnapshot extends Equatable {
     this.sourceId,
     this.mediaType,
     this.mediaCapabilities,
-    this.state = PlayerState.idle,
+    this.state = PlayerCoreState.idle,
     this.options = PlayerOptions.defaults,
     this.capabilities = PlayerCapabilities.basic,
     this.metrics,
@@ -71,7 +71,7 @@ final class PlayerSnapshot extends Equatable {
   final SourceId? sourceId;
 
   /// Media type of the current source.
-  final MediaType? mediaType;
+  final PlayerMediaType? mediaType;
 
   /// Capabilities detected for the current media source.
   ///
@@ -81,7 +81,7 @@ final class PlayerSnapshot extends Equatable {
   final MediaCapabilities? mediaCapabilities;
 
   /// Complete semantic runtime state of the player.
-  final PlayerState state;
+  final PlayerCoreState state;
 
   /// Current player options.
   final PlayerOptions options;
@@ -328,9 +328,9 @@ final class PlayerSnapshot extends Equatable {
     RequestId? requestId,
     GenerationId? generationId,
     SourceId? sourceId,
-    MediaType? mediaType,
+    PlayerMediaType? mediaType,
     MediaCapabilities? mediaCapabilities,
-    PlayerState? state,
+    PlayerCoreState? state,
     PlayerOptions? options,
     PlayerCapabilities? capabilities,
     PlayerMetrics? metrics,
@@ -445,7 +445,7 @@ final class PlayerSnapshot extends Equatable {
   }
 
   /// Returns a snapshot with the supplied media type.
-  PlayerSnapshot withMediaType(MediaType value) {
+  PlayerSnapshot withMediaType(PlayerMediaType value) {
     return copyWith(mediaType: value);
   }
 
@@ -489,7 +489,7 @@ final class PlayerSnapshot extends Equatable {
   }
 
   /// Returns a snapshot with the supplied player state.
-  PlayerSnapshot withState(PlayerState value) {
+  PlayerSnapshot withState(PlayerCoreState value) {
     return copyWith(state: value);
   }
 
@@ -533,12 +533,12 @@ final class PlayerSnapshot extends Equatable {
   /// Returns an idle snapshot while preserving player identity and
   /// configuration.
   PlayerSnapshot asIdle() {
-    return copyWith(state: PlayerState.idle);
+    return copyWith(state: PlayerCoreState.idle);
   }
 
   /// Returns a disposed snapshot.
   ///
-  /// Player identity and runtime associations are preserved so observers can
+  /// PlayerIdentity identity and runtime associations are preserved so observers can
   /// associate the terminal state with the original player generation.
   PlayerSnapshot asDisposed() {
     return PlayerSnapshot(
@@ -623,12 +623,12 @@ final class PlayerSnapshot extends Equatable {
   /// Creates a snapshot for [playerId] using the supplied state.
   static PlayerSnapshot fromState({
     required PlayerId playerId,
-    required PlayerState state,
+    required PlayerCoreState state,
     SessionId? sessionId,
     RequestId? requestId,
     GenerationId? generationId,
     SourceId? sourceId,
-    MediaType? mediaType,
+    PlayerMediaType? mediaType,
     MediaCapabilities? mediaCapabilities,
     PlayerOptions options = PlayerOptions.defaults,
     PlayerCapabilities capabilities = PlayerCapabilities.basic,

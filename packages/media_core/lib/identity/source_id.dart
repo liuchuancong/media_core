@@ -12,7 +12,7 @@ import 'package:equatable/equatable.dart';
 /// Typical relationship:
 ///
 /// ```text
-/// Player
+/// PlayerIdentity
 ///   └── Session
 ///         └── SourceId
 ///               └── PlayerSource

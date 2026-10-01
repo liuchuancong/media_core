@@ -75,7 +75,7 @@ final class OperationContext extends Equatable {
     );
   }
 
-  /// Player associated with the operation.
+  /// PlayerIdentity associated with the operation.
   final PlayerId? playerId;
 
   /// Session associated with the operation.

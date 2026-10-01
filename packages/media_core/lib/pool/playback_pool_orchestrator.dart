@@ -40,7 +40,7 @@ final class PooledItemState {
   final PlayerSource source;
   final PooledItemRole role;
 
-  /// Player holding this item, when one does.
+  /// PlayerIdentity holding this item, when one does.
   final String? playerId;
 
   @override
@@ -183,7 +183,7 @@ final class PlaybackPoolOrchestrator {
   /// Current resource pressure.
   ResourcePressure get pressure => _pressure;
 
-  /// Player holding [index], when one does.
+  /// PlayerIdentity holding [index], when one does.
   PoolPlayerHandle? handleFor(int index) {
     for (final assignment in _assignments.values) {
       if (assignment.index == index) {

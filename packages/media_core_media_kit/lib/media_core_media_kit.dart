@@ -28,12 +28,8 @@ export 'package:media_core_media_kit/src/utils/player_consts.dart' show PlayerCo
 export 'package:media_core_media_kit/src/utils/mpv_platform_profile.dart' show MpvPlatformProfile;
 
 // The upstream packages this adapter is built on, re-exported so a host gets
-// them from its single dependency on this adapter.
-//
-// `Player` and `PlayerState` are hidden because media_core exports its own
-// types under those names; an importer of both barrels would be ambiguous
-// about them. (Prefixed re-exports are not a thing in Dart, so a host that
-// needs the upstream `Player`/`PlayerState` spells them out by importing
-// package:media_kit/media_kit.dart itself.)
-export 'package:media_kit/media_kit.dart' hide Player, PlayerState;
+// them from its single dependency on this adapter. media_core's own public
+// types use composed names (PlayerIdentity, PlayerCoreState, ...), so the
+// engines' bare `Player`/`PlayerState` re-export without ambiguity.
+export 'package:media_kit/media_kit.dart';
 export 'package:media_kit_video/media_kit_video.dart';

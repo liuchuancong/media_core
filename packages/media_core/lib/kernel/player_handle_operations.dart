@@ -135,7 +135,7 @@ extension PlayerHandleOperations on PlayerHandle {
   int _invalidateOperations() {
     final generation = ++_operationGeneration;
 
-    _cancelActiveOperation(StateError('Player operation superseded by lifecycle generation $generation.'));
+    _cancelActiveOperation(StateError('PlayerIdentity operation superseded by lifecycle generation $generation.'));
 
     return generation;
   }
@@ -150,7 +150,7 @@ extension PlayerHandleOperations on PlayerHandle {
 
     _activeCancelToken = null;
 
-    token.cancel(reason ?? StateError('Player operation was cancelled.'));
+    token.cancel(reason ?? StateError('PlayerIdentity operation was cancelled.'));
     token.dispose();
   }
 

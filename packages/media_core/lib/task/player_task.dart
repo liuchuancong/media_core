@@ -78,7 +78,7 @@ abstract class PlayerTask with _$PlayerTask {
     /// operation lifecycle management.
     @OperationContextJsonConverter() OperationContext? operationContext,
 
-    /// Player associated with this task.
+    /// PlayerIdentity associated with this task.
     @PlayerIdJsonConverter() PlayerId? playerId,
 
     /// Request associated with this task.

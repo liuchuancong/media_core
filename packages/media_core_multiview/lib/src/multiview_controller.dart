@@ -107,7 +107,7 @@ final class MultiviewController {
   final Map<int, PoolPlayerHandle> _handles = <int, PoolPlayerHandle>{};
 
   /// Cell index → per-cell substreams.
-  final Map<int, StreamSubscription<PlaybackState>> _progressSubscriptions = <int, StreamSubscription<PlaybackState>>{};
+  final Map<int, StreamSubscription<PlayerTransportState>> _progressSubscriptions = <int, StreamSubscription<PlayerTransportState>>{};
 
   /// Cell index → last observed playback position and when it changed.
   final Map<int, ({Duration position, DateTime at})> _progress = <int, ({Duration position, DateTime at})>{};
@@ -154,7 +154,7 @@ final class MultiviewController {
   /// per-cell filter.
   DanmakuOverlaySession? get focusedDanmaku => _cells[_focusedIndex].danmaku;
 
-  /// Player identity of [index], for a host that wants to render it.
+  /// PlayerIdentity identity of [index], for a host that wants to render it.
   String? playerIdOf(int index) => _handles[index]?.id;
 
   // ---------------------------------------------------------------------------

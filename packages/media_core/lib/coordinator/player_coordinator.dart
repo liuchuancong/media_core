@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:media_core/core/player.dart';
+import 'package:media_core/core/player_identity.dart';
 import 'package:media_core/identity/player_id.dart';
 import 'package:media_core/session/player_session.dart';
 
@@ -23,12 +23,12 @@ final class PlayerCoordinator {
   /// Creates coordinator.
   PlayerCoordinator();
 
-  final Map<PlayerId, Player> _players = {};
+  final Map<PlayerId, PlayerIdentity> _players = {};
 
   final Map<PlayerId, PlayerSession> _sessions = {};
 
   /// Registered players.
-  List<Player> get players {
+  List<PlayerIdentity> get players {
     return _players.values.toList(growable: false);
   }
 
@@ -38,7 +38,7 @@ final class PlayerCoordinator {
   }
 
   /// Registers player.
-  void register(Player player) {
+  void register(PlayerIdentity player) {
     _players[player.id] = player;
   }
 
@@ -50,7 +50,7 @@ final class PlayerCoordinator {
   }
 
   /// Gets player.
-  Player? get(PlayerId playerId) {
+  PlayerIdentity? get(PlayerId playerId) {
     return _players[playerId];
   }
 

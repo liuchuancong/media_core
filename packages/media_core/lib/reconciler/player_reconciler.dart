@@ -2,7 +2,8 @@ import 'package:media_core/reconciler/reconcile_plan.dart';
 import 'package:media_core/reconciler/reconcile_action.dart';
 import 'package:media_core/reconciler/reconcile_result.dart';
 import 'package:media_core/reconciler/reconcile_context.dart';
-import 'package:media_core/core/player_state.dart';
+import 'package:media_core/core/player_core_state.dart';
+import 'package:media_core/core/player_playback_state.dart';
 import 'package:media_core/core/player_status.dart';
 
 /// Reconciles desired player state with current player state.
@@ -12,7 +13,7 @@ import 'package:media_core/core/player_status.dart';
 final class PlayerReconciler {
   const PlayerReconciler();
 
-  ReconcilePlan reconcile({required PlayerState current, required PlayerState desired, ReconcileContext? context}) {
+  ReconcilePlan reconcile({required PlayerCoreState current, required PlayerCoreState desired, ReconcileContext? context}) {
     final actions = <ReconcileAction>[];
 
     if (current == desired) {
@@ -29,7 +30,7 @@ final class PlayerReconciler {
     return ReconcilePlan(actions: actions);
   }
 
-  bool needsReconcile({required PlayerState current, required PlayerState desired}) {
+  bool needsReconcile({required PlayerCoreState current, required PlayerCoreState desired}) {
     return current != desired;
   }
 
@@ -41,7 +42,7 @@ final class PlayerReconciler {
     return ReconcileResult.pending(plan);
   }
 
-  PlayerStatus _resolveStatus(PlayerState state) {
+  PlayerStatus _resolveStatus(PlayerCoreState state) {
     if (state.disposed) {
       return PlayerStatus.disposed;
     }

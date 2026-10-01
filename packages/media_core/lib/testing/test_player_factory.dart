@@ -2,7 +2,7 @@ import 'package:media_core/testing/fake_player.dart';
 import 'package:media_core/testing/fake_player_adapter.dart';
 import 'package:media_core/adapter/player_adapter_context.dart';
 import 'package:media_core/adapter/player_adapter_factory.dart';
-import 'package:media_core/core/player.dart';
+import 'package:media_core/core/player_identity.dart';
 import 'package:media_core/identity/player_id.dart';
 import 'package:media_core/identity/session_id.dart';
 
@@ -10,12 +10,12 @@ import 'package:media_core/identity/session_id.dart';
 final class TestPlayerFactory {
   const TestPlayerFactory._();
 
-  /// Builds a [Player] with a deterministic id from [seed].
-  static Player player(int seed) => FakePlayer.fromSeed(seed).player;
+  /// Builds a [PlayerIdentity] with a deterministic id from [seed].
+  static PlayerIdentity player(int seed) => FakePlayer.fromSeed(seed).player;
 
   /// Builds [count] distinct players.
-  static List<Player> players(int count) {
-    return List<Player>.generate(count, TestPlayerFactory.player, growable: false);
+  static List<PlayerIdentity> players(int count) {
+    return List<PlayerIdentity>.generate(count, TestPlayerFactory.player, growable: false);
   }
 
   /// Builds a [PlayerId] from a raw string.

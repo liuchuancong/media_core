@@ -3,7 +3,7 @@
 // ignore_for_file: type=lint, type=warning, deprecated_member_use, deprecated_member_use_from_same_package
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
-part of 'player_state.dart';
+part of 'player_core_state.dart';
 
 // **************************************************************************
 // FreezedGenerator
@@ -12,9 +12,16 @@ part of 'player_state.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // dart format off
 T _$identity<T>(T value) => value;
+PlayerCoreState _$PlayerCoreStateFromJson(
+  Map<String, dynamic> json
+) {
+    return _PlayerState.fromJson(
+      json
+    );
+}
 
 /// @nodoc
-mixin _$PlayerState {
+mixin _$PlayerCoreState {
 
 /// Current player lifecycle state.
  PlayerLifecycleState get lifecycle;/// Current semantic playback state.
@@ -24,41 +31,41 @@ mixin _$PlayerState {
  bool get videoEnabled;/// Whether subtitle output is enabled.
  bool get subtitlesEnabled;/// Whether audio output is muted.
  bool get muted;
-/// Create a copy of PlayerState
+/// Create a copy of PlayerCoreState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-$PlayerStateCopyWith<PlayerState> get copyWith => _$PlayerStateCopyWithImpl<PlayerState>(this as PlayerState, _$identity);
+$PlayerCoreStateCopyWith<PlayerCoreState> get copyWith => _$PlayerCoreStateCopyWithImpl<PlayerCoreState>(this as PlayerCoreState, _$identity);
 
-  /// Serializes this PlayerState to a JSON map.
+  /// Serializes this PlayerCoreState to a JSON map.
   Map<String, dynamic> toJson();
 
 
 @override
 bool operator ==(Object other) {
-  final _this = this as PlayerState;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerState&&(identical(other.lifecycle, _this.lifecycle) || other.lifecycle == _this.lifecycle)&&(identical(other.playback, _this.playback) || other.playback == _this.playback)&&(identical(other.hasSource, _this.hasSource) || other.hasSource == _this.hasSource)&&(identical(other.audioEnabled, _this.audioEnabled) || other.audioEnabled == _this.audioEnabled)&&(identical(other.videoEnabled, _this.videoEnabled) || other.videoEnabled == _this.videoEnabled)&&(identical(other.subtitlesEnabled, _this.subtitlesEnabled) || other.subtitlesEnabled == _this.subtitlesEnabled)&&(identical(other.muted, _this.muted) || other.muted == _this.muted));
+  final _this = this as PlayerCoreState;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerCoreState&&(identical(other.lifecycle, _this.lifecycle) || other.lifecycle == _this.lifecycle)&&(identical(other.playback, _this.playback) || other.playback == _this.playback)&&(identical(other.hasSource, _this.hasSource) || other.hasSource == _this.hasSource)&&(identical(other.audioEnabled, _this.audioEnabled) || other.audioEnabled == _this.audioEnabled)&&(identical(other.videoEnabled, _this.videoEnabled) || other.videoEnabled == _this.videoEnabled)&&(identical(other.subtitlesEnabled, _this.subtitlesEnabled) || other.subtitlesEnabled == _this.subtitlesEnabled)&&(identical(other.muted, _this.muted) || other.muted == _this.muted));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-  final _this = this as PlayerState;
+  final _this = this as PlayerCoreState;
   return Object.hash(runtimeType,_this.lifecycle,_this.playback,_this.hasSource,_this.audioEnabled,_this.videoEnabled,_this.subtitlesEnabled,_this.muted);
 }
 
 @override
 String toString() {
-  final _this = this as PlayerState;
-  return 'PlayerState(lifecycle: ${_this.lifecycle}, playback: ${_this.playback}, hasSource: ${_this.hasSource}, audioEnabled: ${_this.audioEnabled}, videoEnabled: ${_this.videoEnabled}, subtitlesEnabled: ${_this.subtitlesEnabled}, muted: ${_this.muted})';
+  final _this = this as PlayerCoreState;
+  return 'PlayerCoreState(lifecycle: ${_this.lifecycle}, playback: ${_this.playback}, hasSource: ${_this.hasSource}, audioEnabled: ${_this.audioEnabled}, videoEnabled: ${_this.videoEnabled}, subtitlesEnabled: ${_this.subtitlesEnabled}, muted: ${_this.muted})';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $PlayerStateCopyWith<$Res>  {
-  factory $PlayerStateCopyWith(PlayerState value, $Res Function(PlayerState) _then) = _$PlayerStateCopyWithImpl;
+abstract mixin class $PlayerCoreStateCopyWith<$Res>  {
+  factory $PlayerCoreStateCopyWith(PlayerCoreState value, $Res Function(PlayerCoreState) _then) = _$PlayerCoreStateCopyWithImpl;
 @useResult
 $Res call({
  PlayerLifecycleState lifecycle, PlayerPlaybackState playback, bool hasSource, bool audioEnabled, bool videoEnabled, bool subtitlesEnabled, bool muted
@@ -69,17 +76,17 @@ $Res call({
 
 }
 /// @nodoc
-class _$PlayerStateCopyWithImpl<$Res>
-    implements $PlayerStateCopyWith<$Res> {
-  _$PlayerStateCopyWithImpl(this._self, this._then);
+class _$PlayerCoreStateCopyWithImpl<$Res>
+    implements $PlayerCoreStateCopyWith<$Res> {
+  _$PlayerCoreStateCopyWithImpl(this._self, this._then);
 
-  final PlayerState _self;
-  final $Res Function(PlayerState) _then;
+  final PlayerCoreState _self;
+  final $Res Function(PlayerCoreState) _then;
 
-/// Create a copy of PlayerState
+/// Create a copy of PlayerCoreState
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? lifecycle = null,Object? playback = null,Object? hasSource = null,Object? audioEnabled = null,Object? videoEnabled = null,Object? subtitlesEnabled = null,Object? muted = null,}) {
-  return _then(PlayerState(
+  return _then(PlayerCoreState(
 lifecycle: null == lifecycle ? _self.lifecycle : lifecycle // ignore: cast_nullable_to_non_nullable
 as PlayerLifecycleState,playback: null == playback ? _self.playback : playback // ignore: cast_nullable_to_non_nullable
 as PlayerPlaybackState,hasSource: null == hasSource ? _self.hasSource : hasSource // ignore: cast_nullable_to_non_nullable
@@ -94,8 +101,8 @@ as bool,
 }
 
 
-/// Adds pattern-matching-related methods to [PlayerState].
-extension PlayerStatePatterns on PlayerState {
+/// Adds pattern-matching-related methods to [PlayerCoreState].
+extension PlayerCoreStatePatterns on PlayerCoreState {
 /// A variant of `map` that fallback to returning `orElse`.
 ///
 /// It is equivalent to doing:
@@ -227,7 +234,7 @@ return $default(_that.lifecycle,_that.playback,_that.hasSource,_that.audioEnable
 /// @nodoc
 @JsonSerializable()
 
-class _PlayerState extends PlayerState {
+class _PlayerState extends PlayerCoreState {
   const _PlayerState({this.lifecycle = PlayerLifecycleState.idle, this.playback = PlayerPlaybackState.idle, this.hasSource = false, this.audioEnabled = false, this.videoEnabled = false, this.subtitlesEnabled = false, this.muted = false}): super._();
   factory _PlayerState.fromJson(Map<String, dynamic> json) => _$PlayerStateFromJson(json);
 
@@ -246,7 +253,7 @@ class _PlayerState extends PlayerState {
 /// Whether audio output is muted.
 @override@JsonKey() final  bool muted;
 
-/// Create a copy of PlayerState
+/// Create a copy of PlayerCoreState
 /// with the given fields replaced by the non-null parameter values.
 @override @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
@@ -270,14 +277,14 @@ int get hashCode {
 
 @override
 String toString() {
-    return 'PlayerState(lifecycle: $lifecycle, playback: $playback, hasSource: $hasSource, audioEnabled: $audioEnabled, videoEnabled: $videoEnabled, subtitlesEnabled: $subtitlesEnabled, muted: $muted)';
+    return 'PlayerCoreState(lifecycle: $lifecycle, playback: $playback, hasSource: $hasSource, audioEnabled: $audioEnabled, videoEnabled: $videoEnabled, subtitlesEnabled: $subtitlesEnabled, muted: $muted)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class _$PlayerStateCopyWith<$Res> implements $PlayerStateCopyWith<$Res> {
+abstract mixin class _$PlayerStateCopyWith<$Res> implements $PlayerCoreStateCopyWith<$Res> {
   factory _$PlayerStateCopyWith(_PlayerState value, $Res Function(_PlayerState) _then) = __$PlayerStateCopyWithImpl;
 @override @useResult
 $Res call({
@@ -296,7 +303,7 @@ class __$PlayerStateCopyWithImpl<$Res>
   final _PlayerState _self;
   final $Res Function(_PlayerState) _then;
 
-/// Create a copy of PlayerState
+/// Create a copy of PlayerCoreState
 /// with the given fields replaced by the non-null parameter values.
 @override @pragma('vm:prefer-inline') $Res call({Object? lifecycle = null,Object? playback = null,Object? hasSource = null,Object? audioEnabled = null,Object? videoEnabled = null,Object? subtitlesEnabled = null,Object? muted = null,}) {
   return _then(_PlayerState(

@@ -61,7 +61,7 @@ enum VideoOrientation {
 ///
 /// - GeometryController
 /// - Renderer
-/// - Player snapshot
+/// - PlayerIdentity snapshot
 final class VideoOrientationInfo extends Equatable {
   const VideoOrientationInfo({required this.orientation, this.rotation = 0, this.mirrored = false});
 

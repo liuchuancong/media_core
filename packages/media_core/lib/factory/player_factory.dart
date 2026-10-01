@@ -1,4 +1,4 @@
-import 'package:media_core/core/player.dart';
+import 'package:media_core/core/player_identity.dart';
 import 'package:media_core/factory/player_factory_config.dart';
 
 /// Creates player instances.
@@ -8,7 +8,7 @@ import 'package:media_core/factory/player_factory_config.dart';
 ///
 /// Responsibilities:
 ///
-/// - create Player
+/// - create PlayerIdentity
 /// - apply factory configuration
 ///
 /// It does not:
@@ -18,5 +18,5 @@ import 'package:media_core/factory/player_factory_config.dart';
 /// - control playback
 abstract interface class PlayerFactory {
   /// Creates a player instance.
-  Player create({PlayerFactoryConfig? config});
+  PlayerIdentity create({PlayerFactoryConfig? config});
 }

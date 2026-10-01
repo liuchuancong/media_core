@@ -2,7 +2,7 @@
 
 /// Public library for the `media_core_ui` package.
 ///
-/// Player UI for media_core: six design languages over one shared control
+/// PlayerIdentity UI for media_core: six design languages over one shared control
 /// layer.
 ///
 /// The package is split in two halves:

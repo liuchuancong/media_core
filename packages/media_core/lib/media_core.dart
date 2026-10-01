@@ -23,7 +23,7 @@ library;
 // Public modules
 // ============================================================================
 
-/// Player backend adapter abstraction and adapter lifecycle..
+/// PlayerIdentity backend adapter abstraction and adapter lifecycle..
 export 'package:media_core/adapter/library.dart';
 
 /// Audio focus, session, route, volume and mute management..
@@ -50,10 +50,10 @@ export 'package:media_core/diagnostics/library.dart';
 /// Error models, classification, formatting and error policies..
 export 'package:media_core/error/library.dart';
 
-/// Player event definitions, dispatching and subscriptions..
+/// PlayerIdentity event definitions, dispatching and subscriptions..
 export 'package:media_core/event/library.dart';
 
-/// Player and backend factory, registration and selection..
+/// PlayerIdentity and backend factory, registration and selection..
 export 'package:media_core/factory/library.dart';
 
 /// Backend, line and quality fallback mechanisms..
@@ -65,10 +65,10 @@ export 'package:media_core/geometry/library.dart';
 /// Stable cross-module identity and identifier value objects..
 export 'package:media_core/identity/library.dart';
 
-/// Player kernel: orchestration root wiring source, adapter, session, playback, recovery, fallback, pool and events..
+/// PlayerIdentity kernel: orchestration root wiring source, adapter, session, playback, recovery, fallback, pool and events..
 export 'package:media_core/kernel/library.dart';
 
-/// Player, page and application lifecycle management..
+/// PlayerIdentity, page and application lifecycle management..
 export 'package:media_core/lifecycle/library.dart';
 
 /// Network abstraction, monitoring, conditions and metrics..
@@ -86,7 +86,7 @@ export 'package:media_core/playback/library.dart';
 /// Centralized cross-module player policies..
 export 'package:media_core/policy/library.dart';
 
-/// Player instance pooling, allocation and recycling..
+/// PlayerIdentity instance pooling, allocation and recycling..
 export 'package:media_core/pool/library.dart';
 
 /// Media preloading, warm-up and preload scheduling..
@@ -107,7 +107,7 @@ export 'package:media_core/recording/library.dart';
 /// Playback recovery, retry scheduling and recovery state..
 export 'package:media_core/recovery/library.dart';
 
-/// Player rendering abstraction and rendering state..
+/// PlayerIdentity rendering abstraction and rendering state..
 export 'package:media_core/renderer/library.dart';
 
 /// Decoder, memory, bandwidth and thermal resource management..
@@ -119,7 +119,7 @@ export 'package:media_core/result/library.dart';
 /// Frame capture: engine capture, surface capture, captured-frame value, file writing..
 export 'package:media_core/screenshot/library.dart';
 
-/// Player session lifecycle, context, state and operations..
+/// PlayerIdentity session lifecycle, context, state and operations..
 export 'package:media_core/session/library.dart';
 
 /// Logical player slot ownership, assignment and state..
@@ -137,7 +137,7 @@ export 'package:media_core/task/library.dart';
 /// Generic reusable utility functions and helpers..
 export 'package:media_core/util/library.dart';
 
-/// Player visibility observation, state and management..
+/// PlayerIdentity visibility observation, state and management..
 export 'package:media_core/visibility/library.dart';
 
 // Composition root: owns adapter + session + per-session controllers.

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:media_core/playback/playback_state.dart';
+import 'package:media_core/playback/player_transport_state.dart';
 import 'package:media_core/playback/playback_command.dart';
 import 'package:media_core/playback/playback_request.dart';
 import 'package:media_core/playback/playback_snapshot.dart';
@@ -22,20 +22,20 @@ import 'package:rxdart/rxdart.dart';
 /// - call platform APIs
 /// - render video
 final class PlaybackController {
-  PlaybackController({PlaybackState initialState = const PlaybackState.initial()})
-    : _stateSubject = BehaviorSubject<PlaybackState>.seeded(initialState);
+  PlaybackController({PlayerTransportState initialState = const PlayerTransportState.initial()})
+    : _stateSubject = BehaviorSubject<PlayerTransportState>.seeded(initialState);
 
-  final BehaviorSubject<PlaybackState> _stateSubject;
+  final BehaviorSubject<PlayerTransportState> _stateSubject;
 
   bool _disposed = false;
 
   Future<void> _operation = Future<void>.value();
 
   /// Current state stream.
-  ValueStream<PlaybackState> get state => _stateSubject.stream;
+  ValueStream<PlayerTransportState> get state => _stateSubject.stream;
 
   /// Current state.
-  PlaybackState get current => _stateSubject.value;
+  PlayerTransportState get current => _stateSubject.value;
 
   /// Current snapshot.
   PlaybackSnapshot get snapshot => PlaybackSnapshot.fromState(current);

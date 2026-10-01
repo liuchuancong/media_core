@@ -4,7 +4,7 @@ import 'package:media_core/screenshot/screenshot_format.dart';
 
 /// Frame-capture request handed to a backend adapter.
 ///
-/// It carries only what an engine needs to produce an image. Player identity,
+/// It carries only what an engine needs to produce an image. PlayerIdentity identity,
 /// playback position and frame size are attached by the kernel when the bytes
 /// come back, because the engine knows nothing about the surrounding player —
 /// and because a captured frame is worth keeping even if the player is torn

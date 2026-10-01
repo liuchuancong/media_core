@@ -29,7 +29,7 @@ part 'session_snapshot.freezed.dart';
 abstract class SessionSnapshot with _$SessionSnapshot {
   /// Creates a session snapshot.
   const factory SessionSnapshot({
-    /// Player identity.
+    /// PlayerIdentity identity.
     required PlayerId playerId,
 
     /// Session identity.

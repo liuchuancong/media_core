@@ -37,7 +37,7 @@ import 'package:media_core/resource/resource_pressure.dart';
 ///
 /// ```text
 ///
-/// Player
+/// PlayerIdentity
 ///   |
 ///   v
 /// DecoderManager.acquire()

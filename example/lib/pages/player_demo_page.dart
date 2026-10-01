@@ -37,11 +37,11 @@ final class _PlayerDemoPageState extends State<PlayerDemoPage> {
   PlayerHandle? _handle;
 
   StreamSubscription<PlayerAdapterEvent>? _adapterSub;
-  StreamSubscription<PlaybackState>? _playbackSub;
+  StreamSubscription<PlayerTransportState>? _playbackSub;
   StreamSubscription<Operation>? _operationSub;
   StreamSubscription<RecoveryLadderEvent>? _recoverySub;
 
-  PlaybackState? _playback;
+  PlayerTransportState? _playback;
   bool _loop = false;
   bool _muted = false;
 
@@ -141,7 +141,7 @@ final class _PlayerDemoPageState extends State<PlayerDemoPage> {
     final playback = _playback;
 
     return DemoPageScaffold(
-      title: '播放器 / Player',
+      title: '播放器 / PlayerIdentity',
       subtitle: 'kernel → registerBackend → create → open → play；点开日志看引擎事件、操作记录与恢复决策。',
       log: _log,
       actions: [

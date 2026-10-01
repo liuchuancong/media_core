@@ -20,7 +20,7 @@ import 'package:equatable/equatable.dart';
 /// Those belong to:
 ///
 /// - AudioBackend
-/// - Player
+/// - PlayerIdentity
 final class PlatformAudio extends Equatable {
   /// Creates audio capabilities.
   const PlatformAudio({

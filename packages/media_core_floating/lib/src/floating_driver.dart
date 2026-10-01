@@ -70,7 +70,7 @@ final class FloatingDriver implements KernelPresentationDriver {
   /// Small-window state changes.
   Stream<bool> get onFloatingChanged => _floatingChanges.stream;
 
-  /// Player the small window should show.
+  /// PlayerIdentity the small window should show.
   PlayerId? get playerId => _playerId;
 
   /// Video width fed through [onVideoSize], for the overlay's sizing.
@@ -150,7 +150,7 @@ final class FloatingDriver implements KernelPresentationDriver {
     await DisposeUtils.close(_players);
   }
 
-  /// Player changes, for a host that binds its surface asynchronously.
+  /// PlayerIdentity changes, for a host that binds its surface asynchronously.
   Stream<PlayerId> get onPlayerChanged => _players.stream;
 
   // ---------------------------------------------------------------------------

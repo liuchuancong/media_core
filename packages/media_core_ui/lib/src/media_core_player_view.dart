@@ -88,7 +88,7 @@ final class MediaCorePlayerView extends StatefulWidget {
     this.shortcuts = const PlayerShortcuts(),
   });
 
-  /// Player to render and drive.
+  /// PlayerIdentity to render and drive.
   final PlayerHandle handle;
 
   /// Control set to force; null picks the one the platform expects.
