@@ -1,91 +1,42 @@
-import 'package:media_core_ijk_player/src/fijk_player_config.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
 import 'package:flv_lzc/fijkplayer.dart';
+import 'package:media_core/media_core.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 
-/// FijkPlayer Helper
-class FijkHelper {
-  /// Applies [config] to [player] for the upcoming open.
-  ///
-  /// - Named options and extra options are folded into three maps
-  ///   (one write per key), so a single `Future.wait` dispatches
-  ///   them concurrently without any ordering hazard.
-  /// - `extraXxxOptions` are merged after the named options and can
-  ///   override built-in keys.
-  /// - [sourceHeaders] are merged on top of `config.headers`; source
-  ///   wins because it is more specific.
-  /// - A null or empty [proxyUrl] writes `''` (DIRECT).
-  static Future<void> applyConfig(
-    FijkPlayer player,
-    FijkPlayerConfig config, {
-    Map<String, String>? sourceHeaders,
-    String? proxyUrl,
-  }) async {
-    // headers
-    final mergedHeaders = <String, String>{...config.headers, ...?sourceHeaders};
-
+/// Helpers shared by the ijkplayer adapter.
+abstract final class FijkHelper {
+  /// Translates the framework's source headers into ijkplayer's format
+  /// options: a CRLF-terminated `headers` string, with `user_agent`
+  /// lifted out because ijkplayer treats it separately.
+  static Map<String, Object> sourceHeaderOptions(Map<String, String> headers) {
     String? userAgent;
-    final headerBuffer = StringBuffer();
-    for (final entry in mergedHeaders.entries) {
+    final buffer = StringBuffer();
+
+    for (final entry in headers.entries) {
       final key = entry.key.trim();
-      final value = entry.value.replaceAll(RegExp(r'[\r\n\u0000]+'), ' ').trim();
+      final value = entry.value.replaceAll(RegExp(r'[\x0d\x0a\x00]+'), ' ').trim();
+
       if (key.isEmpty || value.isEmpty) continue;
 
       if (key.toLowerCase() == 'user-agent') {
         userAgent = value;
       } else {
-        headerBuffer.write('$key:$value\r\n');
+        buffer.write('$key:$value\r\n');
       }
     }
 
-    // merge the three categories
-    final playerOpts = <String, Object>{
-      'mediacodec': config.enableCodec ? 1 : 0,
-      'mediacodec-hevc': config.enableCodec ? 1 : 0,
-      'videotoolbox': config.enableCodec ? 1 : 0,
-      'enable-accurate-seek': config.accurateSeek ? 1 : 0,
-      'soundtouch': config.soundtouch ? 1 : 0,
-      'subtitle': config.subtitle ? 1 : 0,
-      'an': config.disableAudioOutput ? 1 : 0,
-      ...config.extraPlayerOptions,
-    };
-
-    final hostOpts = <String, Object>{
-      'request-screen-on': config.requestScreenOn ? 1 : 0,
-      'request-audio-focus': (config.requestAudioFocus && !config.disableAudioOutput) ? 1 : 0,
-      // IJKPlayer refuses `snapshot` unless the host enables it, and a
-      // screenshot request arrives long after the open that writes options, so
-      // it is enabled for every source instead of on demand.
-      'enable-snapshot': 1,
-      ...config.extraHostOptions,
-    };
-
-    final formatOpts = <String, Object>{
-      'reconnect': config.reconnect ? 1 : 0,
-      'timeout': config.timeout.inMicroseconds,
-      'fflags': config.fflags,
-      'rtsp_transport': config.rtspTransport,
-      'http_proxy': proxyUrl ?? '',
-      'headers': headerBuffer.toString(),
+    return <String, Object>{
+      'headers': buffer.toString(),
       if (userAgent != null) 'user_agent': userAgent,
-      ...config.extraFormatOptions,
     };
-
-    // dispatch concurrently
-    final futures = <Future<void>>[
-      for (final e in playerOpts.entries) player.setOption(FijkOption.playerCategory, e.key, e.value),
-      for (final e in hostOpts.entries) player.setOption(FijkOption.hostCategory, e.key, e.value),
-      for (final e in formatOpts.entries) player.setOption(FijkOption.formatCategory, e.key, e.value),
-    ];
-
-    await Future.wait(futures);
   }
 
   /// Level the engine was last told to log at.
   ///
-  /// Static because the plugin's level is process-wide: one value per app, not
-  /// one per player, and a room-per-player host must not push it again on every
-  /// open.
+  /// Static because the plugin's level is process-wide: one value per app,
+  /// not one per player, and a room-per-player host must not push it again
+  /// on every open.
   static FijkLogLevel? _engineLogLevel;
 
   /// Copies the host's logging configuration onto the engine's own log.

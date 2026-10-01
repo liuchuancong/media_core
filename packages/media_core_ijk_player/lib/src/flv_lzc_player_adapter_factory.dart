@@ -1,28 +1,30 @@
 import 'package:media_core_ijk_player/src/flv_lzc_player_adapter.dart';
 import 'package:media_core/media_core.dart';
 
-export 'package:media_core_ijk_player/src/fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
 
 const String kIjkPlayerBackendId = 'ijk';
 
 /// [PlayerAdapterFactory] that creates [FlvLzcPlayerAdapter] instances.
 final class FlvLzcPlayerAdapterFactory implements PlayerAdapterFactory {
-  /// [capabilities] and [config] are shared by every adapter this
+  /// [capabilities] and [options] are shared by every adapter this
   /// factory creates. [configure] runs once per instance after
   /// construction for per-instance customisation.
   const FlvLzcPlayerAdapterFactory({
     this.capabilities = FlvLzcPlayerAdapter.defaultCapabilities,
-    this.config = const FijkPlayerConfig(),
+    this.options = const <EngineOption>[],
     this.configure,
   });
 
   final PlayerAdapterCapabilities capabilities;
-  final FijkPlayerConfig config;
+
+  /// Native ijkplayer options applied by every created adapter before
+  /// each open.
+  final List<EngineOption> options;
   final void Function(FlvLzcPlayerAdapter adapter)? configure;
 
   @override
   PlayerAdapter create(String id) {
-    final adapter = FlvLzcPlayerAdapter(id: id, capabilities: capabilities, config: config);
+    final adapter = FlvLzcPlayerAdapter(id: id, capabilities: capabilities, options: options);
     configure?.call(adapter);
     return adapter;
   }
@@ -49,11 +51,11 @@ void registerIjkFactory(
   DefaultPlayerAdapterFactory factory, {
   String id = kIjkPlayerBackendId,
   PlayerAdapterCapabilities capabilities = FlvLzcPlayerAdapter.defaultCapabilities,
-  FijkPlayerConfig config = const FijkPlayerConfig(),
+  List<EngineOption> options = const <EngineOption>[],
   void Function(FlvLzcPlayerAdapter adapter)? configure,
 }) {
   factory.register(id, () {
-    final adapter = FlvLzcPlayerAdapter(id: id, capabilities: capabilities, config: config);
+    final adapter = FlvLzcPlayerAdapter(id: id, capabilities: capabilities, options: options);
     configure?.call(adapter);
     return adapter;
   });
@@ -64,13 +66,13 @@ void registerIjkRegistry(
   PlayerAdapterRegistry registry, {
   int priority = 90,
   PlayerAdapterCapabilities capabilities = FlvLzcPlayerAdapter.defaultCapabilities,
-  FijkPlayerConfig config = const FijkPlayerConfig(),
+  List<EngineOption> options = const <EngineOption>[],
   void Function(FlvLzcPlayerAdapter adapter)? configure,
 }) {
   registry.register(
     FlvLzcPlayerAdapterFactory(
       capabilities: capabilities,
-      config: config,
+      options: options,
       configure: configure,
     ).registration(priority: priority),
   );

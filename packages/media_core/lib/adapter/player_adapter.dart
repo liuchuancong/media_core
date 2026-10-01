@@ -7,6 +7,7 @@ import 'package:media_core/adapter/player_adapter_metrics.dart';
 import 'package:media_core/source/player_source.dart';
 import 'package:media_core/screenshot/screenshot_request.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
+import 'package:media_core/adapter/engine_option.dart';
 
 /// Abstract media player backend adapter.
 ///
@@ -98,6 +99,14 @@ abstract interface class PlayerAdapter {
   /// across later [open] calls, because recovery replays a source
   /// without going back through the application.
   Future<void> setAudioOnly(bool audioOnly);
+
+  /// Applies raw engine options, spelled in the engine's own vocabulary.
+  ///
+  /// See [EngineOption]: the adapter transports the caller's values to the
+  /// live engine where the engine supports it, and reports per option what
+  /// happened. Options received before the engine exists are consumed at
+  /// engine creation.
+  Future<List<EngineOptionOutcome>> applyEngineOptions(List<EngineOption> options);
 
   /// Captures the current video frame with the backend's own API.
   ///

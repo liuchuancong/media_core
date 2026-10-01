@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import 'package:media_core_media_kit/src/media_kit_player_adapter.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -10,18 +11,48 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 /// single owner of the mpv surface while letting the app own the widget
 /// tree, controls and fullscreen behaviour.
 ///
+/// Every parameter mirrors `mkv.Video`'s own constructor — there is no
+/// adapter-side configuration object between the caller and the engine.
+///
 /// ```dart
 /// MediaKitVideoView(adapter: myAdapter)
 /// ```
 class MediaKitVideoView extends StatelessWidget {
-  const MediaKitVideoView({super.key, required this.adapter, this.controls});
+  const MediaKitVideoView({
+    super.key,
+    required this.adapter,
+    this.controls,
+    this.width,
+    this.height,
+    this.fill = const Color(0xFF000000),
+    this.alignment = Alignment.center,
+    this.aspectRatio,
+    this.filterQuality = FilterQuality.low,
+  });
 
   /// The adapter whose surface is rendered.
   final MediaKitPlayerAdapter adapter;
 
-  /// Controls builder. `null` falls back to the adapter config's own
-  /// controls (which is "no controls" unless configured otherwise).
+  /// Controls builder; null mounts no controls.
   final mkv.VideoControlsBuilder? controls;
+
+  /// Fixed width of the viewport.
+  final double? width;
+
+  /// Fixed height of the viewport.
+  final double? height;
+
+  /// Background color behind the video.
+  final Color fill;
+
+  /// Alignment of the viewport.
+  final Alignment alignment;
+
+  /// Preferred aspect ratio of the viewport.
+  final double? aspectRatio;
+
+  /// Filter quality of the video texture.
+  final FilterQuality filterQuality;
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +64,6 @@ class MediaKitVideoView extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final cfg = adapter.videoConfig;
-
     // fitListenable is the exact same notifier that `adapter.build()`
     // uses, so `adapter.setVideoFit(...)` re-renders this widget too.
     return ValueListenableBuilder<BoxFit>(
@@ -42,31 +71,22 @@ class MediaKitVideoView extends StatelessWidget {
       builder: (context, fit, _) {
         return mkv.Video(
           controller: controller,
-
-          // fit is adapter-driven (setVideoFit writes the notifier).
           fit: fit,
-
-          // controls: prefer the widget's own override, else the
-          // adapter config, else the plugin default.
-          controls: controls ?? cfg.controls ?? mkv.NoVideoControls,
-
-          // Everything else reads straight from the adapter's
-          // MediaKitVideoConfig so the call site keeps one place to
-          // configure the surface.
-          width: cfg.width,
-          height: cfg.height,
-          fill: cfg.fill,
-          alignment: cfg.alignment,
-          aspectRatio: cfg.aspectRatio,
-          filterQuality: cfg.filterQuality,
-          wakelock: cfg.wakelock,
-          pauseUponEnteringBackgroundMode: cfg.pauseUponEnteringBackgroundMode,
-          resumeUponEnteringForegroundMode: cfg.resumeUponEnteringForegroundMode,
-          subtitleViewConfiguration: cfg.subtitleViewConfiguration,
-          onEnterFullscreen: cfg.onEnterFullscreen ?? mkv.defaultEnterNativeFullscreen,
-          onExitFullscreen: cfg.onExitFullscreen ?? mkv.defaultExitNativeFullscreen,
+          controls: controls ?? mkv.NoVideoControls,
+          width: width,
+          height: height,
+          fill: fill,
+          alignment: alignment,
+          aspectRatio: aspectRatio,
+          filterQuality: filterQuality,
         );
       },
     );
   }
+
+  /// No-op: [mkv.Video] owns its own surface lifecycle.
+  Future<void> attach() async {}
+
+  /// Symmetric no-op for [attach].
+  Future<void> detach() async {}
 }

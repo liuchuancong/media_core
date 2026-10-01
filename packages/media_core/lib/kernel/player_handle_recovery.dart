@@ -366,6 +366,10 @@ extension PlayerHandleRecovery on PlayerHandle {
           throw StateError('Recovery backend swap to ${registration.id} was superseded.');
         }
 
+        // The caller's persisted engine options ride along to every fresh
+        // engine, so configuration survives a fallback swap.
+        await _replayEngineOptions(nextAdapter);
+
         if (source != null) {
           await nextAdapter.open(source);
           await _prepareStagedAdapter(nextAdapter, session);

@@ -48,7 +48,8 @@ final class PlayerAdapterCapabilities extends Equatable {
     this.supportsRateControl = false,
     this.supportsVolumeControl = false,
     this.supportsMuteControl = false,
-    this.supportsAudioOnly = false,
+    this.supportsAudioOnly = false,    this.supportsEngineOptions = false,
+
 
     // Video and rendering.
     this.supportsVideoFrameProgress = false,
@@ -133,6 +134,14 @@ final class PlayerAdapterCapabilities extends Equatable {
   /// Declaring `true` is what makes [PlayerAdapter.setAudioOnly] reach
   /// the backend; the base drops the command otherwise.
   final bool supportsAudioOnly;
+  /// Whether raw engine options can be applied to a live engine.
+  ///
+  /// Declared by adapters whose engine has a runtime key/value surface
+  /// (mpv properties, mdk properties, ijkplayer options). An adapter
+  /// without the surface answers `unsupported` for every option instead
+  /// of throwing.
+  final bool supportsEngineOptions;
+
 
   // ---------------------------------------------------------------------------
   // Video and rendering

@@ -18,8 +18,6 @@ library;
 
 // Adapter, configs, factory, view.
 export 'package:media_core_media_kit/src/media_kit_player_adapter.dart';
-export 'package:media_core_media_kit/src/media_kit_player_config.dart';
-export 'package:media_core_media_kit/src/media_kit_video_config.dart';
 export 'package:media_core_media_kit/src/media_kit_adapter_factory.dart';
 export 'package:media_core_media_kit/src/media_kit_video_view.dart';
 

@@ -11,6 +11,7 @@ import 'package:media_core/adapter/player_adapter_event.dart';
 import 'package:media_core/adapter/player_adapter_context.dart';
 import 'package:media_core/adapter/player_adapter_metrics.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
+import 'package:media_core/adapter/engine_option.dart';
 
 /// Sentinel used by [PlayerAdapterStateMirror.copyWith] to distinguish
 /// "parameter omitted" from "parameter explicitly set to null".
@@ -69,6 +70,23 @@ final class FakePlayerAdapter implements PlayerAdapter {
 
   @override
   PlayerAdapterCapabilities get capabilities => behavior.capabilities;
+  /// Scriptable engine-option outcomes for tests.
+  ///
+  /// Null answers [EngineOptionOutcome.appliedLive] for everything.
+  EngineOptionOutcome Function(EngineOption option)? engineOptionHandler;
+
+  /// Every option this fake received, in order, across all calls.
+  final List<EngineOption> receivedEngineOptions = <EngineOption>[];
+
+  @override
+  Future<List<EngineOptionOutcome>> applyEngineOptions(List<EngineOption> options) async {
+    receivedEngineOptions.addAll(options);
+
+    return <EngineOptionOutcome>[
+      for (final option in options) engineOptionHandler?.call(option) ?? EngineOptionOutcome.appliedLive,
+    ];
+  }
+
 
   @override
   PlayerCoreState get state => _mirror.toPlayerState();
@@ -481,7 +499,8 @@ final class FakePlayerAdapterBehavior {
     supportsRateControl: true,
     supportsVolumeControl: true,
     supportsMuteControl: false,
-    supportsAudioOnly: true,
+    supportsAudioOnly: true,    supportsEngineOptions: true,
+
 
     // Video and rendering.
     supportsVideoFrameProgress: true,

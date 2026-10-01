@@ -5,7 +5,6 @@
 library;
 
 export 'package:media_core_better_player/src/better_player_adapter.dart';
-export 'package:media_core_better_player/src/better_player_config.dart';
 export 'package:media_core_better_player/src/better_player_adapter_factory.dart';
 
 // The engine this adapter is built on, re-exported so a host reaches it from

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -29,7 +28,9 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   FvpPlayerAdapter({
     super.id = kFvpPlayerBackendId,
     PlayerAdapterCapabilities capabilities = defaultCapabilities,
-    this.config = const FvpPlayerConfig(),
+    this.properties = const <String, String>{},
+    this.videoDecoders,
+    this.audioBackends,
     FvpVideoConfig videoConfig = const FvpVideoConfig(),
   }) : _videoConfig = videoConfig,
        super(capabilities: capabilities) {
@@ -43,43 +44,37 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   /// Open-time engine configuration.
   ///
   /// Read on every open, so a change applies to the next source.
-  FvpPlayerConfig config;
+  /// Native mdk properties written verbatim when an engine is created.
+  final Map<String, String> properties;
 
-  /// Resolver for the engine's proxy URL, or null for a direct connection.
-  FvpProxyUrlResolver? get proxyUrlResolver => config.proxyUrlResolver;
-  set proxyUrlResolver(FvpProxyUrlResolver? value) => config = config.copyWith(proxyUrlResolver: value);
+  /// Native decoder list; null leaves mdk's own default order.
+  final List<String>? videoDecoders;
 
-  /// Whether hardware decoding is preferred.
-  bool get enableCodec => config.enableCodec;
-  set enableCodec(bool value) => config = config.copyWith(enableCodec: value);
+  /// Native audio backend list; null leaves mdk's default.
+  final List<String>? audioBackends;
 
   FvpVideoConfig _videoConfig;
-
-  /// Surface configuration.
   FvpVideoConfig get videoConfig => _videoConfig;
   set videoConfig(FvpVideoConfig value) {
     _videoConfig = value;
-
     if (_fitNotifier.value != value.fit) {
       _fitNotifier.value = value.fit;
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Engine state
+  // State
   // ---------------------------------------------------------------------------
 
-  /// The engine serving the current source.
   mdk.Player? _player;
 
-  final List<StreamSubscription<dynamic>> _subscriptions = <StreamSubscription<dynamic>>[];
+  final List<StreamSubscription<Object?>> _subscriptions = <StreamSubscription<Object?>>[];
 
   Timer? _positionTimer;
 
   bool _hasOpened = false;
   bool _openFailed = false;
-  bool _privateInput = false;
-  bool _softwareDecoderNextOpen = false;
+
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _audioOutputSuppressed = false;
@@ -157,7 +152,6 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       ..setProperty('avio.headers', encodeHeaders(source.hasHeaders ? source.headers!.values : const <String, String>{}))
       // FFmpeg ignores an empty `http_proxy`, which is what a loopback relay
       // wants: the relay owns the proxied connection.
-      ..setProperty('avio.http_proxy', _proxyUrl())
       ..setActiveTracks(mdk.MediaType.video, audioOnly ? const <int>[] : const <int>[0])
       ..volume = _volume
       ..media = url;
@@ -283,14 +277,12 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   /// A private input is a loopback source (an app-owned relay): the engine must
   /// not send it through the proxy, so the resolver is asked with
   /// `privateInput: true`. The flag is consumed by the next open.
-  void setPrivateInput(bool value) => _privateInput = value;
 
   /// Marks the next open of the current source to decode in software.
   ///
   /// Used when a hardware decoder failed for the source that is about to be
   /// replayed; the engine then starts its software decoders directly instead of
   /// trying the hardware one again.
-  void prepareSoftwareDecoderFallback() => _softwareDecoderNextOpen = true;
 
   /// Mutes the engine output without touching the stored volume.
   ///
@@ -340,29 +332,84 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     _player = player;
 
-    final softwareOnly = _softwareDecoderNextOpen;
-
-    _softwareDecoderNextOpen = false;
-
-    player.videoDecoders =
-        config.videoDecoders ??
-        videoDecodersFor(url, hardware: !softwareOnly && config.enableCodec, hosts: config.legacyHevcFlvHosts);
-
-    final backends = config.audioBackends ?? audioBackends();
-
+    // Native decoder / audio-backend lists, verbatim; null leaves the
+    // engine's own default order. The adapter picks nothing here.
+    player.videoDecoders = videoDecoders ?? const <String>['FFmpeg', 'dav1d'];
+    final backends = audioBackends;
     if (backends != null) player.audioBackends = backends;
 
-    for (final entry in FvpPlayerConfig.defaultLiveProperties.entries) {
-      player.setProperty(entry.key, entry.value);
-    }
-
-    for (final entry in config.extraProperties.entries) {
+    for (final entry in properties.entries) {
       player.setProperty(entry.key, entry.value);
     }
 
     _bind(player);
 
     return player;
+  }
+
+  /// Engine options received while no engine instance exists.
+  ///
+  /// fvp builds a fresh mdk player per source, so an option applied between
+  /// opens is held here and written into the next engine at creation — the
+  /// same last-value-wins contract the handle guarantees on its side.
+  final Map<(String, String), EngineOption> _pendingEngineOptions = <(String, String), EngineOption>{};
+
+  @override
+  Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
+    final outcomes = <EngineOptionOutcome>[];
+    final player = _player;
+
+    for (final option in options) {
+      _pendingEngineOptions[(option.domain ?? '', option.key)] = option;
+
+      if (player == null) {
+        // The engine is created per source; the option joins the next one.
+        outcomes.add(EngineOptionOutcome.stagedForNextOpen);
+
+        continue;
+      }
+
+      try {
+        _applyEngineOption(player, option);
+
+        outcomes.add(EngineOptionOutcome.appliedLive);
+      } catch (_) {
+        outcomes.add(EngineOptionOutcome.stagedForNextOpen);
+      }
+    }
+
+    return outcomes;
+  }
+
+  /// Writes one option to an mdk player.
+  void _applyEngineOption(mdk.Player player, EngineOption option) {
+    switch (option.key) {
+      case 'videoDecoders':
+        player.videoDecoders = _stringListOf(option.value);
+      case 'audioDecoders':
+        player.audioDecoders = _stringListOf(option.value);
+      case 'audioBackends':
+        player.audioBackends = _stringListOf(option.value);
+      default:
+        player.setProperty(option.key, _mdkOptionValue(option.value));
+    }
+  }
+
+  List<String> _stringListOf(Object? value) {
+    if (value is List) {
+      return <String>[for (final entry in value) '$entry'];
+    }
+
+    throw ArgumentError.value(value, 'value', 'Expected a list of strings.');
+  }
+
+  String _mdkOptionValue(Object? value) {
+    return switch (value) {
+      null => '',
+      bool flag => flag ? '1' : '0',
+      final String text => text,
+      final other => '$other',
+    };
   }
 
   Future<void> _disposeEngine() async {
@@ -382,64 +429,6 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     player.dispose();
   }
 
-  /// Video decoder priority for the platform.
-  ///
-  /// Hardware first with software fallbacks, or software only when the caller
-  /// turned hardware decoding off.
-  static List<String> videoDecoders({required bool hardware}) {
-    if (!hardware) return const <String>['FFmpeg', 'dav1d'];
-
-    if (Platform.isAndroid) return const <String>['AMediaCodec', 'FFmpeg', 'dav1d'];
-    if (Platform.isIOS || Platform.isMacOS) return const <String>['VT', 'FFmpeg', 'dav1d'];
-    if (Platform.isWindows) return const <String>['MFT:d3d=11', 'D3D11', 'DXVA', 'FFmpeg', 'dav1d'];
-
-    return const <String>['VAAPI', 'VDPAU', 'FFmpeg', 'dav1d'];
-  }
-
-  /// Video decoder priority for one source.
-  ///
-  /// Legacy codec-id-12 HEVC FLV goes to software on Android: some hardware HEVC
-  /// decoders reject it ("Unsupported input buffer") without an error that would
-  /// advance the engine to its next decoder, so audio plays while every frame is
-  /// dropped. AVC streams from the same hosts are unaffected by the priority
-  /// order.
-  static List<String> videoDecodersFor(
-    String url, {
-    required bool hardware,
-    required Iterable<String> hosts,
-    bool? android,
-  }) {
-    if ((android ?? Platform.isAndroid) && _isLegacyHevcFlv(url, hosts)) {
-      return const <String>['FFmpeg', 'dav1d'];
-    }
-
-    return videoDecoders(hardware: hardware);
-  }
-
-  /// Whether [url] is a plain FLV from one of [hosts].
-  ///
-  /// Kept local to this adapter: the list itself is the caller's configuration
-  /// ([FvpPlayerConfig.legacyHevcFlvHosts]), and nothing here reroutes the
-  /// source — this only decides which decoders to try first.
-  static bool _isLegacyHevcFlv(String url, Iterable<String> hosts) {
-    final uri = Uri.tryParse(url);
-
-    if (uri == null || !const <String>{'http', 'https'}.contains(uri.scheme.toLowerCase())) return false;
-    if (!uri.path.toLowerCase().endsWith('.flv')) return false;
-
-    final host = uri.host.toLowerCase();
-
-    return hosts.any(host.endsWith);
-  }
-
-  /// Audio output backends, or null where the engine's default is fine.
-  ///
-  /// Android goes through OpenSL first: libmdk's AAudio output crashes on
-  /// dispose, stutters on devices with a coarse clock and dies on output routing
-  /// changes, while OpenSL does not.
-  static List<String>? audioBackends({bool? android}) =>
-      (android ?? Platform.isAndroid) ? const <String>['OpenSL', 'AudioTrack', 'AAudio'] : null;
-
   /// `avio.headers` takes CRLF-terminated lines; values that would inject extra
   /// header lines are dropped.
   static String encodeHeaders(Map<String, String> headers) {
@@ -452,18 +441,6 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     });
 
     return buffer.toString();
-  }
-
-  String _proxyUrl() {
-    final privateInput = _privateInput;
-
-    _privateInput = false;
-
-    try {
-      return config.proxyUrlResolver?.call(privateInput: privateInput) ?? '';
-    } catch (_) {
-      return '';
-    }
   }
 
   void _bind(mdk.Player player) {
@@ -807,6 +784,7 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     supportsVolumeControl: true,
     supportsMuteControl: false,
     supportsAudioOnly: true,
+    supportsEngineOptions: true,
 
     // Video and rendering.
     //

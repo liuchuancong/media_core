@@ -8,8 +8,6 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:media_core_media_kit/media_core_media_kit.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform, ValueListenable;
 
-export 'package:media_core_media_kit/src/media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
-export 'package:media_core_media_kit/src/media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
 
 /// [PlayerAdapter] implementation backed by the local media_kit
 /// snapshot — the MPV engine.
@@ -19,35 +17,24 @@ export 'package:media_core_media_kit/src/media_kit_video_config.dart' show Media
 /// how the texture is produced.
 ///
 /// **Platform-specific settings:**
-///
-/// Two switches are meaningful on one platform only, and are ignored
-/// everywhere else so a setting that was persisted on one device
-/// cannot corrupt the picture on another:
-///
-/// - the host's own `vo` / `hwdec` picks via `extraProperties` / config —
-///   `vo=mediacodec_embed` and `hwdec=mediacodec`, bypassing the
-///   SurfaceProducer path.
-/// - [MediaKitPlayerConfig.enableRtxVsr] — Windows only. Enables the
-///   RTX Video Super Resolution filter through `d3d11vpp`.
-///
-/// Additionally, macOS unconditionally forces `hwdec=no` because the
-/// bundled libmpv's VideoToolbox path is unstable with the Flutter
-/// texture surface, and iOS normalisation pins the video output driver
-/// to `libmpv` (see [MpvPlatformProfile]).
+/// The adapter configures nothing on its own: [playerConfiguration] and
+/// [videoControllerConfiguration] are media_kit's own types passed
+/// verbatim, and every runtime tuning value arrives as an engine option
+/// (an mpv property) from the caller.
 
-// Engine configuration lives in the `part` file next to this one:
-// `media_kit_player_adapter_engine.dart` (decoder policy, native mpv
-// properties). Overrides, stream wiring, the public surface and the
-// capability table stay in the class body — the stream handlers call the
-// protected `PlayerAdapterBase` emit API, which only the class itself may
-// touch.
+// Engine creation (the caller's native configurations, verbatim) and the
+// native property writer live in the `part` file next to this one:
+// `media_kit_player_adapter_engine.dart`. Overrides, stream wiring, the
+// public surface and the capability table stay in the class body — the
+// stream handlers call the protected `PlayerAdapterBase` emit API, which
+// only the class itself may touch.
 part 'media_kit_player_adapter_engine.dart';
 final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   /// Creates the adapter.
   ///
-  /// [config] carries open-time mpv options; [videoConfig] carries
-  /// surface options. Both are reachable at any time through the
-  /// matching getters / setters.
+  /// [playerConfiguration] and [videoControllerConfiguration] are
+  /// media_kit's own configuration types, applied verbatim at engine
+  /// creation; null uses the engine's defaults.
   ///
   /// [capabilities] is normalised before being handed to the base: see
   /// [_honestCapabilities]. A caller may pass a declaration that claims
@@ -58,13 +45,21 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     super.id = kMediaKitPlayerBackendId,
     PlayerAdapterCapabilities capabilities = defaultCapabilities,
     mk.Player? player,
-    this.config = const MediaKitPlayerConfig(),
-    MediaKitVideoConfig videoConfig = const MediaKitVideoConfig(),
+    this.playerConfiguration,
+    this.videoControllerConfiguration,
   }) : _injectedPlayer = player,
-       _videoConfig = videoConfig,
-       super(capabilities: _honestCapabilities(capabilities)) {
-    _fitNotifier.value = videoConfig.fit;
-  }
+       super(capabilities: _honestCapabilities(capabilities));
+
+  /// Native media_kit player configuration, applied verbatim at engine
+  /// creation.
+  ///
+  /// Null uses media_kit's own defaults. Runtime changes travel as
+  /// engine options (mpv properties), not through this field.
+  final mk.PlayerConfiguration? playerConfiguration;
+
+  /// Native media_kit_video controller configuration, applied verbatim
+  /// at engine creation.
+  final mkv.VideoControllerConfiguration? videoControllerConfiguration;
 
   /// Narrows [capabilities] to what this platform actually implements.
   ///
@@ -100,24 +95,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   final mk.Player? _injectedPlayer;
 
   // ---------------------------------------------------------------------------
-  // Configuration
+  // Surface
   // ---------------------------------------------------------------------------
-
-  /// Open-time mpv options.
-  ///
-  /// Assigning a new value takes effect on the next open. Tweak
-  /// individual entries through the convenience setters below
-  /// (`enableCodec`, `customPlayerOutput`, ...).
-  MediaKitPlayerConfig config;
-
-  MediaKitVideoConfig _videoConfig;
-  MediaKitVideoConfig get videoConfig => _videoConfig;
-  set videoConfig(MediaKitVideoConfig value) {
-    _videoConfig = value;
-    if (_fitNotifier.value != value.fit) {
-      _fitNotifier.value = value.fit;
-    }
-  }
 
   /// Resizes the native render target without recreating the player.
   ///
@@ -130,43 +109,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     await controller.setSize(width: width, height: height);
   }
 
-  // Convenience accessors — kept for callers that used the old fields.
-  MediaKitProxyUrlResolver? get proxyUrlResolver => config.proxyUrlResolver;
-  set proxyUrlResolver(MediaKitProxyUrlResolver? value) => config = config.copyWith(proxyUrlResolver: value);
-
-  bool get enableCodec => config.enableCodec;
-  set enableCodec(bool v) => config = config.copyWith(enableCodec: v);
-
-
-  bool get customPlayerOutput => config.customPlayerOutput;
-  set customPlayerOutput(bool v) => config = config.copyWith(customPlayerOutput: v);
-
-  String? get videoHardwareDecoder => config.videoHardwareDecoder;
-  set videoHardwareDecoder(String? v) => config = config.copyWith(videoHardwareDecoder: v);
-
-  String get videoOutputDriver => config.videoOutputDriver;
-  set videoOutputDriver(String v) => config = config.copyWith(videoOutputDriver: v);
-
-  String? get audioOutputDriver => config.audioOutputDriver;
-  set audioOutputDriver(String? v) => config = config.copyWith(audioOutputDriver: v);
-
-  bool get enableRtxVsr => config.enableRtxVsr;
-  set enableRtxVsr(bool v) => config = config.copyWith(enableRtxVsr: v);
-
-  // VideoControllerConfiguration passthrough convenience accessors.
-  double get videoScale => config.videoScale;
-  set videoScale(double v) => config = config.copyWith(videoScale: v);
-
-  int? get videoOutputWidth => config.videoOutputWidth;
-  set videoOutputWidth(int? v) => config = config.copyWith(videoOutputWidth: v);
-
-  int? get videoOutputHeight => config.videoOutputHeight;
-  set videoOutputHeight(int? v) => config = config.copyWith(videoOutputHeight: v);
-
-  bool get androidAttachSurfaceAfterVideoParameters => config.androidAttachSurfaceAfterVideoParameters;
-  set androidAttachSurfaceAfterVideoParameters(bool v) =>
-      config = config.copyWith(androidAttachSurfaceAfterVideoParameters: v);
-
   // ---------------------------------------------------------------------------
   // Internal state
   // ---------------------------------------------------------------------------
@@ -176,8 +118,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
-  bool _privateInput = false;
-  bool _softwareDecoderNextOpen = false;
 
   /// What the device is, as far as the platform probe could say.
   ///
@@ -198,7 +138,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   // ignore: unused_field
   bool _audioOutputSuppressed = false;
 
-  String? _currentUrl;
 
   /// Whether the current source is a live (non-seekable) stream.
   ///
@@ -237,10 +176,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   /// Applies the viewport fit through the surface.
   void setVideoFit(BoxFit fit) {
-    if (_fitNotifier.value == fit && _videoConfig.fit == fit) return;
+    if (_fitNotifier.value == fit) return;
+
     _videoFit = fit;
     _fitNotifier.value = fit;
-    _videoConfig = _videoConfig.copyWith(fit: fit);
   }
 
   /// Whether this adapter currently owns a video surface.
@@ -248,6 +187,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   bool get available => !isDisposed && !audioOnly && _videoController != null;
 
   /// Builds the video output widget.
+  ///
+  /// Deliberately bare: the surface's looks (fill, alignment, controls,
+  /// subtitle view, fullscreen behaviour) belong to the host's widget,
+  /// not to the adapter. Hosts that want the full native surface mount
+  /// [MediaKitVideoView] with their own parameters, or build their own
+  /// `mkv.Video` from [videoController].
   @override
   Widget build() {
     final controller = _videoController;
@@ -259,24 +204,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     return ValueListenableBuilder<BoxFit>(
       valueListenable: _fitNotifier,
       builder: (context, fit, _) {
-        final cfg = _videoConfig;
-
         return mkv.Video(
           controller: controller,
-          width: cfg.width,
-          height: cfg.height,
           fit: fit,
-          fill: cfg.fill,
-          alignment: cfg.alignment,
-          aspectRatio: cfg.aspectRatio,
-          filterQuality: cfg.filterQuality,
-          controls: cfg.controls ?? MediaKitVideoControls.none,
-          wakelock: cfg.wakelock,
-          pauseUponEnteringBackgroundMode: cfg.pauseUponEnteringBackgroundMode,
-          resumeUponEnteringForegroundMode: cfg.resumeUponEnteringForegroundMode,
-          subtitleViewConfiguration: cfg.subtitleViewConfiguration,
-          onEnterFullscreen: cfg.onEnterFullscreen ?? mkv.defaultEnterNativeFullscreen,
-          onExitFullscreen: cfg.onExitFullscreen ?? mkv.defaultExitNativeFullscreen,
+          controls: mkv.NoVideoControls,
+          onEnterFullscreen: mkv.defaultEnterNativeFullscreen,
+          onExitFullscreen: mkv.defaultExitNativeFullscreen,
         );
       },
     );
@@ -323,12 +256,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   int _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
 
-  /// The resolved hardware decoder preference (already normalised for
-  /// the current platform).
-  String get preferredHardwareDecoder => _preferredHardwareDecoder;
-
-  String _preferredHardwareDecoder = 'auto-safe';
-
   /// Whether the current platform drives the compat-mode surface.
 
   /// Whether the current platform supports the video frame progress
@@ -350,15 +277,13 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   @override
   Future<void> onInitialize(PlayerAdapterContext context) async {
-    _player = _injectedPlayer ?? mk.Player();
+    _player = _injectedPlayer ?? mk.Player(configuration: playerConfiguration ?? const mk.PlayerConfiguration());
 
     // The device budget must be known before the video controller and the
     // native property contract are built, because both branch on it. It now
     // arrives with the adapter context: the kernel stamps what the platform
     // probe answered into every session.
     _codecs = context.codecs;
-
-    _resolvePreferredHardwareDecoder();
 
     _videoController = _buildVideoController();
 
@@ -369,49 +294,52 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       _observeDecodedFrames();
     }
 
-    await _applyHostDeclaredProperties();
+    // Options the caller pushed before this adapter was initialized ride
+    // along to the engine's first moment.
+    for (final option in consumeStashedEngineOptions()) {
+      await _setNativeProperty(option.key, _mpvOptionValue(option.value));
+    }
+  }
+
+  @override
+  Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
+    final outcomes = <EngineOptionOutcome>[];
+
+    for (final option in options) {
+      // mpv takes property writes on a running player through
+      // `NativePlayer.setProperty`; the request is delivered to the live
+      // instance and the engine applies what its runtime allows.
+      await _setNativeProperty(option.key, _mpvOptionValue(option.value));
+
+      outcomes.add(EngineOptionOutcome.appliedLive);
+    }
+
+    return outcomes;
+  }
+
+  /// Normalizes an option value into mpv's string dialect.
+  String _mpvOptionValue(Object? value) {
+    return switch (value) {
+      null => '',
+      bool flag => flag ? 'yes' : 'no',
+      final String text => text,
+      final other => '$other',
+    };
   }
 
   @override
   Future<void> onBeforeOpen(PlayerSource source) async {
-    final url = source.uri.toString();
-
     _liveSource = source.isLive;
-
-    // A prepared software fallback belongs to the source it was
-    // prepared for. `_currentUrl` is overwritten here, so the
-    // comparison has to happen first.
-    final sameSource = _softwareDecoderNextOpen && url == _currentUrl;
-
-    _currentUrl = url;
-
     _hasDecodedVideoFrame = false;
     _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
-
-    _softwareDecoderNextOpen = sameSource;
-
-    await _applyDecoderPolicy();
-    await _applyProxy();
   }
 
   @override
   Future<void> onOpen(PlayerSource source) async {
-    final recipe = source.metadata[kMediaKitCustomInputKey];
-    final opener = config.customInputOpener;
-    if (recipe != null || source.protocol == SourceProtocol.custom) {
-      if (opener == null || recipe == null) {
-        throw UnsupportedError(
-          'Source carries a $kMediaKitCustomInputKey recipe but no '
-          'MediaKitPlayerConfig.customInputOpener is registered.',
-        );
-      }
-      await opener(player, recipe);
-    } else {
-      await player.open(
-        mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
-        play: true,
-      );
-    }
+    await player.open(
+      mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
+      play: true,
+    );
 
     _hasOpened = true;
 
@@ -507,17 +435,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   // ---------------------------------------------------------------------------
   // Extensions
   // ---------------------------------------------------------------------------
-
-  /// Whether the next open bypasses the native proxy.
-  void setPrivateInput(bool value) {
-    _privateInput = value;
-  }
-
-  /// Marks that the next open of the current source should use software
-  /// decoding.
-  void prepareSoftwareDecoderFallback() {
-    _softwareDecoderNextOpen = true;
-  }
 
   /// Suppresses audio output for the next open.
   Future<void> setAudioOutputSuppressed(bool suppressed) async {
@@ -653,15 +570,6 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         return;
       }
 
-      _softwareDecoderNextOpen = true;
-
-      MediaCoreLog.info(LogCategory.renderer, 'no hardware decoder for ${track.codec}; decoding in software');
-
-      if (!_hasDecodedVideoFrame) {
-        unawaited(_applyDecoderPolicy());
-      }
-
-      return;
     }
   }
 
@@ -836,6 +744,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     supportsVolumeControl: true,
     supportsMuteControl: false,
     supportsAudioOnly: true,
+    supportsEngineOptions: true,
 
     // Video and rendering.
     //

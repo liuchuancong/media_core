@@ -7,16 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_ijk_player/media_core_ijk_player.dart';
 
-export 'package:media_core_ijk_player/src/fijk_player_config.dart' show FijkPlayerConfig, FijkProxyUrlResolver;
 
 final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   FlvLzcPlayerAdapter({
     super.id = kIjkPlayerBackendId,
     super.capabilities = defaultCapabilities,
     FijkPlayer? player,
-    FijkPlayerConfig config = const FijkPlayerConfig(),
+    List<EngineOption> options = const <EngineOption>[],
   }) : _injectedPlayer = player,
-       _config = config;
+       _options = List<EngineOption>.unmodifiable(options);
 
   final FijkPlayer? _injectedPlayer;
   late final FijkPlayer _player = _injectedPlayer ?? FijkPlayer();
@@ -25,33 +24,87 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // Configuration — replace wholesale or tweak individual fields
   // ---------------------------------------------------------------------------
 
-  FijkPlayerConfig _config;
-  FijkPlayerConfig get config => _config;
-  set config(FijkPlayerConfig value) => _config = value;
+  /// Native ijkplayer options applied before every open.
+  ///
+  /// Raw (domain, key, value) triples in the engine's own vocabulary —
+  /// `mediacodec`, `reconnect`, `timeout`, ... The adapter invents
+  /// nothing: options the caller passed at construction ride along to
+  /// every open, and runtime options pushed through
+  /// `applyEngineOptions` are merged last-value-wins on top.
+  final List<EngineOption> _options;
 
-  // Convenience accessors kept for callers that used the old fields.
-  FijkProxyUrlResolver? get proxyUrlResolver => _config.proxyUrlResolver;
-  set proxyUrlResolver(FijkProxyUrlResolver? value) => _config = _config.copyWith(proxyUrlResolver: value);
+  /// Runtime options merged over [_options], keyed by (domain, key).
+  final Map<(String, String), EngineOption> _runtimeOptions = <(String, String), EngineOption>{};
 
-  bool get enableCodec => _config.enableCodec;
-  set enableCodec(bool v) => _config = _config.copyWith(enableCodec: v);
-
-  bool get requestAudioFocus => _config.requestAudioFocus;
-  set requestAudioFocus(bool v) => _config = _config.copyWith(requestAudioFocus: v);
-
-  bool get requestScreenOn => _config.requestScreenOn;
-  set requestScreenOn(bool v) => _config = _config.copyWith(requestScreenOn: v);
+  /// The effective option list for the next open.
+  List<EngineOption> get _effectiveOptions {
+    return <EngineOption>[
+      ..._options,
+      ..._runtimeOptions.values,
+    ];
+  }
 
   // ---------------------------------------------------------------------------
   // Runtime setOption passthrough for edge cases
   // (mid-playback proxy switch, dynamic header swaps, ...)
   // ---------------------------------------------------------------------------
 
-  Future<void> setPlayerOption(String key, Object value) => _player.setOption(FijkOption.playerCategory, key, value);
 
-  Future<void> setHostOption(String key, Object value) => _player.setOption(FijkOption.hostCategory, key, value);
+  @override
+  Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
+    final outcomes = <EngineOptionOutcome>[];
 
-  Future<void> setFormatOption(String key, Object value) => _player.setOption(FijkOption.formatCategory, key, value);
+    for (final option in options) {
+      final category = _fijkCategoryOf(option.domain);
+
+      if (category == null) {
+        outcomes.add(EngineOptionOutcome.unsupported);
+
+        continue;
+      }
+
+      try {
+        await _player.setOption(category, option.key, _fijkOptionValue(option.value));
+
+        // ijkplayer accepts the write on a live instance but consumes most
+        // options at the next prepareAsync: the current stream keeps its
+        // old settings until the next open, which is exactly the staged
+        // contract. The caller asks for immediate effect by letting the
+        // handle rebuild the engine.
+        outcomes.add(EngineOptionOutcome.stagedForNextOpen);
+      } catch (_) {
+        outcomes.add(EngineOptionOutcome.unsupported);
+      }
+    }
+
+    return outcomes;
+  }
+
+  /// Maps an option domain onto an ijkplayer option category.
+  ///
+  /// [FijkOption] categories are plain ints, not an enum, so the mapping
+  /// lives here next to its only consumer. Unknown domains answer null,
+  /// which the caller sees as `unsupported` rather than a guess.
+  static int? _fijkCategoryOf(String? domain) {
+    return switch (domain ?? 'player') {
+      'host' => FijkOption.hostCategory,
+      'format' => FijkOption.formatCategory,
+      'codec' => FijkOption.codecCategory,
+      'sws' => FijkOption.swsCategory,
+      'swr' => FijkOption.swrCategory,
+      'player' => FijkOption.playerCategory,
+      _ => null,
+    };
+  }
+
+  /// Normalizes an option value into what `setOption` accepts (int/String).
+  static Object _fijkOptionValue(Object? value) {
+    return switch (value) {
+      bool flag => flag ? 1 : 0,
+      null => '',
+      final Object accepted => accepted,
+    };
+  }
 
   // ---------------------------------------------------------------------------
   // Internal state
@@ -60,7 +113,6 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   StreamSubscription<Duration>? _positionSubscription;
 
   bool _sourceBuffering = false;
-  bool _privateInput = false;
 
   /// Whether the current source is live. Rate changes and seeks are
   /// ignored for live streams — there is no rewindable timeline and no
@@ -151,9 +203,6 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onOpen(PlayerSource source) async {
-    final privateInput = _privateInput;
-    _privateInput = false;
-
     _lastPosition = Duration.zero;
     _lastDuration = Duration.zero;
     _sourceBuffering = false;
@@ -167,21 +216,28 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     }
     if (isDisposed) return;
 
-    // Resolve the proxy for this open.
-    final config = _config;
-    final String proxyUrl;
-    if (config.proxyUrlResolver != null) {
-      proxyUrl = config.proxyUrlResolver!(privateInput: privateInput);
-    } else {
-      proxyUrl = config.proxyUrl;
+    // The caller's options, verbatim, plus the two contract requirements:
+    // the source's own headers (a PlayerSource field, translated into
+    // ijkplayer's format-option string) and the snapshot host option the
+    // adapter's screenshot capability depends on. Everything else is the
+    // caller's to decide.
+    for (final option in _effectiveOptions) {
+      final category = _fijkCategoryOf(option.domain);
+
+      if (category == null) continue;
+
+      await _player.setOption(category, option.key, _fijkOptionValue(option.value));
     }
 
-    await FijkHelper.applyConfig(
-      _player,
-      config,
-      sourceHeaders: source.hasHeaders ? Map<String, String>.from(source.headers!.values) : null,
-      proxyUrl: proxyUrl,
-    );
+    if (source.hasHeaders) {
+      for (final entry in FijkHelper.sourceHeaderOptions(source.headers!.values).entries) {
+        await _player.setOption(FijkOption.formatCategory, entry.key, entry.value);
+      }
+    }
+
+    // IJKPlayer refuses `snapshot` unless the host enables it, and a
+    // screenshot request arrives long after the open that writes options.
+    await _player.setOption(FijkOption.hostCategory, 'enable-snapshot', 1);
     if (isDisposed) return;
 
     // A new data source starts a fresh prepare path, so re-assert
@@ -230,13 +286,6 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       return;
     }
 
-    // soundtouch only takes effect when the audio pipeline is built (the
-    // next setDataSource), and toggling it mid-stream is unreliable on
-    // some ijk builds — so only touch it here, before any playback.
-    final wantsSoundTouch = rate != 1.0;
-    if (_config.soundtouch != wantsSoundTouch) {
-      await _player.setOption(FijkOption.playerCategory, 'soundtouch', wantsSoundTouch ? 1 : 0);
-    }
     await _player.setSpeed(rate);
   }
 
@@ -271,10 +320,6 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // ---------------------------------------------------------------------------
   // Extensions
   // ---------------------------------------------------------------------------
-
-  /// Marks the next open as an app-owned loopback input so
-  /// [proxyUrlResolver] can decide whether to bypass the proxy.
-  void setPrivateInput(bool value) => _privateInput = value;
 
   /// Restricts playback to the audio track through IJKPlayer's
   /// `disable-vid` option: the decoder is switched off, the stream is
@@ -406,6 +451,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportsVolumeControl: true,
     supportsMuteControl: true,
     supportsAudioOnly: true,
+    supportsEngineOptions: true,
     supportsVideoFrameProgress: false,
     supportsVideoSizeChanged: true,
     supportsVideoReconfig: false,

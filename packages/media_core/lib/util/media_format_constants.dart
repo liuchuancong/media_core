@@ -236,7 +236,7 @@ abstract final class BetterPlayerFormats {
 ///
 /// libmdk bundles its own FFmpeg with a broad demuxer set, so the container
 /// list is intended to cover common media formats supported by media_kit.
-/// The protocol set is deliberately narrower: [FvpPlayerConfig.defaultLiveProperties]
+/// The protocol set is deliberately narrower: the fvp adapter's former built-in preset (now removed; the caller owns the whitelist)
 /// installs a protocol whitelist that does not enable `srt`, `ftp` or `ftps`,
 /// and declaring a scheme the adapter's own whitelist blocks would only win
 /// a source it then fails to open.

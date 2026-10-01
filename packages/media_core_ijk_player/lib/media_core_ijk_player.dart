@@ -5,7 +5,6 @@
 library;
 
 export 'package:media_core_ijk_player/src/fijk_helper.dart';
-export 'package:media_core_ijk_player/src/fijk_player_config.dart';
 export 'package:media_core_ijk_player/src/flv_lzc_player_adapter.dart';
 export 'package:media_core_ijk_player/src/flv_lzc_player_adapter_factory.dart';
 

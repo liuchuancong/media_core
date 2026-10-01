@@ -13,6 +13,7 @@ import 'package:media_core/adapter/player_adapter_exception.dart';
 import 'package:media_core/error/player_error_code.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
 import 'package:flutter/foundation.dart' show protected;
+import 'package:media_core/adapter/engine_option.dart';
 
 /// Template-method base for [PlayerAdapter] implementations.
 ///
@@ -329,6 +330,66 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     _audioOnly = audioOnly;
 
     await onSetAudioOnly(audioOnly);
+  }
+
+  /// Engine options received before [onInitialize] built the engine.
+  ///
+  /// Held here so [applyEngineOptions] is safe to call at any point of the
+  /// adapter's life; consumed through [consumeStashedEngineOptions] where
+  /// the engine is created.
+  List<EngineOption> _stashedEngineOptions = const <EngineOption>[];
+
+  /// Applies raw engine options to the engine this adapter owns.
+  ///
+  /// Gated by [PlayerAdapterCapabilities.supportsEngineOptions] the same
+  /// way [setAudioOnly] is gated by its own capability. Before the engine
+  /// exists the options are stashed and answered
+  /// [EngineOptionOutcome.stagedForNextOpen]; the engine creation path
+  /// picks them up through [consumeStashedEngineOptions].
+  @override
+  Future<List<EngineOptionOutcome>> applyEngineOptions(List<EngineOption> options) async {
+    assert(
+      _capabilities.supportsEngineOptions,
+      '$runtimeType received applyEngineOptions but '
+      'capabilities.supportsEngineOptions is false.',
+    );
+
+    if (!_capabilities.supportsEngineOptions) {
+      return List<EngineOptionOutcome>.filled(options.length, EngineOptionOutcome.unsupported, growable: false);
+    }
+
+    if (!initialized) {
+      _stashedEngineOptions = <EngineOption>[..._stashedEngineOptions, ...options];
+
+      return List<EngineOptionOutcome>.filled(options.length, EngineOptionOutcome.stagedForNextOpen, growable: false);
+    }
+
+    return onApplyEngineOptions(options);
+  }
+
+  /// Engine-specific application of raw options.
+  ///
+  /// The engine exists when this runs; implementations translate the
+  /// options into the engine's own calls and report what happened per
+  /// option. The default answers [EngineOptionOutcome.unsupported] for
+  /// everything, which is the honest answer for a backend without a
+  /// runtime key/value surface.
+  @protected
+  Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
+    return List<EngineOptionOutcome>.filled(options.length, EngineOptionOutcome.unsupported, growable: false);
+  }
+
+  /// Takes the options stashed before the engine existed, if any.
+  ///
+  /// Call exactly where the engine is created, so the options take effect
+  /// from the engine's first moment.
+  @protected
+  List<EngineOption> consumeStashedEngineOptions() {
+    final stashed = _stashedEngineOptions;
+
+    _stashedEngineOptions = const <EngineOption>[];
+
+    return stashed;
   }
 
   /// Captures the current video frame with the backend's own API.

@@ -1,10 +1,8 @@
 import 'package:media_core/media_core.dart';
 
 import 'package:media_core_fvp/src/fvp_player_adapter.dart';
-import 'package:media_core_fvp/src/fvp_player_config.dart';
 import 'package:media_core_fvp/src/fvp_video_config.dart';
 
-export 'package:media_core_fvp/src/fvp_player_config.dart' show FvpPlayerConfig, FvpProxyUrlResolver;
 export 'package:media_core_fvp/src/fvp_video_config.dart' show FvpVideoConfig;
 
 /// Backend id the fvp (libmdk) adapter registers under.
@@ -12,24 +10,35 @@ const String kFvpPlayerBackendId = 'fvp';
 
 /// [PlayerAdapterFactory] that creates [FvpPlayerAdapter] instances.
 final class FvpAdapterFactory implements PlayerAdapterFactory {
-  /// [capabilities], [config] and [videoConfig] are shared by every adapter this
-  /// factory creates. [configure] runs once per instance after construction for
-  /// per-instance customisation.
+  /// [capabilities] and the native mdk fields are shared by every
+  /// adapter this factory creates. [configure] runs once per instance
+  /// after construction for per-instance customisation.
   const FvpAdapterFactory({
     this.capabilities = FvpPlayerAdapter.defaultCapabilities,
-    this.config = const FvpPlayerConfig(),
+    this.properties = const <String, String>{},
+    this.videoDecoders,
+    this.audioBackends,
     this.videoConfig = const FvpVideoConfig(),
     this.configure,
   });
 
   final PlayerAdapterCapabilities capabilities;
-  final FvpPlayerConfig config;
+  final Map<String, String> properties;
+  final List<String>? videoDecoders;
+  final List<String>? audioBackends;
   final FvpVideoConfig videoConfig;
   final void Function(FvpPlayerAdapter adapter)? configure;
 
   @override
   PlayerAdapter create(String id) {
-    final adapter = FvpPlayerAdapter(id: id, capabilities: capabilities, config: config, videoConfig: videoConfig);
+    final adapter = FvpPlayerAdapter(
+        id: id,
+        capabilities: capabilities,
+        properties: properties,
+        videoDecoders: videoDecoders,
+        audioBackends: audioBackends,
+        videoConfig: videoConfig,
+      );
 
     configure?.call(adapter);
 
@@ -58,12 +67,21 @@ void registerFvpFactory(
   DefaultPlayerAdapterFactory factory, {
   String id = kFvpPlayerBackendId,
   PlayerAdapterCapabilities capabilities = FvpPlayerAdapter.defaultCapabilities,
-  FvpPlayerConfig config = const FvpPlayerConfig(),
+  Map<String, String> properties = const <String, String>{},
+  List<String>? videoDecoders,
+  List<String>? audioBackends,
   FvpVideoConfig videoConfig = const FvpVideoConfig(),
   void Function(FvpPlayerAdapter adapter)? configure,
 }) {
   factory.register(id, () {
-    final adapter = FvpPlayerAdapter(id: id, capabilities: capabilities, config: config, videoConfig: videoConfig);
+    final adapter = FvpPlayerAdapter(
+        id: id,
+        capabilities: capabilities,
+        properties: properties,
+        videoDecoders: videoDecoders,
+        audioBackends: audioBackends,
+        videoConfig: videoConfig,
+      );
 
     configure?.call(adapter);
 
@@ -76,14 +94,18 @@ void registerFvpRegistry(
   PlayerAdapterRegistry registry, {
   int priority = 80,
   PlayerAdapterCapabilities capabilities = FvpPlayerAdapter.defaultCapabilities,
-  FvpPlayerConfig config = const FvpPlayerConfig(),
+  Map<String, String> properties = const <String, String>{},
+    List<String>? videoDecoders,
+    List<String>? audioBackends,
   FvpVideoConfig videoConfig = const FvpVideoConfig(),
   void Function(FvpPlayerAdapter adapter)? configure,
 }) {
   registry.register(
     FvpAdapterFactory(
       capabilities: capabilities,
-      config: config,
+      properties: properties,
+      videoDecoders: videoDecoders,
+      audioBackends: audioBackends,
       videoConfig: videoConfig,
       configure: configure,
     ).registration(priority: priority),

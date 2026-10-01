@@ -1,32 +1,47 @@
 import 'package:media_core_media_kit/src/media_kit_player_adapter.dart';
 import 'package:media_core/media_core.dart';
-
-export 'package:media_core_media_kit/src/media_kit_player_config.dart' show MediaKitPlayerConfig, MediaKitProxyUrlResolver;
-export 'package:media_core_media_kit/src/media_kit_video_config.dart' show MediaKitVideoConfig, MediaKitVideoControls;
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 const String kMediaKitPlayerBackendId = 'mpv';
 
 /// [PlayerAdapterFactory] that creates [MediaKitPlayerAdapter] instances.
+///
+/// [playerConfiguration] and [videoControllerConfiguration] are media_kit's
+/// own configuration types, shared verbatim by every adapter this factory
+/// creates. [configure] runs once per instance after construction for
+/// per-instance customisation.
 final class MediaKitAdapterFactory implements PlayerAdapterFactory {
-  /// [capabilities], [config] and [videoConfig] are shared by every
-  /// adapter this factory creates. [configure] runs once per instance
-  /// after construction for per-instance customisation.
+  /// Creates a factory.
   const MediaKitAdapterFactory({
     this.capabilities = MediaKitPlayerAdapter.defaultCapabilities,
-    this.config = const MediaKitPlayerConfig(),
-    this.videoConfig = const MediaKitVideoConfig(),
+    this.playerConfiguration,
+    this.videoControllerConfiguration,
     this.configure,
   });
 
   final PlayerAdapterCapabilities capabilities;
-  final MediaKitPlayerConfig config;
-  final MediaKitVideoConfig videoConfig;
+
+  /// Native media_kit player configuration; null uses engine defaults.
+  final mk.PlayerConfiguration? playerConfiguration;
+
+  /// Native media_kit_video controller configuration; null uses engine
+  /// defaults.
+  final mkv.VideoControllerConfiguration? videoControllerConfiguration;
+
   final void Function(MediaKitPlayerAdapter adapter)? configure;
 
   @override
   PlayerAdapter create(String id) {
-    final adapter = MediaKitPlayerAdapter(id: id, capabilities: capabilities, config: config, videoConfig: videoConfig);
+    final adapter = MediaKitPlayerAdapter(
+      id: id,
+      capabilities: capabilities,
+      playerConfiguration: playerConfiguration,
+      videoControllerConfiguration: videoControllerConfiguration,
+    );
+
     configure?.call(adapter);
+
     return adapter;
   }
 
@@ -52,13 +67,20 @@ void registerMediaKitFactory(
   DefaultPlayerAdapterFactory factory, {
   String id = kMediaKitPlayerBackendId,
   PlayerAdapterCapabilities capabilities = MediaKitPlayerAdapter.defaultCapabilities,
-  MediaKitPlayerConfig config = const MediaKitPlayerConfig(),
-  MediaKitVideoConfig videoConfig = const MediaKitVideoConfig(),
+  mk.PlayerConfiguration? playerConfiguration,
+  mkv.VideoControllerConfiguration? videoControllerConfiguration,
   void Function(MediaKitPlayerAdapter adapter)? configure,
 }) {
   factory.register(id, () {
-    final adapter = MediaKitPlayerAdapter(id: id, capabilities: capabilities, config: config, videoConfig: videoConfig);
+    final adapter = MediaKitPlayerAdapter(
+      id: id,
+      capabilities: capabilities,
+      playerConfiguration: playerConfiguration,
+      videoControllerConfiguration: videoControllerConfiguration,
+    );
+
     configure?.call(adapter);
+
     return adapter;
   });
 }
@@ -68,15 +90,15 @@ void registerMediaKitRegistry(
   PlayerAdapterRegistry registry, {
   int priority = 100,
   PlayerAdapterCapabilities capabilities = MediaKitPlayerAdapter.defaultCapabilities,
-  MediaKitPlayerConfig config = const MediaKitPlayerConfig(),
-  MediaKitVideoConfig videoConfig = const MediaKitVideoConfig(),
+  mk.PlayerConfiguration? playerConfiguration,
+  mkv.VideoControllerConfiguration? videoControllerConfiguration,
   void Function(MediaKitPlayerAdapter adapter)? configure,
 }) {
   registry.register(
     MediaKitAdapterFactory(
       capabilities: capabilities,
-      config: config,
-      videoConfig: videoConfig,
+      playerConfiguration: playerConfiguration,
+      videoControllerConfiguration: videoControllerConfiguration,
       configure: configure,
     ).registration(priority: priority),
   );

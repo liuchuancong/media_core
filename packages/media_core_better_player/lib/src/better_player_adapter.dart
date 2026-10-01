@@ -5,8 +5,6 @@ import 'package:media_core_better_player/media_core_better_player.dart';
 // The package barrel carries the engine too (`better_player_plus` is
 // re-exported from it), so this file does not import the engine directly.
 
-export 'package:media_core_better_player/src/better_player_config.dart'
-    show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
 
 /// [PlayerAdapter] implementation backed by better_player_plus —
 /// the  BetterPlayer engine.
@@ -33,14 +31,23 @@ export 'package:media_core_better_player/src/better_player_config.dart'
 ///   on every tick. Buffering is expressed through
 ///   [PlayerAdapterEvent.buffering] instead.
 /// - an honest capability declaration ([defaultCapabilities])
+/// Rewrites the data source a [BetterPlayerAdapter] is about to set up.
+///
+/// Receives the framework [PlayerSource] and the data source the adapter
+/// mapped from it, returns the one to actually use.
+typedef BetterPlayerDataSourceBuilder =
+    BetterPlayerDataSource Function(PlayerSource source, BetterPlayerDataSource dataSource);
+
 final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   BetterPlayerAdapter({
     super.id = kBetterPlayerBackendId,
     super.capabilities = defaultCapabilities,
     BetterPlayerController? controller,
-    BetterPlayerConfig playerConfig = const BetterPlayerConfig(),
-  }) : _injectedController = controller,
-       config = playerConfig;
+    this.configuration,
+    this.playlistConfiguration,
+    this.dataSource,
+    this.configureDataSource,
+  }) : _injectedController = controller;
 
   final BetterPlayerController? _injectedController;
 
@@ -51,7 +58,18 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // Configuration
   // ---------------------------------------------------------------------------
 
-  BetterPlayerConfig config;
+  /// Native better_player configuration, applied verbatim when the
+  /// controller is created; null uses the adapter's integration defaults.
+  BetterPlayerConfiguration? configuration;
+
+  /// Native playlist configuration, passed to the controller verbatim.
+  BetterPlayerPlaylistConfiguration? playlistConfiguration;
+
+  /// Native data source used ahead of any opened [PlayerSource].
+  BetterPlayerDataSource? dataSource;
+
+  /// Last-chance transform applied to every data source before setup.
+  BetterPlayerDataSourceBuilder? configureDataSource;
 
   BoxFit get videoFit => _videoFit;
 
@@ -64,6 +82,66 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     _videoFit = fit;
     _controller?.setOverriddenFit(fit);
+  }
+
+  /// Replaces the engine configuration for later (re)creations.
+  ///
+  /// better_player locks its configuration at controller construction, so
+  /// this only feeds the *next* controller. To make a new configuration
+  /// effective on a running player, follow it with
+  /// `handle.rebuildEngine()` — the fresh adapter created by the rebuild
+  /// reads this config.
+  void updateConfiguration({
+    BetterPlayerConfiguration? configuration,
+    BetterPlayerPlaylistConfiguration? playlistConfiguration,
+    BetterPlayerDataSource? dataSource,
+    BetterPlayerDataSourceBuilder? configureDataSource,
+  }) {
+    this.configuration = configuration ?? this.configuration;
+    this.playlistConfiguration = playlistConfiguration ?? this.playlistConfiguration;
+    this.dataSource = dataSource ?? this.dataSource;
+    this.configureDataSource = configureDataSource ?? this.configureDataSource;
+  }
+
+  @override
+  Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
+    final controller = _controller;
+    final outcomes = <EngineOptionOutcome>[];
+
+    for (final option in options) {
+      if (controller == null) {
+        // The controller is born from the native configuration; raw options have
+        // no creation-time surface here, so they cannot ride along.
+        outcomes.add(EngineOptionOutcome.unsupported);
+
+        continue;
+      }
+
+      // better_player has no key/value surface: a small set of options maps
+      // onto live controller commands, everything else needs a rebuild.
+      switch (option.key) {
+        case 'volume':
+          await controller.setVolume((option.value as num?)?.toDouble() ?? 1.0);
+          outcomes.add(EngineOptionOutcome.appliedLive);
+
+        case 'speed':
+          await controller.setSpeed((option.value as num?)?.toDouble() ?? 1.0);
+          outcomes.add(EngineOptionOutcome.appliedLive);
+
+        case 'looping':
+          await controller.setLooping(option.value == true);
+          outcomes.add(EngineOptionOutcome.appliedLive);
+
+        case 'mixWithOthers':
+          controller.setMixWithOthers(option.value == true);
+          outcomes.add(EngineOptionOutcome.appliedLive);
+
+        default:
+          outcomes.add(EngineOptionOutcome.needsRebuild);
+      }
+    }
+
+    return outcomes;
   }
 
   // ---------------------------------------------------------------------------
@@ -163,10 +241,8 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       // still owns the presentation fit requested through PlayerVideo.
       injected.setOverriddenFit(_videoFit);
     } else {
-      final cfg = config;
-
       final base =
-          cfg.configuration ??
+          configuration ??
           const BetterPlayerConfiguration(
             handleLifecycle: false,
             fullScreenByDefault: false,
@@ -176,8 +252,8 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       _controller = BetterPlayerController(
         base.copyWith(autoPlay: base.autoPlay && !_audioOutputSuppressed, fit: _videoFit),
-        betterPlayerPlaylistConfiguration: cfg.playlistConfiguration,
-        betterPlayerDataSource: cfg.dataSource,
+        betterPlayerPlaylistConfiguration: playlistConfiguration,
+        betterPlayerDataSource: dataSource,
       );
     }
 
@@ -208,9 +284,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     // Prefer an explicitly configured data source; otherwise map the
     // framework-provided source.
-    var dataSource = config.dataSource;
+    BetterPlayerDataSource? resolvedDataSource = dataSource;
 
-    if (dataSource == null) {
+    if (resolvedDataSource == null) {
       final resolved = _resolveSource(source);
 
       if (resolved == null) {
@@ -220,7 +296,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         );
       }
 
-      dataSource = BetterPlayerDataSource(
+      resolvedDataSource = BetterPlayerDataSource(
         resolved.$1,
         resolved.$2,
         headers: source.hasHeaders ? Map<String, String>.from(source.headers!.values) : null,
@@ -230,13 +306,13 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     }
 
     // Per-open rewrite on top of whichever source was chosen above.
-    final transform = config.configureDataSource;
+    final transform = configureDataSource;
 
     if (transform != null) {
-      dataSource = transform(source, dataSource);
+      resolvedDataSource = transform(source, resolvedDataSource);
     }
 
-    await controller.setupDataSource(dataSource);
+    await controller.setupDataSource(resolvedDataSource);
 
     if (isDisposed) return;
 

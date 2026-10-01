@@ -80,6 +80,9 @@ final class OperationType {
   static const OperationType fallback = OperationType._('fallback', 'Fallback');
 
   static const OperationType retry = OperationType._('retry', 'Retry');
+  static const OperationType applyEngineOptions =
+      OperationType._('apply_engine_options', 'Apply Engine Options');
+
 
   // ---------------------------------------------------------------------------
   // Built-in values
@@ -110,6 +113,7 @@ final class OperationType {
     'recover',
     'fallback',
     'retry',
+    'apply_engine_options',
   };
 
   /// All built-in operation types.
@@ -138,6 +142,7 @@ final class OperationType {
     recover,
     fallback,
     retry,
+    applyEngineOptions,
   ];
 
   // ---------------------------------------------------------------------------

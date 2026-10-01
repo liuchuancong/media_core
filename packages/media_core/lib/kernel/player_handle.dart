@@ -53,6 +53,7 @@ import 'package:media_core/recovery/recovery_ladder_event.dart';
 import 'package:media_core/recovery/recovery_candidate_provider.dart';
 import 'package:media_core/adapter/player_adapter_selector.dart';
 import 'package:media_core/kernel/player_handle_snapshot.dart';
+import 'package:media_core/adapter/engine_option.dart';
 
 // The implementation of [PlayerHandle] is split by concern across `part`
 // files next to this one:
@@ -71,7 +72,7 @@ part 'player_handle_operations.dart';
 part 'player_handle_playback.dart';
 part 'player_handle_lifecycle.dart';
 part 'player_handle_recovery.dart';
-part 'player_handle_adapter.dart';
+part 'player_handle_adapter.dart';part 'player_handle_engine_options.dart';
 
 /// Describes the backend a handle just switched to.
 ///
@@ -353,6 +354,14 @@ final class PlayerHandle implements RecoveryTarget {
   /// are spent the run terminates and the failure is reported instead of
   /// being answered by a silent engine swap.
   bool _engineFallbackEnabled = true;
+  /// Engine options applied through engine-option configuration.
+  ///
+  /// Keyed by (domain, key) so a later value for the same option replaces
+  /// an earlier one. Persisted across backend swaps and engine rebuilds:
+  /// every fresh engine created for this handle replays the whole map, so
+  /// the caller's configuration survives recovery and fallback too.
+  final Map<(String, String), EngineOption> _engineOptions = <(String, String), EngineOption>{};
+
   // ---------------------------------------------------------------------------
   // Identity and state
   // ---------------------------------------------------------------------------
