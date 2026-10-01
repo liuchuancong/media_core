@@ -77,6 +77,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   ///
   /// Safe to call before [onInitialize]: the value is remembered and
   /// applied when the controller is created.
+  @override
   void setVideoFit(BoxFit fit) {
     if (_videoFit == fit) return;
 

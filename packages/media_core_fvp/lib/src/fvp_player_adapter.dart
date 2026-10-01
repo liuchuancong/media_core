@@ -675,6 +675,7 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   BoxFit get videoFit => _videoFit;
 
   /// Applies the viewport fit through the surface.
+  @override
   void setVideoFit(BoxFit fit) {
     if (_fitNotifier.value == fit && _videoConfig.fit == fit) return;
 

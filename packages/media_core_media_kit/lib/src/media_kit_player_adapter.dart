@@ -186,6 +186,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   BoxFit get videoFit => _videoFit;
 
   /// Applies the viewport fit through the surface.
+  @override
   void setVideoFit(BoxFit fit) {
     if (_fitNotifier.value == fit) return;
 
