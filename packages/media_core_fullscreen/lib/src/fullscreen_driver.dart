@@ -110,6 +110,8 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   Rect? _preFullscreenBounds;
 
+  static final _togglePlayerId = PlayerId('fullscreen-toggle');
+
   bool _initialized = false;
   bool _disposed = false;
   bool _isSystemFullscreen = false;
@@ -233,6 +235,40 @@ final class FullscreenDriver implements KernelPresentationDriver {
     _notifyIfChanged(wasAnyFullscreen);
 
     await DisposeUtils.close(_fullscreenChanges);
+  }
+
+  /// Leaves whatever fullscreen variant is active and restores the window.
+  ///
+  /// The presentation chain exits fullscreen through [apply] with a normal
+  /// request, but a host that owns the driver directly — an ESC handler, a
+  /// back gesture, a fullscreen button that only knows "leave" — should not
+  /// have to synthesize a request and a player id for that. No-op when no
+  /// fullscreen variant is active.
+  Future<void> exitFullscreen() async {
+    if (_disposed) {
+      throw StateError('FullscreenDriver has been disposed.');
+    }
+
+    final wasAnyFullscreen = isAnyFullscreen;
+    await _leaveFullscreen();
+    _notifyIfChanged(wasAnyFullscreen);
+  }
+
+  /// Enters system fullscreen when no fullscreen is active, leaves otherwise.
+  ///
+  /// Entering goes through [apply] so the transition is logged and the fit
+  /// strategy is resolved exactly like a chain-driven enter.
+  Future<void> toggleFullscreen() async {
+    if (_disposed) {
+      throw StateError('FullscreenDriver has been disposed.');
+    }
+
+    if (isAnyFullscreen) {
+      await exitFullscreen();
+      return;
+    }
+
+    await apply(_togglePlayerId, PresentationRequest.fullscreen());
   }
 
   // ---------------------------------------------------------------------------

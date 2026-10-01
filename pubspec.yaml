@@ -22,6 +22,7 @@ workspace:
   - packages/media_core_pip
   - packages/media_core_floating
   - packages/media_core_fullscreen
+  - packages/media_core_win32
   - packages/media_core_danmaku
   - packages/media_core_live
   - packages/media_core_feed

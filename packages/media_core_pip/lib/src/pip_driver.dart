@@ -216,6 +216,39 @@ final class PipDriver implements KernelPresentationDriver {
     await DisposeUtils.close(_pipChanges);
   }
 
+  /// Leaves picture-in-picture and restores the captured window snapshot.
+  ///
+  /// The presentation chain exits PiP through [apply] with a normal request;
+  /// a host that owns the driver directly — a close button, a double-tap on
+  /// the PiP surface, a back gesture — should not have to synthesize a
+  /// request and a player id for that. On mobile the system owns the PiP
+  /// window, so this is a no-op there (see `_leavePip`); the state clears
+  /// when the system reports the window gone.
+  Future<void> exitPip() async {
+    if (_disposed) {
+      throw StateError('PipDriver has been disposed.');
+    }
+
+    await _leavePip();
+  }
+
+  /// Enters PiP when it is not active, leaves otherwise.
+  ///
+  /// Entering goes through `_enterPip`, the same sequence a chain-driven
+  /// request takes, so platform resolution and logging stay identical.
+  Future<void> togglePip() async {
+    if (_disposed) {
+      throw StateError('PipDriver has been disposed.');
+    }
+
+    if (_isPip) {
+      await exitPip();
+      return;
+    }
+
+    await _enterPip();
+  }
+
   // ---------------------------------------------------------------------------
   // Entering and leaving
   // ---------------------------------------------------------------------------
