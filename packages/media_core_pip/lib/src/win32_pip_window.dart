@@ -30,8 +30,6 @@ import 'package:media_core_pip/src/pip_window.dart';
 final class Win32PipWindow implements PipWindow {
   static int? _hwnd;
 
-  Win32WindowSnapshot? _nativeSnapshot;
-
   int get _windowHandle {
     if (_hwnd == null || _hwnd == 0) {
       _hwnd = Win32WindowFfi.mainWindowHandle();
@@ -43,11 +41,14 @@ final class Win32PipWindow implements PipWindow {
   Future<PipWindowSnapshot> capture() async {
     final hwnd = _windowHandle;
     final native = Win32WindowFfi.capture(hwnd);
-    _nativeSnapshot = native;
     final bounds = Win32WindowFfi.bounds(hwnd) ?? Rect.zero;
 
-    // A snapshot is the authoritative restore source; the readable fields
-    // double as the honest pre-PiP state for hosts that log or merge it.
+    // Purely read-only: the native snapshot travels inside the returned
+    // PipWindowSnapshot, so the caller that captured the *normal* state is
+    // the one whose snapshot a later restore() replays. Caching the latest
+    // capture here instead made the exit path's own capture (taken to enable
+    // rollback) overwrite the entry snapshot — and restore then replayed the
+    // compact window back, leaving a shrunken, taskbar-less, black window.
     return PipWindowSnapshot(
       bounds: bounds,
       alwaysOnTop: Win32WindowFfi.isTopmost(hwnd),
@@ -84,12 +85,12 @@ final class Win32PipWindow implements PipWindow {
   @override
   Future<void> restore(PipWindowSnapshot snapshot) async {
     final hwnd = _windowHandle;
-    final native =
-        _nativeSnapshot ??
-        (snapshot.titleBarStyle is Win32WindowSnapshot
-            ? snapshot.titleBarStyle as Win32WindowSnapshot
-            : null);
-    _nativeSnapshot = null;
+    // Only the snapshot the caller captured at entry is authoritative. A
+    // snapshot captured *while compact* (the rollback helper does exactly
+    // that) must never win, or restore replays the compact window back.
+    final native = snapshot.titleBarStyle is Win32WindowSnapshot
+        ? snapshot.titleBarStyle as Win32WindowSnapshot
+        : null;
 
     if (native != null) {
       // Replays placement and every style bit captured on entry — bounds,
@@ -98,9 +99,10 @@ final class Win32PipWindow implements PipWindow {
       return;
     }
 
-    // PiP was entered before this window could capture a snapshot: fall back
-    // to moving the window back bounds-only. Styles stay as they are rather
-    // than being guessed.
+    // No native snapshot travels with this snapshot (captured by another
+    // backend, or the handle was gone): reconstruct from the readable fields.
+    // Styles are re-stated rather than guessed, and the title needs no
+    // restore because the compact window never changed it.
     Win32WindowFfi.setSkipTaskbar(hwnd, skip: snapshot.skipTaskbar);
     Win32WindowFfi.setResizable(hwnd, resizable: snapshot.resizable);
     Win32WindowFfi.applyBounds(
