@@ -12,12 +12,17 @@ final class PipWindowSnapshot {
     required this.resizable,
     required this.skipTaskbar,
     required this.title,
+    this.titleBarStyle,
   });
 
   final Rect bounds;
   final bool alwaysOnTop;
   final bool resizable;
   final bool skipTaskbar;
+
+  /// Title bar style captured before entering PiP, so [restore] can put
+  /// the window back exactly as it was. Null when the host does not track it.
+  final Object? titleBarStyle;
   final String title;
 
   @override

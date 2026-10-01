@@ -38,6 +38,9 @@ final class WindowManagerPipWindow implements PipWindow {
     if (aspectRatio != null) {
       await windowManager.setAspectRatio(aspectRatio);
     }
+    // Hide the system title bar: with it, the resized window still reads as
+    // "the whole app shrunk" instead of a picture-in-picture overlay.
+    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     await windowManager.setSize(size);
     await windowManager.setPosition(position);
     await windowManager.setSkipTaskbar(skipTaskbar);
@@ -49,6 +52,9 @@ final class WindowManagerPipWindow implements PipWindow {
     await windowManager.setResizable(snapshot.resizable);
     await windowManager.setSkipTaskbar(snapshot.skipTaskbar);
     await windowManager.setTitle(snapshot.title);
+    // Bring the normal chrome back before resizing, so the restored window
+    // never flashes as a frameless rectangle.
+    await windowManager.setTitleBarStyle(TitleBarStyle.normal);
     await windowManager.setBounds(snapshot.bounds);
   }
 }
