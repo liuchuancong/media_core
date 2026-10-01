@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:flutter/widgets.dart' show WidgetsBinding;
-import 'package:window_manager/window_manager.dart';
 
+import 'package:media_core_pip/src/desktop_pip_window.dart';
 import 'package:media_core_pip/src/pip_window.dart';
 
 /// One monitor's usable area, id'd for remembered-bounds matching.
@@ -30,7 +30,8 @@ final class PipSavedBounds {
 
 typedef PipSavedBoundsReader = PipSavedBounds? Function();
 
-typedef PipSavedBoundsWriter = void Function(Size size, Offset position, String displayId);
+typedef PipSavedBoundsWriter =
+    void Function(Size size, Offset position, String displayId);
 
 /// Sizing policy for the small window, by content aspect ratio.
 ///
@@ -52,19 +53,27 @@ Size pipSmallWindowSize(double aspectRatio) {
     return Size(width, width / ratio);
   }
   const maxSide = 280.0;
-  return ratio >= 1.0 ? Size(maxSide, maxSide / ratio) : Size(maxSide * ratio, maxSide);
+  return ratio >= 1.0
+      ? Size(maxSide, maxSide / ratio)
+      : Size(maxSide * ratio, maxSide);
 }
 
 String? pipDisplayIdForPosition(List<PipWorkArea> displays, Offset position) {
   for (final display in displays) {
     final area = display.area;
-    if (position.dx >= area.left && position.dx < area.right && position.dy >= area.top && position.dy < area.bottom) {
+    if (position.dx >= area.left &&
+        position.dx < area.right &&
+        position.dy >= area.top &&
+        position.dy < area.bottom) {
       return display.id;
     }
   }
   for (final display in displays) {
     final area = display.area;
-    if (position.dx < area.right && position.dx + 1 > area.left && position.dy < area.bottom && position.dy + 1 > area.top) {
+    if (position.dx < area.right &&
+        position.dx + 1 > area.left &&
+        position.dy < area.bottom &&
+        position.dy + 1 > area.top) {
       return display.id;
     }
   }
@@ -85,26 +94,31 @@ Rect pipResolvePlacement({
   Rect? savedBounds,
   double placementMargin = 20,
 }) {
-  final areas = workAreas.where((area) => !area.isEmpty && area.isFinite).toList(growable: false);
-  final fallbackArea = primaryWorkArea.isEmpty ? const Rect.fromLTWH(0, 0, 1280, 720) : primaryWorkArea;
+  final areas = workAreas
+      .where((area) => !area.isEmpty && area.isFinite)
+      .toList(growable: false);
+  final fallbackArea = primaryWorkArea.isEmpty
+      ? const Rect.fromLTWH(0, 0, 1280, 720)
+      : primaryWorkArea;
   final candidates = areas.isEmpty ? <Rect>[fallbackArea] : areas;
-  final validSaved = savedBounds != null && savedBounds.isFinite && !savedBounds.isEmpty ? savedBounds : null;
+  final validSaved =
+      savedBounds != null && savedBounds.isFinite && !savedBounds.isEmpty
+      ? savedBounds
+      : null;
 
   Rect target;
   if (validSaved != null) {
-    target = candidates.firstWhere(
-      (area) {
-        final overlap = validSaved.intersect(area);
-        return overlap.width >= 48 && overlap.height >= 48;
-      },
-      orElse: () => Rect.zero,
-    );
+    target = candidates.firstWhere((area) {
+      final overlap = validSaved.intersect(area);
+      return overlap.width >= 48 && overlap.height >= 48;
+    }, orElse: () => Rect.zero);
   } else {
     target = Rect.zero;
   }
   if (target == Rect.zero) {
     target = candidates.firstWhere(
-      (area) => area.overlaps(fallbackArea) || area.contains(fallbackArea.center),
+      (area) =>
+          area.overlaps(fallbackArea) || area.contains(fallbackArea.center),
       orElse: () => candidates.first,
     );
   }
@@ -116,8 +130,12 @@ Rect pipResolvePlacement({
   final height = requested.height.clamp(minHeight, target.height).toDouble();
   final defaultLeft = target.right - width - placementMargin;
   final defaultTop = target.bottom - height - placementMargin;
-  final left = (validSaved?.left ?? defaultLeft).clamp(target.left, target.right - width).toDouble();
-  final top = (validSaved?.top ?? defaultTop).clamp(target.top, target.bottom - height).toDouble();
+  final left = (validSaved?.left ?? defaultLeft)
+      .clamp(target.left, target.right - width)
+      .toDouble();
+  final top = (validSaved?.top ?? defaultTop)
+      .clamp(target.top, target.bottom - height)
+      .toDouble();
   return Rect.fromLTWH(left, top, width, height);
 }
 
@@ -125,11 +143,18 @@ Rect pipResolvePlacement({
 /// awareness, remembered bounds with display matching, minimum-size
 /// release, host rollback on failure and a serialized operation queue.
 ///
+/// Every actual window operation is delegated to an injected [PipWindow] —
+/// the platform backend ([defaultDesktopPipWindow]: Win32 on Windows,
+/// `window_manager` on macOS and Linux) or a host-supplied one. This class
+/// owns only the policy around it, which is why the driver can be tested
+/// without a window and the backend can be swapped per platform.
+///
 /// Display enumeration is injected so hosts with their own screen plugin
 /// stay dependency-free; single-display hosts can omit the reader and the
 /// current window's monitor bounds stand in for the work area.
 final class DisplayAwarePipWindow implements PipWindow {
   DisplayAwarePipWindow({
+    PipWindow Function()? windowBuilder,
     this.workAreasReader,
     this.readSavedBounds,
     this.writeSavedBounds,
@@ -137,8 +162,10 @@ final class DisplayAwarePipWindow implements PipWindow {
     this.normalMinSize = Size.zero,
     this.defaultSize = const Size(1280, 720),
     this.placementMargin = 20,
-  }) : _alwaysOnTop = alwaysOnTop;
+  }) : _windowBuilder = windowBuilder ?? defaultDesktopPipWindow,
+       _alwaysOnTop = alwaysOnTop;
 
+  final PipWindow Function() _windowBuilder;
   final PipWorkAreasReader? workAreasReader;
   final PipSavedBoundsReader? readSavedBounds;
   final PipSavedBoundsWriter? writeSavedBounds;
@@ -147,18 +174,23 @@ final class DisplayAwarePipWindow implements PipWindow {
   final Size defaultSize;
   final double placementMargin;
 
+  PipWindow? _windowInstance;
+  PipWindow get window => _windowInstance ??= _windowBuilder();
+
   final List<Future<void>> _opQueue = [];
-  Size _savedSize = const Size(1280, 720);
-  Offset _savedPosition = Offset.zero;
+  PipWindowSnapshot? _savedSnapshot;
   bool _compact = false;
   bool get isCompact => _compact;
 
   Future<void> setAlwaysOnTop(bool value) {
     return _serialize(() async {
       if (!_compact) return;
-      await windowManager.setAlwaysOnTop(value);
+      await window.setAlwaysOnTop(value);
     });
   }
+
+  @override
+  Future<void> setMinimumSize(Size size) => window.setMinimumSize(size);
 
   /// Persists the current small-window geometry when remembered bounds are on.
   Future<void> captureGeometry() {
@@ -166,29 +198,19 @@ final class DisplayAwarePipWindow implements PipWindow {
       if (!_compact) return;
       final saved = readSavedBounds?.call();
       if (saved == null) return;
-      final size = await windowManager.getSize();
-      final position = await windowManager.getPosition();
+      final current = await window.capture();
+      final position = current.bounds.topLeft;
       final displays = await _workAreas();
       final displayId =
           pipDisplayIdForPosition(displays, position) ??
           (displays.isEmpty ? null : _displayOfCurrentView(displays));
       if (displayId == null) return;
-      writeSavedBounds?.call(size, position, displayId);
+      writeSavedBounds?.call(current.bounds.size, position, displayId);
     });
   }
 
   @override
-  Future<PipWindowSnapshot> capture() async {
-    final position = await windowManager.getPosition();
-    final bounds = await windowManager.getBounds();
-    return PipWindowSnapshot(
-      bounds: Rect.fromLTWH(position.dx, position.dy, bounds.width, bounds.height),
-      alwaysOnTop: await windowManager.isAlwaysOnTop(),
-      resizable: await windowManager.isResizable(),
-      skipTaskbar: await windowManager.isSkipTaskbar(),
-      title: await windowManager.getTitle(),
-    );
-  }
+  Future<PipWindowSnapshot> capture() => window.capture();
 
   @override
   Future<void> applySmallWindow({
@@ -200,7 +222,9 @@ final class DisplayAwarePipWindow implements PipWindow {
     required bool skipTaskbar,
     required String title,
   }) {
-    return _serialize(() => _enter(aspectRatio ?? size.width / size.height, alwaysOnTop));
+    return _serialize(
+      () => _enter(aspectRatio ?? size.width / size.height, alwaysOnTop),
+    );
   }
 
   @override
@@ -210,19 +234,22 @@ final class DisplayAwarePipWindow implements PipWindow {
 
   Future<void> _enter(double aspectRatio, bool alwaysOnTopOverride) async {
     if (_compact) return;
-    final normalSize = await windowManager.getSize();
-    final normalPosition = await windowManager.getPosition();
-    final normalAlwaysOnTop = await windowManager.isAlwaysOnTop();
+    final window = this.window;
+    final normal = await window.capture();
 
     final displays = await _workAreas();
-    final currentId = pipDisplayIdForPosition(displays, normalPosition);
+    final currentId = pipDisplayIdForPosition(displays, normal.bounds.topLeft);
     PipWorkArea current = displays.firstWhere(
       (display) => display.id == currentId,
-      orElse: () => displays.isEmpty ? PipWorkArea(id: '', area: _currentViewWorkArea()) : displays.first,
+      orElse: () => displays.isEmpty
+          ? PipWorkArea(id: '', area: _currentViewWorkArea())
+          : displays.first,
     );
 
     final saved = readSavedBounds?.call();
-    final savedMatches = saved != null && (saved.displayId.isEmpty || saved.displayId == current.id);
+    final savedMatches =
+        saved != null &&
+        (saved.displayId.isEmpty || saved.displayId == current.id);
     final placement = pipResolvePlacement(
       requestedSize: pipSmallWindowSize(aspectRatio),
       workAreas: [for (final display in displays) display.area],
@@ -233,55 +260,73 @@ final class DisplayAwarePipWindow implements PipWindow {
 
     final pinOnTop = _alwaysOnTop?.call() ?? alwaysOnTopOverride;
     try {
-      await windowManager.setAlwaysOnTop(pinOnTop);
-      await windowManager.setMinimumSize(Size.zero);
-      await windowManager.setSize(placement.size);
-      await windowManager.setPosition(placement.topLeft);
-      final landedId = pipDisplayIdForPosition(displays, placement.topLeft) ?? current.id;
+      // Release the minimum size before shrinking: a backend whose minimum
+      // size also clamps programmatic resizes (macOS contentMinSize) cannot
+      // reach the compact size otherwise. A no-op on backends without the
+      // concept.
+      await window.setMinimumSize(Size.zero);
+      await window.applySmallWindow(
+        size: placement.size,
+        position: placement.topLeft,
+        aspectRatio: aspectRatio,
+        alwaysOnTop: pinOnTop,
+        resizable: false,
+        skipTaskbar: true,
+        title: normal.title,
+      );
+      final landedId =
+          pipDisplayIdForPosition(displays, placement.topLeft) ?? current.id;
       writeSavedBounds?.call(placement.size, placement.topLeft, landedId);
     } catch (error, stackTrace) {
-      await _rollback(
-        minimumSize: normalMinSize,
-        size: normalSize,
-        position: normalPosition,
-        alwaysOnTop: normalAlwaysOnTop,
-      );
+      await _rollbackToNormal(window, normal);
       Error.throwWithStackTrace(error, stackTrace);
     }
 
-    _savedSize = normalSize;
-    _savedPosition = normalPosition;
+    _savedSnapshot = normal;
     _compact = true;
   }
 
   Future<void> _exit() async {
     if (!_compact) return;
-    final pipSize = await windowManager.getSize();
-    final pipPosition = await windowManager.getPosition();
-    final pipAlwaysOnTop = await windowManager.isAlwaysOnTop();
+    final window = this.window;
+    final saved = _savedSnapshot;
+    if (saved == null) return;
+    final compact = await window.capture();
     try {
-      await windowManager.setAlwaysOnTop(false);
-      await windowManager.setMinimumSize(normalMinSize);
-      await windowManager.setSize(_savedSize);
-      await windowManager.setPosition(_savedPosition);
+      await window.setMinimumSize(normalMinSize);
+      await window.restore(saved);
     } catch (error, stackTrace) {
-      await _rollback(minimumSize: Size.zero, size: pipSize, position: pipPosition, alwaysOnTop: pipAlwaysOnTop);
+      await _rollbackToCompact(window, compact);
       Error.throwWithStackTrace(error, stackTrace);
     }
+    _savedSnapshot = null;
     _compact = false;
   }
 
-  Future<void> _rollback({
-    required Size minimumSize,
-    required Size size,
-    required Offset position,
-    required bool alwaysOnTop,
-  }) async {
+  Future<void> _rollbackToNormal(
+    PipWindow window,
+    PipWindowSnapshot normal,
+  ) async {
+    // Best effort: every step stands alone, and one failure must not keep
+    // the later ones from running.
     final steps = <Future<void> Function()>[
-      () => windowManager.setMinimumSize(minimumSize),
-      () => windowManager.setSize(size),
-      () => windowManager.setPosition(position),
-      () => windowManager.setAlwaysOnTop(alwaysOnTop),
+      () => window.setMinimumSize(normalMinSize),
+      () => window.restore(normal),
+    ];
+    for (final step in steps) {
+      try {
+        await step();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _rollbackToCompact(
+    PipWindow window,
+    PipWindowSnapshot compact,
+  ) async {
+    final steps = <Future<void> Function()>[
+      () => window.setMinimumSize(Size.zero),
+      () => window.restore(compact),
     ];
     for (final step in steps) {
       try {
@@ -310,12 +355,16 @@ final class DisplayAwarePipWindow implements PipWindow {
   String _displayOfCurrentView(List<PipWorkArea> displays) => displays.first.id;
 
   Future<void> _serialize(Future<void> Function() operation) {
-    final result = _opQueue.isEmpty ? operation() : _opQueue.last.then((_) => operation());
+    final result = _opQueue.isEmpty
+        ? operation()
+        : _opQueue.last.then((_) => operation());
     _opQueue.add(result);
     unawaited(
-      result.whenComplete(() {
-        _opQueue.remove(result);
-      }).catchError((_) {}),
+      result
+          .whenComplete(() {
+            _opQueue.remove(result);
+          })
+          .catchError((_) {}),
     );
     return result;
   }

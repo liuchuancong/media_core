@@ -26,7 +26,8 @@ final class PipWindowSnapshot {
   final String title;
 
   @override
-  String toString() => 'PipWindowSnapshot(${bounds.width}x${bounds.height} at ${bounds.topLeft})';
+  String toString() =>
+      'PipWindowSnapshot(${bounds.width}x${bounds.height} at ${bounds.topLeft})';
 }
 
 /// Desktop window operations the PiP feature needs.
@@ -55,4 +56,18 @@ abstract interface class PipWindow {
 
   /// Restores a previously captured state.
   Future<void> restore(PipWindowSnapshot snapshot);
+
+  /// Toggles always-on-top while the small window is up.
+  ///
+  /// The compact window's z-order policy belongs to the feature, and hosts
+  /// expose it as a user setting; a backend that cannot change the z-order
+  /// while compact may ignore the call.
+  Future<void> setAlwaysOnTop(bool value);
+
+  /// Releases or re-applies the host's normal minimum size.
+  ///
+  /// Needed before shrinking: a backend whose minimum size also clamps
+  /// programmatic resizes (macOS `contentMinSize`) cannot reach the compact
+  /// size otherwise. Backends without a minimum-size concept ignore the call.
+  Future<void> setMinimumSize(Size size);
 }

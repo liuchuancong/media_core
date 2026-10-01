@@ -53,6 +53,14 @@ final class _FakePipWindow implements PipWindow {
   Future<void> restore(PipWindowSnapshot snapshot) async {
     restoreCount++;
   }
+
+  @override
+  Future<void> setAlwaysOnTop(bool value) async {
+    alwaysOnTop = value;
+  }
+
+  @override
+  Future<void> setMinimumSize(Size size) async {}
 }
 
 final class _FakeSystemPip implements SystemPip {

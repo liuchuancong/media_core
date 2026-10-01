@@ -4,11 +4,11 @@ import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:media_core/media_core.dart';
 
+import 'package:media_core_pip/src/desktop_pip_window.dart';
 import 'package:media_core_pip/src/floating_system_pip.dart';
 import 'package:media_core_pip/src/pip_config.dart';
 import 'package:media_core_pip/src/pip_window.dart';
 import 'package:media_core_pip/src/system_pip.dart';
-import 'package:media_core_pip/src/window_manager_pip_window.dart';
 
 /// Records which platform path ran and why a request was refused.
 ///
@@ -339,7 +339,7 @@ final class PipDriver implements KernelPresentationDriver {
   }
 
   Future<void> _enterDesktopPip() async {
-    final window = _desktopWindow ??= WindowManagerPipWindow();
+    final window = _desktopWindow ??= defaultDesktopPipWindow();
 
     final snapshot = await window.capture();
     _desktopSnapshot = snapshot;
