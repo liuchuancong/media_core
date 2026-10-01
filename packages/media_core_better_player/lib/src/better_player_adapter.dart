@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:media_core/media_core.dart';
+import 'package:media_core_better_player/media_core_better_player.dart';
 // The package barrel carries the engine too (`better_player_plus` is
 // re-exported from it), so this file does not import the engine directly.
-import 'package:media_core_better_player/media_core_video_player.dart';
-import 'package:media_core/media_core.dart';
 
-export 'package:media_core_better_player/src/better_player_config.dart' show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
+export 'package:media_core_better_player/src/better_player_config.dart'
+    show BetterPlayerConfig, BetterPlayerDataSourceBuilder;
 
 /// [PlayerAdapter] implementation backed by better_player_plus —
 /// the  BetterPlayer engine.
