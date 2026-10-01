@@ -95,8 +95,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
     this.config = FullscreenConfig.defaults,
     FullscreenPlatform? platform,
     FullscreenWindow? desktopWindow,
+    PresentationLifecycleHooks? lifecycleHooks,
   }) : platform = platform ?? FullscreenPlatform.resolve(),
-       _desktopWindow = desktopWindow;
+       _desktopWindow = desktopWindow,
+       lifecycleHooks = lifecycleHooks ?? const PresentationLifecycleHooks();
 
   /// Tunables, including the per-orientation fit strategies.
   final FullscreenConfig config;
@@ -106,7 +108,14 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   FullscreenWindow? _desktopWindow;
 
-  final StreamController<bool> _fullscreenChanges = StreamController<bool>.broadcast();
+  /// Lifecycle hooks fired around enter/exit transitions. Replaceable for
+  /// hosts that build their hooks after the driver; see [updateLifecycleHooks].
+  PresentationLifecycleHooks lifecycleHooks;
+
+  PlayerId? _lastPlayerId;
+
+  final StreamController<bool> _fullscreenChanges =
+      StreamController<bool>.broadcast();
 
   Rect? _preFullscreenBounds;
 
@@ -133,6 +142,13 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   /// Fullscreen state changes (either variant).
   Stream<bool> get onFullscreenChanged => _fullscreenChanges.stream;
+
+  /// Replaces the lifecycle hooks.
+  ///
+  /// Exists for hosts that build their hooks after the driver and for tests.
+  void updateLifecycleHooks(PresentationLifecycleHooks? hooks) {
+    lifecycleHooks = hooks ?? const PresentationLifecycleHooks();
+  }
 
   /// Orientation of the last reported video size.
   VideoOrientation get orientation {
@@ -179,6 +195,7 @@ final class FullscreenDriver implements KernelPresentationDriver {
       throw StateError('FullscreenDriver has been disposed.');
     }
 
+    _lastPlayerId = playerId;
     final wasAnyFullscreen = isAnyFullscreen;
 
     _log.info(
@@ -198,16 +215,47 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
     switch (request.mode) {
       case PresentationMode.fullscreen:
+        if (!wasAnyFullscreen) {
+          await _fire(
+            PresentationLifecyclePhase.beforeEnter,
+            playerId,
+            PresentationMode.fullscreen,
+          );
+        }
         await _enterSystemFullscreen();
+        if (!wasAnyFullscreen && isAnyFullscreen) {
+          await _fire(
+            PresentationLifecyclePhase.afterEnter,
+            playerId,
+            PresentationMode.fullscreen,
+          );
+        }
       case PresentationMode.windowFullscreen:
+        if (!wasAnyFullscreen) {
+          await _fire(
+            PresentationLifecyclePhase.beforeEnter,
+            playerId,
+            PresentationMode.windowFullscreen,
+          );
+        }
         await _enterWindowFullscreen();
+        if (!wasAnyFullscreen && isAnyFullscreen) {
+          await _fire(
+            PresentationLifecyclePhase.afterEnter,
+            playerId,
+            PresentationMode.windowFullscreen,
+          );
+        }
       case PresentationMode.normal:
-        await _leaveFullscreen();
+        await _leaveWithLifecycle(playerId, wasAnyFullscreen);
       case PresentationMode.pip:
       case PresentationMode.floating:
         _log.warning(
           'fullscreen driver asked for a mode it does not serve',
-          fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value},
+          fields: <String, Object?>{
+            'mode': request.mode.name,
+            'playerId': playerId.value,
+          },
         );
         throw UnsupportedError(
           'FullscreenDriver serves the two fullscreen variants only; mode "${request.mode.name}" '
@@ -250,7 +298,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
     }
 
     final wasAnyFullscreen = isAnyFullscreen;
-    await _leaveFullscreen();
+    await _leaveWithLifecycle(
+      _lastPlayerId ?? _togglePlayerId,
+      wasAnyFullscreen,
+    );
     _notifyIfChanged(wasAnyFullscreen);
   }
 
@@ -292,7 +343,9 @@ final class FullscreenDriver implements KernelPresentationDriver {
           _preFullscreenBounds = await window.captureBounds();
           _log.debug(
             'captured pre-fullscreen bounds',
-            fields: <String, Object?>{'bounds': _preFullscreenBounds?.toString()},
+            fields: <String, Object?>{
+              'bounds': _preFullscreenBounds?.toString(),
+            },
           );
         }
         await window.setFullscreen(true);
@@ -302,12 +355,17 @@ final class FullscreenDriver implements KernelPresentationDriver {
         // it, and so the host can render the right chrome.
         _log.debug(
           'mobile fullscreen: the host hides the system UI',
-          fields: <String, Object?>{'fit': strategy.name, 'orientation': orientation.name},
+          fields: <String, Object?>{
+            'fit': strategy.name,
+            'orientation': orientation.name,
+          },
         );
         break;
       case FullscreenPlatform.unsupported:
         _log.error('system fullscreen is not supported on this platform');
-        throw UnsupportedError('System fullscreen is not supported on this platform.');
+        throw UnsupportedError(
+          'System fullscreen is not supported on this platform.',
+        );
     }
 
     _setSystemFullscreen(true);
@@ -320,7 +378,9 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
     if (platform == FullscreenPlatform.unsupported) {
       _log.error('window-level fullscreen is not supported on this platform');
-      throw UnsupportedError('Window-level fullscreen is not supported on this platform.');
+      throw UnsupportedError(
+        'Window-level fullscreen is not supported on this platform.',
+      );
     }
 
     // Filling the window while the screen is also fullscreen would leave the
@@ -342,10 +402,76 @@ final class FullscreenDriver implements KernelPresentationDriver {
     }
   }
 
+  /// Wraps [_leaveFullscreen] with the exit lifecycle.
+  ///
+  /// The lifecycle tracks the any-fullscreen level, so a variant hand-off
+  /// (window fullscreen → system fullscreen, routed through
+  /// `_enterSystemFullscreen`) stays fullscreen and fires no exit hooks here.
+  Future<void> _leaveWithLifecycle(
+    PlayerId playerId,
+    bool wasAnyFullscreen,
+  ) async {
+    if (!wasAnyFullscreen) {
+      await _leaveFullscreen();
+      return;
+    }
+    final mode = _isSystemFullscreen
+        ? PresentationMode.fullscreen
+        : PresentationMode.windowFullscreen;
+    await _fire(PresentationLifecyclePhase.beforeExit, playerId, mode);
+    await _leaveFullscreen();
+    if (!isAnyFullscreen) {
+      await _fire(PresentationLifecyclePhase.afterExit, playerId, mode);
+    }
+  }
+
+  /// Runs one lifecycle hook and reports failures without letting them reach
+  /// the transition caller: hooks observe the transition, they never veto it.
+  Future<void> _fire(
+    PresentationLifecyclePhase phase,
+    PlayerId playerId,
+    PresentationMode mode,
+  ) async {
+    final PresentationLifecycleHook? hook = switch (phase) {
+      PresentationLifecyclePhase.beforeEnter => lifecycleHooks.beforeEnter,
+      PresentationLifecyclePhase.afterEnter => lifecycleHooks.afterEnter,
+      PresentationLifecyclePhase.beforeExit => lifecycleHooks.beforeExit,
+      PresentationLifecyclePhase.afterExit => lifecycleHooks.afterExit,
+    };
+    if (hook == null) {
+      return;
+    }
+    try {
+      await hook(
+        PresentationLifecycleEvent(
+          phase: phase,
+          playerId: playerId,
+          mode: mode,
+        ),
+      );
+    } catch (error, stackTrace) {
+      _log.warning(
+        'presentation lifecycle hook failed',
+        error: error,
+        stackTrace: stackTrace,
+        fields: <String, Object?>{
+          'phase': phase.name,
+          'playerId': playerId.value,
+          'mode': mode.name,
+        },
+      );
+    }
+  }
+
   Future<void> _leaveSystemFullscreen() async {
     if (platform == FullscreenPlatform.desktop) {
       final window = _desktopWindow ??= WindowManagerFullscreenWindow();
-      await window.setFullscreen(false, restoreBounds: config.restorePreviousBounds ? _preFullscreenBounds : null);
+      await window.setFullscreen(
+        false,
+        restoreBounds: config.restorePreviousBounds
+            ? _preFullscreenBounds
+            : null,
+      );
     }
     _preFullscreenBounds = null;
     _setSystemFullscreen(false);
@@ -357,14 +483,20 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   void _setSystemFullscreen(bool value) {
     if (value != _isSystemFullscreen) {
-      _log.debug('system fullscreen variant changed', fields: <String, Object?>{'active': value});
+      _log.debug(
+        'system fullscreen variant changed',
+        fields: <String, Object?>{'active': value},
+      );
     }
     _isSystemFullscreen = value;
   }
 
   void _setWindowFullscreen(bool value) {
     if (value != _isWindowFullscreen) {
-      _log.debug('window fullscreen variant changed', fields: <String, Object?>{'active': value});
+      _log.debug(
+        'window fullscreen variant changed',
+        fields: <String, Object?>{'active': value},
+      );
     }
     _isWindowFullscreen = value;
   }
@@ -380,7 +512,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
     if (previous == current || _fullscreenChanges.isClosed) {
       return;
     }
-    _log.debug('fullscreen state settled', fields: <String, Object?>{'fullscreen': current});
+    _log.debug(
+      'fullscreen state settled',
+      fields: <String, Object?>{'fullscreen': current},
+    );
     _fullscreenChanges.add(current);
   }
 }

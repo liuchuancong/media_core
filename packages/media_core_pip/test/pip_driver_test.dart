@@ -66,7 +66,8 @@ final class _FakeSystemPip implements SystemPip {
   int? lastHeight;
   SystemPipSourceRect? lastSourceRect;
 
-  final StreamController<SystemPipStatus> _statusController = StreamController<SystemPipStatus>.broadcast();
+  final StreamController<SystemPipStatus> _statusController =
+      StreamController<SystemPipStatus>.broadcast();
 
   void emitStatus(SystemPipStatus status) => _statusController.add(status);
 
@@ -141,29 +142,39 @@ void main() {
       expect(window.lastAspectRatio, closeTo(1080 / 1920, 0.001));
     });
 
-    test('can leave the window unlocked for a fixed-shape small window', () async {
-      final unlocked = PipDriver(
-        platform: PipPlatform.desktop,
-        desktopWindow: window,
-        config: PipConfig.defaults.copyWith(lockAspectRatio: false),
-      );
-      addTearDown(unlocked.dispose);
+    test(
+      'can leave the window unlocked for a fixed-shape small window',
+      () async {
+        final unlocked = PipDriver(
+          platform: PipPlatform.desktop,
+          desktopWindow: window,
+          config: PipConfig.defaults.copyWith(lockAspectRatio: false),
+        );
+        addTearDown(unlocked.dispose);
 
-      await unlocked.initialize();
-      unlocked.onVideoSize(1080, 1920);
-      await unlocked.apply(_player(), PresentationRequest.pip());
+        await unlocked.initialize();
+        unlocked.onVideoSize(1080, 1920);
+        await unlocked.apply(_player(), PresentationRequest.pip());
 
-      expect(window.lastAspectRatio, isNull, reason: 'the video is fitted into the window instead of shaping it');
-    });
+        expect(
+          window.lastAspectRatio,
+          isNull,
+          reason: 'the video is fitted into the window instead of shaping it',
+        );
+      },
+    );
 
-    test('falls back to the configured size when the video size is unknown', () async {
-      await driver.initialize();
+    test(
+      'falls back to the configured size when the video size is unknown',
+      () async {
+        await driver.initialize();
 
-      await driver.apply(_player(), PresentationRequest.pip());
+        await driver.apply(_player(), PresentationRequest.pip());
 
-      expect(window.lastSize, const Size(320, 180));
-      expect(window.lastAspectRatio, isNull);
-    });
+        expect(window.lastSize, const Size(320, 180));
+        expect(window.lastAspectRatio, isNull);
+      },
+    );
 
     test('snaps into the bottom-right corner of the previous bounds', () async {
       await driver.initialize();
@@ -251,19 +262,22 @@ void main() {
 
     tearDown(() => driver.dispose());
 
-    test('requests the platform with the video size and the source hint', () async {
-      await driver.initialize();
-      driver.onVideoSize(1280, 720);
-      driver.onVideoRect(const Rect.fromLTWH(10, 20, 640, 360));
+    test(
+      'requests the platform with the video size and the source hint',
+      () async {
+        await driver.initialize();
+        driver.onVideoSize(1280, 720);
+        driver.onVideoRect(const Rect.fromLTWH(10, 20, 640, 360));
 
-      await driver.apply(_player(), PresentationRequest.pip());
+        await driver.apply(_player(), PresentationRequest.pip());
 
-      expect(systemPip.enableCount, 1);
-      expect(systemPip.lastWidth, 1280);
-      expect(systemPip.lastHeight, 720);
-      expect(systemPip.lastSourceRect?.width, 640);
-      expect(driver.isPip, isTrue);
-    });
+        expect(systemPip.enableCount, 1);
+        expect(systemPip.lastWidth, 1280);
+        expect(systemPip.lastHeight, 720);
+        expect(systemPip.lastSourceRect?.width, 640);
+        expect(driver.isPip, isTrue);
+      },
+    );
 
     test('omits the source hint when the feature is configured off', () async {
       final custom = PipDriver(
@@ -330,16 +344,19 @@ void main() {
       expect(reported, <bool>[true, false]);
     });
 
-    test('normal cannot exit the system window and does not claim it did', () async {
-      await driver.initialize();
-      driver.onVideoSize(1280, 720);
-      await driver.apply(_player(), PresentationRequest.pip());
+    test(
+      'normal cannot exit the system window and does not claim it did',
+      () async {
+        await driver.initialize();
+        driver.onVideoSize(1280, 720);
+        await driver.apply(_player(), PresentationRequest.pip());
 
-      await driver.apply(_player(), PresentationRequest.normal());
+        await driver.apply(_player(), PresentationRequest.normal());
 
-      expect(driver.isPip, isTrue);
-      expect(systemPip.disposeCount, 0);
-    });
+        expect(driver.isPip, isTrue);
+        expect(systemPip.disposeCount, 0);
+      },
+    );
   });
 
   group('PipDriver on an unsupported platform', () {
@@ -354,6 +371,142 @@ void main() {
         driver.apply(_player(), PresentationRequest.pip()),
         throwsA(isA<UnsupportedError>()),
       );
+    });
+  });
+
+  group('PipDriver lifecycle hooks', () {
+    test(
+      'fires the four hooks around a desktop enter and exit, in order',
+      () async {
+        final window = _FakePipWindow();
+        final phases = <PresentationLifecyclePhase>[];
+        final events = <PresentationLifecycleEvent>[];
+        PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+          return (PresentationLifecycleEvent event) async {
+            phases.add(phase);
+            events.add(event);
+          };
+        }
+
+        final driver = PipDriver(
+          platform: PipPlatform.desktop,
+          desktopWindow: window,
+          lifecycleHooks: PresentationLifecycleHooks(
+            beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+            afterEnter: record(PresentationLifecyclePhase.afterEnter),
+            beforeExit: record(PresentationLifecyclePhase.beforeExit),
+            afterExit: record(PresentationLifecyclePhase.afterExit),
+          ),
+        );
+        addTearDown(driver.dispose);
+        await driver.initialize();
+        driver.onVideoSize(1920, 1080);
+
+        final player = _player();
+        await driver.apply(player, PresentationRequest.pip());
+
+        expect(phases, <PresentationLifecyclePhase>[
+          PresentationLifecyclePhase.beforeEnter,
+          PresentationLifecyclePhase.afterEnter,
+        ]);
+        expect(driver.isPip, isTrue);
+
+        await driver.apply(player, PresentationRequest.normal());
+
+        expect(phases, <PresentationLifecyclePhase>[
+          PresentationLifecyclePhase.beforeEnter,
+          PresentationLifecyclePhase.afterEnter,
+          PresentationLifecyclePhase.beforeExit,
+          PresentationLifecyclePhase.afterExit,
+        ]);
+        expect(driver.isPip, isFalse);
+        expect(
+          events.every((event) => event.mode == PresentationMode.pip),
+          isTrue,
+        );
+        expect(events.every((event) => event.playerId == player), isTrue);
+      },
+    );
+
+    test('repeating the request fires nothing again', () async {
+      final phases = <PresentationLifecyclePhase>[];
+      PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+        return (event) async => phases.add(phase);
+      }
+
+      final driver = PipDriver(
+        platform: PipPlatform.desktop,
+        desktopWindow: _FakePipWindow(),
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+          afterEnter: record(PresentationLifecyclePhase.afterEnter),
+          beforeExit: record(PresentationLifecyclePhase.beforeExit),
+          afterExit: record(PresentationLifecyclePhase.afterExit),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      expect(phases.length, 2);
+    });
+
+    test('a throwing hook never aborts the transition', () async {
+      final window = _FakePipWindow();
+      final driver = PipDriver(
+        platform: PipPlatform.desktop,
+        desktopWindow: window,
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: (_) async => throw StateError('hook failed'),
+          afterEnter: (_) async => throw StateError('hook failed'),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      expect(window.captureCount, 1);
+      expect(driver.isPip, isTrue);
+    });
+
+    test('a system-initiated exit fires only afterExit', () async {
+      final systemPip = _FakeSystemPip();
+      final phases = <PresentationLifecyclePhase>[];
+      PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+        return (event) async => phases.add(phase);
+      }
+
+      final driver = PipDriver(
+        platform: PipPlatform.mobile,
+        systemPip: systemPip,
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+          afterEnter: record(PresentationLifecyclePhase.afterEnter),
+          beforeExit: record(PresentationLifecyclePhase.beforeExit),
+          afterExit: record(PresentationLifecyclePhase.afterExit),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+      driver.onVideoSize(1280, 720);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+      // The platform ends the window on its own; the app never asked for an
+      // exit, so only the settled after-hook may report it.
+      systemPip.emitStatus(SystemPipStatus.disabled);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(driver.isPip, isFalse);
+      expect(phases, <PresentationLifecyclePhase>[
+        PresentationLifecyclePhase.beforeEnter,
+        PresentationLifecyclePhase.afterEnter,
+        PresentationLifecyclePhase.afterExit,
+      ]);
     });
   });
 }

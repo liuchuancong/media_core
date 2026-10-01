@@ -83,10 +83,20 @@ enum PipPlatform {
 /// transition, and the host can tell the viewer why nothing happened.
 final class PipDriver implements KernelPresentationDriver {
   /// Creates the driver.
-  PipDriver({this.config = PipConfig.defaults, PipPlatform? platform, PipWindow? desktopWindow, SystemPip? systemPip})
-    : platform = platform ?? PipPlatform.resolve(),
-      _desktopWindow = desktopWindow,
-      _systemPip = systemPip;
+  PipDriver({
+    this.config = PipConfig.defaults,
+    PipPlatform? platform,
+    PipWindow? desktopWindow,
+    SystemPip? systemPip,
+    PresentationLifecycleHooks? lifecycleHooks,
+  }) : platform = platform ?? PipPlatform.resolve(),
+       _desktopWindow = desktopWindow,
+       _systemPip = systemPip,
+       lifecycleHooks = lifecycleHooks ?? const PresentationLifecycleHooks();
+
+  /// Fallback identity for system-initiated transitions that happen before
+  /// the first app-driven request named a player.
+  static final _systemPlayerId = PlayerId('pip-system');
 
   /// Tunables.
   final PipConfig config;
@@ -96,6 +106,12 @@ final class PipDriver implements KernelPresentationDriver {
 
   PipWindow? _desktopWindow;
   SystemPip? _systemPip;
+
+  /// Lifecycle hooks fired around enter/exit transitions. Replaceable for
+  /// hosts that build their hooks after the driver; see [updateLifecycleHooks].
+  PresentationLifecycleHooks lifecycleHooks;
+
+  PlayerId? _lastPlayerId;
 
   final StreamController<bool> _pipChanges = StreamController<bool>.broadcast();
 
@@ -139,6 +155,13 @@ final class PipDriver implements KernelPresentationDriver {
     }
   }
 
+  /// Replaces the lifecycle hooks.
+  ///
+  /// Exists for hosts that build their hooks after the driver and for tests.
+  void updateLifecycleHooks(PresentationLifecycleHooks? hooks) {
+    lifecycleHooks = hooks ?? const PresentationLifecycleHooks();
+  }
+
   /// Initializes the driver and starts observing platform PiP state.
   ///
   /// Call once, early. Safe to call again.
@@ -154,7 +177,10 @@ final class PipDriver implements KernelPresentationDriver {
 
     final pip = _systemPip ??= FloatingSystemPip();
     try {
-      _statusSubscription = pip.statusStream.listen(_handleSystemStatus, onError: (_) {});
+      _statusSubscription = pip.statusStream.listen(
+        _handleSystemStatus,
+        onError: (_) {},
+      );
     } catch (_) {
       // A platform without the plugin throws when the stream is created rather
       // than reporting unavailability; the driver stays usable either way.
@@ -180,18 +206,22 @@ final class PipDriver implements KernelPresentationDriver {
     if (_disposed) {
       throw StateError('PipDriver has been disposed.');
     }
+    _lastPlayerId = playerId;
 
     switch (request.mode) {
       case PresentationMode.pip:
-        await _enterPip();
+        await _enterPip(playerId);
       case PresentationMode.normal:
-        await _leavePip();
+        await _leavePip(playerId);
       case PresentationMode.fullscreen:
       case PresentationMode.windowFullscreen:
       case PresentationMode.floating:
         _log.warning(
           'pip driver asked for a mode it does not serve',
-          fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value},
+          fields: <String, Object?>{
+            'mode': request.mode.name,
+            'playerId': playerId.value,
+          },
         );
         throw UnsupportedError(
           'PipDriver serves picture-in-picture only; mode "${request.mode.name}" '
@@ -229,7 +259,7 @@ final class PipDriver implements KernelPresentationDriver {
       throw StateError('PipDriver has been disposed.');
     }
 
-    await _leavePip();
+    await _leavePip(_lastPlayerId ?? _systemPlayerId);
   }
 
   /// Enters PiP when it is not active, leaves otherwise.
@@ -246,17 +276,18 @@ final class PipDriver implements KernelPresentationDriver {
       return;
     }
 
-    await _enterPip();
+    await _enterPip(_lastPlayerId ?? _systemPlayerId);
   }
 
   // ---------------------------------------------------------------------------
   // Entering and leaving
   // ---------------------------------------------------------------------------
 
-  Future<void> _enterPip() async {
+  Future<void> _enterPip(PlayerId playerId) async {
     if (_isPip) {
       return;
     }
+    await _fire(PresentationLifecyclePhase.beforeEnter, playerId);
 
     switch (platform) {
       case PipPlatform.desktop:
@@ -264,32 +295,46 @@ final class PipDriver implements KernelPresentationDriver {
       case PipPlatform.mobile:
         await _enterMobilePip();
       case PipPlatform.unsupported:
-        _log.error('pip is not supported on this platform', fields: <String, Object?>{'platform': platform.name});
-        throw UnsupportedError('Picture-in-picture is not supported on this platform.');
+        _log.error(
+          'pip is not supported on this platform',
+          fields: <String, Object?>{'platform': platform.name},
+        );
+        throw UnsupportedError(
+          'Picture-in-picture is not supported on this platform.',
+        );
     }
   }
 
-  Future<void> _leavePip() async {
+  Future<void> _leavePip(PlayerId playerId) async {
     if (!_isPip) {
       return;
     }
 
     if (platform == PipPlatform.desktop) {
+      // An app-driven exit is the only one that leaves here; the lifecycle
+      // fires around the actual restore, never for a request that will not
+      // change anything.
+      await _fire(PresentationLifecyclePhase.beforeExit, playerId);
       final snapshot = _desktopSnapshot;
       if (snapshot != null && config.restoreWindowOnExit) {
         await _desktopWindow?.restore(snapshot);
       }
       _desktopSnapshot = null;
-      _setPip(false);
+      if (_setPip(false)) {
+        await _fire(PresentationLifecyclePhase.afterExit, playerId);
+      }
       return;
     }
 
     // Mobile: the app cannot end the system PiP window. The platform ends it
     // when the viewer returns to the app or closes the window, and
     // `_handleSystemStatus` reports that. Claiming an exit here would make the
-    // state machine believe a window is gone while it is still on screen.
+    // state machine believe a window is gone while it is still on screen, so
+    // no lifecycle fires for this no-op.
     if (platform == PipPlatform.unsupported) {
-      _setPip(false);
+      if (_setPip(false)) {
+        await _fire(PresentationLifecyclePhase.afterExit, playerId);
+      }
     }
   }
 
@@ -320,8 +365,14 @@ final class PipDriver implements KernelPresentationDriver {
       // Bottom-right corner of the previous bounds, clawed back from the
       // screen edge so the window does not sit flush against it.
       position: Offset(
-        (anchor.right - size.width - config.cornerSpacing).clamp(0, double.infinity),
-        (anchor.bottom - size.height - config.cornerSpacing).clamp(0, double.infinity),
+        (anchor.right - size.width - config.cornerSpacing).clamp(
+          0,
+          double.infinity,
+        ),
+        (anchor.bottom - size.height - config.cornerSpacing).clamp(
+          0,
+          double.infinity,
+        ),
       ),
       aspectRatio: config.lockAspectRatio ? _aspectRatio() : null,
       alwaysOnTop: true,
@@ -330,22 +381,33 @@ final class PipDriver implements KernelPresentationDriver {
       title: config.title,
     );
 
-    _setPip(true);
+    if (_setPip(true)) {
+      await _fire(
+        PresentationLifecyclePhase.afterEnter,
+        _lastPlayerId ?? _systemPlayerId,
+      );
+    }
   }
 
   Future<void> _enterMobilePip() async {
     final pip = _systemPip;
     if (pip == null) {
       _log.error('no system pip implementation installed');
-      throw UnsupportedError('No system picture-in-picture implementation is installed.');
+      throw UnsupportedError(
+        'No system picture-in-picture implementation is installed.',
+      );
     }
     if (!await pip.isAvailable) {
       _log.warning('system pip is not available on this device');
-      throw UnsupportedError('System picture-in-picture is not available on this device.');
+      throw UnsupportedError(
+        'System picture-in-picture is not available on this device.',
+      );
     }
     if (_videoWidth <= 0 || _videoHeight <= 0) {
       _log.error('system pip needs a video size, none reported yet');
-      throw StateError('Picture-in-picture needs a video size. Call onVideoSize() first.');
+      throw StateError(
+        'Picture-in-picture needs a video size. Call onVideoSize() first.',
+      );
     }
 
     _log.debug(
@@ -362,33 +424,51 @@ final class PipDriver implements KernelPresentationDriver {
     final status = await pip.enable(
       width: _videoWidth,
       height: _videoHeight,
-      sourceRect: config.requestSourceRectHint ? SystemPipSourceRect.fromRect(_videoRect) : null,
+      sourceRect: config.requestSourceRectHint
+          ? SystemPipSourceRect.fromRect(_videoRect)
+          : null,
     );
 
     if (status == SystemPipStatus.unavailable) {
       _log.error('the platform refused to enter pip');
-      throw UnsupportedError('The platform refused to enter picture-in-picture.');
+      throw UnsupportedError(
+        'The platform refused to enter picture-in-picture.',
+      );
     }
 
-    _handleSystemStatus(status);
+    await _handleSystemStatus(status);
   }
 
   // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
 
-  void _handleSystemStatus(SystemPipStatus status) {
-    final active = status == SystemPipStatus.enabled || status == SystemPipStatus.automatic;
+  Future<void> _handleSystemStatus(SystemPipStatus status) async {
+    final active =
+        status == SystemPipStatus.enabled ||
+        status == SystemPipStatus.automatic;
     // The platform also ends picture-in-picture on its own (the viewer returned
     // to the app or closed the window); recording the raw status is what shows
     // a state that changed without the app asking for it.
-    _log.debug('system pip status', fields: <String, Object?>{'status': status.name, 'active': active});
-    _setPip(active);
+    _log.debug(
+      'system pip status',
+      fields: <String, Object?>{'status': status.name, 'active': active},
+    );
+    // A system-initiated change has no "before" point, so only the settled
+    // after-hook fires for it.
+    if (_setPip(active)) {
+      await _fire(
+        active
+            ? PresentationLifecyclePhase.afterEnter
+            : PresentationLifecyclePhase.afterExit,
+        _lastPlayerId ?? _systemPlayerId,
+      );
+    }
   }
 
-  void _setPip(bool value) {
+  bool _setPip(bool value) {
     if (value == _isPip) {
-      return;
+      return false;
     }
     _isPip = value;
     _log.info(
@@ -403,6 +483,45 @@ final class PipDriver implements KernelPresentationDriver {
     );
     if (!_pipChanges.isClosed) {
       _pipChanges.add(value);
+    }
+    return true;
+  }
+
+  /// Runs one lifecycle hook and reports failures without letting them reach
+  /// the transition caller: hooks observe the transition, they never veto it.
+  Future<void> _fire(
+    PresentationLifecyclePhase phase,
+    PlayerId playerId,
+  ) async {
+    final hooks = lifecycleHooks;
+    final PresentationLifecycleHook? hook = switch (phase) {
+      PresentationLifecyclePhase.beforeEnter => hooks.beforeEnter,
+      PresentationLifecyclePhase.afterEnter => hooks.afterEnter,
+      PresentationLifecyclePhase.beforeExit => hooks.beforeExit,
+      PresentationLifecyclePhase.afterExit => hooks.afterExit,
+    };
+    if (hook == null) {
+      return;
+    }
+    try {
+      await hook(
+        PresentationLifecycleEvent(
+          phase: phase,
+          playerId: playerId,
+          mode: PresentationMode.pip,
+        ),
+      );
+    } catch (error, stackTrace) {
+      _log.warning(
+        'presentation lifecycle hook failed',
+        error: error,
+        stackTrace: stackTrace,
+        fields: <String, Object?>{
+          'phase': phase.name,
+          'playerId': playerId.value,
+          'mode': PresentationMode.pip.name,
+        },
+      );
     }
   }
 

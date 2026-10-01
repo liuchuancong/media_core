@@ -44,15 +44,23 @@ final class FloatingDriver implements KernelPresentationDriver {
   FloatingDriver({
     this.config = FloatingConfig.defaults,
     FloatingWindowPresenter presenter = const NullFloatingWindowPresenter(),
-  }) : _presenter = presenter;
+    PresentationLifecycleHooks? lifecycleHooks,
+  }) : _presenter = presenter,
+       lifecycleHooks = lifecycleHooks ?? const PresentationLifecycleHooks();
 
   /// Behaviour and geometry.
   final FloatingConfig config;
 
   FloatingWindowPresenter _presenter;
 
-  final StreamController<bool> _floatingChanges = StreamController<bool>.broadcast();
-  final StreamController<PlayerId> _players = StreamController<PlayerId>.broadcast();
+  /// Lifecycle hooks fired around show/hide transitions. Replaceable for
+  /// hosts that build their hooks after the driver; see [updateLifecycleHooks].
+  PresentationLifecycleHooks lifecycleHooks;
+
+  final StreamController<bool> _floatingChanges =
+      StreamController<bool>.broadcast();
+  final StreamController<PlayerId> _players =
+      StreamController<PlayerId>.broadcast();
 
   bool _initialized = false;
   bool _disposed = false;
@@ -93,6 +101,13 @@ final class FloatingDriver implements KernelPresentationDriver {
     _presenter = presenter;
   }
 
+  /// Replaces the lifecycle hooks.
+  ///
+  /// Exists for hosts that build their hooks after the driver and for tests.
+  void updateLifecycleHooks(PresentationLifecycleHooks? hooks) {
+    lifecycleHooks = hooks ?? const PresentationLifecycleHooks();
+  }
+
   /// Initializes the driver.
   ///
   /// Call once, early. Safe to call again.
@@ -125,7 +140,10 @@ final class FloatingDriver implements KernelPresentationDriver {
       case PresentationMode.pip:
         _log.warning(
           'floating driver asked for a mode it does not serve',
-          fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value},
+          fields: <String, Object?>{
+            'mode': request.mode.name,
+            'playerId': playerId.value,
+          },
         );
         throw UnsupportedError(
           'FloatingDriver serves the in-app small window only; mode "${request.mode.name}" '
@@ -161,6 +179,12 @@ final class FloatingDriver implements KernelPresentationDriver {
     if (_isFloating && _playerId == playerId) {
       return;
     }
+    // A player swap keeps the window up, so the lifecycle only wraps an actual
+    // hidden → visible transition, the same edge the change stream reports.
+    final wasFloating = _isFloating;
+    if (!wasFloating) {
+      await _fire(PresentationLifecyclePhase.beforeEnter, playerId);
+    }
 
     _log.info(
       'showing the in-app small window',
@@ -184,21 +208,33 @@ final class FloatingDriver implements KernelPresentationDriver {
       // window, a system overlay); the package overlay is what runs otherwise.
       _log.debug('delegating the surface to the host presenter');
       await presenter.show(
-        FloatingWindowRequest(playerId: playerId.value, videoWidth: _videoWidth, videoHeight: _videoHeight),
+        FloatingWindowRequest(
+          playerId: playerId.value,
+          videoWidth: _videoWidth,
+          videoHeight: _videoHeight,
+        ),
       );
     } else {
       _log.debug('no host presenter; the package overlay renders the surface');
     }
 
     _setFloating(true);
+    if (!wasFloating) {
+      await _fire(PresentationLifecyclePhase.afterEnter, playerId);
+    }
   }
 
   Future<void> _hide() async {
     if (!_isFloating) {
       return;
     }
+    final playerId = _playerId ?? PlayerId('floating-unknown');
 
-    _log.info('hiding the in-app small window', fields: <String, Object?>{'playerId': _playerId?.value});
+    await _fire(PresentationLifecyclePhase.beforeExit, playerId);
+    _log.info(
+      'hiding the in-app small window',
+      fields: <String, Object?>{'playerId': _playerId?.value},
+    );
 
     final presenter = _presenter;
     if (presenter.isSupported) {
@@ -206,6 +242,7 @@ final class FloatingDriver implements KernelPresentationDriver {
     }
 
     _setFloating(false);
+    await _fire(PresentationLifecyclePhase.afterExit, playerId);
   }
 
   void _setFloating(bool value) {
@@ -213,9 +250,49 @@ final class FloatingDriver implements KernelPresentationDriver {
       return;
     }
     _isFloating = value;
-    _log.debug('small window state changed', fields: <String, Object?>{'floating': value});
+    _log.debug(
+      'small window state changed',
+      fields: <String, Object?>{'floating': value},
+    );
     if (!_floatingChanges.isClosed) {
       _floatingChanges.add(value);
+    }
+  }
+
+  /// Runs one lifecycle hook and reports failures without letting them reach
+  /// the transition caller: hooks observe the transition, they never veto it.
+  Future<void> _fire(
+    PresentationLifecyclePhase phase,
+    PlayerId playerId,
+  ) async {
+    final PresentationLifecycleHook? hook = switch (phase) {
+      PresentationLifecyclePhase.beforeEnter => lifecycleHooks.beforeEnter,
+      PresentationLifecyclePhase.afterEnter => lifecycleHooks.afterEnter,
+      PresentationLifecyclePhase.beforeExit => lifecycleHooks.beforeExit,
+      PresentationLifecyclePhase.afterExit => lifecycleHooks.afterExit,
+    };
+    if (hook == null) {
+      return;
+    }
+    try {
+      await hook(
+        PresentationLifecycleEvent(
+          phase: phase,
+          playerId: playerId,
+          mode: PresentationMode.floating,
+        ),
+      );
+    } catch (error, stackTrace) {
+      _log.warning(
+        'presentation lifecycle hook failed',
+        error: error,
+        stackTrace: stackTrace,
+        fields: <String, Object?>{
+          'phase': phase.name,
+          'playerId': playerId.value,
+          'mode': PresentationMode.floating.name,
+        },
+      );
     }
   }
 }

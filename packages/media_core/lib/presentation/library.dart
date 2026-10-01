@@ -31,6 +31,7 @@ export 'package:media_core/presentation/presentation_controller.dart';
 export 'package:media_core/presentation/presentation_dispatcher.dart';
 export 'package:media_core/presentation/presentation_driver_chain.dart';
 export 'package:media_core/presentation/presentation_event.dart';
+export 'package:media_core/presentation/presentation_lifecycle.dart';
 export 'package:media_core/presentation/presentation_manager.dart';
 export 'package:media_core/presentation/presentation_mode.dart';
 export 'package:media_core/presentation/presentation_reducer.dart';

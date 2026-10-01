@@ -30,42 +30,75 @@ void main() {
     const placement = FloatingWindowPlacement();
 
     test('follows a landscape video', () {
-      final size = placement.sizeFor(surface: const Size(800, 600), videoWidth: 1920, videoHeight: 1080);
+      final size = placement.sizeFor(
+        surface: const Size(800, 600),
+        videoWidth: 1920,
+        videoHeight: 1080,
+      );
 
       expect(size.height, 90);
       expect(size.width, closeTo(160, 1));
     });
 
     test('follows a portrait video with a tall window', () {
-      final size = placement.sizeFor(surface: const Size(800, 600), videoWidth: 1080, videoHeight: 1920);
+      final size = placement.sizeFor(
+        surface: const Size(800, 600),
+        videoWidth: 1080,
+        videoHeight: 1920,
+      );
 
       expect(size.width, closeTo(160, 1));
       expect(size.height, closeTo(284, 1));
     });
 
     test('falls back to the configured size when the video is unknown', () {
-      expect(placement.sizeFor(surface: const Size(800, 600)), const Size(160, 90));
+      expect(
+        placement.sizeFor(surface: const Size(800, 600)),
+        const Size(160, 90),
+      );
     });
 
     test('can ignore the video shape', () {
       final fixed = FloatingWindowPlacement(
-        config: FloatingPlacementConfig.defaults.copyWith(aspectRatioFromVideo: false),
+        config: FloatingPlacementConfig.defaults.copyWith(
+          aspectRatioFromVideo: false,
+        ),
       );
 
-      expect(fixed.sizeFor(surface: const Size(800, 600), videoWidth: 1080, videoHeight: 1920), const Size(160, 90));
+      expect(
+        fixed.sizeFor(
+          surface: const Size(800, 600),
+          videoWidth: 1080,
+          videoHeight: 1920,
+        ),
+        const Size(160, 90),
+      );
     });
 
     test('never exceeds the configured fraction of the surface', () {
       const small = FloatingWindowPlacement(
-        config: FloatingPlacementConfig(width: 400, height: 300, maxWidthFraction: 0.25),
+        config: FloatingPlacementConfig(
+          width: 400,
+          height: 300,
+          maxWidthFraction: 0.25,
+        ),
       );
 
-      expect(small.sizeFor(surface: const Size(800, 600)).width, 200, reason: 'a quarter of the surface width');
+      expect(
+        small.sizeFor(surface: const Size(800, 600)).width,
+        200,
+        reason: 'a quarter of the surface width',
+      );
     });
 
     test('never shrinks below the configured minimum', () {
       const tiny = FloatingWindowPlacement(
-        config: FloatingPlacementConfig(width: 10, height: 5, minWidth: 96, minHeight: 54),
+        config: FloatingPlacementConfig(
+          width: 10,
+          height: 5,
+          minWidth: 96,
+          minHeight: 54,
+        ),
       );
 
       expect(tiny.sizeFor(surface: const Size(800, 600)), const Size(96, 54));
@@ -85,14 +118,22 @@ void main() {
     });
 
     test('honours an explicit anchor', () {
-      final rect = placement.rectFor(surface: surface, window: window, anchor: FloatingAnchor.topLeft);
+      final rect = placement.rectFor(
+        surface: surface,
+        window: window,
+        anchor: FloatingAnchor.topLeft,
+      );
 
       expect(rect.left, 12);
       expect(rect.top, 12);
     });
 
     test('centres vertically on the side anchors', () {
-      final rect = placement.rectFor(surface: surface, window: window, anchor: FloatingAnchor.centerRight);
+      final rect = placement.rectFor(
+        surface: surface,
+        window: window,
+        anchor: FloatingAnchor.centerRight,
+      );
 
       expect(rect.top, (600 - 90) / 2);
       expect(rect.right, 800 - 12);
@@ -110,10 +151,19 @@ void main() {
     });
 
     test('ignores a drag when dragging is disabled', () {
-      const fixed = FloatingWindowPlacement(config: FloatingPlacementConfig(draggable: false));
+      const fixed = FloatingWindowPlacement(
+        config: FloatingPlacementConfig(draggable: false),
+      );
       const current = Rect.fromLTWH(100, 100, 160, 90);
 
-      expect(fixed.drag(current: current, delta: const Offset(50, 50), surface: surface), current);
+      expect(
+        fixed.drag(
+          current: current,
+          delta: const Offset(50, 50),
+          surface: surface,
+        ),
+        current,
+      );
     });
   });
 
@@ -122,14 +172,22 @@ void main() {
     const surface = Size(800, 600);
 
     test('snaps to the right edge when released near it', () {
-      final snapped = placement.snap(rect: const Rect.fromLTWH(760, 200, 160, 90), surface: surface);
+      final snapped = placement.snap(
+        rect: const Rect.fromLTWH(760, 200, 160, 90),
+        surface: surface,
+      );
 
       expect(snapped.right, 800 - 12);
       expect(snapped.top, 200, reason: 'snapping is horizontal only');
     });
 
     test('snaps to the left edge when released near it', () {
-      expect(placement.snap(rect: const Rect.fromLTWH(10, 200, 160, 90), surface: surface).left, 12);
+      expect(
+        placement
+            .snap(rect: const Rect.fromLTWH(10, 200, 160, 90), surface: surface)
+            .left,
+        12,
+      );
     });
 
     test('leaves a window released mid-surface alone', () {
@@ -139,16 +197,27 @@ void main() {
     });
 
     test('respects a snapped-off configuration', () {
-      const noSnap = FloatingWindowPlacement(config: FloatingPlacementConfig(snapToEdge: false));
+      const noSnap = FloatingWindowPlacement(
+        config: FloatingPlacementConfig(snapToEdge: false),
+      );
       const released = Rect.fromLTWH(10, 200, 160, 90);
 
       expect(noSnap.snap(rect: released, surface: surface), released);
     });
 
     test('reports the nearest corner', () {
-      expect(placement.nearestAnchor(rect: const Rect.fromLTWH(10, 10, 160, 90), surface: surface), FloatingAnchor.topLeft);
       expect(
-        placement.nearestAnchor(rect: const Rect.fromLTWH(600, 500, 160, 90), surface: surface),
+        placement.nearestAnchor(
+          rect: const Rect.fromLTWH(10, 10, 160, 90),
+          surface: surface,
+        ),
+        FloatingAnchor.topLeft,
+      );
+      expect(
+        placement.nearestAnchor(
+          rect: const Rect.fromLTWH(600, 500, 160, 90),
+          surface: surface,
+        ),
         FloatingAnchor.bottomRight,
       );
     });
@@ -163,7 +232,11 @@ void main() {
       await driver.apply(_player(), PresentationRequest.floating());
 
       expect(driver.isFloating, isTrue);
-      expect(driver.isAvailable, isTrue, reason: 'an in-app window is a widget; every platform can show it');
+      expect(
+        driver.isAvailable,
+        isTrue,
+        reason: 'an in-app window is a widget; every platform can show it',
+      );
       expect(driver.playerId, _player());
     });
 
@@ -177,7 +250,10 @@ void main() {
         PresentationRequest.fullscreen(),
         PresentationRequest.windowFullscreen(),
       ]) {
-        await expectLater(driver.apply(_player(), request), throwsA(isA<UnsupportedError>()));
+        await expectLater(
+          driver.apply(_player(), request),
+          throwsA(isA<UnsupportedError>()),
+        );
       }
     });
 
@@ -247,6 +323,94 @@ void main() {
     });
   });
 
+  group('FloatingDriver lifecycle hooks', () {
+    test('fires the four hooks around show and hide, in order', () async {
+      final phases = <PresentationLifecyclePhase>[];
+      final events = <PresentationLifecycleEvent>[];
+      PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+        return (PresentationLifecycleEvent event) async {
+          phases.add(phase);
+          events.add(event);
+        };
+      }
+
+      final driver = FloatingDriver(
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+          afterEnter: record(PresentationLifecyclePhase.afterEnter),
+          beforeExit: record(PresentationLifecyclePhase.beforeExit),
+          afterExit: record(PresentationLifecyclePhase.afterExit),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      final player = _player();
+      await driver.apply(player, PresentationRequest.floating());
+      await driver.apply(player, PresentationRequest.normal());
+
+      expect(phases, <PresentationLifecyclePhase>[
+        PresentationLifecyclePhase.beforeEnter,
+        PresentationLifecyclePhase.afterEnter,
+        PresentationLifecyclePhase.beforeExit,
+        PresentationLifecyclePhase.afterExit,
+      ]);
+      expect(
+        events.every((event) => event.mode == PresentationMode.floating),
+        isTrue,
+      );
+      expect(events.every((event) => event.playerId == player), isTrue);
+    });
+
+    test('a player swap while floating fires no lifecycle', () async {
+      final phases = <PresentationLifecyclePhase>[];
+      PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+        return (event) async => phases.add(phase);
+      }
+
+      final driver = FloatingDriver(
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+          afterEnter: record(PresentationLifecyclePhase.afterEnter),
+          beforeExit: record(PresentationLifecyclePhase.beforeExit),
+          afterExit: record(PresentationLifecyclePhase.afterExit),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      await driver.apply(
+        PlayerId('player_one'),
+        PresentationRequest.floating(),
+      );
+      await driver.apply(
+        PlayerId('player_two'),
+        PresentationRequest.floating(),
+      );
+
+      expect(driver.playerId, PlayerId('player_two'));
+      expect(phases, <PresentationLifecyclePhase>[
+        PresentationLifecyclePhase.beforeEnter,
+        PresentationLifecyclePhase.afterEnter,
+      ]);
+    });
+
+    test('a throwing hook never aborts the show', () async {
+      final driver = FloatingDriver(
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: (_) async => throw StateError('hook failed'),
+          afterEnter: (_) async => throw StateError('hook failed'),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      await driver.apply(_player(), PresentationRequest.floating());
+
+      expect(driver.isFloating, isTrue);
+    });
+  });
+
   group('FloatingWindowOverlay', () {
     Widget harness({
       required Stream<bool> visible,
@@ -275,7 +439,10 @@ void main() {
                   onClose: onClose,
                   expandControlKey: const ValueKey('expand'),
                   closeControlKey: const ValueKey('close'),
-                  child: Container(key: const ValueKey('video'), color: const Color(0xFF000000)),
+                  child: Container(
+                    key: const ValueKey('video'),
+                    color: const Color(0xFF000000),
+                  ),
                 ),
               ],
             ),
@@ -291,7 +458,9 @@ void main() {
     });
 
     testWidgets('places the video at the anchor when visible', (tester) async {
-      await tester.pumpWidget(harness(visible: const Stream<bool>.empty(), initiallyVisible: true));
+      await tester.pumpWidget(
+        harness(visible: const Stream<bool>.empty(), initiallyVisible: true),
+      );
 
       final rect = tester.getRect(find.byKey(const ValueKey('video')));
       expect(rect.right, 800 - 12);
@@ -301,7 +470,12 @@ void main() {
 
     testWidgets('shapes the window after the video', (tester) async {
       await tester.pumpWidget(
-        harness(visible: const Stream<bool>.empty(), initiallyVisible: true, videoWidth: 1080, videoHeight: 1920),
+        harness(
+          visible: const Stream<bool>.empty(),
+          initiallyVisible: true,
+          videoWidth: 1080,
+          videoHeight: 1920,
+        ),
       );
 
       final rect = tester.getRect(find.byKey(const ValueKey('video')));
@@ -309,7 +483,9 @@ void main() {
       expect(rect.height, greaterThan(rect.width));
     });
 
-    testWidgets('appears and disappears with the visibility stream', (tester) async {
+    testWidgets('appears and disappears with the visibility stream', (
+      tester,
+    ) async {
       final visible = StreamController<bool>.broadcast();
       addTearDown(visible.close);
       await tester.pumpWidget(harness(visible: visible.stream));
@@ -332,22 +508,34 @@ void main() {
           visible: const Stream<bool>.empty(),
           initiallyVisible: true,
           placement: const FloatingWindowPlacement(
-            config: FloatingPlacementConfig(anchor: FloatingAnchor.topLeft, dragSnapThreshold: 600),
+            config: FloatingPlacementConfig(
+              anchor: FloatingAnchor.topLeft,
+              dragSnapThreshold: 600,
+            ),
           ),
         ),
       );
       final before = tester.getRect(find.byKey(const ValueKey('video')));
 
-      await tester.drag(find.byKey(const ValueKey('video')), const Offset(500, 120));
+      await tester.drag(
+        find.byKey(const ValueKey('video')),
+        const Offset(500, 120),
+      );
       await tester.pump();
 
       final after = tester.getRect(find.byKey(const ValueKey('video')));
       expect(after.left, greaterThan(before.left));
       expect(after.top, greaterThan(before.top));
-      expect(after.right, 800 - 12, reason: 'released far from the left edge, so it snapped right');
+      expect(
+        after.right,
+        800 - 12,
+        reason: 'released far from the left edge, so it snapped right',
+      );
     });
 
-    testWidgets('calls back from the expand and close controls', (tester) async {
+    testWidgets('calls back from the expand and close controls', (
+      tester,
+    ) async {
       var expanded = 0;
       var closed = 0;
       await tester.pumpWidget(
@@ -367,7 +555,9 @@ void main() {
     });
 
     testWidgets('omits the controls the host did not ask for', (tester) async {
-      await tester.pumpWidget(harness(visible: const Stream<bool>.empty(), initiallyVisible: true));
+      await tester.pumpWidget(
+        harness(visible: const Stream<bool>.empty(), initiallyVisible: true),
+      );
 
       expect(find.byKey(const ValueKey('expand')), findsNothing);
       expect(find.byKey(const ValueKey('close')), findsNothing);

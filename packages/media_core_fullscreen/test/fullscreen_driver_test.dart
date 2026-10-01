@@ -37,7 +37,10 @@ void main() {
 
     setUp(() {
       window = _FakeFullscreenWindow();
-      driver = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: window);
+      driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: window,
+      );
     });
 
     tearDown(() => driver.dispose());
@@ -64,21 +67,26 @@ void main() {
       expect(driver.isSystemFullscreen, isFalse);
     });
 
-    test('does not restore bounds when the feature is configured off', () async {
-      final custom = FullscreenDriver(
-        platform: FullscreenPlatform.desktop,
-        desktopWindow: window,
-        config: FullscreenConfig.defaults.copyWith(restorePreviousBounds: false),
-      );
-      addTearDown(custom.dispose);
+    test(
+      'does not restore bounds when the feature is configured off',
+      () async {
+        final custom = FullscreenDriver(
+          platform: FullscreenPlatform.desktop,
+          desktopWindow: window,
+          config: FullscreenConfig.defaults.copyWith(
+            restorePreviousBounds: false,
+          ),
+        );
+        addTearDown(custom.dispose);
 
-      await custom.initialize();
-      await custom.apply(_player(), PresentationRequest.fullscreen());
-      await custom.apply(_player(), PresentationRequest.normal());
+        await custom.initialize();
+        await custom.apply(_player(), PresentationRequest.fullscreen());
+        await custom.apply(_player(), PresentationRequest.normal());
 
-      expect(window.captureCount, 0);
-      expect(window.lastRestoreBounds, isNull);
-    });
+        expect(window.captureCount, 0);
+        expect(window.lastRestoreBounds, isNull);
+      },
+    );
 
     test('repeating the request does not touch the window twice', () async {
       await driver.initialize();
@@ -90,7 +98,10 @@ void main() {
     });
 
     test('dispose leaves the platform state behind', () async {
-      final local = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: window);
+      final local = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: window,
+      );
       await local.initialize();
       await local.apply(_player(), PresentationRequest.fullscreen());
 
@@ -106,7 +117,10 @@ void main() {
 
     setUp(() {
       window = _FakeFullscreenWindow();
-      driver = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: window);
+      driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: window,
+      );
     });
 
     tearDown(() => driver.dispose());
@@ -116,7 +130,11 @@ void main() {
 
       await driver.apply(_player(), PresentationRequest.windowFullscreen());
 
-      expect(window.setCount, 0, reason: 'the host draws window fullscreen; there is nothing to set');
+      expect(
+        window.setCount,
+        0,
+        reason: 'the host draws window fullscreen; there is nothing to set',
+      );
       expect(window.captureCount, 0);
       expect(driver.isWindowFullscreen, isTrue);
       expect(driver.isSystemFullscreen, isFalse);
@@ -180,17 +198,22 @@ void main() {
       expect(driver.strategy, FullscreenFitStrategy.rotate);
     });
 
-    test('falls back to the configured orientation before any video size', () async {
-      final driver = FullscreenDriver(
-        platform: FullscreenPlatform.mobile,
-        config: FullscreenConfig.defaults.copyWith(fallbackOrientation: VideoOrientation.portrait),
-      );
-      addTearDown(driver.dispose);
-      await driver.initialize();
+    test(
+      'falls back to the configured orientation before any video size',
+      () async {
+        final driver = FullscreenDriver(
+          platform: FullscreenPlatform.mobile,
+          config: FullscreenConfig.defaults.copyWith(
+            fallbackOrientation: VideoOrientation.portrait,
+          ),
+        );
+        addTearDown(driver.dispose);
+        await driver.initialize();
 
-      expect(driver.orientation, VideoOrientation.portrait);
-      expect(driver.strategy, FullscreenConfig.defaults.portraitStrategy);
-    });
+        expect(driver.orientation, VideoOrientation.portrait);
+        expect(driver.strategy, FullscreenConfig.defaults.portraitStrategy);
+      },
+    );
 
     test('mobile fullscreen is tracked without a platform call', () async {
       final driver = FullscreenDriver(platform: FullscreenPlatform.mobile);
@@ -199,18 +222,31 @@ void main() {
 
       await driver.apply(_player(), PresentationRequest.fullscreen());
 
-      expect(driver.isSystemFullscreen, isTrue, reason: 'the host hides the system UI; the mode is still tracked');
+      expect(
+        driver.isSystemFullscreen,
+        isTrue,
+        reason: 'the host hides the system UI; the mode is still tracked',
+      );
     });
   });
 
   group('FullscreenDriver refusals', () {
     test('refuses modes another driver owns', () async {
-      final driver = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: _FakeFullscreenWindow());
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: _FakeFullscreenWindow(),
+      );
       addTearDown(driver.dispose);
       await driver.initialize();
 
-      for (final request in <PresentationRequest>[PresentationRequest.pip(), PresentationRequest.floating()]) {
-        await expectLater(driver.apply(_player(), request), throwsA(isA<UnsupportedError>()));
+      for (final request in <PresentationRequest>[
+        PresentationRequest.pip(),
+        PresentationRequest.floating(),
+      ]) {
+        await expectLater(
+          driver.apply(_player(), request),
+          throwsA(isA<UnsupportedError>()),
+        );
       }
     });
 
@@ -230,7 +266,10 @@ void main() {
     });
 
     test('a disposed driver refuses further requests', () async {
-      final driver = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: _FakeFullscreenWindow());
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: _FakeFullscreenWindow(),
+      );
       await driver.initialize();
       await driver.dispose();
 
@@ -243,7 +282,10 @@ void main() {
 
   group('FullscreenDriver state stream', () {
     test('reports both variants and their exits', () async {
-      final driver = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: _FakeFullscreenWindow());
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: _FakeFullscreenWindow(),
+      );
       addTearDown(driver.dispose);
       await driver.initialize();
       final reported = <bool>[];
@@ -258,6 +300,138 @@ void main() {
       // second event), left entirely. The hand-off deliberately does not
       // report the instant when neither variant was set.
       expect(reported, <bool>[true, false]);
+    });
+  });
+
+  group('FullscreenDriver lifecycle hooks', () {
+    test(
+      'fires the four hooks around a fullscreen enter and exit, in order',
+      () async {
+        final window = _FakeFullscreenWindow();
+        final phases = <PresentationLifecyclePhase>[];
+        final events = <PresentationLifecycleEvent>[];
+        PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+          return (PresentationLifecycleEvent event) async {
+            phases.add(phase);
+            events.add(event);
+          };
+        }
+
+        final driver = FullscreenDriver(
+          platform: FullscreenPlatform.desktop,
+          desktopWindow: window,
+          lifecycleHooks: PresentationLifecycleHooks(
+            beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+            afterEnter: record(PresentationLifecyclePhase.afterEnter),
+            beforeExit: record(PresentationLifecyclePhase.beforeExit),
+            afterExit: record(PresentationLifecyclePhase.afterExit),
+          ),
+        );
+        addTearDown(driver.dispose);
+        await driver.initialize();
+
+        final player = _player();
+        await driver.apply(player, PresentationRequest.fullscreen());
+
+        expect(phases, <PresentationLifecyclePhase>[
+          PresentationLifecyclePhase.beforeEnter,
+          PresentationLifecyclePhase.afterEnter,
+        ]);
+        expect(driver.isSystemFullscreen, isTrue);
+
+        await driver.apply(player, PresentationRequest.normal());
+
+        expect(phases, <PresentationLifecyclePhase>[
+          PresentationLifecyclePhase.beforeEnter,
+          PresentationLifecyclePhase.afterEnter,
+          PresentationLifecyclePhase.beforeExit,
+          PresentationLifecyclePhase.afterExit,
+        ]);
+        expect(
+          events.every((event) => event.mode == PresentationMode.fullscreen),
+          isTrue,
+        );
+        expect(events.every((event) => event.playerId == player), isTrue);
+      },
+    );
+
+    test('exit hooks name the variant that was active', () async {
+      final modes = <PresentationMode>[];
+      PresentationLifecycleHook recordExit(PresentationLifecyclePhase phase) {
+        return (PresentationLifecycleEvent event) async {
+          if (phase == PresentationLifecyclePhase.beforeExit)
+            modes.add(event.mode);
+        };
+      }
+
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: _FakeFullscreenWindow(),
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeExit: recordExit(PresentationLifecyclePhase.beforeExit),
+          afterExit: recordExit(PresentationLifecyclePhase.afterExit),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      await driver.apply(_player(), PresentationRequest.windowFullscreen());
+      await driver.apply(_player(), PresentationRequest.normal());
+
+      expect(modes, <PresentationMode>[PresentationMode.windowFullscreen]);
+    });
+
+    test(
+      'a variant hand-off stays fullscreen and fires no lifecycle',
+      () async {
+        final phases = <PresentationLifecyclePhase>[];
+        PresentationLifecycleHook record(PresentationLifecyclePhase phase) {
+          return (event) async => phases.add(phase);
+        }
+
+        final driver = FullscreenDriver(
+          platform: FullscreenPlatform.desktop,
+          desktopWindow: _FakeFullscreenWindow(),
+          lifecycleHooks: PresentationLifecycleHooks(
+            beforeEnter: record(PresentationLifecyclePhase.beforeEnter),
+            afterEnter: record(PresentationLifecyclePhase.afterEnter),
+            beforeExit: record(PresentationLifecyclePhase.beforeExit),
+            afterExit: record(PresentationLifecyclePhase.afterExit),
+          ),
+        );
+        addTearDown(driver.dispose);
+        await driver.initialize();
+
+        await driver.apply(_player(), PresentationRequest.windowFullscreen());
+        // Switching variants never leaves fullscreen, so the lifecycle, which
+        // tracks the any-fullscreen level, stays silent.
+        await driver.apply(_player(), PresentationRequest.fullscreen());
+
+        expect(driver.isSystemFullscreen, isTrue);
+        expect(phases, <PresentationLifecyclePhase>[
+          PresentationLifecyclePhase.beforeEnter,
+          PresentationLifecyclePhase.afterEnter,
+        ]);
+      },
+    );
+
+    test('a throwing hook never aborts the enter', () async {
+      final window = _FakeFullscreenWindow();
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: window,
+        lifecycleHooks: PresentationLifecycleHooks(
+          beforeEnter: (_) async => throw StateError('hook failed'),
+          afterEnter: (_) async => throw StateError('hook failed'),
+        ),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      await driver.apply(_player(), PresentationRequest.fullscreen());
+
+      expect(window.setCount, 1);
+      expect(driver.isSystemFullscreen, isTrue);
     });
   });
 }
