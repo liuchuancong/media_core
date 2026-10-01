@@ -186,6 +186,29 @@ extension _LivePlaybackPipeline on LivePlaybackController {
     return _sweep(startAtCurrent: true);
   }
 
+  /// Re-aligns the mirrored playback state with the adapter's own semantic
+  /// state on every position heartbeat.
+  ///
+  /// The adapter's [PlayerAdapter.state] cannot drift: the adapter updates it
+  /// itself for every event it emits. The mirror, however, is fed through
+  /// subscriptions that an engine attached mid-playback joins late, so
+  /// playback edges (Playing, Buffering(false)) can be missed. Position
+  /// events arrive several times a second regardless, which makes them a
+  /// free heartbeat: any mirror that says "not playing" while the engine is
+  /// playing is corrected within a second. Only upgrades are applied —
+  /// downgrades to paused belong to the user-command paths.
+  void _reconcileMirroredPlayback() {
+    final handle = _handle;
+    if (handle == null || handle.disposed) {
+      return;
+    }
+
+    final truth = handle.adapter.state.playback;
+    if (truth == PlayerPlaybackState.playing && state.playback != PlayerPlaybackState.playing) {
+      _setState(_liveState(PlayerPlaybackState.playing));
+    }
+  }
+
   /// Mirrors the playback state an engine reached before it was attached.
   ///
   /// A staged engine is opened and plays while it is still being verified,
@@ -229,6 +252,7 @@ extension _LivePlaybackPipeline on LivePlaybackController {
 
       case PlayerAdapterPositionChanged(position: final position):
         watchdogs.onPositionProgress(position);
+        _reconcileMirroredPlayback();
 
       case PlayerAdapterVideoFrameProgress():
         watchdogs.onFrameProgress();
