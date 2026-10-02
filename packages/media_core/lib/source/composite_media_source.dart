@@ -36,13 +36,19 @@ final class CompositeMediaSource extends MediaSource {
   /// so it is rejected here rather than left to fail inside an
   /// adapter.
   CompositeMediaSource({
-    this.videoTracks = const <MediaTrack>[],
-    this.audioTracks = const <MediaTrack>[],
-    this.subtitleTracks = const <MediaTrack>[],
+    List<MediaTrack> videoTracks = const <MediaTrack>[],
+    List<MediaTrack> audioTracks = const <MediaTrack>[],
+    List<MediaTrack> subtitleTracks = const <MediaTrack>[],
   }) : assert(
          videoTracks.isNotEmpty || audioTracks.isNotEmpty,
          'CompositeMediaSource requires at least one video or audio track.',
-       );
+       ),
+       // Stored unmodifiable: a provider that keeps mutating the list
+       // it passed in must not be able to change what a planner or
+       // adapter sees after the source was handed over.
+       videoTracks = List<MediaTrack>.unmodifiable(videoTracks),
+       audioTracks = List<MediaTrack>.unmodifiable(audioTracks),
+       subtitleTracks = List<MediaTrack>.unmodifiable(subtitleTracks);
 
   /// Candidate video tracks, ordered by preference.
   final List<MediaTrack> videoTracks;

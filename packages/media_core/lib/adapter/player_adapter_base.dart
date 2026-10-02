@@ -12,8 +12,12 @@ import 'package:media_core/screenshot/screenshot_request.dart';
 import 'package:media_core/adapter/player_adapter_exception.dart';
 import 'package:media_core/error/player_error_code.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
+import 'package:media_core/adapter/composite_support.dart';
+import 'package:media_core/source/media_source.dart';
+import 'package:media_core/source/media_source_bridge.dart';
 import 'package:flutter/foundation.dart' show protected;
 import 'package:media_core/adapter/engine_option.dart';
+import 'package:media_core/playback/buffer_range.dart';
 
 /// Template-method base for [PlayerAdapter] implementations.
 ///
@@ -189,6 +193,15 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @override
   Future<void> open(PlayerSource source) async {
     requireReady();
+
+    // Composite-on-none is the failure the whole planner layer exists
+    // to prevent, but open() is public and a caller can bypass
+    // PlayerKernel.createFromMedia (or a resolver can hand the
+    // bridged source straight to the wrong backend after a runtime
+    // adapter swap). Refusing here — before the engine ever sees the
+    // URL — is what guarantees a DASH pair can never degrade into
+    // "video plays, audio silently missing".
+    _rejectUnsupportedComposite(source);
 
     // Source-scoped reset: the previous source's late events must
     // not leak into this generation.
@@ -511,6 +524,31 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
   @protected
   Future<void> onDispose();
 
+  /// Throws when [source] carries a composite this backend cannot
+  /// consume.
+  ///
+  /// Progressive and non-bridged sources always pass. The check only
+  /// fires for a [PlayerSource] that crossed [MediaSourceBridge] and
+  /// whose [CompositeSupport] is [CompositeSupport.none]: playing its
+  /// primary URL would silently drop the other essences, which is
+  /// exactly the failure mode the planner layer was built to make
+  /// loud instead of quiet.
+  void _rejectUnsupportedComposite(PlayerSource source) {
+    if (capabilities.supportsComposite) {
+      return;
+    }
+    final mediaSource = MediaSourceBridge.fromPlayerSource(source);
+    if (mediaSource is CompositeMediaSource) {
+      throw UnsupportedError(
+        'Adapter "$id" declares compositeSupport: none but was opened with a '
+        'CompositeMediaSource (${mediaSource.videoTracks.length} video, '
+        '${mediaSource.audioTracks.length} audio). Open it through '
+        'PlayerKernel.createFromMedia with a MediaRemuxer, or register a '
+        'composite-capable backend.',
+      );
+    }
+  }
+
   /// Throws when commands cannot be accepted.
   @protected
   void requireReady() {
@@ -598,6 +636,36 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     }
 
     _addEvent(PlayerAdapterEvent.buffering(buffering: buffering, progress: progress));
+  }
+
+  /// Reports the stretches of media the engine can play without waiting.
+  ///
+  /// A signal the UI layer paints directly, so it is gated by
+  /// [PlayerAdapterCapabilities.supportsBufferedRanges]: an engine
+  /// that declared no range reporting must not put canonical ranges
+  /// on the transport state, because an absent ahead-fill bar and a
+  /// bar that says "nothing buffered" are different facts and only
+  /// the capability knows which one is true. A violation is asserted
+  /// in debug and dropped in release, matching the other gated
+  /// emitters.
+  ///
+  /// Ranges arrive as the engine reported them; the transport state
+  /// canonicalizes once on reduce.
+  @protected
+  void emitBufferedRanges(List<BufferRange> ranges) {
+    if (!acceptsEngineEvents) return;
+
+    assert(
+      _capabilities.supportsBufferedRanges,
+      '$runtimeType emitted buffered ranges but '
+      'capabilities.supportsBufferedRanges is false.',
+    );
+
+    if (!_capabilities.supportsBufferedRanges) {
+      return;
+    }
+
+    _addEvent(PlayerAdapterEvent.bufferedRangesChanged(ranges: ranges));
   }
 
   /// Reports decoded video dimensions.

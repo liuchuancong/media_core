@@ -61,12 +61,12 @@ extension MediaSourceBridge on MediaSource {
     };
 
     return PlayerSource(
-      id: id ?? SourceId.generate(),
+      id: id ?? _stableIdFor(primary),
       uri: primary?.uri ?? Uri(),
       type: _sourceTypeFor(primary),
       protocol: primary?.protocol ?? SourceProtocol.unknown,
       mediaType: _mediaTypeFor(this, primary),
-      format: _formatFor(primary),
+      format: primary?.format ?? SourceFormat.unknown,
       headers: mergedHeaders,
       title: title,
       metadata: metadata,
@@ -127,21 +127,6 @@ SourceMediaType _mediaTypeFor(MediaSource source, MediaTrack? primary) {
   return primary?.mediaType ?? SourceMediaType.unknown;
 }
 
-SourceFormat _formatFor(MediaTrack? primary) {
-  if (primary == null) {
-    return SourceFormat.unknown;
-  }
-  // Prefer the container format inferred from the URI over the raw
-  // MIME string: `video/mp4` covers a family, `.mpd` in the path
-  // identifies a specific manifest shape and is what adapters
-  // branch on.
-  final byUri = primary.format;
-  if (byUri != SourceFormat.unknown) {
-    return byUri;
-  }
-  return SourceFormat.unknown;
-}
-
 SourceType _sourceTypeFor(MediaTrack? primary) {
   if (primary == null) {
     return SourceType.unknown;
@@ -166,4 +151,20 @@ SourceType _sourceTypeFor(MediaTrack? primary) {
     case SourceProtocol.unknown:
       return SourceType.remote;
   }
+}
+
+/// A deterministic id derived from the primary track's URI.
+///
+/// `SourceId.generate()` would make every bridge call look like a new
+/// source, so `PlayerHandle.open`'s "did the source change" test
+/// would re-announce the same DASH pair on every replay and recovery
+/// would see spurious identity churn. A URI-derived id is stable for
+/// the same essence and changes exactly when the upstream URL
+/// changes — which is precisely when it is a different source.
+SourceId _stableIdFor(MediaTrack? primary) {
+  final uri = primary?.uri;
+  if (uri == null || uri.toString().trim().isEmpty) {
+    return SourceId.generate();
+  }
+  return SourceId(uri.toString());
 }
