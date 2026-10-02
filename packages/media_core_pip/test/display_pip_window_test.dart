@@ -207,6 +207,69 @@ void main() {
       expect(inner.lastPosition, const Offset(120, 300));
     });
 
+    test(
+      'the remembered size follows the current video aspect — no black bars',
+      () async {
+        // A size remembered on a landscape stream…
+        saved = PipSavedBounds(
+          displayId: 'd1',
+          bounds: const Rect.fromLTWH(120, 300, 360, 202),
+        );
+        final display = build();
+
+        // …must not letterbox a portrait stream: the remembered height drives,
+        // the width re-derives from the current video's aspect.
+        await display.applySmallWindow(
+          size: const Size(213.75, 380),
+          position: Offset.zero,
+          aspectRatio: 9 / 16,
+          alwaysOnTop: false,
+          resizable: true,
+          skipTaskbar: false,
+          title: 'Test',
+        );
+
+        // The scale carries as the remembered long side (360); the short side
+        // re-derives aspect-exactly instead of distorting the shape.
+        expect(inner.lastSize?.width, closeTo(202.5, 0.5));
+        expect(inner.lastSize?.height, closeTo(360, 0.5));
+        expect(
+          inner.lastSize!.width / inner.lastSize!.height,
+          closeTo(9 / 16, 0.01),
+        );
+      },
+    );
+
+    test(
+      'a landscape stream re-derives the height from a remembered portrait size',
+      () async {
+        saved = PipSavedBounds(
+          displayId: 'd1',
+          bounds: const Rect.fromLTWH(100, 100, 213.75, 380),
+        );
+        final display = build();
+
+        await display.applySmallWindow(
+          size: const Size(360, 202.5),
+          position: Offset.zero,
+          aspectRatio: 16 / 9,
+          alwaysOnTop: false,
+          resizable: true,
+          skipTaskbar: false,
+          title: 'Test',
+        );
+
+        // The scale carries as the remembered long side (380); the height
+        // re-derives aspect-exactly.
+        expect(inner.lastSize?.width, closeTo(380, 0.5));
+        expect(inner.lastSize?.height, closeTo(380 * 9 / 16, 0.5));
+        expect(
+          inner.lastSize!.width / inner.lastSize!.height,
+          closeTo(16 / 9, 0.01),
+        );
+      },
+    );
+
     test('the always-on-top policy pin overrides the request', () async {
       final display = DisplayAwarePipWindow(
         windowBuilder: () => inner,

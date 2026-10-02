@@ -256,11 +256,54 @@ final class DisplayAwarePipWindow implements PipWindow {
     final savedMatches =
         saved != null &&
         (saved.displayId.isEmpty || saved.displayId == current.id);
+    // The remembered size is the user's scale, not a fixed shape: the short
+    // side always follows the CURRENT video's aspect. A size remembered on a
+    // landscape stream must not letterbox a portrait one (and vice versa) —
+    // a box whose shape drifts from the picture shows nothing but black bars.
+    PipSavedBounds? matchedSaved;
+    if (saved != null && savedMatches) {
+      // The user's scale is the remembered LONG side — it carries across
+      // orientation changes (a size picked on a portrait stream applies to
+      // the landscape stream's long side too).
+      var scale = saved.bounds.width > saved.bounds.height
+          ? saved.bounds.width
+          : saved.bounds.height;
+      final Size followed;
+      if (aspectRatio >= 1.0) {
+        // Landscape: the width is the long side; keep the floors
+        // aspect-exact so no clamp ever reintroduces black bars.
+        var width = scale.clamp(140.0, double.infinity);
+        var height = width / aspectRatio;
+        if (height < 90) {
+          height = 90;
+          width = height * aspectRatio;
+        }
+        followed = Size(width, height);
+      } else {
+        // Portrait: the height is the long side.
+        var height = scale.clamp(90.0, double.infinity);
+        var width = height * aspectRatio;
+        if (width < 140) {
+          width = 140;
+          height = width / aspectRatio;
+        }
+        followed = Size(width, height);
+      }
+      matchedSaved = PipSavedBounds(
+        displayId: saved.displayId,
+        bounds: Rect.fromLTWH(
+          saved.bounds.left,
+          saved.bounds.top,
+          followed.width,
+          followed.height,
+        ),
+      );
+    }
     final placement = pipResolvePlacement(
       requestedSize: pipSmallWindowSize(aspectRatio),
       workAreas: [for (final display in displays) display.area],
       primaryWorkArea: current.area,
-      savedBounds: savedMatches ? saved.bounds : null,
+      savedBounds: matchedSaved?.bounds,
       placementMargin: placementMargin,
     );
 
