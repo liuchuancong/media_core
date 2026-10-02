@@ -365,12 +365,46 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
         play: true,
       );
+      // A composite (Bilibili DASH: video.m4s + audio.m4s) arrives here with
+      // the primary video URI flattened by [MediaSourceBridge] and the full
+      // track list parked in metadata. MPV has no native merge, so the extra
+      // audio essences ride mpv's side channel: `--audio-file` (append through
+      // the mpv `audio-files` list). The primary video is the open() target;
+      // every remaining audio track is attached on top of it.
+      await _attachCompositeAudio(source);
     }
 
     _hasOpened = true;
 
     if (audioOnly) {
       await _applyAudioOnly(true);
+    }
+  }
+
+  /// Routes a [CompositeMediaSource]'s extra audio essences through MPV's
+  /// external `audio-files` side channel.
+  ///
+  /// No-op for progressive sources and for composites with at most one audio
+  /// track already served by the primary. Best-effort: a backend or URL that
+  /// rejects the attachment must not fail the open — the primary video still
+  /// plays (silently, at worst) and the caller can fall back.
+  Future<void> _attachCompositeAudio(PlayerSource source) async {
+    final composite = MediaSourceBridge.compositeFromPlayerSource(source);
+    if (composite == null) return;
+
+    final primaryUri = composite.primaryVideo?.uri ?? composite.primaryAudio?.uri;
+    for (final track in composite.audioTracks) {
+      if (track.uri == primaryUri) continue; // already the open() target
+      final url = track.uri.toString();
+      if (url.isEmpty) continue;
+      final native = _player?.platform;
+      if (native == null) return;
+      try {
+        // ignore: avoid_dynamic_calls
+        await (native as dynamic).command(<Object>['change-list', 'audio-files', 'append', url]);
+      } catch (_) {
+        // Best-effort side-channel attach.
+      }
     }
   }
 
