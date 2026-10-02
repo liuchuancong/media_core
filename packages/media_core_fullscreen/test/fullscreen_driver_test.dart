@@ -1,6 +1,6 @@
 import 'package:flutter/painting.dart' show Rect;
 import 'package:flutter/services.dart'
-    show MethodCall, SystemChannels, SystemUiMode, SystemUiOverlay;
+    show MethodCall, SystemChannels, SystemUiMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_fullscreen/media_core_fullscreen.dart';
