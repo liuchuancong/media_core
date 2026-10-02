@@ -161,6 +161,20 @@ void main() {
       expect(window.lastAspectRatio, closeTo(1080 / 1920, 0.001));
     });
 
+    test('never locks the shape when the host unlocks it', () async {
+      driver.updateConfig(PipConfig.defaults.copyWith(lockAspectRatio: false));
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      // A ratio handed to the window is what starts the desktop post-resize
+      // shape snap, and that snap is what stops the viewer from changing the
+      // height on its own. Unlocked means the window never receives one.
+      expect(window.lastAspectRatio, isNull);
+      expect(window.lastSize, const Size(320, 180));
+    });
+
     test('re-shapes the open window when the stream changes orientation', () async {
       await driver.initialize();
       driver.onVideoSize(1920, 1080);

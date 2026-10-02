@@ -52,9 +52,10 @@ final class WindowManagerPipWindow implements PipWindow {
   }) async {
     await windowManager.setAlwaysOnTop(alwaysOnTop);
     await windowManager.setResizable(resizable);
-    if (aspectRatio != null) {
-      await windowManager.setAspectRatio(aspectRatio);
-    }
+    // A null ratio means the host unlocked the shape. The OS aspect lock has to
+    // be released explicitly (window_manager resets with 0), or a lock left by
+    // an earlier locked session keeps fighting the viewer's resize.
+    await windowManager.setAspectRatio(aspectRatio ?? 0);
     // Hide the system title bar before shrinking: the host's custom chrome
     // takes over visually the moment the window narrows.
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);

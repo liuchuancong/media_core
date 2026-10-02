@@ -247,6 +247,26 @@ void main() {
       },
     );
 
+    test('an unlocked shape travels through instead of a substituted ratio', () async {
+      final display = build();
+
+      await display.applySmallWindow(
+        size: const Size(360, 202.5),
+        position: const Offset(1540, 857.5),
+        aspectRatio: null,
+        alwaysOnTop: false,
+        resizable: true,
+        skipTaskbar: false,
+        title: 'Test',
+      );
+
+      // Replacing the null with the requested size's ratio is exactly what
+      // re-locked the window: the backend would start its post-resize shape
+      // snap and the viewer could no longer change the height on its own.
+      expect(inner.applyCount, 1);
+      expect(inner.lastAspectRatio, isNull);
+    });
+
     test(
       'a landscape stream re-derives the height from a remembered portrait size',
       () async {

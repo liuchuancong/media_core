@@ -114,6 +114,9 @@ final class Win32PipWindow implements PipWindow {
         : null;
 
     _stopSnapMonitor();
+    // The shape belongs to the session that set it: a ratio left over from a
+    // locked session would otherwise keep snapping the next, unlocked one.
+    _aspectRatio = null;
     if (native != null) {
       // Replays placement and every style bit captured on entry — bounds,
       // resizable, skip-taskbar and top-most included — in one sequence.

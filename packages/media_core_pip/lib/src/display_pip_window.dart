@@ -236,9 +236,9 @@ final class DisplayAwarePipWindow implements PipWindow {
     required bool skipTaskbar,
     required String title,
   }) {
-    return _serialize(
-      () => _enter(aspectRatio ?? size.width / size.height, alwaysOnTop),
-    );
+    // The ratio travels unchanged: null is the host asking for a freely
+    // resizable shape, and only the placement math below needs a concrete one.
+    return _serialize(() => _enter(aspectRatio, size, alwaysOnTop));
   }
 
   @override
@@ -246,10 +246,14 @@ final class DisplayAwarePipWindow implements PipWindow {
     return _serialize(_exit);
   }
 
-  Future<void> _enter(double aspectRatio, bool alwaysOnTopOverride) async {
+  Future<void> _enter(double? shapeAspectRatio, Size requestedSize, bool alwaysOnTopOverride) async {
     if (_compact) return;
     final window = this.window;
     final normal = await window.capture();
+    // Sizing must always start from a real ratio, even when the shape is
+    // unlocked: the remembered bounds and the default size are expressed as a
+    // long side plus the video's aspect.
+    final aspectRatio = shapeAspectRatio ?? requestedSize.width / requestedSize.height;
 
     final displays = await _workAreas();
     final currentId = pipDisplayIdForPosition(displays, normal.bounds.topLeft);
@@ -326,7 +330,7 @@ final class DisplayAwarePipWindow implements PipWindow {
       await window.applySmallWindow(
         size: placement.size,
         position: placement.topLeft,
-        aspectRatio: aspectRatio,
+        aspectRatio: shapeAspectRatio,
         alwaysOnTop: pinOnTop,
         resizable: true,
         skipTaskbar: true,

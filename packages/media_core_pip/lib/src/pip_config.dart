@@ -54,9 +54,10 @@ final class PipConfig {
   /// Whether the desktop small window is locked to the video's shape.
   ///
   /// On by default: a small window that shows the video's actual shape wastes
-  /// no area on letterbox bars. Turn it off for a fixed-shape small window that
-  /// the video is fitted into — the in-app equivalent of that is
-  /// `media_core_floating`, which is a widget rather than a window.
+  /// no area on letterbox bars. Turn it off to let the viewer pick any shape —
+  /// the picture is then fitted into the window and gains bars on whichever
+  /// side the shape does not match. The in-app equivalent of a free-shaped
+  /// surface is `media_core_floating`, which is a widget rather than a window.
   final bool lockAspectRatio;
 
   /// Orientation assumed when the video size is unknown.
