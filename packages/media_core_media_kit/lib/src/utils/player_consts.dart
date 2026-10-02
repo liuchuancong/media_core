@@ -21,6 +21,9 @@ abstract final class PlayerConsts {
   /// renderer. Other drivers are mainly compatibility, embedding, or
   /// platform-specific outputs.
   static const Map<String, String> videoOutputDrivers = {
+    /// Follow mpv's own driver pick — the embedded player's stored default.
+    'auto': 'auto',
+
     /// Modern GPU renderer based on libplacebo.
     ///
     /// This is the current recommended general-purpose renderer in MPV.
