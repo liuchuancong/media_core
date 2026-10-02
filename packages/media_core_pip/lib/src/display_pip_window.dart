@@ -276,7 +276,7 @@ final class DisplayAwarePipWindow implements PipWindow {
         position: placement.topLeft,
         aspectRatio: aspectRatio,
         alwaysOnTop: pinOnTop,
-        resizable: false,
+        resizable: true,
         skipTaskbar: true,
         title: normal.title,
       );

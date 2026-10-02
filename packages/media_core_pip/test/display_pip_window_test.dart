@@ -179,7 +179,7 @@ void main() {
         expect(inner.lastSize, const Size(360, 202.5));
         expect(inner.lastPosition, const Offset(1540, 857.5));
         expect(inner.lastAlwaysOnTop, isFalse);
-        expect(inner.lastResizable, isFalse);
+        expect(inner.lastResizable, isTrue);
         expect(inner.lastSkipTaskbar, isTrue);
         expect(written?.size, const Size(360, 202.5));
         expect(written?.displayId, 'd1');

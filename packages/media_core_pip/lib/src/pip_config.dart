@@ -80,7 +80,8 @@ final class PipConfig {
       restoreWindowOnExit: restoreWindowOnExit ?? this.restoreWindowOnExit,
       lockAspectRatio: lockAspectRatio ?? this.lockAspectRatio,
       fallbackOrientation: fallbackOrientation ?? this.fallbackOrientation,
-      requestSourceRectHint: requestSourceRectHint ?? this.requestSourceRectHint,
+      requestSourceRectHint:
+          requestSourceRectHint ?? this.requestSourceRectHint,
     );
   }
 }

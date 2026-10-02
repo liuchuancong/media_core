@@ -136,7 +136,7 @@ void main() {
 
       expect(window.captureCount, 1);
       expect(window.lastAlwaysOnTop, isTrue);
-      expect(window.lastResizable, isFalse);
+      expect(window.lastResizable, isTrue);
       expect(window.lastAspectRatio, closeTo(16 / 9, 0.001));
       // Landscape video: wide window, height derived from the ratio.
       expect(window.lastSize, const Size(320, 180));

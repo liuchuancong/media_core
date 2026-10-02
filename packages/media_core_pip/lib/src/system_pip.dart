@@ -37,7 +37,12 @@ enum SystemPipTrigger {
 /// Only a hint: a wrong rectangle costs animation polish, never correctness,
 /// which is why every implementation must tolerate `null`.
 final class SystemPipSourceRect {
-  const SystemPipSourceRect({required this.left, required this.top, required this.width, required this.height});
+  const SystemPipSourceRect({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+  });
 
   /// Builds a hint from a layout rectangle, dropping it when it carries no area.
   ///

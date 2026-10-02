@@ -50,6 +50,9 @@ const int _swpShowWindow = 0x0040;
 const int _monitorDefaultToNearest = 2;
 const int _wmSyscommand = 0x0112;
 const int _scRestore = 0xF120;
+const int _dwmwaWindowCornerPreference = 33;
+const int _dwmwcpDefault = 0;
+const int _dwmwcpRound = 2;
 const int _wmNclbuttondown = 0x00A1;
 const int _htcaption = 2;
 const int _wmGettext = 0x000D;
@@ -165,6 +168,15 @@ typedef _SendMessageW_Native =
     _LongPtr Function(_Hwnd hwnd, _Dword msg, _LongPtr wparam, _LongPtr lparam);
 typedef _SendMessageW_Dart =
     int Function(int hwnd, int msg, int wparam, int lparam);
+typedef _DwmSetWindowAttribute_Native =
+    _LongPtr Function(
+      _Hwnd hwnd,
+      _Dword attr,
+      Pointer<_Dword> value,
+      _Dword size,
+    );
+typedef _DwmSetWindowAttribute_Dart =
+    int Function(int hwnd, int attr, Pointer<_Dword> value, int size);
 typedef _ReleaseCapture_Native = _Bool32 Function();
 typedef _ReleaseCapture_Dart = int Function();
 typedef _GetCurrentProcessId_Native = _Dword Function();
@@ -198,11 +210,19 @@ abstract final class Win32WindowFfi {
 
   static final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
   static final DynamicLibrary _kernel32 = DynamicLibrary.open('kernel32.dll');
+  static final DynamicLibrary? _dwmapi = Platform.isWindows
+      ? DynamicLibrary.open('dwmapi.dll')
+      : null;
 
   static final _ReleaseCapture_Dart _releaseCapture = _user32
       .lookupFunction<_ReleaseCapture_Native, _ReleaseCapture_Dart>(
         'ReleaseCapture',
       );
+  static final _DwmSetWindowAttribute_Dart? _dwmSetWindowAttribute = _dwmapi
+      ?.lookupFunction<
+        _DwmSetWindowAttribute_Native,
+        _DwmSetWindowAttribute_Dart
+      >('DwmSetWindowAttribute');
   static final _GetCurrentProcessId_Dart _getCurrentProcessId = _kernel32
       .lookupFunction<_GetCurrentProcessId_Native, _GetCurrentProcessId_Dart>(
         'GetCurrentProcessId',
@@ -407,6 +427,31 @@ abstract final class Win32WindowFfi {
     if (hwnd == 0) return false;
     _releaseCapture();
     return _sendMessage(hwnd, _wmNclbuttondown, _htcaption, 0) != 0;
+  }
+
+  /// Requests rounded window corners (Windows 11 `DWMWA_WINDOW_CORNER_PREFERENCE`).
+  ///
+  /// The compact picture-in-picture window reads as a floating card only when
+  /// its corners are rounded; a freshly shrunk frameless window comes out
+  /// square. Older systems ignore the attribute (the call fails silently),
+  /// which simply keeps the square window they can render.
+  static bool setRoundedCorners(int hwnd, {required bool round}) {
+    if (hwnd == 0) return false;
+    final setter = _dwmSetWindowAttribute;
+    if (setter == null) return false;
+    final preference = calloc<_Dword>();
+    try {
+      preference.value = round ? _dwmwcpRound : _dwmwcpDefault;
+      return setter(
+            hwnd,
+            _dwmwaWindowCornerPreference,
+            preference,
+            sizeOf<_Dword>(),
+          ) ==
+          0;
+    } finally {
+      calloc.free(preference);
+    }
   }
 
   /// Moves the window into or out of the top-most band without touching its

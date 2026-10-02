@@ -75,6 +75,7 @@ final class Win32PipWindow implements PipWindow {
     // so [aspectRatio] is deliberately not applied here.
     Win32WindowFfi.setResizable(hwnd, resizable: resizable);
     Win32WindowFfi.setSkipTaskbar(hwnd, skip: skipTaskbar);
+    Win32WindowFfi.setRoundedCorners(hwnd, round: true);
     Win32WindowFfi.applyBounds(
       hwnd,
       Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
@@ -96,6 +97,9 @@ final class Win32PipWindow implements PipWindow {
       // Replays placement and every style bit captured on entry — bounds,
       // resizable, skip-taskbar and top-most included — in one sequence.
       Win32WindowFfi.restoreSnapshot(native);
+      // Corner preference is not part of the placement snapshot; hand the
+      // decision back to the system for the restored normal window.
+      Win32WindowFfi.setRoundedCorners(hwnd, round: false);
       return;
     }
 

@@ -27,7 +27,11 @@ final MemoryAccount _memory = MediaCoreMemory.of(MemoryModule.pip);
 /// someone may want the window when they leave the page but not when they
 /// switch apps, or the other way round.
 final class PipAutoEnterPolicy {
-  const PipAutoEnterPolicy({this.onPageExit = true, this.onAppBackground = true, this.requirePlaying = true});
+  const PipAutoEnterPolicy({
+    this.onPageExit = true,
+    this.onAppBackground = true,
+    this.requirePlaying = true,
+  });
 
   /// Caller-accepted defaults: both triggers, and only while playing.
   static const PipAutoEnterPolicy defaults = PipAutoEnterPolicy();
@@ -44,7 +48,11 @@ final class PipAutoEnterPolicy {
   /// frame the viewer did not ask for, which reads as a bug.
   final bool requirePlaying;
 
-  PipAutoEnterPolicy copyWith({bool? onPageExit, bool? onAppBackground, bool? requirePlaying}) {
+  PipAutoEnterPolicy copyWith({
+    bool? onPageExit,
+    bool? onAppBackground,
+    bool? requirePlaying,
+  }) {
     return PipAutoEnterPolicy(
       onPageExit: onPageExit ?? this.onPageExit,
       onAppBackground: onAppBackground ?? this.onAppBackground,
@@ -68,7 +76,8 @@ final class PipSession {
   final String? reason;
 
   @override
-  String toString() => 'PipSession(${active ? 'active' : 'idle'}${playerId == null ? '' : ', $playerId'})';
+  String toString() =>
+      'PipSession(${active ? 'active' : 'idle'}${playerId == null ? '' : ', $playerId'})';
 }
 
 /// Owns the handover between a page and the picture-in-picture window.
@@ -119,7 +128,6 @@ final class PipSession {
 /// side can be wired to the core's `AppLifecycleDriver`, which already observes
 /// the platform lifecycle.
 final class PipSessionController {
-
   /// This instance's key in the shared account: a module can have several
   /// live instances, and a report sums their contributions rather than
   /// keeping whichever reported last.
@@ -165,9 +173,11 @@ final class PipSessionController {
   /// A host overrides it to add controls, a danmaku layer or gestures — or to
   /// render a player the framework does not own, which is why the callback takes
   /// the id rather than a handle: an id always exists, a handle does not.
-  final Widget Function(BuildContext context, PlayerId playerId)? surfaceBuilder;
+  final Widget Function(BuildContext context, PlayerId playerId)?
+  surfaceBuilder;
 
-  final StreamController<PipSession> _sessionController = StreamController<PipSession>.broadcast();
+  final StreamController<PipSession> _sessionController =
+      StreamController<PipSession>.broadcast();
 
   PlayerId? _playerId;
   bool _disposed = false;
@@ -204,7 +214,9 @@ final class PipSessionController {
         'cannot enter pip: player is gone',
         fields: <String, Object?>{'playerId': playerId.value, 'reason': reason},
       );
-      throw StateError('PlayerIdentity $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.');
+      throw StateError(
+        'PlayerIdentity $playerId is gone: the page disposed it instead of leaving it to the kernel to carry.',
+      );
     }
 
     _log.info(
@@ -225,22 +237,32 @@ final class PipSessionController {
     await _driver.apply(playerId, PresentationRequest.pip());
 
     _reportMemory(active: _driver.isPip, playerId: playerId);
-    _log.debug('pip window applied', fields: <String, Object?>{'active': _driver.isPip});
+    _log.debug(
+      'pip window applied',
+      fields: <String, Object?>{'active': _driver.isPip},
+    );
   }
 
   /// Leaves the small window. The player stays alive for the host to re-attach.
   Future<void> exit({String reason = 'requested'}) async {
     _ensureNotDisposed();
-    _log.info('leaving pip', fields: <String, Object?>{'playerId': _playerId?.value, 'reason': reason});
+    _log.info(
+      'leaving pip',
+      fields: <String, Object?>{'playerId': _playerId?.value, 'reason': reason},
+    );
     await _driver.initialize();
-    await _driver.apply(_playerId ?? PlayerId('pip-idle'), PresentationRequest.normal());
+    await _driver.apply(
+      _playerId ?? PlayerId('pip-idle'),
+      PresentationRequest.normal(),
+    );
     _emit(PipSession(playerId: _playerId, active: false, reason: reason));
     _reportMemory(active: false, playerId: _playerId);
   }
 
   /// Enters if idle, leaves if active.
-  Future<void> toggle(PlayerId playerId) =>
-      isActive ? exit(reason: 'toggled off') : enter(playerId, reason: 'toggled on');
+  Future<void> toggle(PlayerId playerId) => isActive
+      ? exit(reason: 'toggled off')
+      : enter(playerId, reason: 'toggled on');
 
   /// Reports that the page showing [playerId] is going away.
   ///
@@ -253,7 +275,10 @@ final class PipSessionController {
   }
 
   /// Reports that the app moved to the background while showing [playerId].
-  Future<bool> onAppBackgrounded({required PlayerId playerId, required bool playing}) {
+  Future<bool> onAppBackgrounded({
+    required PlayerId playerId,
+    required bool playing,
+  }) {
     if (!autoEnter.onAppBackground) {
       return Future<bool>.value(false);
     }
@@ -269,7 +294,11 @@ final class PipSessionController {
   }
 
   /// Builds the small window's surface for [playerId].
-  Widget buildSurface(BuildContext context, PlayerId playerId, {BoxFit fit = BoxFit.contain}) {
+  Widget buildSurface(
+    BuildContext context,
+    PlayerId playerId, {
+    BoxFit fit = BoxFit.contain,
+  }) {
     final builder = surfaceBuilder;
     if (builder != null) {
       return builder(context, playerId);
@@ -302,19 +331,29 @@ final class PipSessionController {
   // Internals
   // ---------------------------------------------------------------------------
 
-  Future<bool> _autoEnter(PlayerId playerId, {required bool playing, required String reason}) async {
+  Future<bool> _autoEnter(
+    PlayerId playerId, {
+    required bool playing,
+    required String reason,
+  }) async {
     _ensureNotDisposed();
     if (autoEnter.requirePlaying && !playing) {
       _log.debug(
         'auto-enter skipped: not playing',
-        fields: <String, Object?>{'playerId': playerId.value, 'trigger': reason},
+        fields: <String, Object?>{
+          'playerId': playerId.value,
+          'trigger': reason,
+        },
       );
       return false;
     }
     if (isActive && _playerId == playerId) {
       _log.debug(
         'auto-enter skipped: already carrying this player',
-        fields: <String, Object?>{'playerId': playerId.value, 'trigger': reason},
+        fields: <String, Object?>{
+          'playerId': playerId.value,
+          'trigger': reason,
+        },
       );
       return true;
     }
@@ -324,7 +363,8 @@ final class PipSessionController {
 
   /// Reports the carried surface.
   void _reportMemory({required bool active, PlayerId? playerId}) {
-    _memory.report(_memoryKey, 
+    _memory.report(
+      _memoryKey,
       items: active ? 1 : 0,
       bytes: active ? MemoryEstimates.videoSurface : 0,
       note: active ? 'carrying ${playerId?.value}' : 'idle',

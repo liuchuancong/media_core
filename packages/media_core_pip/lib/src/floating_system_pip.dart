@@ -71,20 +71,33 @@ final class FloatingSystemPip implements SystemPip {
       throw StateError('FloatingSystemPip has been disposed.');
     }
     if (width <= 0 || height <= 0) {
-      throw ArgumentError('Picture-in-picture needs a positive video size, got ${width}x$height.');
+      throw ArgumentError(
+        'Picture-in-picture needs a positive video size, got ${width}x$height.',
+      );
     }
 
     final aspectRatio = _aspectRatio(width, height);
     final hint = sourceRect == null
         ? null
-        : Rectangle<int>(sourceRect.left, sourceRect.top, sourceRect.width, sourceRect.height);
+        : Rectangle<int>(
+            sourceRect.left,
+            sourceRect.top,
+            sourceRect.width,
+            sourceRect.height,
+          );
 
     // The plugin models the two triggers as separate argument types, which is
     // also how the platform sees them: `ImmediatePiP` shrinks now, `OnLeavePiP`
     // arms the next navigation away.
     final arguments = switch (trigger) {
-      SystemPipTrigger.immediate => ImmediatePiP(aspectRatio: aspectRatio, sourceRectHint: hint),
-      SystemPipTrigger.onLeaveApp => OnLeavePiP(aspectRatio: aspectRatio, sourceRectHint: hint),
+      SystemPipTrigger.immediate => ImmediatePiP(
+        aspectRatio: aspectRatio,
+        sourceRectHint: hint,
+      ),
+      SystemPipTrigger.onLeaveApp => OnLeavePiP(
+        aspectRatio: aspectRatio,
+        sourceRectHint: hint,
+      ),
     };
 
     return _map(await _floating.enable(arguments));

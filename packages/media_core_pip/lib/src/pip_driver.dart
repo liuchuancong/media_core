@@ -376,7 +376,9 @@ final class PipDriver implements KernelPresentationDriver {
       ),
       aspectRatio: config.lockAspectRatio ? _aspectRatio() : null,
       alwaysOnTop: true,
-      resizable: false,
+      // The compact window is user-adjustable: edge-resizing lets the viewer
+      // pick their own size after the video-shaped default.
+      resizable: true,
       skipTaskbar: config.skipTaskbar,
       title: config.title,
     );
