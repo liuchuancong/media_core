@@ -435,6 +435,7 @@ final class PlayerAdapterSelector {
   ///   gets a registration and the planner can decide whether to
   ///   remux or reject.
   /// - audio-only progressive source and [PlayerAdapterCapabilities.supportsAudioOnly]: +10
+  /// - live source and [PlayerAdapterCapabilities.supportsLive]: +10
   int scoreMedia(PlayerAdapterRegistration registration, MediaSource source) {
     var score = registration.priority;
     final capabilities = registration.capabilities;
@@ -468,6 +469,15 @@ final class PlayerAdapterSelector {
           capabilities.supportsAudioOnly) {
         score += 10;
       }
+    }
+
+    // Live parity with the PlayerSource path: a backend that cannot
+    // hold a live stream open should not win a live source on
+    // protocol and format alone. Composite live sources get the same
+    // bonus, which keeps a would-be remux refusal from landing on a
+    // non-live engine that would fail even later.
+    if (source.live && capabilities.supportsLive) {
+      score += 10;
     }
 
     return score;

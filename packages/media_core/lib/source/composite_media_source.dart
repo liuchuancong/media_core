@@ -39,6 +39,7 @@ final class CompositeMediaSource extends MediaSource {
     List<MediaTrack> videoTracks = const <MediaTrack>[],
     List<MediaTrack> audioTracks = const <MediaTrack>[],
     List<MediaTrack> subtitleTracks = const <MediaTrack>[],
+    super.live,
   }) : assert(
          videoTracks.isNotEmpty || audioTracks.isNotEmpty,
          'CompositeMediaSource requires at least one video or audio track.',
@@ -109,11 +110,13 @@ final class CompositeMediaSource extends MediaSource {
     List<MediaTrack>? videoTracks,
     List<MediaTrack>? audioTracks,
     List<MediaTrack>? subtitleTracks,
+    bool? live,
   }) {
     return CompositeMediaSource(
       videoTracks: videoTracks ?? this.videoTracks,
       audioTracks: audioTracks ?? this.audioTracks,
       subtitleTracks: subtitleTracks ?? this.subtitleTracks,
+      live: live ?? this.live,
     );
   }
 
@@ -123,7 +126,8 @@ final class CompositeMediaSource extends MediaSource {
       other is CompositeMediaSource &&
           _listEquals(other.videoTracks, videoTracks) &&
           _listEquals(other.audioTracks, audioTracks) &&
-          _listEquals(other.subtitleTracks, subtitleTracks);
+          _listEquals(other.subtitleTracks, subtitleTracks) &&
+          other.live == live;
 
   @override
   int get hashCode => Object.hash(
@@ -131,6 +135,7 @@ final class CompositeMediaSource extends MediaSource {
     Object.hashAll(videoTracks),
     Object.hashAll(audioTracks),
     Object.hashAll(subtitleTracks),
+    live,
   );
 
   @override

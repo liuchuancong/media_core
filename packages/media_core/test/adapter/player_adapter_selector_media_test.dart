@@ -33,11 +33,13 @@ PlayerAdapterRegistration _reg(
 PlayerAdapterCapabilities _caps({
   CompositeSupport composite = CompositeSupport.none,
   bool audioOnly = false,
+  bool live = false,
 }) => PlayerAdapterCapabilities(
   supportedProtocols: _httpProtocols,
   supportedFormats: _mp4Formats,
   compositeSupport: composite,
   supportsAudioOnly: audioOnly,
+  supportsLive: live,
 );
 
 MediaTrack _videoTrack(String url) => MediaTrack(
@@ -53,6 +55,8 @@ MediaTrack _audioTrack(String url) => MediaTrack(
 );
 
 void main() {
+  _liveScoringTests();
+
   group('PlayerAdapterSelector.selectMedia', () {
     test('composite source prefers native backend over externalAudio', () {
       final registry = PlayerAdapterRegistry()
@@ -289,4 +293,61 @@ class _NullFactory implements PlayerAdapterFactory {
 
   @override
   bool supports(String id) => true;
+}
+
+// Appended group: live scoring. Lives in this file because the fake
+// registrations and helpers are already here.
+void _liveScoringTests() {
+  group('scoreMedia live bonus', () {
+    test('a live source favors a supportsLive backend', () {
+      final registry = PlayerAdapterRegistry()
+        ..register(_reg('vod-only', capabilities: _caps()))
+        ..register(_reg('live-ok', capabilities: _caps(live: true)));
+      final selector = PlayerAdapterSelector(registry);
+
+      final live = ProgressiveMediaSource.url(
+        Uri.parse('https://example.com/stream.m3u8'),
+        live: true,
+      );
+
+      expect(selector.selectMedia(live)!.id, 'live-ok');
+      expect(
+        selector.scoreMedia(_lookup(registry, 'live-ok'), live),
+        greaterThan(selector.scoreMedia(_lookup(registry, 'vod-only'), live)),
+      );
+    });
+
+    test('a non-live source leaves the bonus out', () {
+      final registry = PlayerAdapterRegistry()
+        ..register(_reg('vod-only', capabilities: _caps()))
+        ..register(_reg('live-ok', capabilities: _caps(live: true)));
+      final selector = PlayerAdapterSelector(registry);
+
+      final vod = ProgressiveMediaSource.url(
+        Uri.parse('https://example.com/movie.mp4'),
+      );
+
+      expect(
+        selector.scoreMedia(_lookup(registry, 'live-ok'), vod),
+        selector.scoreMedia(_lookup(registry, 'vod-only'), vod),
+      );
+    });
+
+    test('a live composite still prefers composite support over live support', () {
+      // A live composite cannot be remuxed at all, so a backend that
+      // merely holds live open but takes one input is worse than one
+      // that takes two: the composite bonus must outrank the live one.
+      final registry = PlayerAdapterRegistry()
+        ..register(_reg('live-single', capabilities: _caps(live: true)))
+        ..register(_reg('media3', capabilities: _caps(composite: CompositeSupport.native)));
+      final selector = PlayerAdapterSelector(registry);
+
+      final liveComposite = CompositeMediaSource(
+        videoTracks: [_videoTrack('https://example.com/live.m4s')],
+        live: true,
+      );
+
+      expect(selector.selectMedia(liveComposite)!.id, 'media3');
+    });
+  });
 }

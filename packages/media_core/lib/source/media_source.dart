@@ -54,7 +54,14 @@ enum MediaSourceType {
 /// - PlayerAdapter
 sealed class MediaSource {
   /// Creates a media source.
-  const MediaSource();
+  ///
+  /// [live] declares whether the input is an on-demand asset or a
+  /// never-ending stream. Providers set it from their own knowledge
+  /// (a Bilibili live room, an HLS event with no duration); it is not
+  /// something media_core infers, because a manifest without a
+  /// `ProgramInformation` duration and a VOD file whose probe failed
+  /// look identical from the URL alone.
+  const MediaSource({this.live = false});
 
   /// The shape of this source.
   ///
@@ -62,6 +69,13 @@ sealed class MediaSource {
   /// subclass, so adding a new [MediaSource] variant is a compile-time
   /// break for consumers rather than a silent fall-through.
   MediaSourceType get type;
+
+  /// Whether this source is a never-ending live stream rather than an
+  /// on-demand asset.
+  final bool live;
+
+  /// Whether this source is a live stream.
+  bool get isLive => live;
 
   /// Whether this source is a single progressive stream.
   bool get isProgressive => type == MediaSourceType.progressive;

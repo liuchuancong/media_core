@@ -27,6 +27,9 @@ import 'package:media_core_logging/media_core_logging.dart';
 ///    what lets a provider "accidentally" ship Bilibili DASH audio
 ///    to a Fijk build with no sound — an explicit unsupported signal
 ///    keeps that failure at the layer that can react to it.
+///    A **live** composite never gets a [RemuxPlan] even with a
+///    remuxer wired: a stream copy runs to end-of-file, and a live
+///    period does not have one.
 ///
 /// Responsibilities:
 ///
@@ -107,6 +110,21 @@ final class DefaultMediaSourcePlanner implements MediaSourcePlanner {
 
     if (capabilities.supportsComposite) {
       return CompositePlan(source, mode: capabilities.compositeSupport);
+    }
+
+    // A remux reads every essence to EOF and only then writes the
+    // index that makes the file seekable, so a live stream never
+    // finishes merging — the call would hang until someone cancelled
+    // it. A live composite on a backend that cannot take two inputs
+    // has no honest answer here, and pretending to have one (emit a
+    // plan nobody can execute) is worse than refusing.
+    if (source.live) {
+      return UnsupportedPlan(
+        'Live composite sources cannot be remuxed (a stream copy runs '
+        'to end-of-file); select a backend with native or external-audio '
+        'composite support instead.',
+        source: source,
+      );
     }
 
     final muxer = remuxer;

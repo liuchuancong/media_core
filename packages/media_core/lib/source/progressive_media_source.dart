@@ -27,7 +27,9 @@ part of 'media_source.dart';
 /// - MediaSourcePlanner
 final class ProgressiveMediaSource extends MediaSource {
   /// Creates a progressive source backed by a single [track].
-  const ProgressiveMediaSource({required this.track});
+  ///
+  /// [live] marks a never-ending stream; see [MediaSource.live].
+  const ProgressiveMediaSource({required this.track, super.live});
 
   /// Convenience constructor for the extremely common case of
   /// "just play this URL".
@@ -40,9 +42,11 @@ final class ProgressiveMediaSource extends MediaSource {
   factory ProgressiveMediaSource.url(
     Object uri, {
     MediaTrackType kind = MediaTrackType.video,
+    bool live = false,
   }) {
     return ProgressiveMediaSource(
       track: MediaTrack(uri: _coerceUri(uri), kind: kind),
+      live: live,
     );
   }
 
@@ -56,20 +60,25 @@ final class ProgressiveMediaSource extends MediaSource {
   List<MediaTrack> get tracks => <MediaTrack>[track];
 
   /// Creates a copy with modifications.
-  ProgressiveMediaSource copyWith({MediaTrack? track}) {
-    if (track == null) {
+  ProgressiveMediaSource copyWith({MediaTrack? track, bool? live}) {
+    if (track == null && (live == null || live == this.live)) {
       return this;
     }
-    return ProgressiveMediaSource(track: track);
+    return ProgressiveMediaSource(
+      track: track ?? this.track,
+      live: live ?? this.live,
+    );
   }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ProgressiveMediaSource && other.track == track;
+      other is ProgressiveMediaSource &&
+          other.track == track &&
+          other.live == live;
 
   @override
-  int get hashCode => Object.hash(MediaSourceType.progressive, track);
+  int get hashCode => Object.hash(MediaSourceType.progressive, track, live);
 
   @override
   String toString() => 'ProgressiveMediaSource(${track.uri})';

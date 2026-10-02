@@ -251,6 +251,54 @@ void main() {
       expect((plan as RemuxPlan).source, composite);
     });
 
+    test('a live composite never plans a remux, even with a remuxer', () {
+      // A stream copy runs to end-of-file; a live period has none, so
+      // emitting RemuxPlan here would schedule a call that can only
+      // hang. The refusal must reach the caller instead.
+      final planner = DefaultMediaSourcePlanner(remuxer: _PrimaryOnlyRemuxer());
+      final liveComposite = CompositeMediaSource(
+        videoTracks: [
+          MediaTrack(
+            uri: Uri.parse('https://example.com/live_v.m4s'),
+            kind: MediaTrackType.video,
+          ),
+        ],
+        audioTracks: [
+          MediaTrack(
+            uri: Uri.parse('https://example.com/live_a.m4s'),
+            kind: MediaTrackType.audio,
+          ),
+        ],
+        live: true,
+      );
+
+      final plan = planner.plan(liveComposite, none);
+
+      expect(plan, isA<UnsupportedPlan>());
+      expect(
+        (plan as UnsupportedPlan).reason,
+        contains('Live composite sources cannot be remuxed'),
+      );
+    });
+
+    test('a live composite still takes a native backend', () {
+      final planner = DefaultMediaSourcePlanner(remuxer: _PrimaryOnlyRemuxer());
+      final liveComposite = CompositeMediaSource(
+        videoTracks: [
+          MediaTrack(
+            uri: Uri.parse('https://example.com/live_v.m4s'),
+            kind: MediaTrackType.video,
+          ),
+        ],
+        live: true,
+      );
+
+      final plan = planner.plan(liveComposite, native);
+
+      expect(plan, isA<CompositePlan>());
+      expect((plan as CompositePlan).mode, CompositeSupport.native);
+    });
+
     test('every plan variant reports playability', () {
       expect(DirectPlan(progressive).isPlayable, isTrue);
       expect(CompositePlan(composite).isPlayable, isTrue);
