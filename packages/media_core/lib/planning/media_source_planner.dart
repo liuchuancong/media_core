@@ -1,6 +1,6 @@
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
 import 'package:media_core/source/media_source.dart';
-import 'package:media_core/source/media_source_plan.dart';
+import 'package:media_core/planning/media_source_plan.dart';
 
 /// Decides how a [MediaSource] should be handled by a specific
 /// backend.

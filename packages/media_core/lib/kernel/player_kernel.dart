@@ -26,12 +26,12 @@ import 'package:media_core/presentation/presentation_request.dart';
 import 'package:media_core/screenshot/player_screenshot.dart';
 import 'package:media_core/screenshot/screenshot_options.dart';
 import 'package:media_core/session/player_session.dart';
-import 'package:media_core/source/default_media_source_planner.dart';
-import 'package:media_core/source/media_remuxer.dart';
+import 'package:media_core/planning/default_media_source_planner.dart';
+import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
 import 'package:media_core/source/media_source_bridge.dart';
-import 'package:media_core/source/media_source_plan.dart';
-import 'package:media_core/source/media_source_planner.dart';
+import 'package:media_core/planning/media_source_plan.dart';
+import 'package:media_core/planning/media_source_planner.dart';
 import 'package:media_core/source/player_source.dart';
 import 'package:media_core/source/source_service.dart';
 import 'package:media_core_logging/media_core_logging.dart';
@@ -804,7 +804,7 @@ final class PlayerKernel {
       final resolved = await service.resolve(source);
       final carried = resolved.source;
       if (carried != null) {
-        return carried;
+        return _preserveBridgeMetadata(carried, source);
       }
       if (resolved.uri != source.uri) {
         return source.copyWith(uri: resolved.uri);
@@ -814,6 +814,29 @@ final class PlayerKernel {
       // Resolution is an enhancement; the original source still opens.
       return source;
     }
+  }
+
+  /// Keeps the [MediaSourceBridge] entry alive across a resolver hop.
+  ///
+  /// A resolver that carries its own [PlayerSource] replaces the
+  /// object wholesale, and a resolver-built source knows nothing about
+  /// the composite the provider produced. Without this re-attachment,
+  /// a DASH pair would reach the adapter as a bare video URL and a
+  /// composite-capable backend would play it with no audio and no
+  /// signal that anything was lost. Only the bridge key is preserved;
+  /// everything else stays the resolver's answer, because the
+  /// resolver is the authority on the rest of the source.
+  PlayerSource _preserveBridgeMetadata(PlayerSource carried, PlayerSource original) {
+    final bridge = original.metadata[MediaSourceBridge.metadataKey];
+    if (bridge == null || carried.metadata.containsKey(MediaSourceBridge.metadataKey)) {
+      return carried;
+    }
+    return carried.copyWith(
+      metadata: <String, Object?>{
+        ...carried.metadata,
+        MediaSourceBridge.metadataKey: bridge,
+      },
+    );
   }
 
   void _registerEverywhere(PlayerHandle handle) {

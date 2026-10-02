@@ -7,12 +7,12 @@ import 'package:media_core/event/player_event_bus.dart';
 import 'package:media_core/kernel/kernel_options.dart';
 import 'package:media_core/kernel/player_handle.dart';
 import 'package:media_core/kernel/player_kernel.dart';
-import 'package:media_core/source/default_media_source_planner.dart';
-import 'package:media_core/source/media_remuxer.dart';
+import 'package:media_core/planning/default_media_source_planner.dart';
+import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
 import 'package:media_core/source/media_source_bridge.dart';
-import 'package:media_core/source/media_source_plan.dart';
-import 'package:media_core/source/media_source_planner.dart';
+import 'package:media_core/planning/media_source_plan.dart';
+import 'package:media_core/planning/media_source_planner.dart';
 import 'package:media_core/source/media_track.dart';
 import 'package:media_core/source/media_track_type.dart';
 import 'package:media_core/testing/fake_player_adapter.dart';
@@ -237,6 +237,49 @@ void main() {
         throwsA(isA<UnsupportedError>()),
       );
       expect(stubPlanner.calls, hasLength(1));
+    });
+  });
+
+  group('PlayerHandle.timeline', () {
+    test('exposes the aligned presentation timeline of the open media', () async {
+      final adapter = FakePlayerAdapter(id: 'mpv-like');
+      final handle = _handle(
+        adapter,
+        capabilities: const PlayerAdapterCapabilities(
+          compositeSupport: CompositeSupport.externalAudio,
+        ),
+      );
+      await handle.initialize();
+
+      await handle.openMedia(
+        CompositeMediaSource(
+          videoTracks: [
+            MediaTrack(
+              uri: Uri.parse('https://example.com/v.m4s'),
+              kind: MediaTrackType.video,
+              startOffset: const Duration(milliseconds: 40),
+            ),
+          ],
+          audioTracks: [
+            _audioTrack('https://example.com/a.m4s'),
+          ],
+        ),
+        autoPlay: false,
+      );
+
+      final timeline = handle.timeline;
+      expect(timeline, isNotNull);
+      // The audio track anchors the clock; the video trails by 40 ms.
+      expect(timeline!.primary!.track.kind, MediaTrackType.video);
+      expect(timeline.primary!.offset, const Duration(milliseconds: 40));
+      final audio = timeline.tracks
+          .firstWhere((t) => t.track.kind == MediaTrackType.audio);
+      expect(audio.offset, Duration.zero);
+    });
+
+    test('is null for a plain PlayerSource that never crossed the bridge', () async {
+      final handle = _handle(FakePlayerAdapter(id: 'plain'));
+      expect(handle.timeline, isNull);
     });
   });
 }

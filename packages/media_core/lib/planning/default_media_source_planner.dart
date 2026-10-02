@@ -1,9 +1,9 @@
 import 'package:media_core/adapter/composite_support.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/source/media_remuxer.dart';
+import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
-import 'package:media_core/source/media_source_plan.dart';
-import 'package:media_core/source/media_source_planner.dart';
+import 'package:media_core/planning/media_source_plan.dart';
+import 'package:media_core/planning/media_source_planner.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 
 /// The default [MediaSourcePlanner].

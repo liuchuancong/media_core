@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_core/adapter/composite_support.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/source/default_media_source_planner.dart';
-import 'package:media_core/source/media_remuxer.dart';
+import 'package:media_core/planning/default_media_source_planner.dart';
+import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
 import 'package:media_core/source/media_source_bridge.dart';
-import 'package:media_core/source/media_source_plan.dart';
+import 'package:media_core/planning/media_source_plan.dart';
 import 'package:media_core/source/media_track.dart';
 import 'package:media_core/source/media_track_type.dart';
 import 'package:media_core/source/source_headers.dart';

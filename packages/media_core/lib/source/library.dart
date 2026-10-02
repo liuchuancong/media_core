@@ -16,12 +16,8 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/source/default_media_source_planner.dart';
-export 'package:media_core/source/media_remuxer.dart';
 export 'package:media_core/source/media_source.dart';
 export 'package:media_core/source/media_source_bridge.dart';
-export 'package:media_core/source/media_source_plan.dart';
-export 'package:media_core/source/media_source_planner.dart';
 export 'package:media_core/source/media_track.dart';
 export 'package:media_core/source/media_track_type.dart';
 export 'package:media_core/source/player_source.dart';
