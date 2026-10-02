@@ -25,7 +25,10 @@ enum MultiviewQualityPreference {
 /// given and the quality policy is inert — which is stated rather than silently
 /// pretended.
 typedef MultiviewQualityResolver =
-    Future<MultiviewCellSource> Function(MultiviewCellSource source, MultiviewQualityPreference preference);
+    Future<MultiviewCellSource> Function(
+      MultiviewCellSource source,
+      MultiviewQualityPreference preference,
+    );
 
 /// Immutable view of the wall, for a host that renders from state.
 final class MultiviewSnapshot {
@@ -60,5 +63,6 @@ final class MultiviewSnapshot {
   int get assignedCount => cells.where((cell) => !cell.isEmpty).length;
 
   @override
-  String toString() => 'MultiviewSnapshot(${layout.name}, $playingCount playing, focus $focusedIndex)';
+  String toString() =>
+      'MultiviewSnapshot(${layout.name}, $playingCount playing, focus $focusedIndex)';
 }

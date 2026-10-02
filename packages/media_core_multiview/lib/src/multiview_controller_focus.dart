@@ -39,7 +39,11 @@ extension MultiviewControllerFocus on MultiviewController {
     if (_audioIndex != index) {
       _log.debug(
         'audio focus moved',
-        fields: <String, Object?>{'from': _audioIndex, 'to': index, 'audioMode': _config.audioMode.name},
+        fields: <String, Object?>{
+          'from': _audioIndex,
+          'to': index,
+          'audioMode': _config.audioMode.name,
+        },
       );
     }
     _audioIndex = index;
@@ -50,7 +54,11 @@ extension MultiviewControllerFocus on MultiviewController {
   /// Silences the wall without losing the audio focus.
   Future<void> muteAll({bool muted = true}) async {
     _ensureNotDisposed();
-    _config = _config.copyWith(audioMode: muted ? MultiviewAudioMode.muted : MultiviewAudioMode.exclusive);
+    _config = _config.copyWith(
+      audioMode: muted
+          ? MultiviewAudioMode.muted
+          : MultiviewAudioMode.exclusive,
+    );
     await _applyAudio();
     _emit();
   }
@@ -61,11 +69,17 @@ extension MultiviewControllerFocus on MultiviewController {
   /// is how a monitoring wall sends one camera to a small window without
   /// restarting the stream — the target is the host's `PipSessionController`
   /// (`pipSession.enter(PlayerId(playerId))`) or its floating equivalent.
-  Future<bool> handOverCell(int index, Future<void> Function(String playerId) handOver) async {
+  Future<bool> handOverCell(
+    int index,
+    Future<void> Function(String playerId) handOver,
+  ) async {
     _ensureNotDisposed();
     final playerId = playerIdOf(index);
     if (playerId == null) {
-      _log.debug('cell has no player to hand over', fields: <String, Object?>{'index': index});
+      _log.debug(
+        'cell has no player to hand over',
+        fields: <String, Object?>{'index': index},
+      );
       return false;
     }
     _log.info(
@@ -107,7 +121,10 @@ extension MultiviewControllerFocus on MultiviewController {
     if (!_config.patrolEnabled || _cells.length <= 1) {
       return;
     }
-    _patrol = Timer.periodic(_config.patrolInterval, (_) => unawaited(_rotateFocus()));
+    _patrol = Timer.periodic(
+      _config.patrolInterval,
+      (_) => unawaited(_rotateFocus()),
+    );
   }
 
   /// Moves the focus to the next cell worth watching.
@@ -122,10 +139,14 @@ extension MultiviewControllerFocus on MultiviewController {
       if (cell.isEmpty) {
         continue;
       }
-      if (_config.patrolSkipsOfflineCells && cell.status != MultiviewCellStatus.playing) {
+      if (_config.patrolSkipsOfflineCells &&
+          cell.status != MultiviewCellStatus.playing) {
         continue;
       }
-      _log.debug('patrol moving the focus', fields: <String, Object?>{'from': _focusedIndex, 'to': index});
+      _log.debug(
+        'patrol moving the focus',
+        fields: <String, Object?>{'from': _focusedIndex, 'to': index},
+      );
       await setVideoFocus(index);
       await setAudioFocus(index);
       return;

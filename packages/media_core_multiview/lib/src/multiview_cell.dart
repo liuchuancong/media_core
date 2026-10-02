@@ -1,5 +1,6 @@
 import 'package:media_core/media_core.dart' show PlayerSource;
-import 'package:media_core_danmaku/media_core_danmaku.dart' show DanmakuOverlaySession;
+import 'package:media_core_danmaku/media_core_danmaku.dart'
+    show DanmakuOverlaySession;
 
 /// What a cell is doing.
 enum MultiviewCellStatus {
@@ -32,8 +33,8 @@ enum MultiviewCellStatus {
 /// Produces a fresh source for one whose signed URL has expired.
 ///
 /// Returning null keeps the current source; throwing fails the open.
-typedef MultiviewSourceRenew = Future<MultiviewCellSource?> Function(MultiviewCellSource current);
-
+typedef MultiviewSourceRenew =
+    Future<MultiviewCellSource?> Function(MultiviewCellSource current);
 
 /// Why a cell failed.
 enum MultiviewCellFailureKind {
@@ -49,7 +50,12 @@ enum MultiviewCellFailureKind {
 
 /// One cell's failure, with the attempt it happened on.
 final class MultiviewCellFailure {
-  const MultiviewCellFailure({required this.kind, required this.message, this.attempt = 1, this.cause});
+  const MultiviewCellFailure({
+    required this.kind,
+    required this.message,
+    this.attempt = 1,
+    this.cause,
+  });
 
   final MultiviewCellFailureKind kind;
   final String message;
@@ -60,7 +66,8 @@ final class MultiviewCellFailure {
   final Object? cause;
 
   @override
-  String toString() => 'MultiviewCellFailure(${kind.name}, attempt $attempt: $message)';
+  String toString() =>
+      'MultiviewCellFailure(${kind.name}, attempt $attempt: $message)';
 }
 
 /// What a cell is playing.
@@ -100,7 +107,8 @@ final class MultiviewCellSource {
   /// Returning null keeps the current source; throwing fails the open.
   final MultiviewSourceRenew? renew;
 
-  bool isExpired(DateTime now) => expiresAt != null && !now.isBefore(expiresAt!);
+  bool isExpired(DateTime now) =>
+      expiresAt != null && !now.isBefore(expiresAt!);
 
   @override
   String toString() => 'MultiviewCellSource(${title ?? roomId ?? source.uri})';
@@ -170,8 +178,12 @@ final class MultiviewCell {
       status == MultiviewCellStatus.recovering;
 
   /// Whether the cell should be retried automatically.
-  bool get canRecover => !isPlaying && status != MultiviewCellStatus.offline && status != MultiviewCellStatus.empty;
+  bool get canRecover =>
+      !isPlaying &&
+      status != MultiviewCellStatus.offline &&
+      status != MultiviewCellStatus.empty;
 
   @override
-  String toString() => 'MultiviewCell($index, ${status.name}${source == null ? '' : ', $source'})';
+  String toString() =>
+      'MultiviewCell($index, ${status.name}${source == null ? '' : ', $source'})';
 }
