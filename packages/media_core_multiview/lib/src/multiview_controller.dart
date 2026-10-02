@@ -126,6 +126,10 @@ final class MultiviewController {
   Timer? _patrol;
   int _focusedIndex = 0;
   int? _audioIndex;
+
+  /// Audio mode in force before [muteAll] silenced the wall, so un-muting can
+  /// return to it instead of forcing exclusive mode.
+  MultiviewAudioMode? _audioModeBeforeMute;
   ResourcePressure _pressure = ResourcePressure.none;
   bool _budgetExceeded = false;
   bool _disposed = false;

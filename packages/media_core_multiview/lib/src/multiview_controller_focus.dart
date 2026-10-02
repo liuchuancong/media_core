@@ -52,13 +52,26 @@ extension MultiviewControllerFocus on MultiviewController {
   }
 
   /// Silences the wall without losing the audio focus.
+  ///
+  /// Un-muting restores the mode that was in force before the wall was muted:
+  /// a mixed wall stays mixed instead of silently becoming exclusive.
   Future<void> muteAll({bool muted = true}) async {
     _ensureNotDisposed();
-    _config = _config.copyWith(
-      audioMode: muted
-          ? MultiviewAudioMode.muted
-          : MultiviewAudioMode.exclusive,
-    );
+    if (muted) {
+      if (_config.audioMode != MultiviewAudioMode.muted) {
+        _audioModeBeforeMute = _config.audioMode;
+      }
+      _config = _config.copyWith(audioMode: MultiviewAudioMode.muted);
+    } else {
+      final MultiviewAudioMode restore =
+          _audioModeBeforeMute ?? MultiviewAudioMode.exclusive;
+      _audioModeBeforeMute = null;
+      _config = _config.copyWith(
+        audioMode: restore == MultiviewAudioMode.muted
+            ? MultiviewAudioMode.exclusive
+            : restore,
+      );
+    }
     await _applyAudio();
     _emit();
   }

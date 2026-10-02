@@ -304,6 +304,61 @@ void main() {
       expect(host.handles[1].muted, isFalse);
       expect(host.handles[1].volume, 0.2);
     });
+
+    test(
+      'muting the wall silences cells that carry their own volume',
+      () async {
+        await wall.assign(0, _room('a'));
+        await wall.assign(1, _room('b'));
+        await wall.setAudioFocus(0);
+        // What a host does when a cell starts: restore the room's own volume.
+        await wall.setCellVolume(0, 0.8);
+        await wall.setCellVolume(1, 0.6);
+
+        await wall.muteAll();
+
+        expect(host.handles.every((handle) => handle.muted), isTrue);
+        expect(host.handles.every((handle) => handle.volume == 0.0), isTrue);
+
+        await wall.muteAll(muted: false);
+
+        expect(host.handles[0].muted, isFalse);
+        expect(
+          host.handles[0].volume,
+          0.8,
+          reason: 'the audible cell keeps its own volume',
+        );
+      },
+    );
+
+    test('a per-cell volume does not keep a background cell audible', () async {
+      await wall.assign(0, _room('a'));
+      await wall.assign(1, _room('b'));
+      await wall.setCellVolume(1, 0.9);
+
+      await wall.setAudioFocus(0);
+
+      expect(host.handles[0].muted, isFalse);
+      expect(
+        host.handles[1].muted,
+        isTrue,
+        reason: 'exclusive mode still owns the background cell',
+      );
+    });
+
+    test('un-muting restores the mode that was in force', () async {
+      await wall.updateConfig(
+        wall.config.copyWith(audioMode: MultiviewAudioMode.mixed),
+      );
+      await wall.assign(0, _room('a'));
+      await wall.assign(1, _room('b'));
+
+      await wall.muteAll();
+      await wall.muteAll(muted: false);
+
+      expect(wall.config.audioMode, MultiviewAudioMode.mixed);
+      expect(host.handles.every((handle) => handle.muted), isFalse);
+    });
   });
 
   group('MultiviewController budget', () {

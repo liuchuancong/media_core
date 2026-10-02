@@ -175,22 +175,32 @@ extension _MultiviewControllerInternals on MultiviewController {
       return;
     }
 
+    // The audio mode decides the level, and a per-cell volume only overrides it
+    // where that cell is the one being listened to. Two rules matter here:
+    //
+    // * Muting the wall is authoritative. A host restores each room's own saved
+    //   volume through `setCellVolume` when a cell starts, so letting the
+    //   override win also let the wall keep playing at full volume with the mute
+    //   button on.
+    // * In exclusive mode every non-focused cell stays at `backgroundVolume`
+    //   (silent by default) even when it carries an override, otherwise the
+    //   whole wall is audible at once and switching the audio focus changes
+    //   nothing.
     for (final cell in _cells) {
       final handle = _handles[cell.index];
       if (handle == null) {
         continue;
       }
 
-      final desired =
-          _cellVolumes[cell.index] ??
-          switch (_config.audioMode) {
-            MultiviewAudioMode.muted => 0.0,
-            MultiviewAudioMode.mixed => _config.focusedVolume,
-            MultiviewAudioMode.exclusive =>
-              cell.index == (_audioIndex ?? _focusedIndex)
-                  ? _config.focusedVolume
-                  : _config.backgroundVolume,
-          };
+      final double desired = switch (_config.audioMode) {
+        MultiviewAudioMode.muted => 0.0,
+        MultiviewAudioMode.mixed =>
+          _cellVolumes[cell.index] ?? _config.focusedVolume,
+        MultiviewAudioMode.exclusive =>
+          cell.index == (_audioIndex ?? _focusedIndex)
+              ? _cellVolumes[cell.index] ?? _config.focusedVolume
+              : _config.backgroundVolume,
+      };
 
       cell.hasAudioFocus = desired > 0;
       await handle.setVolume(desired);
