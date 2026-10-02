@@ -590,6 +590,23 @@ void main() {
     });
   });
 
+  group('MultiviewController cell playerId', () {
+    test(
+      'stamps the acquired player id onto the cell and clears it on release',
+      () async {
+        await wall.assign(0, _room('a'));
+
+        expect(wall.cells[0].status, MultiviewCellStatus.playing);
+        expect(wall.cells[0].playerId, isNotNull);
+        expect(wall.cells[0].playerId, 'player-1');
+
+        await wall.clear(0);
+
+        expect(wall.cells[0].playerId, isNull);
+      },
+    );
+  });
+
   group('MultiviewController snapshot stream', () {
     test('broadcasts the starting -> playing transition for a cell', () async {
       final statuses = <MultiviewCellStatus>[];

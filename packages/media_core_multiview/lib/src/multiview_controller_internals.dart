@@ -128,6 +128,9 @@ extension _MultiviewControllerInternals on MultiviewController {
     }
     final handle = await _players.acquire();
     _handles[index] = handle;
+    // Stamp the acquired player onto the cell: hosts resolve the video
+    // surface by reading the cell's playerId against the kernel.
+    _cells[index].playerId = handle.id;
     return handle;
   }
 
@@ -140,6 +143,7 @@ extension _MultiviewControllerInternals on MultiviewController {
     if (handle == null) {
       return;
     }
+    _cells[index].playerId = null;
     await handle.pause();
     await handle.recycle();
     // Back to the host, which may return it from the kernel's instance pool: a
