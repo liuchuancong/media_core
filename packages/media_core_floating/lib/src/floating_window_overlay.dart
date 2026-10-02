@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import 'package:media_core_floating/src/floating_window_placement.dart';
@@ -101,10 +103,22 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
   /// would last one frame.
   bool _userSized = false;
 
+  /// Held so it can be cancelled: hosts build a fresh overlay for every
+  /// open/close cycle, and an uncancelled listener accumulates one per cycle on
+  /// a stream that outlives the widget.
+  StreamSubscription<bool>? _visibilitySubscription;
+
+  @override
+  void dispose() {
+    _visibilitySubscription?.cancel();
+    _visibilitySubscription = null;
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
-    widget.visible.listen((value) {
+    _visibilitySubscription = widget.visible.listen((value) {
       if (!mounted || value == _visible) {
         return;
       }

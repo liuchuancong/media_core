@@ -71,4 +71,44 @@ void main() {
       expect(find.byKey(const Key('resize-grip')), findsNothing);
     });
   });
+
+  group('FloatingWindowOverlay visibility', () {
+    testWidgets('the visibility stream hides and re-shows the window', (tester) async {
+      final visibility = StreamController<bool>.broadcast();
+      addTearDown(visibility.close);
+
+      Widget host() => Directionality(
+        textDirection: TextDirection.ltr,
+        child: MediaQuery(
+          data: const MediaQueryData(),
+          child: FloatingWindowOverlay(
+            visible: visibility.stream,
+            initiallyVisible: true,
+            placement: const FloatingWindowPlacement(
+              config: FloatingPlacementConfig(width: 300, height: 200),
+            ),
+            child: const ColoredBox(color: Color(0xFF112233)),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(host());
+      expect(find.byType(ColoredBox), findsOneWidget);
+
+      visibility.add(false);
+      await tester.pumpAndSettle();
+      expect(find.byType(ColoredBox), findsNothing);
+
+      visibility.add(true);
+      await tester.pumpAndSettle();
+      expect(find.byType(ColoredBox), findsOneWidget);
+
+      // Disposing must drop the listener: a host that opens and closes the
+      // window repeatedly would otherwise keep every dead state's callback.
+      await tester.pumpWidget(const SizedBox.shrink());
+      visibility.add(false);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
