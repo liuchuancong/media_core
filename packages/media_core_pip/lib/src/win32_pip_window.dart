@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:media_core_win32/media_core_win32.dart';
 
@@ -16,7 +18,8 @@ import 'package:media_core_pip/src/pip_window.dart';
 ///
 /// - skip taskbar: the `WS_EX_TOOLWINDOW` bit (what `set_skip_taskbar.cpp`
 ///   does), so the compact window leaves both the taskbar and Alt-Tab;
-/// - resizable: the `WS_THICKFRAME` style bit, dropped while compact;
+/// - resizable: the `WS_THICKFRAME` style bit, kept while compact so the
+///   viewer can pick their own size;
 /// - top-most: `SetWindowPos` against `HWND_TOPMOST` (via `applyBounds`);
 /// - move + resize: one atomic `SetWindowPos` that also carries
 ///   `SWP_FRAMECHANGED` so style and bounds land together;
@@ -24,11 +27,18 @@ import 'package:media_core_pip/src/pip_window.dart';
 ///   [capture] time and replayed, followed by a forced re-layout.
 ///
 /// The custom-drawn chrome is the host's widget, so nothing here touches
-/// title-bar styles; the snapshot replays whatever the window had. There is
-/// no minimum-size concept in this backend — dropping `WS_THICKFRAME` already
-/// prevents user resizes — so [setMinimumSize] is a documented no-op.
+/// title-bar styles; the snapshot replays whatever the window had. Free
+/// user resizes are allowed while compact (`WS_THICKFRAME` stays), and a
+/// snap monitor re-aligns the window shape with the video's aspect once the
+/// drag settles — the contained picture never gains black bars. There is no
+/// native minimum-size concept, so [setMinimumSize] is a documented no-op.
 final class Win32PipWindow implements PipWindow {
   static int? _hwnd;
+
+  Timer? _snapTimer;
+  Size _lastSeenBounds = Size.zero;
+  int _stableTicks = 0;
+  double _aspectRatio = 16 / 9;
 
   int get _windowHandle {
     if (_hwnd == null || _hwnd == 0) {
@@ -72,7 +82,11 @@ final class Win32PipWindow implements PipWindow {
     final hwnd = _windowHandle;
     // The driver already sizes the window from the video's shape; an
     // OS-level aspect lock would fight that resize on the next size report,
-    // so [aspectRatio] is deliberately not applied here.
+    // so [aspectRatio] is deliberately not applied here — it feeds the
+    // post-resize snap instead.
+    _aspectRatio = aspectRatio != null && aspectRatio > 0
+        ? aspectRatio
+        : 16 / 9;
     Win32WindowFfi.setResizable(hwnd, resizable: resizable);
     Win32WindowFfi.setSkipTaskbar(hwnd, skip: skipTaskbar);
     Win32WindowFfi.setRoundedCorners(hwnd, round: true);
@@ -81,6 +95,9 @@ final class Win32PipWindow implements PipWindow {
       Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
       topmost: alwaysOnTop,
     );
+    _lastSeenBounds = Size(size.width, size.height);
+    _stableTicks = 0;
+    _startSnapMonitor();
   }
 
   @override
@@ -93,6 +110,7 @@ final class Win32PipWindow implements PipWindow {
         ? snapshot.titleBarStyle as Win32WindowSnapshot
         : null;
 
+    _stopSnapMonitor();
     if (native != null) {
       // Replays placement and every style bit captured on entry — bounds,
       // resizable, skip-taskbar and top-most included — in one sequence.
@@ -116,6 +134,71 @@ final class Win32PipWindow implements PipWindow {
     );
   }
 
+  /// Starts watching the compact window's bounds. While the viewer drags an
+  /// edge the shape is theirs; once the bounds settle (two consecutive
+  /// unchanged reads), one snap aligns the shape with the video's aspect — a
+  /// landscape stream keeps its width and re-derives the height, a portrait
+  /// stream keeps the height. Without this every free resize ends in black
+  /// bars around the contained video.
+  void _startSnapMonitor() {
+    _snapTimer ??= Timer.periodic(
+      const Duration(milliseconds: 150),
+      (_) => _snapTick(),
+    );
+  }
+
+  void _stopSnapMonitor() {
+    _snapTimer?.cancel();
+    _snapTimer = null;
+    _stableTicks = 0;
+  }
+
+  void _snapTick() {
+    final hwnd = _windowHandle;
+    final bounds = Win32WindowFfi.bounds(hwnd);
+    if (bounds == null || bounds.width <= 0 || bounds.height <= 0) return;
+    final settled =
+        (bounds.width - _lastSeenBounds.width).abs() < 2 &&
+        (bounds.height - _lastSeenBounds.height).abs() < 2;
+    _lastSeenBounds = bounds.size;
+    if (!settled) {
+      _stableTicks = 0;
+      return;
+    }
+    _stableTicks++;
+    if (_stableTicks < 2) return;
+
+    double targetWidth;
+    double targetHeight;
+    if (_aspectRatio >= 1.0) {
+      // Landscape: the width is the long side.
+      targetWidth = bounds.width;
+      targetHeight = targetWidth / _aspectRatio;
+      if (targetHeight < 90) {
+        targetHeight = 90;
+        targetWidth = targetHeight * _aspectRatio;
+      }
+    } else {
+      // Portrait: the height is the long side.
+      targetHeight = bounds.height;
+      targetWidth = targetHeight * _aspectRatio;
+      if (targetWidth < 140) {
+        targetWidth = 140;
+        targetHeight = targetWidth / _aspectRatio;
+      }
+    }
+    if ((targetWidth - bounds.width).abs() < 3 &&
+        (targetHeight - bounds.height).abs() < 3)
+      return;
+    Win32WindowFfi.applyBounds(
+      hwnd,
+      Rect.fromLTWH(bounds.left, bounds.top, targetWidth, targetHeight),
+      topmost: Win32WindowFfi.isTopmost(hwnd),
+    );
+    _stableTicks = 0;
+    _lastSeenBounds = Size(targetWidth, targetHeight);
+  }
+
   @override
   Future<void> setAlwaysOnTop(bool value) async {
     // Bounds stay untouched: only the z-order moves.
@@ -124,8 +207,8 @@ final class Win32PipWindow implements PipWindow {
 
   @override
   Future<void> setMinimumSize(Size size) async {
-    // No minimum-size concept: a compact window without WS_THICKFRAME cannot
-    // be resized by the user in the first place.
+    // No native minimum-size concept; the compact window's shape is kept
+    // video-formed by the snap monitor instead.
   }
 
   @override
