@@ -402,16 +402,30 @@ final class PipDriver implements KernelPresentationDriver {
       title: config.title,
     );
 
-    // The viewer's floor for the compact window, applied only after the size
-    // itself: a backend whose minimum can also clamp programmatic resizes must
-    // not be able to block the entry above. Leaving PiP restores the host's
-    // normal minimum, so this never leaks into the restored window.
-    await window.setMinimumSize(Size(config.minWidth, config.minHeight));
-
     if (_setPip(true)) {
       await _fire(
         PresentationLifecyclePhase.afterEnter,
         _lastPlayerId ?? _systemPlayerId,
+      );
+    }
+
+    // The viewer's floor for the compact window. Applied last, and non-fatal:
+    // a backend whose minimum can also clamp programmatic resizes must not block
+    // the entry above, and a failing minimum must not abort the transition after
+    // the window already shrank — that left the host's state machine believing
+    // PiP never started (no status change), so the room UI kept rendering its
+    // previous layout inside the small window. Leaving PiP restores the host's
+    // normal minimum, so this never leaks into the restored window.
+    try {
+      await window.setMinimumSize(Size(config.minWidth, config.minHeight));
+    } catch (error, stackTrace) {
+      _log.warning(
+        'compact minimum size was not applied',
+        fields: <String, Object?>{
+          'minSize': '${config.minWidth.round()}x${config.minHeight.round()}',
+          'error': '$error',
+          'stackTrace': '$stackTrace',
+        },
       );
     }
   }

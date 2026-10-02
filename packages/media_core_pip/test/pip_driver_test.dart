@@ -21,6 +21,7 @@ final class _FakePipWindow implements PipWindow {
   int setAspectCount = 0;
   Size? lastMinimumSize;
   int minimumSizeCalls = 0;
+  Object? minimumSizeError;
   bool? lastAlwaysOnTop;
   bool? lastResizable;
 
@@ -73,6 +74,8 @@ final class _FakePipWindow implements PipWindow {
   Future<void> setMinimumSize(Size size) async {
     lastMinimumSize = size;
     minimumSizeCalls++;
+    final error = minimumSizeError;
+    if (error != null) throw error;
   }
 
   @override
@@ -164,6 +167,21 @@ void main() {
 
       expect(window.lastSize, const Size(180, 320));
       expect(window.lastAspectRatio, closeTo(1080 / 1920, 0.001));
+    });
+
+    test('a failing compact minimum never aborts the entry', () async {
+      window.minimumSizeError = StateError('this backend has no minimum size');
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      // By the time the minimum is applied the window has already shrunk, so a
+      // throw here must not skip the state change: a host that never hears
+      // "PiP started" keeps rendering its previous layout inside the small
+      // window.
+      expect(window.lastMinimumSize, const Size(140, 90));
+      expect(driver.isPip, isTrue);
     });
 
     test('never locks the shape when the host unlocks it', () async {
