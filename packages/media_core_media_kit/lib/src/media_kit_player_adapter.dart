@@ -399,12 +399,47 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       if (url.isEmpty) continue;
       final native = _player?.platform;
       if (native == null) return;
+      // mpv fetches an external `audio-files` entry with its GLOBAL network
+      // options, not the per-Media httpHeaders the primary open() carried, so
+      // mirror the track's request headers onto the player first (Referer /
+      // Cookie via http-header-fields; User-Agent via its own option).
+      await _applyTrackNetworkHeaders(native, track.headers?.values ?? const <String, String>{});
       try {
         // ignore: avoid_dynamic_calls
         await (native as dynamic).command(<Object>['change-list', 'audio-files', 'append', url]);
       } catch (_) {
         // Best-effort side-channel attach.
       }
+    }
+  }
+
+  /// Sets the player-global HTTP headers MPV uses for side-channel inputs.
+  /// `user-agent` is its own option; every other header goes into the
+  /// `http-header-fields` list as a `Name: value` line (replaced wholesale so
+  /// a re-attach never stacks duplicates).
+  Future<void> _applyTrackNetworkHeaders(dynamic native, Map<String, String> headers) async {
+    if (headers.isEmpty) return;
+    final fields = <String>[];
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == 'user-agent') {
+        try {
+          // ignore: avoid_dynamic_calls
+          await (native as dynamic).setProperty('user-agent', entry.value);
+        } catch (_) {}
+        continue;
+      }
+      fields.add('${entry.key}: ${entry.value}');
+    }
+    if (fields.isEmpty) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      await (native as dynamic).setProperty('http-header-fields', fields);
+    } catch (_) {
+      // Older mpv builds take a comma-joined string; best-effort fallback.
+      try {
+        // ignore: avoid_dynamic_calls
+        await (native as dynamic).setProperty('http-header-fields', fields.join(','));
+      } catch (_) {}
     }
   }
 
