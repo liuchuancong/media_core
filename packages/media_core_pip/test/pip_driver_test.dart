@@ -19,6 +19,8 @@ final class _FakePipWindow implements PipWindow {
   double? lastAspectRatio;
   double? pushedAspectRatio;
   int setAspectCount = 0;
+  Size? lastMinimumSize;
+  int minimumSizeCalls = 0;
   bool? lastAlwaysOnTop;
   bool? lastResizable;
 
@@ -68,7 +70,10 @@ final class _FakePipWindow implements PipWindow {
   }
 
   @override
-  Future<void> setMinimumSize(Size size) async {}
+  Future<void> setMinimumSize(Size size) async {
+    lastMinimumSize = size;
+    minimumSizeCalls++;
+  }
 
   @override
   Future<void> startDragging() async {}
@@ -173,6 +178,21 @@ void main() {
       // height on its own. Unlocked means the window never receives one.
       expect(window.lastAspectRatio, isNull);
       expect(window.lastSize, const Size(320, 180));
+    });
+
+    test('applies the configured compact minimum to the window', () async {
+      driver.updateConfig(
+        PipConfig.defaults.copyWith(minWidth: 120, minHeight: 68),
+      );
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      // The floor belongs to the viewer's setting. Before this the two config
+      // fields were never read by anything, so every backend applied whatever
+      // floor it happened to have.
+      expect(window.lastMinimumSize, const Size(120, 68));
     });
 
     test('re-shapes the open window when the stream changes orientation', () async {

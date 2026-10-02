@@ -374,6 +374,8 @@ final class PipDriver implements KernelPresentationDriver {
             '$_videoHeight',
         'alwaysOnTop': true,
         'skipTaskbar': config.skipTaskbar,
+        'lockAspectRatio': config.lockAspectRatio,
+        'minSize': '${config.minWidth.round()}x${config.minHeight.round()}',
       },
     );
 
@@ -399,6 +401,12 @@ final class PipDriver implements KernelPresentationDriver {
       skipTaskbar: config.skipTaskbar,
       title: config.title,
     );
+
+    // The viewer's floor for the compact window, applied only after the size
+    // itself: a backend whose minimum can also clamp programmatic resizes must
+    // not be able to block the entry above. Leaving PiP restores the host's
+    // normal minimum, so this never leaks into the restored window.
+    await window.setMinimumSize(Size(config.minWidth, config.minHeight));
 
     if (_setPip(true)) {
       await _fire(

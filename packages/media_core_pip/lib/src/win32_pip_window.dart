@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:media_core_win32/media_core_win32.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'package:media_core_pip/src/pip_window.dart';
 
@@ -231,8 +232,18 @@ final class Win32PipWindow implements PipWindow {
 
   @override
   Future<void> setMinimumSize(Size size) async {
-    // No native minimum-size concept; the compact window's shape is kept
-    // video-formed by the snap monitor instead.
+    // Everything else in this backend bypasses `window_manager` because its
+    // style and bounds calls sit behind a frameless fast path for hosts with a
+    // hidden title bar. A minimum size is a different animal: the plugin keeps
+    // one plain value and enforces it from `WM_GETMINMAXINFO`, which is exactly
+    // the platform mechanism this backend has no other way to reach, and it
+    // touches no style or bounds. A zero axis releases the minimum.
+    //
+    // Zero handle means no runner window to constrain, which is the same
+    // degradation contract every other call here follows — and unlike the FFI
+    // calls, a channel call with no plugin attached would throw.
+    if (_windowHandle == 0) return;
+    await windowManager.setMinimumSize(size);
   }
 
   @override
