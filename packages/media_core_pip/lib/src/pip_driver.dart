@@ -98,8 +98,14 @@ final class PipDriver implements KernelPresentationDriver {
   /// the first app-driven request named a player.
   static final _systemPlayerId = PlayerId('pip-system');
 
-  /// Tunables.
-  final PipConfig config;
+  /// Tunables. Replaceable for hosts that build their settings after the
+  /// driver; see [updateConfig].
+  PipConfig config;
+
+  /// Replaces the tunables.
+  void updateConfig(PipConfig value) {
+    config = value;
+  }
 
   /// Platform family this driver serves.
   final PipPlatform platform;
