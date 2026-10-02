@@ -187,11 +187,27 @@ void main() {
         expect(inner.lastPosition, const Offset(1540, 857.5));
         expect(inner.lastAlwaysOnTop, isFalse);
         expect(inner.lastResizable, isTrue);
-        expect(inner.lastSkipTaskbar, isTrue);
+        expect(inner.lastSkipTaskbar, isFalse);
         expect(written?.size, const Size(360, 202.5));
         expect(written?.displayId, 'd1');
       },
     );
+
+    test('the requested skip-taskbar flag reaches the backend', () async {
+      final display = build();
+
+      await display.applySmallWindow(
+        size: const Size(360, 202.5),
+        position: const Offset(1540, 857.5),
+        aspectRatio: 16 / 9,
+        alwaysOnTop: false,
+        resizable: true,
+        skipTaskbar: true,
+        title: 'Test',
+      );
+
+      expect(inner.lastSkipTaskbar, isTrue);
+    });
 
     test('a matching saved placement wins over the default corner', () async {
       saved = PipSavedBounds(

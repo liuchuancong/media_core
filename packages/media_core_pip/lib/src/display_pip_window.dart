@@ -238,7 +238,7 @@ final class DisplayAwarePipWindow implements PipWindow {
   }) {
     // The ratio travels unchanged: null is the host asking for a freely
     // resizable shape, and only the placement math below needs a concrete one.
-    return _serialize(() => _enter(aspectRatio, size, alwaysOnTop));
+    return _serialize(() => _enter(aspectRatio, size, alwaysOnTop, skipTaskbar));
   }
 
   @override
@@ -246,7 +246,12 @@ final class DisplayAwarePipWindow implements PipWindow {
     return _serialize(_exit);
   }
 
-  Future<void> _enter(double? shapeAspectRatio, Size requestedSize, bool alwaysOnTopOverride) async {
+  Future<void> _enter(
+    double? shapeAspectRatio,
+    Size requestedSize,
+    bool alwaysOnTopOverride,
+    bool skipTaskbar,
+  ) async {
     if (_compact) return;
     final window = this.window;
     final normal = await window.capture();
@@ -338,7 +343,11 @@ final class DisplayAwarePipWindow implements PipWindow {
         aspectRatio: shapeAspectRatio,
         alwaysOnTop: pinOnTop,
         resizable: true,
-        skipTaskbar: true,
+        // The host's choice travels through: hiding the compact window from the
+        // taskbar (and Alt-Tab) is a host decision, and overriding it here made
+        // [PipConfig.skipTaskbar] unreachable for every host that wrapped its
+        // backend in this placement policy.
+        skipTaskbar: skipTaskbar,
         title: normal.title,
       );
       final landedId =
