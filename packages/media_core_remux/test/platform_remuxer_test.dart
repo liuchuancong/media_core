@@ -2,69 +2,59 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/remux/media_remuxer.dart';
+import 'package:media_core/media_core.dart';
 
-import 'package:media_core_remux/src/android_media_remuxer.dart';
 import 'package:media_core_remux/src/ffmpeg_media_remuxer.dart';
 
 void main() {
   group('platformRemuxer', () {
-    test('ffmpeg preference answers on every platform, Android included', () async {
-      final remuxer = await platformRemuxer(
-        preference: PlatformRemuxerPreference.ffmpeg,
-      );
-
-      expect(remuxer, isA<FfmpegMediaRemuxer>());
-    });
-
-    test('auto prefers FFmpeg off Android', () async {
-      if (Platform.isAndroid) {
-        return; // Native leg owns this branch; exercised on device.
+    test('answers with the FFmpeg leg on a platform that has an FFmpeg', () {
+      if (!remuxSupported) {
+        return; // Web or an unsupported host; the null path below covers it.
       }
 
-      final remuxer = await platformRemuxer();
-
-      expect(remuxer, isA<FfmpegMediaRemuxer>());
+      expect(platformRemuxer(), isA<FfmpegMediaRemuxer>());
     });
 
-    test('androidNative never exists off Android', () async {
-      if (Platform.isAndroid) {
-        return; // The attached-plugin answer is device-only behavior.
-      }
+    test('the supported flag agrees with the factory', () {
+      final supported = Platform.isAndroid ||
+          Platform.isIOS ||
+          Platform.isMacOS ||
+          Platform.isWindows ||
+          Platform.isLinux;
 
-      expect(
-        await platformRemuxer(
-          preference: PlatformRemuxerPreference.androidNative,
-        ),
-        isNull,
-      );
+      expect(remuxSupported, isTrue, reason: 'tests run on a desktop host');
+      expect(supported, isTrue);
+      expect(platformRemuxer(), isA<MediaRemuxer>());
     });
 
-    test('a chosen remuxer is usable as the MediaRemuxer contract', () async {
-      final remuxer = await platformRemuxer(
-        preference: PlatformRemuxerPreference.ffmpeg,
-      );
-
-      expect(remuxer, isA<MediaRemuxer>());
-      // The factory hands back the caller's runner seam untouched —
-      // proof the instance is the configured one, not a re-defaulted copy.
-      final runnerArguments = <List<String>>[];
-      final configured = await platformRemuxer(
-        preference: PlatformRemuxerPreference.ffmpeg,
+    test('the caller runner seam reaches the produced remuxer', () async {
+      final seen = <List<String>>[];
+      final remuxer = platformRemuxer(
         ffmpegRun: (args) async {
-          runnerArguments.add(args);
+          seen.add(args);
           return 0;
         },
-      );
-      expect(configured, isA<FfmpegMediaRemuxer>());
-      expect(remuxer, isNot(same(configured)));
-    });
+      )!;
 
-    test('AndroidMediaRemuxer remains directly constructible for explicit wiring', () {
-      // A host on Android that wants the native leg without the
-      // availability probe (it knows its own build) constructs it
-      // directly; the factory is convenience, not the only door.
-      expect(AndroidMediaRemuxer(), isA<MediaRemuxer>());
+      await remuxer.remux(
+        CompositeMediaSource(
+          videoTracks: [
+            MediaTrack(
+              uri: Uri.parse('https://example.com/v.m4s'),
+              kind: MediaTrackType.video,
+            ),
+          ],
+          audioTracks: [
+            MediaTrack(
+              uri: Uri.parse('https://example.com/a.m4s'),
+              kind: MediaTrackType.audio,
+            ),
+          ],
+        ),
+      );
+
+      expect(seen.single, contains('-i'));
     });
   });
 }

@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 
 import 'package:media_core/composition/media_timeline.dart';
 import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
+
+import 'package:media_core_remux/src/remux_failed_error.dart';
 import 'package:media_core/source/media_track.dart';
 import 'package:media_core/source/media_track_type.dart';
 import 'package:media_core/source/source_headers.dart';
 
-import 'package:media_core_remux/src/android_media_remuxer.dart';
+
 
 /// Runs one complete FFmpeg invocation and answers with its exit code.
 ///
@@ -90,37 +94,39 @@ final class FfmpegKitRunner {
   }
 }
 
-/// Cross-platform [MediaRemuxer] that folds a DASH pair with an FFmpeg
-/// stream copy.
+/// The [MediaRemuxer] for platforms that run `ffmpeg_kit_extended_flutter`.
 ///
-/// The second leg of the remux contract, and the one that runs on
-/// every platform:
-///
-/// - **Android** has two working legs. [AndroidMediaRemuxer] (the
-///   platform's MediaExtractor/MediaMuxer) is the lighter default —
-///   no FFmpeg binary in the process; this class is the explicit
-///   alternative via `preference: PlatformRemuxerPreference.ffmpeg`
-///   for hosts that want one muxing code path on every platform, or
-///   the automatic fallback when the plugin is not attached.
-/// - **iOS / macOS / Windows / Linux** run here through
-///   `ffmpeg_kit_extended_flutter` (same pinned build the recording
-///   package uses), which is the only muxing stack available on all
-///   of them at once. A native AVFoundation (`AVMutableComposition` +
-///   `AVAssetExportSession`) or Media Foundation (SourceReader +
-///   SinkWriter) leg can replace Apple/Windows use later without
-///   touching callers — they all answer the same [MediaRemuxer].
+/// One leg, every platform: **Android, iOS, macOS, Windows and Linux** all
+/// fold their DASH pair through the same stream copy, which is what keeps
+/// a single set of failure modes and one FFmpeg binary in the app instead
+/// of a per-platform muxer stack with per-platform bugs.
 ///
 /// The copy is `-c copy` only: samples are moved, never re-encoded, so
-/// codecs survive unchanged and the CPU cost is IO-bound rather than
-/// codec-bound. Alignment comes from [MediaTimeline] the same way the
-/// Android leg gets it: each essence's aligned offset is applied with
-/// `-itsoffset` before its own `-i`, which shifts that input's
-/// timestamps on the shared clock while leaving its media content
-/// untouched.
+/// codecs survive unchanged (HEVC stays HEVC) and the CPU cost is IO-bound
+/// rather than codec-bound. Alignment comes from [MediaTimeline]: each
+/// essence's aligned offset is applied with `-itsoffset` before its own
+/// `-i`, which shifts that input's timestamps on the shared clock while
+/// leaving its media content untouched.
+///
+/// The output is necessarily a single-file progressive container — MP4
+/// here, chosen by the output extension. DASH is a *delivery* model
+/// (manifest plus segments); once two essences are folded into one
+/// stream there is nothing left to deliver as fragments, and a merged
+/// file's job is to be seekable by one URL from a single-input engine,
+/// which is exactly what a `moov` sample table provides.
 ///
 /// Request headers are per-input (`-user_agent` and `-headers` are
-/// options *of the following* `-i`), which is exactly what Bilibili
-/// needs: the gate applies to both essences but the maps can differ.
+/// options *of the following* `-i`), which is what Bilibili needs: the
+/// gate applies to both essences and the maps can differ.
+///
+/// What this does not do:
+///
+/// - Subtitle tracks are dropped. MP4 subtitle muxing (tx3g/CMFC) is
+///   outside the platform muxer's practical scope, and a subtitle that
+///   matters belongs on a backend that selects it natively.
+/// - Live streams. A stream copy runs to EOF, and a live DASH period
+///   never ends; composite live sources should go to a backend whose
+///   composite support is native or externalAudio instead.
 final class FfmpegMediaRemuxer implements MediaRemuxer {
   /// Creates an FFmpeg remuxer.
   ///
@@ -289,69 +295,34 @@ final class FfmpegMediaRemuxer implements MediaRemuxer {
   }
 }
 
-/// How [platformRemuxer] should choose on Android, where two legs work.
-enum PlatformRemuxerPreference {
-  /// Android: the native MediaExtractor/MediaMuxer leg when the plugin
-  /// is attached, FFmpeg stream copy otherwise. Every other platform:
-  /// FFmpeg. This is the default — native first, because it costs no
-  /// FFmpeg binary and is the lighter path on the one platform that
-  /// has both.
-  auto,
-
-  /// Force the Android MediaExtractor/MediaMuxer leg. `null` on other
-  /// platforms or when the plugin is not attached — never a silent
-  /// fall to FFmpeg, because a caller picking this option is doing so
-  /// specifically to avoid loading FFmpeg in-process.
-  androidNative,
-
-  /// Force the FFmpeg stream-copy leg everywhere, Android included.
-  /// A caller picks this to keep one muxing code path across every
-  /// platform (one set of failure modes, one binary), or when the
-  /// platform stack rejects a specific container the provider serves.
-  ffmpeg,
+/// Whether this platform has an FFmpeg the remuxer can drive.
+///
+/// `ffmpeg_kit_extended_flutter` ships Android, iOS, macOS, Windows and
+/// Linux; a web build has no process to run, so it gets no remuxer and
+/// the planner's [UnsupportedPlan] stays the honest answer for a
+/// composite source on a single-URL backend there.
+bool get remuxSupported {
+  if (kIsWeb) {
+    return false;
+  }
+  return Platform.isAndroid ||
+      Platform.isIOS ||
+      Platform.isMacOS ||
+      Platform.isWindows ||
+      Platform.isLinux;
 }
 
-/// The remuxer this platform should use, or `null` when this platform
-/// has none for the requested [preference].
+/// The remuxer for the current platform, or `null` where there is none.
 ///
-/// Selection is capability-first, matching how the rest of media_core
-/// treats declared support: on Android the native MediaMuxer is
-/// preferred where attached and FFmpeg covers the rest; [preference]
-/// pins the choice when a host knows which leg it wants.
+/// One muxing path on every supported platform, so a bug, a container
+/// quirk and a header-handling rule all mean the same thing everywhere:
 ///
 /// ```dart
-/// // Default: native on Android, FFmpeg elsewhere.
-/// final kernel = PlayerKernel(remuxer: await platformRemuxer());
-///
-/// // One code path on every platform, at the cost of the FFmpeg binary.
-/// final kernel = PlayerKernel(
-///   remuxer: await platformRemuxer(
-///     preference: PlatformRemuxerPreference.ffmpeg,
-///   ),
-/// );
+/// final kernel = PlayerKernel(remuxer: platformRemuxer());
 /// ```
-Future<MediaRemuxer?> platformRemuxer({
-  PlatformRemuxerPreference preference = PlatformRemuxerPreference.auto,
-  FfmpegRunner? ffmpegRun,
-}) async {
-  switch (preference) {
-    case PlatformRemuxerPreference.ffmpeg:
-      return FfmpegMediaRemuxer(run: ffmpegRun);
-
-    case PlatformRemuxerPreference.androidNative:
-      if (!Platform.isAndroid) {
-        return null;
-      }
-      final android = AndroidMediaRemuxer();
-      return await android.isAvailable() ? android : null;
-
-    case PlatformRemuxerPreference.auto:
-      if (Platform.isAndroid) {
-        final android = AndroidMediaRemuxer();
-        if (await android.isAvailable()) {
-          return android;
-        }
-      }
-      return FfmpegMediaRemuxer(run: ffmpegRun);
+MediaRemuxer? platformRemuxer({FfmpegRunner? ffmpegRun}) {
+  if (!remuxSupported) {
+    return null;
   }
+  return FfmpegMediaRemuxer(run: ffmpegRun);
 }
