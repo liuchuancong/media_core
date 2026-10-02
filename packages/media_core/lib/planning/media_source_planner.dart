@@ -7,13 +7,13 @@ import 'package:media_core/planning/media_source_plan.dart';
 ///
 /// [MediaSourcePlanner] is the seam between "what the provider
 /// produced" and "what the adapter will accept". It runs before any
-/// engine call so the caller can log the decision, show a friendly
-/// error, or hand the plan to a remuxer without either the provider
-/// or the backend having to know the other exists.
+/// engine call so the caller can log the decision or show a friendly
+/// error without either the provider or the backend having to know the
+/// other exists.
 ///
 /// Planning is a pure, synchronous function of `(source,
-/// capabilities)`. Anything asynchronous — remuxing, downloading,
-/// probing — is the caller's job after the plan is returned.
+/// capabilities)`. Anything asynchronous — probing, fetching, opening
+/// a backend — is the caller's job after the plan is returned.
 ///
 /// Responsibilities:
 ///
@@ -27,7 +27,7 @@ import 'package:media_core/planning/media_source_plan.dart';
 /// Those belong to:
 ///
 /// - PlayerAdapter
-/// - MediaRemuxer
+/// - PlayerKernel
 abstract interface class MediaSourcePlanner {
   /// Produces the plan for [source] against [capabilities].
   MediaSourcePlan plan(

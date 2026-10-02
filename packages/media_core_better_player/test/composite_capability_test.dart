@@ -42,18 +42,7 @@ void main() {
       ],
     );
 
-    test('lands on a remux when a remuxer is wired', () {
-      final planner = DefaultMediaSourcePlanner(remuxer: _NoopRemuxer());
-
-      final plan = planner.plan(
-        pair,
-        BetterPlayerAdapter.defaultCapabilities,
-      );
-
-      expect(plan, isA<RemuxPlan>());
-    });
-
-    test('refuses loudly when no remuxer is wired', () {
+    test('refuses loudly rather than playing the pair video-only', () {
       const planner = DefaultMediaSourcePlanner();
 
       final plan = planner.plan(
@@ -93,12 +82,6 @@ void main() {
       expect(selected.id, 'media_kit');
     });
   });
-}
-
-class _NoopRemuxer implements MediaRemuxer {
-  @override
-  Future<MediaSource> remux(CompositeMediaSource source) async =>
-      ProgressiveMediaSource.url(source.primaryVideo!.uri);
 }
 
 class _NullFactory implements PlayerAdapterFactory {

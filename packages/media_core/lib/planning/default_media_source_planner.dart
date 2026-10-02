@@ -1,6 +1,5 @@
 import 'package:media_core/adapter/composite_support.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
 import 'package:media_core/planning/media_source_plan.dart';
 import 'package:media_core/planning/media_source_planner.dart';
@@ -8,8 +7,7 @@ import 'package:media_core_logging/media_core_logging.dart';
 
 /// The default [MediaSourcePlanner].
 ///
-/// Encodes the three rules media_core needs today and leaves room
-/// for the remux branch the future [MediaRemuxer] hook will fill:
+/// Encodes the three rules media_core needs today:
 ///
 /// 1. A progressive source is always directly playable — no backend
 ///    capability can turn a single stream into something it can't
@@ -20,16 +18,14 @@ import 'package:media_core_logging/media_core_logging.dart';
 ///    distinction is expressed by the same variant because the
 ///    planner is only deciding "does the adapter accept this
 ///    composite" — the how is the adapter's business.
-/// 3. A composite source on a `CompositeSupport.none` backend needs
-///    extra work. When [remuxer] is wired we emit [RemuxPlan]; when
-///    it is not we emit [UnsupportedPlan] rather than silently
-///    dropping to the primary track. Falling back without a plan is
-///    what lets a provider "accidentally" ship Bilibili DASH audio
-///    to a Fijk build with no sound — an explicit unsupported signal
-///    keeps that failure at the layer that can react to it.
-///    A **live** composite never gets a [RemuxPlan] even with a
-///    remuxer wired: a stream copy runs to end-of-file, and a live
-///    period does not have one.
+/// 3. A composite source on a `CompositeSupport.none` backend is
+///    planned as [UnsupportedPlan] rather than silently dropping to
+///    the primary track. Nothing in the stack folds two essences into
+///    one stream, so the only honest answers are "this backend takes
+///    both inputs" or "no". Falling back without a plan is what lets a
+///    provider "accidentally" ship Bilibili DASH audio to a Fijk build
+///    with no sound — an explicit unsupported signal keeps that
+///    failure at the layer that can react to it.
 ///
 /// Responsibilities:
 ///
@@ -37,13 +33,12 @@ import 'package:media_core_logging/media_core_logging.dart';
 ///
 /// It does not:
 ///
-/// - perform remuxing
+/// - merge or convert any essence
 /// - open backends
 /// - cache decisions across calls
 ///
 /// Those belong to:
 ///
-/// - MediaRemuxer
 /// - PlayerAdapter
 /// - PlayerKernel
 ///
@@ -58,15 +53,7 @@ import 'package:media_core_logging/media_core_logging.dart';
 /// ```
 final class DefaultMediaSourcePlanner implements MediaSourcePlanner {
   /// Creates the default planner.
-  ///
-  /// [remuxer] is optional and reserved: passing one changes the
-  /// `CompositeSupport.none` outcome from [UnsupportedPlan] to
-  /// [RemuxPlan], letting a caller that has wired a muxer decide how
-  /// to invoke it.
-  const DefaultMediaSourcePlanner({this.remuxer});
-
-  /// Optional remuxer consulted for composite-on-incompatible-backend.
-  final MediaRemuxer? remuxer;
+  const DefaultMediaSourcePlanner();
 
   @override
   MediaSourcePlan plan(
@@ -95,7 +82,6 @@ final class DefaultMediaSourcePlanner implements MediaSourcePlanner {
     return switch (plan) {
       DirectPlan() => 'direct',
       CompositePlan(:final mode) => 'composite/${mode.name}',
-      RemuxPlan() => 'remux',
       UnsupportedPlan() => 'unsupported',
     };
   }
@@ -112,30 +98,11 @@ final class DefaultMediaSourcePlanner implements MediaSourcePlanner {
       return CompositePlan(source, mode: capabilities.compositeSupport);
     }
 
-    // A remux reads every essence to EOF and only then writes the
-    // index that makes the file seekable, so a live stream never
-    // finishes merging — the call would hang until someone cancelled
-    // it. A live composite on a backend that cannot take two inputs
-    // has no honest answer here, and pretending to have one (emit a
-    // plan nobody can execute) is worse than refusing.
-    if (source.live) {
-      return UnsupportedPlan(
-        'Live composite sources cannot be remuxed (a stream copy runs '
-        'to end-of-file); select a backend with native or external-audio '
-        'composite support instead.',
-        source: source,
-      );
-    }
-
-    final muxer = remuxer;
-    if (muxer != null) {
-      return RemuxPlan(source);
-    }
-
     return UnsupportedPlan(
-      'Selected backend does not support composite media sources and no '
-      'remuxer is wired. Register a composite-capable backend or supply a '
-      'MediaRemuxer to DefaultMediaSourcePlanner.',
+      'This backend takes one URL and cannot consume a composite source '
+      '(${source.videoTracks.length} video + ${source.audioTracks.length} '
+      'audio tracks). Register a backend whose composite support is native '
+      'or external-audio, or hand it a single multiplexed URL.',
       source: source,
     );
   }

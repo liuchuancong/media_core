@@ -542,9 +542,9 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
       throw UnsupportedError(
         'Adapter "$id" declares compositeSupport: none but was opened with a '
         'CompositeMediaSource (${mediaSource.videoTracks.length} video, '
-        '${mediaSource.audioTracks.length} audio). Open it through '
-        'PlayerKernel.createFromMedia with a MediaRemuxer, or register a '
-        'composite-capable backend.',
+        '${mediaSource.audioTracks.length} audio). Register a backend whose '
+        'composite support is native or external-audio, or hand this adapter '
+        'a single multiplexed URL.',
       );
     }
   }

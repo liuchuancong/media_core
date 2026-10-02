@@ -486,8 +486,8 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // IJKPlayer is an FFmpeg-backed single-URL engine: it opens one
     // data source and demuxes whatever that source contains. There
     // is no side channel for an external audio essence and no
-    // merging API, so a DASH pair has to be remuxed before this
-    // backend can play it.
+    // merging API, so the planner refuses a composite here instead of
+    // opening the video URL and dropping the audio.
     compositeSupport: CompositeSupport.none,
   );
 }

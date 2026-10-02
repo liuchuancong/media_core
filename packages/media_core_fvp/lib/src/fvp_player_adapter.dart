@@ -840,8 +840,11 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     supportedFormats: FvpFormats.supportedFormats,
     // FVP opens one URL through its FFmpeg demuxer and reads whatever
     // essences that container carries. Like IJKPlayer it has no
-    // side-channel for external audio, so a composite source needs a
-    // remux step upstream before it reaches this adapter.
+    // side-channel for external audio, so the planner refuses a
+    // composite here rather than playing it video-only.
+    // A manifest URL is the one input that would carry both essences,
+    // but whether libmdk's bundled libavformat was built with the dash
+    // demuxer is not verified on device, so this stays `none` until it is.
     compositeSupport: CompositeSupport.none,
   );
 }

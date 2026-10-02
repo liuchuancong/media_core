@@ -708,16 +708,17 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // `BetterPlayerDataSource` exactly one URI. There is no Dart-side
     // entry for a second essence, so a composite handed to this adapter
     // would open its video URL and drop the audio with no signal.
-    // Declared `none` deliberately, and this is where the pair stops
-    // being our problem: the planner sees none and routes composite
-    // sources here through `RemuxPlan`, so the FFmpeg leg folds the two
-    // essences into one file and this adapter receives exactly one URI
-    // — which is the only thing its surface can express.
+    // Declared `none` deliberately, and the consequence is loud rather
+    // than silent: the planner answers UnsupportedPlan for a composite
+    // here, so a DASH pair only reaches this adapter once the provider
+    // has folded it into one URL — which is the only thing its surface
+    // can express.
     //
     // A fork of better_player_plus adding a merge data source was built
     // and removed again in the same week: a 114-file vendored plugin plus
-    // a Kotlin change nobody here could compile bought only "skip one
-    // temp file", at the cost of a permanent upstream-tracking branch.
+    // a Kotlin change nobody here could compile, bought only the ability
+    // to skip an external merge step, at the cost of a permanent
+    // upstream-tracking branch.
     // If this ever wants the `native` claim, the route is a first-party
     // Media3 adapter owning ExoPlayer and its `TextureRegistry` surface,
     // not another fork.

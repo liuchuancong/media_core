@@ -6,12 +6,12 @@ import 'package:media_core/source/media_source.dart';
 /// The planner produces a plan; it never touches the adapter itself.
 /// Splitting the two is what lets a provider hand a Bilibili DASH
 /// pair to `PlayerKernel` without knowing whether the eventual
-/// backend is Media3, MPV, or a single-URL engine that will need a
-/// remux step first.
+/// backend is Media3, MPV, or a single-URL engine that cannot take
+/// that pair at all.
 ///
 /// Every variant is a leaf — consumers switch on the shape and are
 /// forced by the compiler to handle each one, which is what makes
-/// adding a `RemuxPlan` here later a compile-time migration instead
+/// adding a variant here later a compile-time migration instead
 /// of a silent runtime fall-through.
 ///
 /// Responsibilities:
@@ -33,9 +33,9 @@ sealed class MediaSourcePlan {
 
   /// Whether this plan is directly playable by the target backend.
   ///
-  /// True for [DirectPlan] and [CompositePlan]; false for [RemuxPlan]
-  /// and [UnsupportedPlan], which need either extra work or a
-  /// different backend before anything plays.
+  /// True for [DirectPlan] and [CompositePlan]; false for
+  /// [UnsupportedPlan], which needs a different backend before
+  /// anything plays.
   bool get isPlayable;
 }
 
@@ -93,8 +93,9 @@ final class CompositePlan extends MediaSourcePlan {
 
   /// How the selected backend will consume the composite.
   ///
-  /// Never [CompositeSupport.none] — the planner would have produced
-  /// a [RemuxPlan] or [UnsupportedPlan] in that case.
+  /// Never [CompositeSupport.none]: a `none` backend gets one URL, and
+  /// nothing in the stack folds two essences into one, so the planner
+  /// answers [UnsupportedPlan] instead.
   final CompositeSupport mode;
 
   @override
@@ -112,34 +113,6 @@ final class CompositePlan extends MediaSourcePlan {
 
   @override
   String toString() => 'CompositePlan($source, $mode)';
-}
-
-/// The source is composite but the backend cannot consume composites.
-///
-/// A [MediaRemuxer] is available and should be invoked to fold the
-/// essence tracks into a single stream before playback. The planner
-/// declares the intent; running the remux belongs to the caller
-/// (typically `PlayerKernel`) so the planner stays synchronous and
-/// side-effect free.
-final class RemuxPlan extends MediaSourcePlan {
-  /// Creates a remux plan.
-  const RemuxPlan(this.source);
-
-  /// The composite source that needs remuxing.
-  final CompositeMediaSource source;
-
-  @override
-  bool get isPlayable => false;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is RemuxPlan && other.source == source;
-
-  @override
-  int get hashCode => Object.hash(RemuxPlan, source);
-
-  @override
-  String toString() => 'RemuxPlan($source)';
 }
 
 /// No backend can play this source as-is.

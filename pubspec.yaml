@@ -29,7 +29,6 @@ workspace:
   - packages/media_core_feed
   - packages/media_core_list_playback
   - packages/media_core_recording_ffmpeg
-  - packages/media_core_remux
   - packages/media_core_download
   - packages/media_core_multiview
   - example

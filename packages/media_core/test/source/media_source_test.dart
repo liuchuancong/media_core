@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/adapter/composite_support.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
 import 'package:media_core/planning/default_media_source_planner.dart';
-import 'package:media_core/remux/media_remuxer.dart';
 import 'package:media_core/source/media_source.dart';
 import 'package:media_core/source/media_source_bridge.dart';
 import 'package:media_core/planning/media_source_plan.dart';
@@ -57,16 +56,6 @@ abstract class _PlannerHandle {
     MediaSource source,
     PlayerAdapterCapabilities capabilities,
   );
-}
-
-/// Remuxer that flattens a composite to its primary video track so
-/// tests can prove the kernel re-plans after remuxing.
-class _PrimaryOnlyRemuxer implements MediaRemuxer {
-  @override
-  Future<MediaSource> remux(CompositeMediaSource source) async {
-    final primary = source.primaryVideo ?? source.primaryAudio!;
-    return ProgressiveMediaSource(track: primary);
-  }
 }
 
 void main() {
@@ -235,54 +224,22 @@ void main() {
       expect(sideChannelPlan.mode, CompositeSupport.externalAudio);
     });
 
-    test('composite on none backend with no remuxer is unsupported', () {
-      final planner = const DefaultMediaSourcePlanner();
+    test('composite on a none backend is refused with a usable reason', () {
+      const planner = DefaultMediaSourcePlanner();
       final plan = planner.plan(composite, none);
 
       expect(plan, isA<UnsupportedPlan>());
-      expect((plan as UnsupportedPlan).reason, contains('composite'));
-    });
-
-    test('composite on none backend with a remuxer plans remux', () {
-      final planner = DefaultMediaSourcePlanner(remuxer: _PrimaryOnlyRemuxer());
-      final plan = planner.plan(composite, none);
-
-      expect(plan, isA<RemuxPlan>());
-      expect((plan as RemuxPlan).source, composite);
-    });
-
-    test('a live composite never plans a remux, even with a remuxer', () {
-      // A stream copy runs to end-of-file; a live period has none, so
-      // emitting RemuxPlan here would schedule a call that can only
-      // hang. The refusal must reach the caller instead.
-      final planner = DefaultMediaSourcePlanner(remuxer: _PrimaryOnlyRemuxer());
-      final liveComposite = CompositeMediaSource(
-        videoTracks: [
-          MediaTrack(
-            uri: Uri.parse('https://example.com/live_v.m4s'),
-            kind: MediaTrackType.video,
-          ),
-        ],
-        audioTracks: [
-          MediaTrack(
-            uri: Uri.parse('https://example.com/live_a.m4s'),
-            kind: MediaTrackType.audio,
-          ),
-        ],
-        live: true,
-      );
-
-      final plan = planner.plan(liveComposite, none);
-
-      expect(plan, isA<UnsupportedPlan>());
-      expect(
-        (plan as UnsupportedPlan).reason,
-        contains('Live composite sources cannot be remuxed'),
-      );
+      final reason = (plan as UnsupportedPlan).reason;
+      expect(reason, contains('composite'));
+      expect(reason, contains('one URL'));
+      // The reason names what was dropped, so a log line alone tells the
+      // provider which essence the backend cannot reach.
+      expect(reason, contains('1 video'));
+      expect(reason, contains('1 audio'));
     });
 
     test('a live composite still takes a native backend', () {
-      final planner = DefaultMediaSourcePlanner(remuxer: _PrimaryOnlyRemuxer());
+      const planner = DefaultMediaSourcePlanner();
       final liveComposite = CompositeMediaSource(
         videoTracks: [
           MediaTrack(
@@ -302,7 +259,6 @@ void main() {
     test('every plan variant reports playability', () {
       expect(DirectPlan(progressive).isPlayable, isTrue);
       expect(CompositePlan(composite).isPlayable, isTrue);
-      expect(RemuxPlan(composite).isPlayable, isFalse);
       expect(const UnsupportedPlan('no').isPlayable, isFalse);
     });
   });
@@ -385,23 +341,6 @@ void main() {
 
       final untouched = plain.copyWith(metadata: const <String, Object?>{});
       expect(MediaSourceBridge.fromPlayerSource(untouched), isNull);
-    });
-  });
-
-  group('_PrimaryOnlyRemuxer', () {
-    test('folds a composite into a progressive source', () async {
-      final composite = CompositeMediaSource(
-        videoTracks: [_video('https://example.com/v.m4s')],
-        audioTracks: [_audio('https://example.com/a.m4s')],
-      );
-
-      final remuxed = await _PrimaryOnlyRemuxer().remux(composite);
-
-      expect(remuxed, isA<ProgressiveMediaSource>());
-      expect(
-        (remuxed as ProgressiveMediaSource).track.uri.toString(),
-        'https://example.com/v.m4s',
-      );
     });
   });
 

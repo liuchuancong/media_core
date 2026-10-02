@@ -375,8 +375,9 @@ final class PlayerAdapterCapabilities extends Equatable {
   ///   secondary-track channel, so the planner picks a primary video
   ///   essence for the main URL and routes the extra audio through the
   ///   side channel.
-  /// - [CompositeSupport.none] — FijkPlayer and any single-URL engine;
-  ///   the planner must fall back (remux, primary-only, or reject).
+  /// - [CompositeSupport.none] — FijkPlayer and any other single-URL
+  ///   engine; the planner answers [UnsupportedPlan] for a composite,
+  ///   because nothing in the stack folds two essences into one stream.
   ///
   /// Defaults to [CompositeSupport.none] to match this class's
   /// conservative baseline; adapters that can do better opt in.

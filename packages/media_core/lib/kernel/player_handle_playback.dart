@@ -275,16 +275,8 @@ extension PlayerHandlePlayback on PlayerHandle {
   /// composite preserved under [MediaSourceBridge.metadataKey]) or an
   /// explicit throw.
   ///
-  /// Remux and unsupported outcomes are deliberately not handled
-  /// here: running a [MediaRemuxer] needs the kernel's remuxer
-  /// instance and the caller's post-remux re-plan loop, which is
-  /// what [PlayerKernel.createFromMedia] already implements. A
-  /// handle-level remux path would fork that loop and the two would
-  /// drift; callers that need remux on a live handle should release
-  /// and go through the kernel.
-  ///
-  /// Throws [UnsupportedError] when the plan is a [RemuxPlan] or
-  /// [UnsupportedPlan]; every other outcome delegates to [open].
+  /// Throws [UnsupportedError] when the plan is an [UnsupportedPlan];
+  /// every other outcome delegates to [open].
   Future<void> openMedia(MediaSource source, {bool? autoPlay}) async {
     _ensureNotDisposed();
 
@@ -294,13 +286,6 @@ extension PlayerHandlePlayback on PlayerHandle {
       case DirectPlan():
       case CompositePlan():
         return open(source.toPlayerSource(), autoPlay: autoPlay);
-      case RemuxPlan():
-        throw UnsupportedError(
-          'openMedia cannot service a RemuxPlan on a live handle; the '
-          'remux loop lives in PlayerKernel.createFromMedia. Release this '
-          'player and go through the kernel with a MediaRemuxer attached, '
-          'or register a composite-capable backend.',
-        );
       case UnsupportedPlan(:final reason):
         throw UnsupportedError(reason);
     }

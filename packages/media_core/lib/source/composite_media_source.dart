@@ -21,12 +21,13 @@ part of 'media_source.dart';
 ///
 /// It does not:
 ///
-/// - merge or remux anything
+/// - merge the essences it carries into one stream
 /// - decide which backend plays it
 ///
 /// Those belong to:
 ///
-/// - MediaRemuxer (future)
+/// - PlayerAdapter, through `CompositeSupport.native` or
+///   `CompositeSupport.externalAudio`
 /// - MediaSourcePlanner
 final class CompositeMediaSource extends MediaSource {
   /// Creates a composite source.

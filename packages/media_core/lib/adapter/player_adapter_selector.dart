@@ -432,8 +432,8 @@ final class PlayerAdapterSelector {
   ///   +40, [CompositeSupport.none] no bonus — this ranks Media3 above
   ///   MPV above single-URL engines for a DASH pair without hiding the
   ///   weaker backends entirely, so a caller with only Fijk wired still
-  ///   gets a registration and the planner can decide whether to
-  ///   remux or reject.
+  ///   gets a registration and the planner is the one that refuses,
+  ///   with a reason.
   /// - audio-only progressive source and [PlayerAdapterCapabilities.supportsAudioOnly]: +10
   /// - live source and [PlayerAdapterCapabilities.supportsLive]: +10
   int scoreMedia(PlayerAdapterRegistration registration, MediaSource source) {
@@ -474,7 +474,7 @@ final class PlayerAdapterSelector {
     // Live parity with the PlayerSource path: a backend that cannot
     // hold a live stream open should not win a live source on
     // protocol and format alone. Composite live sources get the same
-    // bonus, which keeps a would-be remux refusal from landing on a
+    // bonus, which keeps a guaranteed planner refusal from landing on a
     // non-live engine that would fail even later.
     if (source.live && capabilities.supportsLive) {
       score += 10;

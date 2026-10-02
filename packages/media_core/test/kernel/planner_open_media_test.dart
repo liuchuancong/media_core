@@ -1,22 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:media_core/adapter/composite_support.dart';
-import 'package:media_core/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/adapter/player_adapter_registry.dart';
-import 'package:media_core/event/player_event_bus.dart';
-import 'package:media_core/kernel/kernel_options.dart';
+import 'package:media_core/source/media_track.dart';
+import 'package:media_core/source/media_source.dart';
 import 'package:media_core/kernel/player_handle.dart';
 import 'package:media_core/kernel/player_kernel.dart';
-import 'package:media_core/planning/default_media_source_planner.dart';
-import 'package:media_core/remux/media_remuxer.dart';
-import 'package:media_core/source/media_source.dart';
+import 'package:media_core/kernel/kernel_options.dart';
+import 'package:media_core/event/player_event_bus.dart';
+import 'package:media_core/source/media_track_type.dart';
+import 'package:media_core/adapter/composite_support.dart';
 import 'package:media_core/source/media_source_bridge.dart';
 import 'package:media_core/planning/media_source_plan.dart';
-import 'package:media_core/planning/media_source_planner.dart';
-import 'package:media_core/source/media_track.dart';
-import 'package:media_core/source/media_track_type.dart';
 import 'package:media_core/testing/fake_player_adapter.dart';
 import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/planning/media_source_planner.dart';
+import 'package:media_core/adapter/player_adapter_registry.dart';
+import 'package:media_core/adapter/player_adapter_capabilities.dart';
+
 
 PlayerAdapterRegistration _reg(
   String id, {
@@ -196,31 +194,6 @@ void main() {
       );
     });
 
-    test('RemuxPlan is rejected on a live handle with a kernel-path hint', () async {
-      final handle = _handle(
-        FakePlayerAdapter(id: 'fijk-like'),
-        capabilities: const PlayerAdapterCapabilities(),
-        planner: DefaultMediaSourcePlanner(remuxer: _StubRemuxer()),
-      );
-
-      await handle.initialize();
-
-      expect(
-        () => handle.openMedia(
-          CompositeMediaSource(
-            videoTracks: [_videoTrack('https://example.com/v.m4s')],
-          ),
-        ),
-        throwsA(
-          isA<UnsupportedError>().having(
-            (e) => e.message,
-            'message',
-            contains('createFromMedia'),
-          ),
-        ),
-      );
-    });
-
     test('custom planner is consulted instead of the default', () async {
       final stubPlanner = _StubPlanner(const UnsupportedPlan('stubbed'));
       final handle = _handle(
@@ -302,12 +275,6 @@ PlayerHandle _handle(
     options: const KernelOptions(),
     planner: planner,
   );
-}
-
-class _StubRemuxer implements MediaRemuxer {
-  @override
-  Future<MediaSource> remux(CompositeMediaSource source) async =>
-      ProgressiveMediaSource(track: source.primaryVideo ?? source.primaryAudio!);
 }
 
 class _StubPlanner implements MediaSourcePlanner {

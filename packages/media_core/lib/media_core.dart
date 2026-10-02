@@ -119,9 +119,6 @@ export 'package:media_core/recording/library.dart';
 /// Playback recovery, retry scheduling and recovery state..
 export 'package:media_core/recovery/library.dart';
 
-/// Playback services: the media remuxer contract..
-export 'package:media_core/remux/library.dart';
-
 /// PlayerIdentity rendering abstraction and rendering state..
 export 'package:media_core/renderer/library.dart';
 

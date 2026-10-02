@@ -3,9 +3,9 @@
 /// A composite source can be presented in more than one way, and the
 /// difference matters for how the planner schedules the tracks:
 ///
-/// - [none] — the backend cannot consume composites at all. The
-///   planner must fall back (remux, drop to the primary track, or
-///   reject).
+/// - [none] — the backend takes exactly one URL. The planner answers
+///   [UnsupportedPlan] for a composite here; nothing in the stack
+///   merges two essences on the backend's behalf.
 /// - [native] — the backend has a first-class API for merging essence
 ///   sources (e.g. Media3 / ExoPlayer's `MergingMediaSource`). The
 ///   planner hands the whole composite through unchanged.
