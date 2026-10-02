@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.mediacore.remux">
+    <!--
+      The remuxer writes only inside the app's own cache directory, which
+      needs no storage permission on any API level this plugin supports.
+      It reads essence URLs over HTTPS with caller-supplied headers;
+      INTERNET is declared by the app, as it already is for playback.
+    -->
+</manifest>

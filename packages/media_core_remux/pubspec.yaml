@@ -1,0 +1,42 @@
+name: media_core_remux
+
+description: Remux services for media_core - folds a CompositeMediaSource's separated video and audio essences into one playable MP4 (Android MediaExtractor/MediaMuxer, cross-platform FFmpeg stream copy) so single-URL backends can play DASH pairs.
+
+publish_to: none
+
+version: 0.1.0
+
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The vocabulary this service works in: MediaSource, CompositeMediaSource,
+  # MediaRemuxer, and the MediaTimeline that aligns the essences before muxing.
+  media_core:
+    path: ../media_core
+
+  # FFmpeg runtime for the cross-platform stream-copy leg. Same pin as
+  # media_core_recording_ffmpeg so the workspace resolves one binary.
+  ffmpeg_kit_extended_flutter: 0.6.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      # Android only by design: MediaExtractor/MediaMuxer are the platform's
+      # own muxing stack. Other platforms get no registration and simply do
+      # not install an AndroidMediaRemuxer; the planner's UnsupportedPlan
+      # path remains their answer for composite sources on none backends.
+      android:
+        package: com.mediacore.remux
+        pluginClass: MediaRemuxPlugin
