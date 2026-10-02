@@ -108,6 +108,7 @@ final class TestScenarios {
       audioDeviceChanged: (_) => 'audioDeviceChanged',
       subtitleChanged: (_) => 'subtitleChanged',
       cacheChanged: (_) => 'cacheChanged',
+      bufferedRangesChanged: (_) => 'bufferedRangesChanged',
       metadataChanged: (_) => 'metadataChanged',
       playlistChanged: (_) => 'playlistChanged',
       clientMessage: (_) => 'clientMessage',

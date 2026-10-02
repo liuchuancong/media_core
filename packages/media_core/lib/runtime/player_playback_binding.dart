@@ -38,6 +38,9 @@ final class PlayerPlaybackBinding {
       case PlayerAdapterDurationChanged(:final duration):
         _playback.updateDuration(duration);
 
+      case PlayerAdapterBufferedRangesChanged(:final ranges):
+        _playback.updateBuffer(ranges);
+
       case PlayerAdapterVolumeChanged(:final volume):
         _playback.apply(PlaybackCommand.volume(volume));
 

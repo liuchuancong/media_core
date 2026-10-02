@@ -73,6 +73,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     // Playback state and buffering.
     this.supportsCacheState = false,
     this.supportsBufferingProgress = false,
+    this.supportsBufferedRanges = false,
     this.supportsChapterControl = false,
     this.supportsLoop = false,
 
@@ -249,6 +250,19 @@ final class PlayerAdapterCapabilities extends Equatable {
   /// (0..100).
   final bool supportsBufferingProgress;
 
+  /// Whether the backend reports which stretches of media are
+  /// already downloaded.
+  ///
+  /// A scalar progress figure cannot drive a scrubber: the UI needs
+  /// to paint ahead-fill and to know whether the position a drag is
+  /// hovering over is already buffered. Engines that can report
+  /// ranges (media_kit's buffered positions, platform players'
+  /// `buffered` TimeRanges) declare this `true`; the base drops
+  /// [PlayerAdapterBufferedRangesChanged] otherwise, so a UI that
+  /// reads the flag always knows why a bar is absent rather than
+  /// guessing whether the engine is broken or just unreported.
+  final bool supportsBufferedRanges;
+
   /// Whether chapter navigation is supported.
   ///
   /// Backends such as mpv expose this through the `chapter` property
@@ -409,6 +423,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     bool? supportsExternalSubtitle,
     bool? supportsCacheState,
     bool? supportsBufferingProgress,
+    bool? supportsBufferedRanges,
     bool? supportsChapterControl,
     bool? supportsLoop,
     bool? supportsMetadata,
@@ -447,6 +462,7 @@ final class PlayerAdapterCapabilities extends Equatable {
       supportsExternalSubtitle: supportsExternalSubtitle ?? this.supportsExternalSubtitle,
       supportsCacheState: supportsCacheState ?? this.supportsCacheState,
       supportsBufferingProgress: supportsBufferingProgress ?? this.supportsBufferingProgress,
+      supportsBufferedRanges: supportsBufferedRanges ?? this.supportsBufferedRanges,
       supportsChapterControl: supportsChapterControl ?? this.supportsChapterControl,
       supportsLoop: supportsLoop ?? this.supportsLoop,
       supportsMetadata: supportsMetadata ?? this.supportsMetadata,
@@ -488,6 +504,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     supportsExternalSubtitle,
     supportsCacheState,
     supportsBufferingProgress,
+    supportsBufferedRanges,
     supportsChapterControl,
     supportsLoop,
     supportsMetadata,

@@ -100,6 +100,36 @@ final class _PlayerProgressBarState extends State<PlayerProgressBar> {
     return base;
   }
 
+  /// The engine's buffered stretches as track fractions.
+  ///
+  /// An empty list is the honest answer for three different cases a
+  /// viewer cannot tell apart and should not be lied to about: the
+  /// backend declared no range reporting, the clip has no duration
+  /// (live), or nothing is buffered yet. All three paint no ahead
+  /// fill, which is exactly what each of them means.
+  List<_Fraction> _bufferedFractions(PlayerTransportState playback) {
+    if (!playback.hasDuration) {
+      return const <_Fraction>[];
+    }
+
+    final total = playback.duration.inMilliseconds;
+    if (total <= 0) {
+      return const <_Fraction>[];
+    }
+
+    return playback.buffer
+        .normalize()
+        .ranges
+        .map(
+          (range) => _Fraction(
+            (range.start.inMilliseconds / total).clamp(0.0, 1.0),
+            (range.end.inMilliseconds / total).clamp(0.0, 1.0),
+          ),
+        )
+        .where((fraction) => !fraction.isEmpty)
+        .toList(growable: false);
+  }
+
   /// Track geometry for a pointer position inside the bar.
   double _fractionFor(Offset localPosition, double width) {
     if (width <= 0) {
@@ -138,6 +168,7 @@ final class _PlayerProgressBarState extends State<PlayerProgressBar> {
               revealThumb: _growing,
               playbackFraction: playback.hasDuration ? playback.progress.clamp(0.0, 1.0) : 0,
               dragFraction: _dragFraction,
+              bufferedFractions: _bufferedFractions(playback),
             ),
           );
         },
@@ -225,6 +256,7 @@ final class _ProgressPainter extends CustomPainter {
     required this.revealThumb,
     required this.playbackFraction,
     required this.dragFraction,
+    this.bufferedFractions = const <_Fraction>[],
   });
 
   final PlayerControlsTheme theme;
@@ -234,6 +266,7 @@ final class _ProgressPainter extends CustomPainter {
   final bool revealThumb;
   final double playbackFraction;
   final double? dragFraction;
+  final List<_Fraction> bufferedFractions;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -245,6 +278,25 @@ final class _ProgressPainter extends CustomPainter {
     // track on top of it would double the channel.
     if (theme.progressTrackShape != PlayerProgressTrack.inset) {
       canvas.drawRRect(RRect.fromRectAndRadius(track, radius), Paint()..color = theme.progressTrack);
+    }
+
+    // The buffered fill goes down before the played check and before the
+    // thumb, because it answers "how far can I scrub without waiting" —
+    // a fact that is most visible at the very start of a freshly opened
+    // video, when played is zero and this early return used to swallow it.
+    for (final buffered in bufferedFractions) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            size.width * buffered.start,
+            track.top,
+            size.width * buffered.extent,
+            trackHeight,
+          ),
+          radius,
+        ),
+        Paint()..color = theme.progressBuffered,
+      );
     }
 
     final played = dragFraction ?? playbackFraction;
@@ -281,8 +333,40 @@ final class _ProgressPainter extends CustomPainter {
         oldDelegate.revealThumb != revealThumb ||
         oldDelegate.playbackFraction != playbackFraction ||
         oldDelegate.dragFraction != dragFraction ||
+        !_sameBuffered(oldDelegate.bufferedFractions, bufferedFractions) ||
         oldDelegate.theme != theme;
   }
+
+  static bool _sameBuffered(List<_Fraction> a, List<_Fraction> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+/// A start/end pair on the 0..1 track, used for the buffered fill.
+final class _Fraction {
+  const _Fraction(this.start, this.end);
+
+  final double start;
+  final double end;
+
+  double get extent => end - start;
+
+  bool get isEmpty => extent <= 0;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is _Fraction && other.start == start && other.end == end;
+
+  @override
+  int get hashCode => Object.hash(start, end);
 }
 
 /// Progress bar plus the two time labels, laid out the way a bar wants.

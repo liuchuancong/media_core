@@ -203,6 +203,21 @@ extension _HandleAdapterBridge on PlayerHandle {
           'progress': progress,
         });
 
+      case PlayerAdapterBufferedRangesChanged(ranges: final ranges):
+        // The transport state carries the canonical view (the binding
+        // normalizes it); this event is the moment the bar repaints,
+        // so it publishes the raw reach figure the UI can draw
+        // without recomputing.
+        _publish(PlayerEventType.buffering, <String, Object?>{
+          'action': 'bufferedRanges',
+          'ranges': ranges
+              .map((range) => <String, int>{
+                'startMs': range.start.inMilliseconds,
+                'endMs': range.end.inMilliseconds,
+              })
+              .toList(),
+        });
+
       case PlayerAdapterMetadataChanged(metadata: final metadata):
         _publish(PlayerEventType.player, <String, Object?>{'action': 'metadataChanged', 'metadata': metadata});
 

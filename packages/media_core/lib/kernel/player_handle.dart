@@ -12,18 +12,20 @@ import 'package:media_core/identity/session_id.dart';
 import 'package:media_core/event/event_priority.dart';
 import 'package:media_core/policy/player_policy.dart';
 import 'package:media_core/source/player_source.dart';
-import 'package:media_core/source/default_media_source_planner.dart';
+import 'package:media_core/planning/default_media_source_planner.dart';
 import 'package:media_core/source/media_source.dart';
 import 'package:media_core/source/media_source_bridge.dart';
-import 'package:media_core/source/media_source_plan.dart';
-import 'package:media_core/source/media_source_planner.dart';
+import 'package:media_core/planning/media_source_plan.dart';
+import 'package:media_core/planning/media_source_planner.dart';
 import 'package:media_core/session/session_state.dart';
 import 'package:media_core/runtime/player_runtime.dart';
 import 'package:media_core/adapter/player_adapter.dart';
+import 'package:media_core/composition/media_timeline.dart';
 import 'package:media_core/event/player_event_bus.dart';
 import 'package:media_core/identity/generation_id.dart';
 import 'package:media_core/session/player_session.dart';
 import 'package:media_core/event/player_event_type.dart';
+import 'package:media_core/playback/playback_buffer.dart';
 import 'package:media_core/playback/player_transport_state.dart';
 import 'package:media_core/session/session_context.dart';
 import 'package:media_core/recovery/recovery_step.dart';
@@ -404,6 +406,30 @@ final class PlayerHandle implements RecoveryTarget {
   /// Currently open source, if any.
   PlayerSource? get source => _currentSource;
 
+  /// The presentation timeline of the currently open media source.
+  ///
+  /// Derived from the [MediaSource] this handle opened (see
+  /// [openMedia] and [PlayerKernel.createFromMedia]): composite
+  /// tracks are aligned onto one clock through
+  /// [MediaTimeline.from], so an adapter or overlay can convert
+  /// between a track's media time and the position the player
+  /// reports without re-reading every `startOffset`.
+  ///
+  /// Null when the open source never crossed
+  /// [MediaSourceBridge] — a plain `PlayerSource` carries no track
+  /// information to align.
+  MediaTimeline? get timeline {
+    final current = _currentSource;
+    if (current == null) {
+      return null;
+    }
+    final media = MediaSourceBridge.fromPlayerSource(current);
+    if (media == null) {
+      return null;
+    }
+    return MediaTimeline.from(media);
+  }
+
   /// Current playback state.
   PlayerTransportState get playback => _runtime.playback.current;
 
@@ -510,6 +536,16 @@ final class PlayerHandle implements RecoveryTarget {
 
   /// Current playback position, `Duration.zero` before any position event.
   Duration get position => _runtime.playback.current.position;
+
+  /// What the engine currently reports as buffered, canonicalized.
+  ///
+  /// A progress bar's ahead-fill and a scrubber's "is the hovered
+  /// position already downloaded" answer come from here. Empty is a
+  /// fact about the backend (it declares
+  /// [PlayerAdapterCapabilities.supportsBufferedRanges] false), not an
+  /// error — draw no ahead-fill in that case rather than inventing
+  /// one.
+  PlaybackBuffer get buffer => _runtime.playback.current.buffer;
 
   /// Stream duration, `Duration.zero` while unknown.
   Duration get duration => _runtime.playback.current.duration;

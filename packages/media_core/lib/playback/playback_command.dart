@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:media_core/playback/buffer_range.dart';
 
 /// Playback command.
 ///
@@ -45,6 +46,15 @@ sealed class PlaybackCommand extends Equatable {
 
   /// Update playback speed.
   const factory PlaybackCommand.rate(double rate) = PlaybackCommandRate;
+
+  /// Buffered stretches reported by the engine.
+  ///
+  /// A state update like [PlaybackCommand.position], not an
+  /// intention: the transport command is untouched, because the
+  /// player's playing/paused state is exactly what it was when the
+  /// buffer advanced.
+  const factory PlaybackCommand.buffered(List<BufferRange> ranges) =
+      PlaybackCommandBuffered;
 
   // ---------------------------------------------------------------------------
   // Status
@@ -182,4 +192,15 @@ final class PlaybackCommandRate extends PlaybackCommand {
 
   @override
   List<Object?> get props => [rate];
+}
+
+/// Buffered stretches reported by the engine.
+final class PlaybackCommandBuffered extends PlaybackCommand {
+  const PlaybackCommandBuffered(this.ranges);
+
+  /// Buffered stretches as reported.
+  final List<BufferRange> ranges;
+
+  @override
+  List<Object?> get props => [ranges];
 }

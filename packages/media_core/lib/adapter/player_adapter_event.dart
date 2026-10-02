@@ -1,3 +1,4 @@
+import 'package:media_core/playback/buffer_range.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'player_adapter_event.freezed.dart';
@@ -114,6 +115,24 @@ abstract class PlayerAdapterEvent with _$PlayerAdapterEvent {
     /// Cached or buffered progress when available.
     double? progress,
   }) = PlayerAdapterCacheChanged;
+
+  /// Buffered byte ranges changed.
+  ///
+  /// This event reports the stretches of media the backend can play
+  /// without waiting, in the same media clock as
+  /// [PlayerAdapterEvent.positionChanged].
+  ///
+  /// It is distinct from [cacheChanged], which reports a single
+  /// scalar progress figure: a progress bar needs the actual
+  /// stretches to paint the ahead-fill and to answer whether a
+  /// scrub target is already downloaded, and a scalar cannot express
+  /// the discontiguous buffers a seek-ahead or a live edge produces.
+  /// The two coexist because engines report one, the other, or both.
+  const factory PlayerAdapterEvent.bufferedRangesChanged({
+    /// Buffered stretches as the backend reported them; the consumer
+    /// canonicalizes through [PlaybackBuffer.normalize].
+    required List<BufferRange> ranges,
+  }) = PlayerAdapterBufferedRangesChanged;
 
   /// Playback metadata changed.
   ///

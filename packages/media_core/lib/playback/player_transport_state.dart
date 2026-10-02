@@ -1,3 +1,4 @@
+import 'package:media_core/playback/playback_buffer.dart';
 import 'package:media_core/playback/playback_command.dart';
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
@@ -30,6 +31,7 @@ final class PlayerTransportState extends Equatable {
     required this.initialized,
     required this.updatedAt,
     this.buffering = false,
+    this.buffer = const PlaybackBuffer.empty(),
   });
 
   /// Initial state.
@@ -41,7 +43,8 @@ final class PlayerTransportState extends Equatable {
       rate = 1.0,
       initialized = false,
       updatedAt = null,
-      buffering = false;
+      buffering = false,
+      buffer = const PlaybackBuffer.empty();
 
   /// Current playback command/state.
   final PlaybackCommand command;
@@ -73,6 +76,15 @@ final class PlayerTransportState extends Equatable {
   /// of the session - which silently disabled everything that asks the player
   /// whether it is playing.
   final bool buffering;
+
+  /// What the engine currently reports as buffered.
+  ///
+  /// The playback mirror of the engine's report, not the cache
+  /// layer's inventory: this says what the engine believes it can
+  /// play without waiting. An engine that never reports ranges leaves
+  /// it empty, which is a fact about the engine — a progress bar that
+  /// draws "no ahead fill" instead of guessing.
+  final PlaybackBuffer buffer;
 
   // ---------------------------------------------------------------------------
   // Status
@@ -117,6 +129,7 @@ final class PlayerTransportState extends Equatable {
     bool? initialized,
     DateTime? updatedAt,
     bool? buffering,
+    PlaybackBuffer? buffer,
   }) {
     return PlayerTransportState(
       command: command ?? this.command,
@@ -127,6 +140,7 @@ final class PlayerTransportState extends Equatable {
       initialized: initialized ?? this.initialized,
       updatedAt: updatedAt ?? this.updatedAt,
       buffering: buffering ?? this.buffering,
+      buffer: buffer ?? this.buffer,
     );
   }
 
@@ -158,6 +172,17 @@ final class PlayerTransportState extends Equatable {
 
       case PlaybackCommandDuration():
         return copyWith(duration: command.duration, updatedAt: clock.now());
+
+      case PlaybackCommandBuffered(ranges: final ranges):
+        // A report, not an intention: the transport command is
+        // untouched, because playing/paused is exactly what it was
+        // when the buffer advanced. Normalized on the way in so every
+        // consumer of `state.buffer` reads canonical ranges no matter
+        // how the engine chunked its reports.
+        return copyWith(
+          buffer: PlaybackBuffer(ranges: ranges).normalize(),
+          updatedAt: clock.now(),
+        );
 
       case PlaybackCommandVolume():
         return copyWith(volume: command.volume, updatedAt: clock.now());

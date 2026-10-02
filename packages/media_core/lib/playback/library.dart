@@ -16,6 +16,8 @@ library;
 // Public exports
 // ============================================================================
 
+export 'package:media_core/playback/buffer_range.dart';
+export 'package:media_core/playback/playback_buffer.dart';
 export 'package:media_core/playback/playback_command.dart';
 export 'package:media_core/playback/playback_command_type.dart';
 export 'package:media_core/playback/playback_controller.dart';
@@ -27,3 +29,5 @@ export 'package:media_core/playback/playback_request.dart';
 export 'package:media_core/playback/playback_snapshot.dart';
 export 'package:media_core/playback/player_transport_state.dart';
 export 'package:media_core/playback/playback_volume.dart';
+export 'package:media_core/playback/thumbnail_slice.dart';
+export 'package:media_core/playback/thumbnail_track.dart';

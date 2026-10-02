@@ -56,7 +56,7 @@ extension PlayerAdapterEventPatterns on PlayerAdapterEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlayerAdapterOpened value)?  opened,TResult Function( PlayerAdapterPlaying value)?  playing,TResult Function( PlayerAdapterPaused value)?  paused,TResult Function( PlayerAdapterStopped value)?  stopped,TResult Function( PlayerAdapterBuffering value)?  buffering,TResult Function( PlayerAdapterCompleted value)?  completed,TResult Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult Function( PlayerAdapterVideoReconfigured value)?  videoReconfigured,TResult Function( PlayerAdapterHwdecChanged value)?  hwdecChanged,TResult Function( PlayerAdapterAudioReconfigured value)?  audioReconfigured,TResult Function( PlayerAdapterAudioDeviceChanged value)?  audioDeviceChanged,TResult Function( PlayerAdapterSubtitleChanged value)?  subtitleChanged,TResult Function( PlayerAdapterCacheChanged value)?  cacheChanged,TResult Function( PlayerAdapterMetadataChanged value)?  metadataChanged,TResult Function( PlayerAdapterPlaylistChanged value)?  playlistChanged,TResult Function( PlayerAdapterClientMessage value)?  clientMessage,TResult Function( PlayerAdapterLogMessage value)?  logMessage,TResult Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult Function( PlayerAdapterRateChanged value)?  rateChanged,TResult Function( PlayerAdapterErrorEvent value)?  error,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlayerAdapterOpened value)?  opened,TResult Function( PlayerAdapterPlaying value)?  playing,TResult Function( PlayerAdapterPaused value)?  paused,TResult Function( PlayerAdapterStopped value)?  stopped,TResult Function( PlayerAdapterBuffering value)?  buffering,TResult Function( PlayerAdapterCompleted value)?  completed,TResult Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult Function( PlayerAdapterVideoReconfigured value)?  videoReconfigured,TResult Function( PlayerAdapterHwdecChanged value)?  hwdecChanged,TResult Function( PlayerAdapterAudioReconfigured value)?  audioReconfigured,TResult Function( PlayerAdapterAudioDeviceChanged value)?  audioDeviceChanged,TResult Function( PlayerAdapterSubtitleChanged value)?  subtitleChanged,TResult Function( PlayerAdapterCacheChanged value)?  cacheChanged,TResult Function( PlayerAdapterBufferedRangesChanged value)?  bufferedRangesChanged,TResult Function( PlayerAdapterMetadataChanged value)?  metadataChanged,TResult Function( PlayerAdapterPlaylistChanged value)?  playlistChanged,TResult Function( PlayerAdapterClientMessage value)?  clientMessage,TResult Function( PlayerAdapterLogMessage value)?  logMessage,TResult Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult Function( PlayerAdapterRateChanged value)?  rateChanged,TResult Function( PlayerAdapterErrorEvent value)?  error,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
@@ -75,7 +75,8 @@ return hwdecChanged(_that);case PlayerAdapterAudioReconfigured() when audioRecon
 return audioReconfigured(_that);case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
 return audioDeviceChanged(_that);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
 return subtitleChanged(_that);case PlayerAdapterCacheChanged() when cacheChanged != null:
-return cacheChanged(_that);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return cacheChanged(_that);case PlayerAdapterBufferedRangesChanged() when bufferedRangesChanged != null:
+return bufferedRangesChanged(_that);case PlayerAdapterMetadataChanged() when metadataChanged != null:
 return metadataChanged(_that);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
 return playlistChanged(_that);case PlayerAdapterClientMessage() when clientMessage != null:
 return clientMessage(_that);case PlayerAdapterLogMessage() when logMessage != null:
@@ -100,7 +101,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlayerAdapterOpened value)  opened,required TResult Function( PlayerAdapterPlaying value)  playing,required TResult Function( PlayerAdapterPaused value)  paused,required TResult Function( PlayerAdapterStopped value)  stopped,required TResult Function( PlayerAdapterBuffering value)  buffering,required TResult Function( PlayerAdapterCompleted value)  completed,required TResult Function( PlayerAdapterPositionChanged value)  positionChanged,required TResult Function( PlayerAdapterDurationChanged value)  durationChanged,required TResult Function( PlayerAdapterVideoSizeChanged value)  videoSizeChanged,required TResult Function( PlayerAdapterVideoFrameProgress value)  videoFrameProgress,required TResult Function( PlayerAdapterVideoReconfigured value)  videoReconfigured,required TResult Function( PlayerAdapterHwdecChanged value)  hwdecChanged,required TResult Function( PlayerAdapterAudioReconfigured value)  audioReconfigured,required TResult Function( PlayerAdapterAudioDeviceChanged value)  audioDeviceChanged,required TResult Function( PlayerAdapterSubtitleChanged value)  subtitleChanged,required TResult Function( PlayerAdapterCacheChanged value)  cacheChanged,required TResult Function( PlayerAdapterMetadataChanged value)  metadataChanged,required TResult Function( PlayerAdapterPlaylistChanged value)  playlistChanged,required TResult Function( PlayerAdapterClientMessage value)  clientMessage,required TResult Function( PlayerAdapterLogMessage value)  logMessage,required TResult Function( PlayerAdapterVolumeChanged value)  volumeChanged,required TResult Function( PlayerAdapterRateChanged value)  rateChanged,required TResult Function( PlayerAdapterErrorEvent value)  error,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlayerAdapterOpened value)  opened,required TResult Function( PlayerAdapterPlaying value)  playing,required TResult Function( PlayerAdapterPaused value)  paused,required TResult Function( PlayerAdapterStopped value)  stopped,required TResult Function( PlayerAdapterBuffering value)  buffering,required TResult Function( PlayerAdapterCompleted value)  completed,required TResult Function( PlayerAdapterPositionChanged value)  positionChanged,required TResult Function( PlayerAdapterDurationChanged value)  durationChanged,required TResult Function( PlayerAdapterVideoSizeChanged value)  videoSizeChanged,required TResult Function( PlayerAdapterVideoFrameProgress value)  videoFrameProgress,required TResult Function( PlayerAdapterVideoReconfigured value)  videoReconfigured,required TResult Function( PlayerAdapterHwdecChanged value)  hwdecChanged,required TResult Function( PlayerAdapterAudioReconfigured value)  audioReconfigured,required TResult Function( PlayerAdapterAudioDeviceChanged value)  audioDeviceChanged,required TResult Function( PlayerAdapterSubtitleChanged value)  subtitleChanged,required TResult Function( PlayerAdapterCacheChanged value)  cacheChanged,required TResult Function( PlayerAdapterBufferedRangesChanged value)  bufferedRangesChanged,required TResult Function( PlayerAdapterMetadataChanged value)  metadataChanged,required TResult Function( PlayerAdapterPlaylistChanged value)  playlistChanged,required TResult Function( PlayerAdapterClientMessage value)  clientMessage,required TResult Function( PlayerAdapterLogMessage value)  logMessage,required TResult Function( PlayerAdapterVolumeChanged value)  volumeChanged,required TResult Function( PlayerAdapterRateChanged value)  rateChanged,required TResult Function( PlayerAdapterErrorEvent value)  error,}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened():
@@ -119,7 +120,8 @@ return hwdecChanged(_that);case PlayerAdapterAudioReconfigured():
 return audioReconfigured(_that);case PlayerAdapterAudioDeviceChanged():
 return audioDeviceChanged(_that);case PlayerAdapterSubtitleChanged():
 return subtitleChanged(_that);case PlayerAdapterCacheChanged():
-return cacheChanged(_that);case PlayerAdapterMetadataChanged():
+return cacheChanged(_that);case PlayerAdapterBufferedRangesChanged():
+return bufferedRangesChanged(_that);case PlayerAdapterMetadataChanged():
 return metadataChanged(_that);case PlayerAdapterPlaylistChanged():
 return playlistChanged(_that);case PlayerAdapterClientMessage():
 return clientMessage(_that);case PlayerAdapterLogMessage():
@@ -143,7 +145,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlayerAdapterOpened value)?  opened,TResult? Function( PlayerAdapterPlaying value)?  playing,TResult? Function( PlayerAdapterPaused value)?  paused,TResult? Function( PlayerAdapterStopped value)?  stopped,TResult? Function( PlayerAdapterBuffering value)?  buffering,TResult? Function( PlayerAdapterCompleted value)?  completed,TResult? Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult? Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult? Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult? Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult? Function( PlayerAdapterVideoReconfigured value)?  videoReconfigured,TResult? Function( PlayerAdapterHwdecChanged value)?  hwdecChanged,TResult? Function( PlayerAdapterAudioReconfigured value)?  audioReconfigured,TResult? Function( PlayerAdapterAudioDeviceChanged value)?  audioDeviceChanged,TResult? Function( PlayerAdapterSubtitleChanged value)?  subtitleChanged,TResult? Function( PlayerAdapterCacheChanged value)?  cacheChanged,TResult? Function( PlayerAdapterMetadataChanged value)?  metadataChanged,TResult? Function( PlayerAdapterPlaylistChanged value)?  playlistChanged,TResult? Function( PlayerAdapterClientMessage value)?  clientMessage,TResult? Function( PlayerAdapterLogMessage value)?  logMessage,TResult? Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult? Function( PlayerAdapterRateChanged value)?  rateChanged,TResult? Function( PlayerAdapterErrorEvent value)?  error,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlayerAdapterOpened value)?  opened,TResult? Function( PlayerAdapterPlaying value)?  playing,TResult? Function( PlayerAdapterPaused value)?  paused,TResult? Function( PlayerAdapterStopped value)?  stopped,TResult? Function( PlayerAdapterBuffering value)?  buffering,TResult? Function( PlayerAdapterCompleted value)?  completed,TResult? Function( PlayerAdapterPositionChanged value)?  positionChanged,TResult? Function( PlayerAdapterDurationChanged value)?  durationChanged,TResult? Function( PlayerAdapterVideoSizeChanged value)?  videoSizeChanged,TResult? Function( PlayerAdapterVideoFrameProgress value)?  videoFrameProgress,TResult? Function( PlayerAdapterVideoReconfigured value)?  videoReconfigured,TResult? Function( PlayerAdapterHwdecChanged value)?  hwdecChanged,TResult? Function( PlayerAdapterAudioReconfigured value)?  audioReconfigured,TResult? Function( PlayerAdapterAudioDeviceChanged value)?  audioDeviceChanged,TResult? Function( PlayerAdapterSubtitleChanged value)?  subtitleChanged,TResult? Function( PlayerAdapterCacheChanged value)?  cacheChanged,TResult? Function( PlayerAdapterBufferedRangesChanged value)?  bufferedRangesChanged,TResult? Function( PlayerAdapterMetadataChanged value)?  metadataChanged,TResult? Function( PlayerAdapterPlaylistChanged value)?  playlistChanged,TResult? Function( PlayerAdapterClientMessage value)?  clientMessage,TResult? Function( PlayerAdapterLogMessage value)?  logMessage,TResult? Function( PlayerAdapterVolumeChanged value)?  volumeChanged,TResult? Function( PlayerAdapterRateChanged value)?  rateChanged,TResult? Function( PlayerAdapterErrorEvent value)?  error,}){
 final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
@@ -162,7 +164,8 @@ return hwdecChanged(_that);case PlayerAdapterAudioReconfigured() when audioRecon
 return audioReconfigured(_that);case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
 return audioDeviceChanged(_that);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
 return subtitleChanged(_that);case PlayerAdapterCacheChanged() when cacheChanged != null:
-return cacheChanged(_that);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return cacheChanged(_that);case PlayerAdapterBufferedRangesChanged() when bufferedRangesChanged != null:
+return bufferedRangesChanged(_that);case PlayerAdapterMetadataChanged() when metadataChanged != null:
 return metadataChanged(_that);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
 return playlistChanged(_that);case PlayerAdapterClientMessage() when clientMessage != null:
 return clientMessage(_that);case PlayerAdapterLogMessage() when logMessage != null:
@@ -186,7 +189,7 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String? source)?  opened,TResult Function()?  playing,TResult Function()?  paused,TResult Function()?  stopped,TResult Function( bool buffering,  double? progress)?  buffering,TResult Function()?  completed,TResult Function( Duration position)?  positionChanged,TResult Function( Duration duration)?  durationChanged,TResult Function( int width,  int height)?  videoSizeChanged,TResult Function()?  videoFrameProgress,TResult Function()?  videoReconfigured,TResult Function( String? decoder)?  hwdecChanged,TResult Function()?  audioReconfigured,TResult Function( String? device)?  audioDeviceChanged,TResult Function( String? text)?  subtitleChanged,TResult Function( bool? buffering,  Duration? duration,  double? progress)?  cacheChanged,TResult Function( Map<String, dynamic> metadata)?  metadataChanged,TResult Function( List<String> items,  int? index)?  playlistChanged,TResult Function( String message,  List<String> args)?  clientMessage,TResult Function( String level,  String prefix,  String text)?  logMessage,TResult Function( double volume)?  volumeChanged,TResult Function( double rate)?  rateChanged,TResult Function( String message,  Object? error,  StackTrace? stackTrace)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String? source)?  opened,TResult Function()?  playing,TResult Function()?  paused,TResult Function()?  stopped,TResult Function( bool buffering,  double? progress)?  buffering,TResult Function()?  completed,TResult Function( Duration position)?  positionChanged,TResult Function( Duration duration)?  durationChanged,TResult Function( int width,  int height)?  videoSizeChanged,TResult Function()?  videoFrameProgress,TResult Function()?  videoReconfigured,TResult Function( String? decoder)?  hwdecChanged,TResult Function()?  audioReconfigured,TResult Function( String? device)?  audioDeviceChanged,TResult Function( String? text)?  subtitleChanged,TResult Function( bool? buffering,  Duration? duration,  double? progress)?  cacheChanged,TResult Function( List<BufferRange> ranges)?  bufferedRangesChanged,TResult Function( Map<String, dynamic> metadata)?  metadataChanged,TResult Function( List<String> items,  int? index)?  playlistChanged,TResult Function( String message,  List<String> args)?  clientMessage,TResult Function( String level,  String prefix,  String text)?  logMessage,TResult Function( double volume)?  volumeChanged,TResult Function( double rate)?  rateChanged,TResult Function( String message,  Object? error,  StackTrace? stackTrace)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
 return opened(_that.source);case PlayerAdapterPlaying() when playing != null:
@@ -204,7 +207,8 @@ return hwdecChanged(_that.decoder);case PlayerAdapterAudioReconfigured() when au
 return audioReconfigured();case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
 return audioDeviceChanged(_that.device);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
 return subtitleChanged(_that.text);case PlayerAdapterCacheChanged() when cacheChanged != null:
-return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterBufferedRangesChanged() when bufferedRangesChanged != null:
+return bufferedRangesChanged(_that.ranges);case PlayerAdapterMetadataChanged() when metadataChanged != null:
 return metadataChanged(_that.metadata);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
 return playlistChanged(_that.items,_that.index);case PlayerAdapterClientMessage() when clientMessage != null:
 return clientMessage(_that.message,_that.args);case PlayerAdapterLogMessage() when logMessage != null:
@@ -229,7 +233,7 @@ return error(_that.message,_that.error,_that.stackTrace);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String? source)  opened,required TResult Function()  playing,required TResult Function()  paused,required TResult Function()  stopped,required TResult Function( bool buffering,  double? progress)  buffering,required TResult Function()  completed,required TResult Function( Duration position)  positionChanged,required TResult Function( Duration duration)  durationChanged,required TResult Function( int width,  int height)  videoSizeChanged,required TResult Function()  videoFrameProgress,required TResult Function()  videoReconfigured,required TResult Function( String? decoder)  hwdecChanged,required TResult Function()  audioReconfigured,required TResult Function( String? device)  audioDeviceChanged,required TResult Function( String? text)  subtitleChanged,required TResult Function( bool? buffering,  Duration? duration,  double? progress)  cacheChanged,required TResult Function( Map<String, dynamic> metadata)  metadataChanged,required TResult Function( List<String> items,  int? index)  playlistChanged,required TResult Function( String message,  List<String> args)  clientMessage,required TResult Function( String level,  String prefix,  String text)  logMessage,required TResult Function( double volume)  volumeChanged,required TResult Function( double rate)  rateChanged,required TResult Function( String message,  Object? error,  StackTrace? stackTrace)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String? source)  opened,required TResult Function()  playing,required TResult Function()  paused,required TResult Function()  stopped,required TResult Function( bool buffering,  double? progress)  buffering,required TResult Function()  completed,required TResult Function( Duration position)  positionChanged,required TResult Function( Duration duration)  durationChanged,required TResult Function( int width,  int height)  videoSizeChanged,required TResult Function()  videoFrameProgress,required TResult Function()  videoReconfigured,required TResult Function( String? decoder)  hwdecChanged,required TResult Function()  audioReconfigured,required TResult Function( String? device)  audioDeviceChanged,required TResult Function( String? text)  subtitleChanged,required TResult Function( bool? buffering,  Duration? duration,  double? progress)  cacheChanged,required TResult Function( List<BufferRange> ranges)  bufferedRangesChanged,required TResult Function( Map<String, dynamic> metadata)  metadataChanged,required TResult Function( List<String> items,  int? index)  playlistChanged,required TResult Function( String message,  List<String> args)  clientMessage,required TResult Function( String level,  String prefix,  String text)  logMessage,required TResult Function( double volume)  volumeChanged,required TResult Function( double rate)  rateChanged,required TResult Function( String message,  Object? error,  StackTrace? stackTrace)  error,}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened():
 return opened(_that.source);case PlayerAdapterPlaying():
@@ -247,7 +251,8 @@ return hwdecChanged(_that.decoder);case PlayerAdapterAudioReconfigured():
 return audioReconfigured();case PlayerAdapterAudioDeviceChanged():
 return audioDeviceChanged(_that.device);case PlayerAdapterSubtitleChanged():
 return subtitleChanged(_that.text);case PlayerAdapterCacheChanged():
-return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterMetadataChanged():
+return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterBufferedRangesChanged():
+return bufferedRangesChanged(_that.ranges);case PlayerAdapterMetadataChanged():
 return metadataChanged(_that.metadata);case PlayerAdapterPlaylistChanged():
 return playlistChanged(_that.items,_that.index);case PlayerAdapterClientMessage():
 return clientMessage(_that.message,_that.args);case PlayerAdapterLogMessage():
@@ -271,7 +276,7 @@ return error(_that.message,_that.error,_that.stackTrace);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String? source)?  opened,TResult? Function()?  playing,TResult? Function()?  paused,TResult? Function()?  stopped,TResult? Function( bool buffering,  double? progress)?  buffering,TResult? Function()?  completed,TResult? Function( Duration position)?  positionChanged,TResult? Function( Duration duration)?  durationChanged,TResult? Function( int width,  int height)?  videoSizeChanged,TResult? Function()?  videoFrameProgress,TResult? Function()?  videoReconfigured,TResult? Function( String? decoder)?  hwdecChanged,TResult? Function()?  audioReconfigured,TResult? Function( String? device)?  audioDeviceChanged,TResult? Function( String? text)?  subtitleChanged,TResult? Function( bool? buffering,  Duration? duration,  double? progress)?  cacheChanged,TResult? Function( Map<String, dynamic> metadata)?  metadataChanged,TResult? Function( List<String> items,  int? index)?  playlistChanged,TResult? Function( String message,  List<String> args)?  clientMessage,TResult? Function( String level,  String prefix,  String text)?  logMessage,TResult? Function( double volume)?  volumeChanged,TResult? Function( double rate)?  rateChanged,TResult? Function( String message,  Object? error,  StackTrace? stackTrace)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String? source)?  opened,TResult? Function()?  playing,TResult? Function()?  paused,TResult? Function()?  stopped,TResult? Function( bool buffering,  double? progress)?  buffering,TResult? Function()?  completed,TResult? Function( Duration position)?  positionChanged,TResult? Function( Duration duration)?  durationChanged,TResult? Function( int width,  int height)?  videoSizeChanged,TResult? Function()?  videoFrameProgress,TResult? Function()?  videoReconfigured,TResult? Function( String? decoder)?  hwdecChanged,TResult? Function()?  audioReconfigured,TResult? Function( String? device)?  audioDeviceChanged,TResult? Function( String? text)?  subtitleChanged,TResult? Function( bool? buffering,  Duration? duration,  double? progress)?  cacheChanged,TResult? Function( List<BufferRange> ranges)?  bufferedRangesChanged,TResult? Function( Map<String, dynamic> metadata)?  metadataChanged,TResult? Function( List<String> items,  int? index)?  playlistChanged,TResult? Function( String message,  List<String> args)?  clientMessage,TResult? Function( String level,  String prefix,  String text)?  logMessage,TResult? Function( double volume)?  volumeChanged,TResult? Function( double rate)?  rateChanged,TResult? Function( String message,  Object? error,  StackTrace? stackTrace)?  error,}) {final _that = this;
 switch (_that) {
 case PlayerAdapterOpened() when opened != null:
 return opened(_that.source);case PlayerAdapterPlaying() when playing != null:
@@ -289,7 +294,8 @@ return hwdecChanged(_that.decoder);case PlayerAdapterAudioReconfigured() when au
 return audioReconfigured();case PlayerAdapterAudioDeviceChanged() when audioDeviceChanged != null:
 return audioDeviceChanged(_that.device);case PlayerAdapterSubtitleChanged() when subtitleChanged != null:
 return subtitleChanged(_that.text);case PlayerAdapterCacheChanged() when cacheChanged != null:
-return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterMetadataChanged() when metadataChanged != null:
+return cacheChanged(_that.buffering,_that.duration,_that.progress);case PlayerAdapterBufferedRangesChanged() when bufferedRangesChanged != null:
+return bufferedRangesChanged(_that.ranges);case PlayerAdapterMetadataChanged() when metadataChanged != null:
 return metadataChanged(_that.metadata);case PlayerAdapterPlaylistChanged() when playlistChanged != null:
 return playlistChanged(_that.items,_that.index);case PlayerAdapterClientMessage() when clientMessage != null:
 return clientMessage(_that.message,_that.args);case PlayerAdapterLogMessage() when logMessage != null:
@@ -1148,6 +1154,84 @@ buffering: freezed == buffering ? _self.buffering : buffering // ignore: cast_nu
 as bool?,duration: freezed == duration ? _self.duration : duration // ignore: cast_nullable_to_non_nullable
 as Duration?,progress: freezed == progress ? _self.progress : progress // ignore: cast_nullable_to_non_nullable
 as double?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PlayerAdapterBufferedRangesChanged implements PlayerAdapterEvent {
+  const PlayerAdapterBufferedRangesChanged({required  List<BufferRange> ranges}): _ranges = ranges;
+  
+
+/// Buffered stretches as the backend reported them; the consumer
+/// canonicalizes through [PlaybackBuffer.normalize].
+ final  List<BufferRange> _ranges;
+/// Buffered stretches as the backend reported them; the consumer
+/// canonicalizes through [PlaybackBuffer.normalize].
+ List<BufferRange> get ranges {
+  if (_ranges is EqualUnmodifiableListView) return _ranges;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_ranges);
+}
+
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PlayerAdapterBufferedRangesChangedCopyWith<PlayerAdapterBufferedRangesChanged> get copyWith => _$PlayerAdapterBufferedRangesChangedCopyWithImpl<PlayerAdapterBufferedRangesChanged>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayerAdapterBufferedRangesChanged&&const DeepCollectionEquality().equals(other.ranges, _ranges));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_ranges));
+}
+
+@override
+String toString() {
+    return 'PlayerAdapterEvent.bufferedRangesChanged(ranges: $ranges)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PlayerAdapterBufferedRangesChangedCopyWith<$Res> implements $PlayerAdapterEventCopyWith<$Res> {
+  factory $PlayerAdapterBufferedRangesChangedCopyWith(PlayerAdapterBufferedRangesChanged value, $Res Function(PlayerAdapterBufferedRangesChanged) _then) = _$PlayerAdapterBufferedRangesChangedCopyWithImpl;
+@useResult
+$Res call({
+ List<BufferRange> ranges
+});
+
+
+
+
+}
+/// @nodoc
+class _$PlayerAdapterBufferedRangesChangedCopyWithImpl<$Res>
+    implements $PlayerAdapterBufferedRangesChangedCopyWith<$Res> {
+  _$PlayerAdapterBufferedRangesChangedCopyWithImpl(this._self, this._then);
+
+  final PlayerAdapterBufferedRangesChanged _self;
+  final $Res Function(PlayerAdapterBufferedRangesChanged) _then;
+
+/// Create a copy of PlayerAdapterEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? ranges = null,}) {
+  return _then(PlayerAdapterBufferedRangesChanged(
+ranges: null == ranges ? _self._ranges : ranges // ignore: cast_nullable_to_non_nullable
+as List<BufferRange>,
   ));
 }
 

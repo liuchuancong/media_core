@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:media_core/playback/player_transport_state.dart';
+import 'package:media_core/playback/buffer_range.dart';
 import 'package:media_core/playback/playback_command.dart';
 import 'package:media_core/playback/playback_request.dart';
 import 'package:media_core/playback/playback_snapshot.dart';
@@ -102,6 +103,16 @@ final class PlaybackController {
   /// Update duration.
   void updateDuration(Duration duration) {
     apply(PlaybackCommand.duration(duration));
+  }
+
+  /// Update the buffered stretches the engine reported.
+  ///
+  /// Takes raw ranges rather than a [PlaybackBuffer] because the
+  /// state layer canonicalizes exactly once on reduce; normalizing
+  /// here too would create a second place where the two could
+  /// disagree about what "the buffer" is.
+  void updateBuffer(List<BufferRange> ranges) {
+    apply(PlaybackCommand.buffered(ranges));
   }
 
   Future<void> _enqueue(Future<void> Function() action) {
