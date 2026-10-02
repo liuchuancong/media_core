@@ -9,6 +9,8 @@ final class PipConfig {
   const PipConfig({
     this.width = 320,
     this.height = 180,
+    this.minWidth = 140,
+    this.minHeight = 90,
     this.cornerSpacing = 16,
     this.skipTaskbar = false,
     this.title = 'media_core PiP',
@@ -23,6 +25,12 @@ final class PipConfig {
 
   /// Width of the desktop small window, in logical pixels.
   final double width;
+
+  /// Smallest width the compact window may reach, in logical pixels.
+  final double minWidth;
+
+  /// Smallest height the compact window may reach, in logical pixels.
+  final double minHeight;
 
   /// Height of the desktop small window.
   ///
@@ -63,6 +71,8 @@ final class PipConfig {
   PipConfig copyWith({
     double? width,
     double? height,
+    double? minWidth,
+    double? minHeight,
     double? cornerSpacing,
     bool? skipTaskbar,
     String? title,
@@ -74,6 +84,8 @@ final class PipConfig {
     return PipConfig(
       width: width ?? this.width,
       height: height ?? this.height,
+      minWidth: minWidth ?? this.minWidth,
+      minHeight: minHeight ?? this.minHeight,
       cornerSpacing: cornerSpacing ?? this.cornerSpacing,
       skipTaskbar: skipTaskbar ?? this.skipTaskbar,
       title: title ?? this.title,

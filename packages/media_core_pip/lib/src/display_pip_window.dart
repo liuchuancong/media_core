@@ -276,23 +276,24 @@ final class DisplayAwarePipWindow implements PipWindow {
       var scale = saved.bounds.width > saved.bounds.height
           ? saved.bounds.width
           : saved.bounds.height;
+      // The floors are aspect-exact: when one side bottoms out the other
+      // follows down, so a smaller pick still yields a video-shaped window.
+      const minWidthFloor = 140.0;
+      const minHeightFloor = 90.0;
       final Size followed;
       if (aspectRatio >= 1.0) {
-        // Landscape: the width is the long side; keep the floors
-        // aspect-exact so no clamp ever reintroduces black bars.
-        var width = scale.clamp(140.0, double.infinity);
+        var width = scale.clamp(minWidthFloor, double.infinity);
         var height = width / aspectRatio;
-        if (height < 90) {
-          height = 90;
+        if (height < minHeightFloor) {
+          height = minHeightFloor;
           width = height * aspectRatio;
         }
         followed = Size(width, height);
       } else {
-        // Portrait: the height is the long side.
-        var height = scale.clamp(90.0, double.infinity);
+        var height = scale.clamp(minHeightFloor, double.infinity);
         var width = height * aspectRatio;
-        if (width < 140) {
-          width = 140;
+        if (width < minWidthFloor) {
+          width = minWidthFloor;
           height = width / aspectRatio;
         }
         followed = Size(width, height);
