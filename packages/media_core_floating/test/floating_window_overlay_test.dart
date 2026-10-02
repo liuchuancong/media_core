@@ -72,6 +72,79 @@ void main() {
     });
   });
 
+  group('FloatingWindowOverlay remembered geometry', () {
+    Future<StreamController<bool>> pumpWith({
+      required WidgetTester tester,
+      Rect? initialRect,
+      ValueChanged<Rect>? onRectChanged,
+    }) async {
+      final visibility = StreamController<bool>.broadcast();
+      addTearDown(visibility.close);
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: MediaQuery(
+            data: const MediaQueryData(),
+            child: FloatingWindowOverlay(
+              visible: visibility.stream,
+              initiallyVisible: true,
+              placement: const FloatingWindowPlacement(
+                config: FloatingPlacementConfig(
+                  width: 300,
+                  height: 200,
+                  minWidth: 100,
+                  minHeight: 80,
+                  snapToEdge: false,
+                  resizableByDrag: true,
+                ),
+              ),
+              initialRect: initialRect,
+              onRectChanged: onRectChanged,
+              child: const ColoredBox(color: Color(0xFF112233)),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      return visibility;
+    }
+
+    testWidgets('a remembered rect comes back instead of the anchor', (tester) async {
+      const saved = Rect.fromLTWH(40, 60, 220, 140);
+      await pumpWith(tester: tester, initialRect: saved);
+
+      expect(tester.getTopLeft(find.byType(ColoredBox)), saved.topLeft);
+      expect(tester.getSize(find.byType(ColoredBox)), saved.size);
+    });
+
+    testWidgets('a remembered rect off the surface is clamped back in', (tester) async {
+      await pumpWith(tester: tester, initialRect: const Rect.fromLTWH(4000, 4000, 5000, 900));
+
+      final rect = tester.getRect(find.byType(ColoredBox));
+      final surface = tester.getSize(find.byType(FloatingWindowOverlay));
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.top, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(surface.width));
+      expect(rect.bottom, lessThanOrEqualTo(surface.height));
+    });
+
+    testWidgets('a settled drag and a hide both report the rect', (tester) async {
+      Rect? reported;
+      final visibility = await pumpWith(tester: tester, onRectChanged: (rect) => reported = rect);
+
+      await tester.drag(find.byType(ColoredBox), const Offset(-40, -30));
+      await tester.pump();
+      expect(reported, isNotNull);
+      expect(reported!.size, tester.getSize(find.byType(ColoredBox)));
+
+      reported = null;
+      visibility.add(false);
+      await tester.pumpAndSettle();
+      // 隐藏时再报一次：这是宿主最后能拿到的位置。
+      expect(reported, isNotNull);
+    });
+  });
+
   group('FloatingWindowOverlay visibility', () {
     testWidgets('the visibility stream hides and re-shows the window', (tester) async {
       final visibility = StreamController<bool>.broadcast();

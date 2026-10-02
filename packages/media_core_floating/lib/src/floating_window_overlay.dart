@@ -39,6 +39,8 @@ class FloatingWindowOverlay extends StatefulWidget {
     this.placement = const FloatingWindowPlacement(),
     this.videoWidth,
     this.videoHeight,
+    this.initialRect,
+    this.onRectChanged,
     this.onExpand,
     this.onClose,
     this.expandControlKey,
@@ -65,6 +67,21 @@ class FloatingWindowOverlay extends StatefulWidget {
   /// Latest video size, used when the placement follows the video's shape.
   final int? videoWidth;
   final int? videoHeight;
+
+  /// A remembered rect to restore instead of the configured anchor.
+  ///
+  /// Hosts feed back what [onRectChanged] reported, so a window the viewer
+  /// positioned once comes back there instead of at the anchor. The rect is
+  /// clamped into the current surface before use: remembered coordinates
+  /// describe the surface they were captured on, which a rotation or a resized
+  /// app window may have changed. Ignored when the configuration does not allow
+  /// dragging, because then the window has no position of its own to keep.
+  final Rect? initialRect;
+
+  /// Reports the rect once it settles: after a move or resize ends, and once
+  /// more when the window hides — the position worth remembering is the last
+  /// one the viewer chose.
+  final ValueChanged<Rect>? onRectChanged;
 
   /// Called when the viewer asks to return the video to the page.
   final VoidCallback? onExpand;
@@ -122,6 +139,7 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
       if (!mounted || value == _visible) {
         return;
       }
+      final lastRect = _rect;
       setState(() {
         _visible = value;
         if (!value) {
@@ -132,6 +150,11 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
           _placedForSurface = null;
         }
       });
+      if (!value && lastRect != null) {
+        // Reported after the state settles: the host persists it, and a host
+        // that rebuilds this overlay in response must not run inside setState.
+        widget.onRectChanged?.call(lastRect);
+      }
     });
   }
 
@@ -179,10 +202,38 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
     if (current != null && _placedForSurface == surface && (_userSized || current.size == window)) {
       return current;
     }
+    if (_placedForSurface != surface) {
+      final restored = _restoreRect(surface);
+      if (restored != null) {
+        _rect = restored;
+        _placedForSurface = surface;
+        _userSized = true;
+        return restored;
+      }
+    }
     final placed = widget.placement.rectFor(surface: surface, window: window);
     _rect = placed;
     _placedForSurface = surface;
     return placed;
+  }
+
+  /// The remembered rect, clamped back into the current surface.
+  ///
+  /// [FloatingWindowPlacement.drag] with a zero delta is exactly that clamp: it
+  /// keeps the rect inside the surface, and with `resizableByDrag` it also brings
+  /// the size back within the configured floor and the width cap.
+  Rect? _restoreRect(Size surface) {
+    if (!widget.placement.config.draggable) return null;
+    final saved = widget.initialRect;
+    if (saved == null || !saved.isFinite || saved.isEmpty) return null;
+    if (!surface.isFinite || surface.isEmpty) return null;
+    return widget.placement.drag(current: saved, delta: Offset.zero, surface: surface, resizeTo: saved.size);
+  }
+
+  void _reportRect() {
+    final rect = _rect;
+    if (rect == null) return;
+    widget.onRectChanged?.call(rect);
   }
 
   Widget _buildWindow() {
@@ -250,6 +301,7 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
           setState(() {
             _rect = widget.placement.snap(rect: current, surface: surface);
           });
+          _reportRect();
         },
         child: surface,
       );
@@ -293,8 +345,14 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
             );
           });
         },
-        onPanEnd: (_) => _resizeOrigin = null,
-        onPanCancel: () => _resizeOrigin = null,
+        onPanEnd: (_) {
+          _resizeOrigin = null;
+          _reportRect();
+        },
+        onPanCancel: () {
+          _resizeOrigin = null;
+          _reportRect();
+        },
         child: Semantics(
           button: true,
           label: 'Resize small window',
