@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/painting.dart' show Rect;
+import 'package:flutter/services.dart'
+    show SystemChrome, SystemUiMode, SystemUiOverlay;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:media_core/media_core.dart';
 
@@ -69,7 +71,10 @@ enum FullscreenPlatform {
 ///
 /// [PresentationMode.fullscreen] is the platform's own fullscreen: a desktop
 /// window covers the screen, a phone hides the system UI. It is a real platform
-/// state, so it can fail and has to be restored on exit.
+/// state, so it can fail and has to be restored on exit. On mobile the driver
+/// performs the immersive switch itself (`SystemUiMode`); the orientation to
+/// lock and the status bar styling are presentation policy and stay with the
+/// host.
 ///
 /// [PresentationMode.windowFullscreen] is the host's layout: the video fills
 /// the application window while the window stays a window. Nothing platform
@@ -350,16 +355,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
         }
         await window.setFullscreen(true);
       case FullscreenPlatform.mobile:
-        // No window to resize and no API to call: on mobile the host hides the
-        // system UI. The mode is still tracked so the other features can leave
-        // it, and so the host can render the right chrome.
-        _log.debug(
-          'mobile fullscreen: the host hides the system UI',
-          fields: <String, Object?>{
-            'fit': strategy.name,
-            'orientation': orientation.name,
-          },
-        );
+        // Mobile fullscreen is the system UI itself: immersive sticky hides
+        // the status and navigation bars for the presentation. The
+        // orientation to lock is presentation policy and stays with the host.
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         break;
       case FullscreenPlatform.unsupported:
         _log.error('system fullscreen is not supported on this platform');
@@ -471,6 +470,13 @@ final class FullscreenDriver implements KernelPresentationDriver {
         restoreBounds: config.restorePreviousBounds
             ? _preFullscreenBounds
             : null,
+      );
+    } else if (platform == FullscreenPlatform.mobile) {
+      // Restores the status and navigation bars. The status bar styling and
+      // the orientation release are host policy and stay there.
+      await SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
       );
     }
     _preFullscreenBounds = null;

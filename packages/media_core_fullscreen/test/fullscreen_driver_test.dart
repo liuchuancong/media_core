@@ -1,4 +1,6 @@
 import 'package:flutter/painting.dart' show Rect;
+import 'package:flutter/services.dart'
+    show MethodCall, SystemChannels, SystemUiMode, SystemUiOverlay;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_fullscreen/media_core_fullscreen.dart';
@@ -215,19 +217,24 @@ void main() {
       },
     );
 
-    test('mobile fullscreen is tracked without a platform call', () async {
-      final driver = FullscreenDriver(platform: FullscreenPlatform.mobile);
-      addTearDown(driver.dispose);
-      await driver.initialize();
+    test(
+      'mobile fullscreen is tracked while the driver performs the switch',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        final driver = FullscreenDriver(platform: FullscreenPlatform.mobile);
+        addTearDown(driver.dispose);
+        await driver.initialize();
 
-      await driver.apply(_player(), PresentationRequest.fullscreen());
+        await driver.apply(_player(), PresentationRequest.fullscreen());
 
-      expect(
-        driver.isSystemFullscreen,
-        isTrue,
-        reason: 'the host hides the system UI; the mode is still tracked',
-      );
-    });
+        expect(
+          driver.isSystemFullscreen,
+          isTrue,
+          reason:
+              'the driver performs the immersive switch and tracks the mode',
+        );
+      },
+    );
   });
 
   group('FullscreenDriver refusals', () {
@@ -433,5 +440,79 @@ void main() {
       expect(window.setCount, 1);
       expect(driver.isSystemFullscreen, isTrue);
     });
+  });
+
+  group('FullscreenDriver mobile', () {
+    // SystemChrome routes through the 'flutter/platform' method channel.
+    List<MethodCall> recordedSystemCalls(TestWidgetsFlutterBinding binding) {
+      final calls = <MethodCall>[];
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      return calls;
+    }
+
+    test(
+      'performs the immersive switch itself and restores it on exit',
+      () async {
+        final binding = TestWidgetsFlutterBinding.ensureInitialized();
+        final systemCalls = recordedSystemCalls(binding);
+
+        final driver = FullscreenDriver(platform: FullscreenPlatform.mobile);
+        addTearDown(driver.dispose);
+        await driver.initialize();
+
+        await driver.apply(_player(), PresentationRequest.fullscreen());
+
+        expect(driver.isSystemFullscreen, isTrue);
+        final enterCalls = systemCalls
+            .where(
+              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
+            )
+            .toList(growable: false);
+        expect(enterCalls, isNotEmpty);
+        expect(
+          enterCalls.last.arguments,
+          SystemUiMode.immersiveSticky.toString(),
+        );
+
+        await driver.apply(_player(), PresentationRequest.normal());
+
+        expect(driver.isSystemFullscreen, isFalse);
+        // The manual mode restores both overlays; the host owns the status bar
+        // styling and the orientation release.
+        final restoreCall = systemCalls.last;
+        expect(restoreCall.method, 'SystemChrome.setEnabledSystemUIOverlays');
+        expect(restoreCall.arguments, <String>[
+          'SystemUiOverlay.top',
+          'SystemUiOverlay.bottom',
+        ]);
+      },
+    );
+
+    test(
+      'dispose restores the system UI when torn down mid-fullscreen',
+      () async {
+        final binding = TestWidgetsFlutterBinding.ensureInitialized();
+        final systemCalls = recordedSystemCalls(binding);
+
+        final driver = FullscreenDriver(platform: FullscreenPlatform.mobile);
+        await driver.initialize();
+        await driver.apply(_player(), PresentationRequest.fullscreen());
+        systemCalls.clear();
+
+        await driver.dispose();
+
+        expect(driver.isSystemFullscreen, isFalse);
+        expect(
+          systemCalls.last.method,
+          'SystemChrome.setEnabledSystemUIOverlays',
+        );
+      },
+    );
   });
 }
