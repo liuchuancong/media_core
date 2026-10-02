@@ -32,11 +32,17 @@ export 'package:media_core/audio/library.dart';
 /// Debugging and fault-injection infrastructure..
 export 'package:media_core/bug/library.dart';
 
+/// Protocol-neutral casting: render devices, transport state, controller..
+export 'package:media_core/casting/library.dart';
+
 /// Memory, disk and cache storage abstractions..
 export 'package:media_core/cache/library.dart';
 
 /// Mutex, semaphore, locking and concurrency control primitives..
 export 'package:media_core/concurrency/library.dart';
+
+/// Composition layer: presentation timeline, segments and cues..
+export 'package:media_core/composition/library.dart';
 
 /// Cross-module player and playback coordination..
 export 'package:media_core/coordinator/library.dart';
@@ -86,6 +92,12 @@ export 'package:media_core/playback/library.dart';
 /// Centralized cross-module player policies..
 export 'package:media_core/policy/library.dart';
 
+/// Media source planning: plans, planner contract and defaults..
+export 'package:media_core/planning/library.dart';
+
+/// Quality candidates and live switching continuity..
+export 'package:media_core/quality/library.dart';
+
 /// PlayerIdentity instance pooling, allocation and recycling..
 export 'package:media_core/pool/library.dart';
 
@@ -106,6 +118,9 @@ export 'package:media_core/recording/library.dart';
 
 /// Playback recovery, retry scheduling and recovery state..
 export 'package:media_core/recovery/library.dart';
+
+/// Playback services: the media remuxer contract..
+export 'package:media_core/remux/library.dart';
 
 /// PlayerIdentity rendering abstraction and rendering state..
 export 'package:media_core/renderer/library.dart';
