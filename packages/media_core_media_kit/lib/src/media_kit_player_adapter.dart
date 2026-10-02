@@ -97,6 +97,17 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       result = result.copyWith(supportsScreenshot: false);
     }
 
+    // The composite side channel is mpv's `audio-files` / `sub-files` list,
+    // reached through NativePlayer commands. On web media_kit drives an HTML
+    // video element with no such platform surface, so keeping the declared
+    // externalAudio support would let the planner route a DASH pair here and
+    // then drop the audio at the first null platform — a silent failure with
+    // a permission slip. Web takes the honest `none`, which sends composite
+    // sources to the remux leg (or an explicit refusal where no FFmpeg runs).
+    if (kIsWeb && result.compositeSupport != CompositeSupport.none) {
+      result = result.copyWith(compositeSupport: CompositeSupport.none);
+    }
+
     return result;
   }
 
@@ -381,35 +392,127 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     }
   }
 
-  /// Routes a [CompositeMediaSource]'s extra audio essences through MPV's
-  /// external `audio-files` side channel.
+  /// Routes a [CompositeMediaSource]'s extra essences through MPV's
+  /// external `audio-files` / `sub-files` side channels.
   ///
   /// No-op for progressive sources and for composites with at most one audio
-  /// track already served by the primary. Best-effort: a backend or URL that
-  /// rejects the attachment must not fail the open — the primary video still
-  /// plays (silently, at worst) and the caller can fall back.
+  /// track already served by the primary. Attachment is best-effort — a
+  /// rejected URL must not kill the primary video — but never silent: every
+  /// failure is logged with the track and the mpv error, because "the video
+  /// plays and nobody noticed the audio is gone" is the one outcome this
+  /// whole composite model exists to make loud.
   Future<void> _attachCompositeAudio(PlayerSource source) async {
     final composite = MediaSourceBridge.compositeFromPlayerSource(source);
     if (composite == null) return;
 
+    // DASH representations need not start at the same instant; MPV has no
+    // per-external-file offset option, so the shared-clock alignment the
+    // composition layer computed is applied as the one global knob that
+    // means the same thing: `audio-delay` (seconds, audio lags when
+    // positive). Zero for the ordinary same-period pair, so the property is
+    // left alone unless something actually trails.
+    final timeline = MediaTimeline.from(composite);
+    final videoEntry = timeline.primary;
+
     final primaryUri = composite.primaryVideo?.uri ?? composite.primaryAudio?.uri;
+    var firstAudio = true;
     for (final track in composite.audioTracks) {
       if (track.uri == primaryUri) continue; // already the open() target
       final url = track.uri.toString();
       if (url.isEmpty) continue;
       final native = _player?.platform;
-      if (native == null) return;
+      if (native == null) {
+        _warnNoSideChannel();
+        return;
+      }
+
+      if (firstAudio) {
+        await _applyAudioAlignment(native, timeline, videoEntry);
+        firstAudio = false;
+      }
+
       // mpv fetches an external `audio-files` entry with its GLOBAL network
       // options, not the per-Media httpHeaders the primary open() carried, so
       // mirror the track's request headers onto the player first (Referer /
       // Cookie via http-header-fields; User-Agent via its own option).
       await _applyTrackNetworkHeaders(native, track.headers?.values ?? const <String, String>{});
-      try {
-        // ignore: avoid_dynamic_calls
-        await (native as dynamic).command(<Object>['change-list', 'audio-files', 'append', url]);
-      } catch (_) {
-        // Best-effort side-channel attach.
+      await _sideChannelAppend(native, 'audio-files', url, track);
+    }
+
+    // Subtitles ride the same side channel. mpv's `sub-files` takes file
+    // URLs; a DASH `text` representation served as WebVTT is exactly such a
+    // file, so declaring the essence and never attaching it was just a gap
+    // in this loop, not a limit of the engine.
+    for (final track in composite.subtitleTracks) {
+      final url = track.uri.toString();
+      if (url.isEmpty) continue;
+      final native = _player?.platform;
+      if (native == null) {
+        _warnNoSideChannel();
+        return;
       }
+      await _applyTrackNetworkHeaders(native, track.headers?.values ?? const <String, String>{});
+      await _sideChannelAppend(native, 'sub-files', url, track);
+    }
+  }
+
+  /// The composite side channel needs mpv's native command surface; say so
+  /// once instead of dropping the remaining essences in silence.
+  void _warnNoSideChannel() {
+    MediaCoreLog.warning(
+      LogCategory.renderer,
+      'composite side channel unavailable: no mpv NativePlayer on this '
+      'platform; extra audio and subtitle essences were not attached',
+    );
+  }
+
+  /// Appends one URL to an mpv list option, logging rather than throwing.
+  Future<void> _sideChannelAppend(
+    dynamic native,
+    String list,
+    String url,
+    MediaTrack track,
+  ) async {
+    try {
+      // ignore: avoid_dynamic_calls
+      await (native as dynamic).command(<Object>['change-list', list, 'append', url]);
+    } catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.renderer,
+        'composite $list attach failed for $url: $error',
+        fields: <String, Object?>{
+          'list': list,
+          'kind': track.kind.name,
+          if (track.language != null) 'language': track.language,
+        },
+      );
+    }
+  }
+
+  /// Applies the composition layer's alignment as mpv's `audio-delay`.
+  Future<void> _applyAudioAlignment(
+    dynamic native,
+    MediaTimeline timeline,
+    TimelineTrack? video,
+  ) async {
+    if (video == null) {
+      return;
+    }
+    final audio = timeline.tracks
+        .where((entry) => entry.track.kind == MediaTrackType.audio)
+        .firstOrNull;
+    if (audio == null || audio.offset == video.offset) {
+      return; // aligned; leave the user's own delay untouched
+    }
+    final seconds = (audio.offset - video.offset).inMicroseconds / 1000000;
+    try {
+      // ignore: avoid_dynamic_calls
+      await (native as dynamic).setProperty('audio-delay', seconds);
+    } catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.renderer,
+        'composite audio-delay ${seconds}s rejected by mpv: $error',
+      );
     }
   }
 
@@ -421,6 +524,17 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (headers.isEmpty) return;
     final fields = <String>[];
     for (final entry in headers.entries) {
+      // A header value carrying CR/LF would inject additional request lines
+      // (or, for `http-header-fields`, a whole extra header) into what mpv
+      // sends to the CDN. The same rule the FFmpeg remuxer applies: drop the
+      // value, never sanitize it into something the site did not issue.
+      if (entry.value.contains('\r') || entry.value.contains('\n')) {
+        MediaCoreLog.warning(
+          LogCategory.network,
+          'dropped side-channel header ${entry.key}: contains CR/LF',
+        );
+        continue;
+      }
       if (entry.key.toLowerCase() == 'user-agent') {
         try {
           // ignore: avoid_dynamic_calls
