@@ -16,4 +16,6 @@ dependencies:
   better_player_plus: ^1.4.1
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   flutter_lints: ^6.0.0

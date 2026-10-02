@@ -701,12 +701,22 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // Source matching.
     supportedProtocols: BetterPlayerFormats.supportedProtocols,
     supportedFormats: BetterPlayerFormats.supportedFormats,
-    // BetterPlayer drives ExoPlayer on Android and AVPlayer on iOS.
-    // Both backends expose a first-class merging API for parallel
-    // essence streams — ExoPlayer's `MergingMediaSource` and
-    // AVFoundation's `AVMutableComposition` — so a composite reaches
-    // the platform layer and is folded natively rather than through
-    // a side channel.
-    compositeSupport: CompositeSupport.native,
+    // BetterPlayer drives ExoPlayer on Android and AVPlayer on iOS, and
+    // both *engines* can merge parallel essences (Media3's
+    // `MergingMediaSource`, AVFoundation's `AVMutableComposition`) — but
+    // the better_player_plus surface this adapter is limited to hands
+    // `BetterPlayerDataSource` exactly one URI. There is no Dart-side
+    // entry for a second essence, so a composite handed to this adapter
+    // would open its video URL and drop the audio with no signal.
+    // Declared `none` until a merge path exists, so the planner sends
+    // composite sources here as a `RemuxPlan`: one merged file in, one
+    // data source out, and the pair plays with sound.
+    //
+    // Turning this into `native` requires one of: a fork/plugin change
+    // that adds a merge-typed data source (two URLs plus per-URL
+    // headers, folded into a `MergingMediaSource` in the plugin's
+    // Kotlin `MediaSource` factory), or a first-party Media3 adapter
+    // owning ExoPlayer and its `TextureRegistry` surface directly.
+    compositeSupport: CompositeSupport.none,
   );
 }
