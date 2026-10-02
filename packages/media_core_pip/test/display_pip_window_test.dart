@@ -267,6 +267,29 @@ void main() {
       expect(inner.lastAspectRatio, isNull);
     });
 
+    test('an unlocked shape replays the remembered bounds as they are', () async {
+      // A window the viewer squashed while the shape was unlocked…
+      saved = PipSavedBounds(
+        displayId: 'd1',
+        bounds: const Rect.fromLTWH(120, 300, 360, 120),
+      );
+      final display = build();
+
+      await display.applySmallWindow(
+        size: const Size(360, 202.5),
+        position: Offset.zero,
+        aspectRatio: null,
+        alwaysOnTop: false,
+        resizable: true,
+        skipTaskbar: false,
+        title: 'Test',
+      );
+
+      // …must come back squashed. Re-deriving the video's 16:9 here would undo
+      // the viewer's shape on every entry into the small window.
+      expect(inner.lastSize, const Size(360, 120));
+    });
+
     test(
       'a landscape stream re-derives the height from a remembered portrait size',
       () async {

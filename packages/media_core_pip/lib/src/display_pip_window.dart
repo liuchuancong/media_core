@@ -273,7 +273,12 @@ final class DisplayAwarePipWindow implements PipWindow {
     // landscape stream must not letterbox a portrait one (and vice versa) —
     // a box whose shape drifts from the picture shows nothing but black bars.
     PipSavedBounds? matchedSaved;
-    if (saved != null && savedMatches) {
+    if (saved != null && savedMatches && shapeAspectRatio == null) {
+      // Unlocked shape: the remembered bounds ARE the shape the viewer picked,
+      // so they are replayed as they are. Re-deriving the video's aspect here
+      // would undo a squashed window on every entry into the small window.
+      matchedSaved = saved;
+    } else if (saved != null && savedMatches) {
       // The user's scale is the remembered LONG side — it carries across
       // orientation changes (a size picked on a portrait stream applies to
       // the landscape stream's long side too).
