@@ -41,6 +41,7 @@ class FloatingWindowOverlay extends StatefulWidget {
     this.onClose,
     this.expandControlKey,
     this.closeControlKey,
+    this.resizeControlKey,
     super.key,
   });
 
@@ -73,6 +74,9 @@ class FloatingWindowOverlay extends StatefulWidget {
   final Key? expandControlKey;
   final Key? closeControlKey;
 
+  /// Key for the corner resize grip, addressed the same way as the other two.
+  final Key? resizeControlKey;
+
   @override
   State<FloatingWindowOverlay> createState() => _FloatingWindowOverlayState();
 }
@@ -86,6 +90,16 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
   /// A rect is only reusable while the surface is unchanged: after a rotation
   /// the old coordinates describe a surface that no longer exists.
   Size? _placedForSurface;
+
+  /// Window size at the start of the running corner drag.
+  Size? _resizeOrigin;
+
+  /// Whether a corner drag has taken ownership of the window size.
+  ///
+  /// Without this the next build compares the rect against the configured
+  /// default size, finds them different, and puts the window back — a resize
+  /// would last one frame.
+  bool _userSized = false;
 
   @override
   void initState() {
@@ -148,7 +162,7 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
 
   Rect _resolveRect(Size surface, Size window) {
     final current = _rect;
-    if (current != null && _placedForSurface == surface && current.size == window) {
+    if (current != null && _placedForSurface == surface && (_userSized || current.size == window)) {
       return current;
     }
     final placed = widget.placement.rectFor(surface: surface, window: window);
@@ -199,33 +213,93 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
       );
     }
 
-    if (!widget.placement.config.draggable) {
-      return surface;
+    Widget result = surface;
+    if (widget.placement.config.draggable) {
+      result = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) {
+          final surface = _placedForSurface;
+          final current = _rect;
+          if (surface == null || current == null) {
+            return;
+          }
+          setState(() {
+            _rect = widget.placement.drag(current: current, delta: details.delta, surface: surface);
+          });
+        },
+        onPanEnd: (_) {
+          final surface = _placedForSurface;
+          final current = _rect;
+          if (surface == null || current == null) {
+            return;
+          }
+          setState(() {
+            _rect = widget.placement.snap(rect: current, surface: surface);
+          });
+        },
+        child: surface,
+      );
     }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) {
-        final surface = _placedForSurface;
-        final current = _rect;
-        if (surface == null || current == null) {
-          return;
-        }
-        setState(() {
-          _rect = widget.placement.drag(current: current, delta: details.delta, surface: surface);
-        });
-      },
-      onPanEnd: (_) {
-        final surface = _placedForSurface;
-        final current = _rect;
-        if (surface == null || current == null) {
-          return;
-        }
-        setState(() {
-          _rect = widget.placement.snap(rect: current, surface: surface);
-        });
-      },
-      child: surface,
+    if (widget.placement.config.resizableByDrag) {
+      // The grip is a sibling above the move recognizer, not inside it: as a
+      // descendant it lost every pan to the window-move recognizer, which then
+      // slid the window instead of resizing it.
+      result = Stack(fit: StackFit.expand, children: [result, _buildResizeGrip()]);
+    }
+
+    return result;
+  }
+  /// Corner grip: dragging it resizes the window, dragging the picture moves it.
+  ///
+  /// The grip owns its own hit region on top of the surface so its pan is not
+  /// claimed by the window-move recognizer wrapped around everything below.
+  Widget _buildResizeGrip() {
+    return Positioned(
+      right: 0,
+      bottom: 0,
+      child: GestureDetector(
+        key: widget.resizeControlKey,
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (_) => _resizeOrigin = _rect?.size,
+        onPanUpdate: (details) {
+          final origin = _resizeOrigin;
+          final current = _rect;
+          final surface = _placedForSurface;
+          if (origin == null || current == null || surface == null) {
+            return;
+          }
+          setState(() {
+            _userSized = true;
+            _rect = widget.placement.drag(
+              current: current,
+              delta: Offset.zero,
+              surface: surface,
+              resizeTo: Size(origin.width + details.delta.dx, origin.height + details.delta.dy),
+            );
+          });
+        },
+        onPanEnd: (_) => _resizeOrigin = null,
+        onPanCancel: () => _resizeOrigin = null,
+        child: Semantics(
+          button: true,
+          label: 'Resize small window',
+          child: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Color(0x66000000),
+              borderRadius: BorderRadius.only(topLeft: Radius.circular(8)),
+            ),
+            child: const Text(
+              '⌟',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 14, height: 1),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
