@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_core/media_core.dart';
@@ -18,40 +16,12 @@ import 'package:media_core_better_player/media_core_better_player.dart';
 /// this test at the same time the capability changes, not after.
 void main() {
   group('BetterPlayer composite capability', () {
-    test('baseline does not advertise composite support it cannot honor', () {
+    test('does not advertise composite support it cannot honor', () {
       expect(
         BetterPlayerAdapter.defaultCapabilities.supportsComposite,
         isFalse,
-        reason: 'the iOS path has no merge; declaring support there '
-            'would play a DASH pair silent instead of routing it to the '
-            'remux leg',
-      );
-    });
-
-    test('the Android profile is the baseline plus the merge bit only', () {
-      // Deriving one from the other is the point: two hand-written
-      // profiles would drift on every unrelated capability and the
-      // drift would look like a platform difference that does not
-      // exist.
-      final android = BetterPlayerAdapter.androidMergeCapabilities;
-      final baseline = BetterPlayerAdapter.defaultCapabilities;
-
-      expect(android.supportsComposite, isTrue);
-      expect(android.compositeSupport, CompositeSupport.native);
-      expect(
-        android.copyWith(compositeSupport: CompositeSupport.none),
-        baseline,
-      );
-    });
-
-    test('the platform profile picks merge only where it exists', () {
-      final expected = Platform.isAndroid
-          ? CompositeSupport.native
-          : CompositeSupport.none;
-
-      expect(
-        BetterPlayerAdapter.capabilitiesForPlatform().compositeSupport,
-        expected,
+        reason: 'a single-URI BetterPlayerDataSource cannot consume a '
+            'CompositeMediaSource without dropping its audio',
       );
     });
   });

@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_better_player/media_core_better_player.dart';
@@ -43,40 +41,13 @@ typedef BetterPlayerDataSourceBuilder =
 final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   BetterPlayerAdapter({
     super.id = kBetterPlayerBackendId,
-    PlayerAdapterCapabilities? capabilities,
+    super.capabilities = defaultCapabilities,
     BetterPlayerController? controller,
     this.configuration,
     this.playlistConfiguration,
     this.dataSource,
     this.configureDataSource,
-  }) : _injectedController = controller,
-       super(capabilities: capabilities ?? capabilitiesForPlatform());
-
-  /// The merge-capable profile for Android, where the vendored fork
-  /// turns a video URL plus audio URLs into one `MergingMediaSource`.
-  ///
-  /// Derived from [defaultCapabilities] rather than duplicated, so the
-  /// two profiles cannot drift apart on everything except the one bit
-  /// that actually differs by platform.
-  static PlayerAdapterCapabilities get androidMergeCapabilities =>
-      defaultCapabilities.copyWith(compositeSupport: CompositeSupport.native);
-
-  /// The capability profile to register this backend with, picking the
-  /// merge profile only where the fork's merge path exists.
-  ///
-  /// Not baked into a `const`: the capability set is what the planner
-  /// routes composites by, and a claim made for a platform whose
-  /// plugin path ignores the field would re-open the silent no-audio
-  /// failure the whole composite model exists to prevent. iOS keeps
-  /// [defaultCapabilities] (none), so a DASH pair there still goes
-  /// through the remux leg instead of arriving at a data source that
-  /// would drop the audio.
-  static PlayerAdapterCapabilities capabilitiesForPlatform() {
-    if (Platform.isAndroid) {
-      return androidMergeCapabilities;
-    }
-    return defaultCapabilities;
-  }
+  }) : _injectedController = controller;
 
   final BetterPlayerController? _injectedController;
 
@@ -333,47 +304,6 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         // `isLive` is a source-level hint; do not hardcode it.
         liveStream: source.isLive,
       );
-
-      // A composite source reaches here only when the platform can
-      // merge it (Android, via the fork's merge data source) — the
-      // base class refuses composite metadata on a backend that
-      // declares CompositeSupport.none. The flat PlayerSource only
-      // carries the primary video URL; the audio essences ride in the
-      // bridged metadata, and handing ExoPlayer the video alone would
-      // play a silent picture with no signal that audio existed.
-      final composite = MediaSourceBridge.compositeFromPlayerSource(source);
-      if (composite != null && composite.hasVideo && composite.hasAudio) {
-        if (!Platform.isAndroid) {
-          // The fork's merge path is Android-only. Past this point the
-          // field would be serialized to a plugin that drops it on
-          // silence, which is the exact "picture plays, audio gone,
-          // nobody asked" outcome the composite model was built to
-          // make impossible — so refuse here instead of trusting the
-          // capability set to have been chosen correctly upstream.
-          throw UnsupportedError(
-            'BetterPlayer cannot merge a composite source on this '
-            'platform; register it with capabilitiesForPlatform() (which '
-            'declares none off Android) so the planner sends composite '
-            'sources to the remux leg, or use a backend with native '
-            'composite support.',
-          );
-        }
-        final video = composite.primaryVideo!;
-        resolvedDataSource = BetterPlayerDataSource(
-          resolved.$1,
-          video.uri.toString(),
-          headers: video.headers?.toMap(),
-          liveStream: source.isLive,
-          mergeAudioSources: [
-            for (final audio in composite.audioTracks)
-              BetterPlayerDataSource(
-                BetterPlayerDataSourceType.network,
-                audio.uri.toString(),
-                headers: audio.headers?.toMap(),
-              ),
-          ],
-        );
-      }
     }
 
     // Per-open rewrite on top of whichever source was chosen above.
@@ -772,17 +702,21 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     supportedProtocols: BetterPlayerFormats.supportedProtocols,
     supportedFormats: BetterPlayerFormats.supportedFormats,
     // BetterPlayer drives ExoPlayer on Android and AVPlayer on iOS, and
-    // the engines differ here: the vendored fork of better_player_plus
-    // adds a merge data source (one video URL plus N audio URLs folded
-    // into an ExoPlayer `MergingMediaSource`), but only the Android
-    // side has that path — the iOS side still plays a single URI, so a
-    // composite handed to it would lose its audio with no signal.
+    // both *engines* can merge parallel essences (Media3's
+    // `MergingMediaSource`, AVFoundation's `AVMutableComposition`) — but
+    // the better_player_plus surface this adapter is limited to hands
+    // `BetterPlayerDataSource` exactly one URI. There is no Dart-side
+    // entry for a second essence, so a composite handed to this adapter
+    // would open its video URL and drop the audio with no signal.
+    // Declared `none` until a merge path exists, so the planner sends
+    // composite sources here as a `RemuxPlan`: one merged file in, one
+    // data source out, and the pair plays with sound.
     //
-    // This baseline therefore declares `none`; [capabilitiesForPlatform]
-    // swaps in [androidMergeCapabilities] where the merge actually
-    // exists. Register through the factory (which calls it) rather
-    // than pasting this constant, or the Android merge goes unannounced
-    // and every DASH pair takes the remux detour instead.
+    // Turning this into `native` requires one of: a fork/plugin change
+    // that adds a merge-typed data source (two URLs plus per-URL
+    // headers, folded into a `MergingMediaSource` in the plugin's
+    // Kotlin `MediaSource` factory), or a first-party Media3 adapter
+    // owning ExoPlayer and its `TextureRegistry` surface directly.
     compositeSupport: CompositeSupport.none,
   );
 }

@@ -37,12 +37,6 @@ dev_dependencies:
   melos: ^8.9.0
 
 dependency_overrides:
-  # Fork of better_player_plus 1.4.1 (Apache-2.0, LICENSE retained) with a
-  # merge data source added: one video URL plus N audio URLs fold into a
-  # MergingMediaSource on Android, which is how a DASH pair reaches ExoPlayer
-  # with its audio. Everything else is upstream.
-  better_player_plus:
-    path: packages/better_player_plus_fork
   wakelock_plus: ^1.7.0
   code_assets: ^2.1.0
   hooks: ^2.2.0

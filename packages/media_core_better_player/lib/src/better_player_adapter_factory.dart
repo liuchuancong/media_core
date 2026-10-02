@@ -10,7 +10,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   /// every adapter this factory creates. [configure] runs once per
   /// instance after construction for per-instance customisation.
   const BetterPlayerAdapterFactory({
-    this.capabilities,
+    this.capabilities = BetterPlayerAdapter.defaultCapabilities,
     this.configuration,
     this.playlistConfiguration,
     this.dataSource,
@@ -18,7 +18,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
     this.configure,
   });
 
-  final PlayerAdapterCapabilities? capabilities;
+  final PlayerAdapterCapabilities capabilities;
   final BetterPlayerConfiguration? configuration;
   final BetterPlayerPlaylistConfiguration? playlistConfiguration;
   final BetterPlayerDataSource? dataSource;
@@ -29,7 +29,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   PlayerAdapter create(String id) {
     final adapter = BetterPlayerAdapter(
       id: id,
-      capabilities: capabilities ?? BetterPlayerAdapter.capabilitiesForPlatform(),
+      capabilities: capabilities,
       configuration: configuration,
       playlistConfiguration: playlistConfiguration,
       dataSource: dataSource,
@@ -50,7 +50,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
     return PlayerAdapterRegistration(
       id: kBetterPlayerBackendId,
       factory: this,
-      capabilities: capabilities ?? BetterPlayerAdapter.capabilitiesForPlatform(),
+      capabilities: capabilities,
       priority: priority,
     );
   }
@@ -60,7 +60,7 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
 void registerBetterPlayerFactory(
   DefaultPlayerAdapterFactory factory, {
   String id = kBetterPlayerBackendId,
-  PlayerAdapterCapabilities? capabilities,
+  PlayerAdapterCapabilities capabilities = BetterPlayerAdapter.defaultCapabilities,
   BetterPlayerConfiguration? configuration,
     BetterPlayerPlaylistConfiguration? playlistConfiguration,
     BetterPlayerDataSource? dataSource,
@@ -70,7 +70,7 @@ void registerBetterPlayerFactory(
   factory.register(id, () {
     final adapter = BetterPlayerAdapter(
         id: id,
-        capabilities: capabilities ?? BetterPlayerAdapter.capabilitiesForPlatform(),
+        capabilities: capabilities,
         configuration: configuration,
         playlistConfiguration: playlistConfiguration,
         dataSource: dataSource,
@@ -85,7 +85,7 @@ void registerBetterPlayerFactory(
 void registerBetterPlayerRegistry(
   PlayerAdapterRegistry registry, {
   int priority = 80,
-  PlayerAdapterCapabilities? capabilities,
+  PlayerAdapterCapabilities capabilities = BetterPlayerAdapter.defaultCapabilities,
   BetterPlayerConfiguration? configuration,
     BetterPlayerPlaylistConfiguration? playlistConfiguration,
     BetterPlayerDataSource? dataSource,
@@ -94,7 +94,7 @@ void registerBetterPlayerRegistry(
 }) {
   registry.register(
     BetterPlayerAdapterFactory(
-      capabilities: capabilities ?? BetterPlayerAdapter.capabilitiesForPlatform(),
+      capabilities: capabilities,
       configuration: configuration,
       playlistConfiguration: playlistConfiguration,
       dataSource: dataSource,
