@@ -838,5 +838,10 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     // Source matching.
     supportedProtocols: FvpFormats.supportedProtocols,
     supportedFormats: FvpFormats.supportedFormats,
+    // FVP opens one URL through its FFmpeg demuxer and reads whatever
+    // essences that container carries. Like IJKPlayer it has no
+    // side-channel for external audio, so a composite source needs a
+    // remux step upstream before it reaches this adapter.
+    compositeSupport: CompositeSupport.none,
   );
 }

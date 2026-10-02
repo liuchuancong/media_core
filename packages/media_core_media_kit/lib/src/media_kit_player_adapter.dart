@@ -822,5 +822,11 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // Source matching.
     supportedProtocols: MediaKitFormats.supportedProtocols,
     supportedFormats: MediaKitFormats.supportedFormats,
+    // media_kit wraps libmpv on every target, and MPV combines a
+    // primary URL with side-channel audio files (`--audio-file`,
+    // `secondary-sid`), not a native merging API. Providers should
+    // read the composite from MediaSourceBridge metadata and route
+    // extra audio through mpv's side channel.
+    compositeSupport: CompositeSupport.externalAudio,
   );
 }

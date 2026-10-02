@@ -12,6 +12,11 @@ import 'package:media_core/identity/session_id.dart';
 import 'package:media_core/event/event_priority.dart';
 import 'package:media_core/policy/player_policy.dart';
 import 'package:media_core/source/player_source.dart';
+import 'package:media_core/source/default_media_source_planner.dart';
+import 'package:media_core/source/media_source.dart';
+import 'package:media_core/source/media_source_bridge.dart';
+import 'package:media_core/source/media_source_plan.dart';
+import 'package:media_core/source/media_source_planner.dart';
 import 'package:media_core/session/session_state.dart';
 import 'package:media_core/runtime/player_runtime.dart';
 import 'package:media_core/adapter/player_adapter.dart';
@@ -163,6 +168,7 @@ final class PlayerHandle implements RecoveryTarget {
     this.policy = const PlayerPolicy(),
     PlayerAdapterRegistry? registry,
     PlayerAdapterSelector? selector,
+    MediaSourcePlanner? planner,
   }) : _player = player,
        _registration = registration,
        _adapterContext = adapterContext,
@@ -170,6 +176,7 @@ final class PlayerHandle implements RecoveryTarget {
        _options = options,
        _registry = registry,
        _selector = selector,
+       _planner = planner ?? const DefaultMediaSourcePlanner(),
        _loop = config.loop,
        _runtime = PlayerRuntime(
          adapter: adapter,
@@ -201,6 +208,7 @@ final class PlayerHandle implements RecoveryTarget {
   final KernelOptions _options;
   final PlayerAdapterRegistry? _registry;
   final PlayerAdapterSelector? _selector;
+  final MediaSourcePlanner _planner;
 
   final PlayerRuntime _runtime;
 

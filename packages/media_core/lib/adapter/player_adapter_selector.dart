@@ -1,6 +1,10 @@
+import 'package:media_core/source/media_source.dart';
+import 'package:media_core/source/media_track.dart';
+import 'package:media_core/source/media_track_type.dart';
 import 'package:media_core/source/player_source.dart';
-import 'package:media_core/source/source_protocol.dart';
 import 'package:media_core/source/source_format.dart';
+import 'package:media_core/source/source_protocol.dart';
+import 'package:media_core/adapter/composite_support.dart';
 import 'package:media_core/adapter/player_adapter_registry.dart';
 import 'package:media_core/adapter/player_adapter_capabilities.dart';
 import 'package:media_core_logging/media_core_logging.dart';
@@ -247,4 +251,281 @@ final class PlayerAdapterSelector {
 
     return conventional != null && capabilities.supportsFormat(conventional);
   }
+
+  // ---------------------------------------------------------------------------
+  // MediaSource-aware selection
+  //
+  // The PlayerSource-based methods above predate the composite model. When
+  // the caller already has a MediaSource — a Bilibili DASH pair, a
+  // multi-audio source — scoring through the flat path loses the one signal
+  // that decides whether the source is playable at all: the backend's
+  // CompositeSupport. The methods below keep the same weighting for
+  // protocol and format but add a composite bonus so a registry that
+  // includes both Media3 and Fijk picks Media3 for a composite source
+  // without the caller having to prefer it by id.
+  // ---------------------------------------------------------------------------
+
+  /// Returns the best registration for [source], or `null` when
+  /// no enabled adapter is registered.
+  ///
+  /// Behaves like [select] but scores against the shape of a
+  /// [MediaSource], including whether the backend's
+  /// [PlayerAdapterCapabilities.compositeSupport] matches the source
+  /// being composite.
+  PlayerAdapterRegistration? selectMedia(
+    MediaSource source, {
+    String? preferredId,
+  }) {
+    if (preferredId != null && preferredId.trim().isNotEmpty) {
+      final preferred = registry.get(preferredId);
+
+      if (preferred != null && preferred.enabled) {
+        MediaCoreLog.info(
+          LogCategory.fallback,
+          'backend selection: preferred backend "$preferredId" selected for '
+              '${source.type.name} source',
+          fields: <String, Object?>{
+            'uri': _primaryUriOf(source)?.toString(),
+            'preferred': preferredId,
+            'sourceType': source.type.name,
+          },
+        );
+
+        return preferred;
+      }
+
+      MediaCoreLog.warning(
+        LogCategory.fallback,
+        'backend selection: preferred backend "$preferredId" is '
+            '${preferred == null ? 'not registered' : 'disabled'} — falling back to scoring',
+        fields: <String, Object?>{
+          'uri': _primaryUriOf(source)?.toString(),
+          'registered': registry.ids.toList(),
+        },
+      );
+    }
+
+    final candidates = mediaCandidatesFor(source);
+
+    if (candidates.isEmpty) {
+      MediaCoreLog.error(
+        LogCategory.fallback,
+        'backend selection: no enabled backend can handle the ${source.type.name} source',
+        fields: <String, Object?>{
+          'uri': _primaryUriOf(source)?.toString(),
+          'registered': registry.ids.toList(),
+        },
+      );
+
+      return null;
+    }
+
+    PlayerAdapterRegistration? best;
+    var bestScore = -1 << 30;
+
+    for (final candidate in candidates) {
+      final candidateScore = scoreMedia(candidate, source);
+      if (candidateScore > bestScore) {
+        bestScore = candidateScore;
+        best = candidate;
+      }
+    }
+
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'backend selection: ${best?.id} selected (score $bestScore) for '
+          '${source.type.name} source',
+      fields: <String, Object?>{
+        'uri': _primaryUriOf(source)?.toString(),
+        'sourceType': source.type.name,
+        'composite': source is CompositeMediaSource,
+        'scores': _mediaScoreTable(candidates, source),
+      },
+    );
+
+    return best;
+  }
+
+  /// Returns the best registration for [source].
+  ///
+  /// Throws [StateError] when no enabled adapter can play [source].
+  PlayerAdapterRegistration requireMedia(
+    MediaSource source, {
+    String? preferredId,
+  }) {
+    final selected = selectMedia(source, preferredId: preferredId);
+    if (selected == null) {
+      throw StateError(
+        'No enabled player adapter can handle ${source.type.name} media source '
+        '"${_primaryUriOf(source) ?? '<no uri>'}".',
+      );
+    }
+    return selected;
+  }
+
+  /// Returns enabled registrations able to handle [source],
+  /// ordered from best to worst match.
+  List<PlayerAdapterRegistration> mediaCandidatesFor(MediaSource source) {
+    final capable = registry.registrations.where((r) => r.enabled).toList()
+      ..sort((a, b) {
+        final byScore = scoreMedia(b, source).compareTo(scoreMedia(a, source));
+        if (byScore != 0) return byScore;
+        return b.priority.compareTo(a.priority);
+      });
+
+    final table = capable
+        .map((registration) => '${registration.id}:${scoreMedia(registration, source)}')
+        .join(', ');
+
+    MediaCoreLog.debug(
+      LogCategory.fallback,
+      'backend candidates (${source.type.name}): $table',
+      fields: <String, Object?>{'uri': _primaryUriOf(source)?.toString()},
+    );
+
+    return capable;
+  }
+
+  /// Renders every candidate with its score breakdown against a
+  /// [MediaSource].
+  List<Map<String, Object?>> mediaScoreTable(MediaSource source) =>
+      _mediaScoreTable(registry.registrations, source);
+
+  List<Map<String, Object?>> _mediaScoreTable(
+    Iterable<PlayerAdapterRegistration> registrations,
+    MediaSource source,
+  ) {
+    final primary = _primaryTrackOf(source);
+    final isComposite = source is CompositeMediaSource;
+    final table = <Map<String, Object?>>[];
+
+    for (final registration in registrations) {
+      final capabilities = registration.capabilities;
+
+      table.add(<String, Object?>{
+        'id': registration.id,
+        'enabled': registration.enabled,
+        'priority': registration.priority,
+        'protocolMatch':
+            primary != null && _protocolMatchesTrack(capabilities, primary),
+        'formatMatch': primary != null && _formatMatchesTrack(capabilities, primary),
+        'compositeSupport': capabilities.compositeSupport.name,
+        'compositeMatch': isComposite && capabilities.supportsComposite,
+        'score': scoreMedia(registration, source),
+      });
+    }
+
+    table.sort((a, b) => (b['score']! as int).compareTo(a['score']! as int));
+
+    return table;
+  }
+
+  /// Scores one registration against a [MediaSource].
+  ///
+  /// Weights:
+  ///
+  /// - registration priority: as registered (baseline)
+  /// - protocol match on the primary track: +40
+  /// - format match on the primary track: +30
+  /// - composite support bonus when the source is composite:
+  ///   [CompositeSupport.native] +60, [CompositeSupport.externalAudio]
+  ///   +40, [CompositeSupport.none] no bonus — this ranks Media3 above
+  ///   MPV above single-URL engines for a DASH pair without hiding the
+  ///   weaker backends entirely, so a caller with only Fijk wired still
+  ///   gets a registration and the planner can decide whether to
+  ///   remux or reject.
+  /// - audio-only progressive source and [PlayerAdapterCapabilities.supportsAudioOnly]: +10
+  int scoreMedia(PlayerAdapterRegistration registration, MediaSource source) {
+    var score = registration.priority;
+    final capabilities = registration.capabilities;
+    final primary = _primaryTrackOf(source);
+
+    if (primary != null) {
+      if (_protocolMatchesTrack(capabilities, primary)) {
+        score += 40;
+      }
+      if (_formatMatchesTrack(capabilities, primary)) {
+        score += 30;
+      }
+    }
+
+    if (source is CompositeMediaSource) {
+      switch (capabilities.compositeSupport) {
+        case CompositeSupport.native:
+          score += 60;
+        case CompositeSupport.externalAudio:
+          score += 40;
+        case CompositeSupport.none:
+          break;
+      }
+    } else if (source is ProgressiveMediaSource) {
+      // A progressive audio-only source is the one shape where
+      // supportsAudioOnly is a selection signal at planning time;
+      // composite sources carry their audio explicitly as another
+      // track, so this bonus is deliberately scoped here.
+      if (primary != null &&
+          primary.kind == MediaTrackType.audio &&
+          capabilities.supportsAudioOnly) {
+        score += 10;
+      }
+    }
+
+    return score;
+  }
+
+  /// Whether [capabilities] can consume a composite source at all.
+  ///
+  /// Kept as a first-class predicate so callers outside the selector
+  /// (e.g. an app that hides "Play in high quality" for composite
+  /// sources on Fijk) can ask the same question without re-deriving
+  /// it.
+  bool compositeMatches(
+    PlayerAdapterCapabilities capabilities,
+    MediaSource source,
+  ) {
+    if (source is! CompositeMediaSource) {
+      return true;
+    }
+    return capabilities.supportsComposite;
+  }
+}
+
+Uri? _primaryUriOf(MediaSource source) => _primaryTrackOf(source)?.uri;
+
+MediaTrack? _primaryTrackOf(MediaSource source) {
+  if (source is ProgressiveMediaSource) {
+    return source.track;
+  }
+  if (source is CompositeMediaSource) {
+    return source.primaryVideo ?? source.primaryAudio;
+  }
+  return null;
+}
+
+bool _protocolMatchesTrack(
+  PlayerAdapterCapabilities capabilities,
+  MediaTrack track,
+) {
+  final protocol = track.protocol;
+  if (protocol.isKnown && capabilities.supportsProtocol(protocol.name)) {
+    return true;
+  }
+  final scheme = track.uri.scheme.trim().toLowerCase();
+  return scheme.isNotEmpty && capabilities.supportsProtocol(scheme);
+}
+
+bool _formatMatchesTrack(
+  PlayerAdapterCapabilities capabilities,
+  MediaTrack track,
+) {
+  final format = track.format;
+  if (format.isKnown && capabilities.supportsFormat(format.name)) {
+    return true;
+  }
+  final extension = SourceFormat.extensionOf(track.uri);
+  if (extension != null && capabilities.supportsFormat(extension)) {
+    return true;
+  }
+  final conventional = format.extension;
+  return conventional != null && capabilities.supportsFormat(conventional);
 }

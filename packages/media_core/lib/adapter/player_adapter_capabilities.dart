@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:media_core/adapter/composite_support.dart';
 
 /// Describes capabilities of a player adapter.
 ///
@@ -95,6 +96,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     // Source matching.
     this.supportedProtocols = const {},
     this.supportedFormats = const {},
+    this.compositeSupport = CompositeSupport.none,
   });
 
   // ---------------------------------------------------------------------------
@@ -346,6 +348,33 @@ final class PlayerAdapterCapabilities extends Equatable {
   /// - mp4
   final Set<String> supportedFormats;
 
+  /// How this backend consumes a [CompositeMediaSource].
+  ///
+  /// The distinction matters because "supports composite" is not one
+  /// capability but two, and they need different handling above the
+  /// adapter:
+  ///
+  /// - [CompositeSupport.native] — Media3 / ExoPlayer's
+  ///   `MergingMediaSource`, so the planner forwards the whole
+  ///   composite and the engine merges internally.
+  /// - [CompositeSupport.externalAudio] — MPV's `audio-files` /
+  ///   secondary-track channel, so the planner picks a primary video
+  ///   essence for the main URL and routes the extra audio through the
+  ///   side channel.
+  /// - [CompositeSupport.none] — FijkPlayer and any single-URL engine;
+  ///   the planner must fall back (remux, primary-only, or reject).
+  ///
+  /// Defaults to [CompositeSupport.none] to match this class's
+  /// conservative baseline; adapters that can do better opt in.
+  final CompositeSupport compositeSupport;
+
+  /// Whether this backend can consume composite sources at all.
+  ///
+  /// Derived from [compositeSupport] so callers never see a
+  /// `supportsComposite` boolean drift out of sync with the enum it
+  /// summarises.
+  bool get supportsComposite => compositeSupport != CompositeSupport.none;
+
   /// Whether adapter can handle protocol.
   bool supportsProtocol(String protocol) {
     return supportedProtocols.contains(protocol.toLowerCase());
@@ -393,6 +422,7 @@ final class PlayerAdapterCapabilities extends Equatable {
     bool? supportsFullscreen,
     Set<String>? supportedProtocols,
     Set<String>? supportedFormats,
+    CompositeSupport? compositeSupport,
   }) {
     return PlayerAdapterCapabilities(
       supportsLive: supportsLive ?? this.supportsLive,
@@ -430,6 +460,7 @@ final class PlayerAdapterCapabilities extends Equatable {
       supportsFullscreen: supportsFullscreen ?? this.supportsFullscreen,
       supportedProtocols: supportedProtocols ?? this.supportedProtocols,
       supportedFormats: supportedFormats ?? this.supportedFormats,
+      compositeSupport: compositeSupport ?? this.compositeSupport,
     );
   }
 
@@ -470,5 +501,6 @@ final class PlayerAdapterCapabilities extends Equatable {
     supportsFullscreen,
     supportedProtocols,
     supportedFormats,
+    compositeSupport,
   ];
 }

@@ -26,6 +26,12 @@ import 'package:media_core/presentation/presentation_request.dart';
 import 'package:media_core/screenshot/player_screenshot.dart';
 import 'package:media_core/screenshot/screenshot_options.dart';
 import 'package:media_core/session/player_session.dart';
+import 'package:media_core/source/default_media_source_planner.dart';
+import 'package:media_core/source/media_remuxer.dart';
+import 'package:media_core/source/media_source.dart';
+import 'package:media_core/source/media_source_bridge.dart';
+import 'package:media_core/source/media_source_plan.dart';
+import 'package:media_core/source/media_source_planner.dart';
 import 'package:media_core/source/player_source.dart';
 import 'package:media_core/source/source_service.dart';
 import 'package:media_core_logging/media_core_logging.dart';
@@ -42,23 +48,31 @@ import 'package:media_core/kernel/player_handle.dart';
 /// player framework:
 ///
 /// ```text
-/// PlayerSource
-///     │  SourceService (resolve)
-///     ▼
-/// PlayerAdapterSelector ──▶ PlayerAdapterRegistry
-///     │  best backend
-///     ▼
-/// PlayerHandle ──▶ PlayerAdapter (media_kit / ijk / video_player / ...)
-///     │
-///     ├── PlayerSession + SessionController
-///     ├── PlaybackController
-///     ├── LifecycleController
-///     ├── RecoveryLadder (report → escalate → reopen / next line / next backend)
-///     ├── GlobalPlayerCoordinator (audio/page/resource/presentation)
-///     ├── PlayerPool (instance reuse)
-///     ├── PreloadManager (warm-up bookkeeping)
-///     └── PlayerEventBus (normalized events)
+/// MediaSource (Progressive / Composite)      PlayerSource
+///     │  MediaSourcePlanner + capabilities        │  SourceService (resolve)
+///     ▼                                           ▼
+/// DirectPlan / CompositePlan / RemuxPlan / UnsupportedPlan
+///     │  bridge to PlayerSource                   │
+///     └────────────────┬──────────────────────────┘
+///                      ▼
+///              PlayerAdapterSelector ──▶ PlayerAdapterRegistry
+///                      │  best backend
+///                      ▼
+///              PlayerHandle ──▶ PlayerAdapter (media_kit / ijk / video_player / ...)
+///                      │
+///                      ├── PlayerSession + SessionController
+///                      ├── PlaybackController
+///                      ├── LifecycleController
+///                      ├── RecoveryLadder (report → escalate → reopen / next line / next backend)
+///                      ├── GlobalPlayerCoordinator (audio/page/resource/presentation)
+///                      ├── PlayerPool (instance reuse)
+///                      ├── PreloadManager (warm-up bookkeeping)
+///                      └── PlayerEventBus (normalized events)
 /// ```
+///
+/// [create] is the PlayerSource entry; [createFromMedia] is the
+/// MediaSource entry and the one a provider that produces composite
+/// DASH pairs should reach for.
 ///
 /// Responsibilities:
 ///
@@ -107,6 +121,8 @@ final class PlayerKernel {
     PlayerPool? pool,
     PreloadManager? preloadManager,
     GlobalPlayerCoordinator? coordinator,
+    MediaSourcePlanner? planner,
+    MediaRemuxer? remuxer,
     this.options = const KernelOptions(),
   }) : registry = registry ?? PlayerAdapterRegistry(),
        _selector = selector,
@@ -114,7 +130,10 @@ final class PlayerKernel {
        _eventBus = eventBus ?? PlayerEventBus(),
        _pool = pool ?? PlayerPool(),
        _preloadManager = preloadManager ?? PreloadManager(),
-       _coordinator = coordinator ?? GlobalPlayerCoordinator() {
+       _coordinator = coordinator ?? GlobalPlayerCoordinator(),
+       _remuxer = remuxer,
+       _planner =
+           planner ?? DefaultMediaSourcePlanner(remuxer: remuxer) {
     _trackActivePlayer();
 
     // A capability package may have installed a process-wide media-session
@@ -135,6 +154,8 @@ final class PlayerKernel {
   final PlayerPool _pool;
   final PreloadManager _preloadManager;
   final GlobalPlayerCoordinator _coordinator;
+  final MediaSourcePlanner _planner;
+  final MediaRemuxer? _remuxer;
 
   /// Kernel-wide options.
   final KernelOptions options;
@@ -173,6 +194,37 @@ final class PlayerKernel {
 
   /// Lazy selector bound to [registry].
   PlayerAdapterSelector get selector => _selector ?? PlayerAdapterSelector(registry);
+
+  /// The planner consulted by [createFromMedia] before any adapter
+  /// sees a source.
+  MediaSourcePlanner get mediaSourcePlanner => _planner;
+
+  /// Runs the planner against [source] without touching any
+  /// adapter or handle.
+  ///
+  /// UI layers and pre-flight checks use this to answer
+  /// "can this be played, and if so by whom" before the caller
+  /// commits to a [create] or [createFromMedia] — for example, to
+  /// disable the 4K HDR option on a build whose registry contains
+  /// only Fijk.
+  ///
+  /// The method never throws for an unsupported source: an
+  /// [UnsupportedPlan] is a legitimate answer and the caller decides
+  /// what to do with it. A [StateError] from [selector.requireMedia]
+  /// still surfaces, because "no backend registered at all" is a
+  /// configuration bug rather than a planning outcome.
+  ({PlayerAdapterRegistration registration, MediaSourcePlan plan}) planFor(
+    MediaSource source, {
+    String? preferredBackend,
+  }) {
+    final registration = selector.requireMedia(
+      source,
+      preferredId: preferredBackend,
+    );
+    final plan = _planner.plan(source, registration.capabilities);
+
+    return (registration: registration, plan: plan);
+  }
 
   /// Global event bus.
   PlayerEventBus get eventBus => _eventBus;
@@ -300,6 +352,7 @@ final class PlayerKernel {
       config: config,
       registry: registry,
       selector: selector,
+      planner: _planner,
     );
 
     // The config carries playback preferences the handle cannot read from the
@@ -330,6 +383,88 @@ final class PlayerKernel {
     }
 
     return handle;
+  }
+
+  /// Creates a player from a [MediaSource].
+  ///
+  /// Where [create] takes the flat [PlayerSource] an existing adapter
+  /// already understands, [createFromMedia] accepts the shape-aware
+  /// [MediaSource] model the provider layer produces — a Bilibili
+  /// DASH pair becomes one [CompositeMediaSource] here and this
+  /// method figures out what to do with it:
+  ///
+  /// 1. Pick a backend from the primary track's protocol/format.
+  /// 2. Ask [mediaSourcePlanner] how that backend should consume the
+  ///    source, given its declared
+  ///    [PlayerAdapterCapabilities.compositeSupport].
+  /// 3. For a [DirectPlan] or [CompositePlan], bridge the source to
+  ///    [PlayerSource] and delegate to [create]. The original
+  ///    [MediaSource] is preserved under
+  ///    [MediaSourceBridge.metadataKey] so a composite-capable
+  ///    adapter can recover the extra tracks.
+  /// 4. For a [RemuxPlan], run the kernel's [MediaRemuxer] and loop.
+  ///    The re-planned source can be DirectPlan once the remuxer has
+  ///    folded the essences, so the second pass terminates on the
+  ///    playable path.
+  /// 5. For an [UnsupportedPlan], throw. Silently falling back to the
+  ///    primary track is what lets a composite ship to a
+  ///    single-URL backend with no audio and no signal that anything
+  ///    went wrong — an explicit exception keeps the failure at the
+  ///    layer that can react.
+  ///
+  /// The loop is finite: a [MediaRemuxer] that keeps returning
+  /// composite sources would otherwise spin here. Callers that own a
+  /// remuxer are responsible for making it idempotent, but this
+  /// method guards against a broken remuxer by refusing the second
+  /// RemuxPlan round and reporting it as unsupported.
+  Future<PlayerHandle> createFromMedia(
+    MediaSource source, {
+    PlayerConfig config = PlayerConfig.defaults,
+    String? preferredBackend,
+  }) async {
+    var current = source;
+    var remuxPasses = 0;
+
+    while (true) {
+      final registration = selector.requireMedia(
+        current,
+        preferredId: preferredBackend,
+      );
+      final plan = _planner.plan(current, registration.capabilities);
+
+      switch (plan) {
+        case DirectPlan():
+        case CompositePlan():
+          final bridged = current.toPlayerSource();
+          return create(
+            config: config,
+            source: bridged,
+            preferredBackend: registration.id,
+          );
+
+        case RemuxPlan(:final source):
+          final muxer = _remuxer;
+          if (muxer == null) {
+            throw UnsupportedError(
+              'MediaSourcePlanner produced a RemuxPlan but the kernel has '
+              'no MediaRemuxer attached. Pass one to the PlayerKernel '
+              'constructor or wire a composite-capable backend.',
+            );
+          }
+          if (remuxPasses > 0) {
+            throw UnsupportedError(
+              'MediaRemuxer returned another composite source; refusing a '
+              'second remux pass. ${source.videoTracks.length} video and '
+              '${source.audioTracks.length} audio tracks still present.',
+            );
+          }
+          remuxPasses++;
+          current = await muxer.remux(source);
+
+        case UnsupportedPlan(:final reason):
+          throw UnsupportedError(reason);
+      }
+    }
   }
 
   /// Acquires an idle player from the pool.

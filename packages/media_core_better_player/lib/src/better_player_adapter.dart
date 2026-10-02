@@ -701,5 +701,12 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // Source matching.
     supportedProtocols: BetterPlayerFormats.supportedProtocols,
     supportedFormats: BetterPlayerFormats.supportedFormats,
+    // BetterPlayer drives ExoPlayer on Android and AVPlayer on iOS.
+    // Both backends expose a first-class merging API for parallel
+    // essence streams — ExoPlayer's `MergingMediaSource` and
+    // AVFoundation's `AVMutableComposition` — so a composite reaches
+    // the platform layer and is folded natively rather than through
+    // a side channel.
+    compositeSupport: CompositeSupport.native,
   );
 }

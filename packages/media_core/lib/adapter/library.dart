@@ -16,6 +16,7 @@ library;
 // Public exports
 // ============================================================================
 
+export 'package:media_core/adapter/composite_support.dart';
 export 'package:media_core/adapter/player_adapter.dart';
 export 'package:media_core/adapter/player_adapter_base.dart';
 export 'package:media_core/adapter/player_adapter_capabilities.dart';
