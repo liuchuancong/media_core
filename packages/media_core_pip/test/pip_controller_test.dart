@@ -69,6 +69,9 @@ final class _FakeDesktopWindow implements PipWindow {
 
   @override
   Future<void> setMinimumSize(Size size) async {}
+
+  @override
+  Future<void> startDragging() async {}
 }
 
 PlayerId _id(String value) => PlayerId(value);

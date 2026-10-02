@@ -10,6 +10,7 @@ final class _FakeInnerWindow implements PipWindow {
   int captureCount = 0;
   int applyCount = 0;
   int restoreCount = 0;
+  int dragCount = 0;
   int minimumSizeReleases = 0;
   int minimumSizeRestores = 0;
   Size? lastMinimumSize;
@@ -78,6 +79,11 @@ final class _FakeInnerWindow implements PipWindow {
     } else {
       minimumSizeRestores++;
     }
+  }
+
+  @override
+  Future<void> startDragging() async {
+    dragCount++;
   }
 }
 
@@ -288,6 +294,25 @@ void main() {
         expect(inner.bounds, const Rect.fromLTWH(0, 0, 1280, 720));
       },
     );
+
+    test('startDragging only reaches the backend while compact', () async {
+      final display = build();
+
+      await display.startDragging();
+      expect(inner.dragCount, 0);
+
+      await display.applySmallWindow(
+        size: const Size(360, 202.5),
+        position: Offset.zero,
+        aspectRatio: 16 / 9,
+        alwaysOnTop: false,
+        resizable: true,
+        skipTaskbar: false,
+        title: 'Test',
+      );
+      await display.startDragging();
+      expect(inner.dragCount, 1);
+    });
 
     test('setAlwaysOnTop while compact reaches the backend', () async {
       final display = build();

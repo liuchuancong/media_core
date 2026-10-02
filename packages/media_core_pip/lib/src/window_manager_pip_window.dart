@@ -81,4 +81,7 @@ final class WindowManagerPipWindow implements PipWindow {
 
   @override
   Future<void> setMinimumSize(Size size) => windowManager.setMinimumSize(size);
+
+  @override
+  Future<void> startDragging() => windowManager.startDragging();
 }

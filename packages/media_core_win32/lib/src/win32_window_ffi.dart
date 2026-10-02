@@ -50,6 +50,8 @@ const int _swpShowWindow = 0x0040;
 const int _monitorDefaultToNearest = 2;
 const int _wmSyscommand = 0x0112;
 const int _scRestore = 0xF120;
+const int _wmNclbuttondown = 0x00A1;
+const int _htcaption = 2;
 const int _wmGettext = 0x000D;
 const int _wmGettextlength = 0x000E;
 
@@ -163,6 +165,8 @@ typedef _SendMessageW_Native =
     _LongPtr Function(_Hwnd hwnd, _Dword msg, _LongPtr wparam, _LongPtr lparam);
 typedef _SendMessageW_Dart =
     int Function(int hwnd, int msg, int wparam, int lparam);
+typedef _ReleaseCapture_Native = _Bool32 Function();
+typedef _ReleaseCapture_Dart = int Function();
 typedef _GetCurrentProcessId_Native = _Dword Function();
 typedef _GetCurrentProcessId_Dart = int Function();
 
@@ -195,6 +199,10 @@ abstract final class Win32WindowFfi {
   static final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
   static final DynamicLibrary _kernel32 = DynamicLibrary.open('kernel32.dll');
 
+  static final _ReleaseCapture_Dart _releaseCapture = _user32
+      .lookupFunction<_ReleaseCapture_Native, _ReleaseCapture_Dart>(
+        'ReleaseCapture',
+      );
   static final _GetCurrentProcessId_Dart _getCurrentProcessId = _kernel32
       .lookupFunction<_GetCurrentProcessId_Native, _GetCurrentProcessId_Dart>(
         'GetCurrentProcessId',
@@ -385,6 +393,20 @@ abstract final class Win32WindowFfi {
     } finally {
       calloc.free(buffer);
     }
+  }
+
+  /// Begins a native drag of the window: releases the mouse capture Flutter
+  /// holds and enters the caption drag loop via `WM_NCLBUTTONDOWN(HTCAPTION)`.
+  /// Works on any window regardless of its style bits — the compact
+  /// picture-in-picture window has neither a title bar nor `WS_THICKFRAME`,
+  /// so a surface-initiated drag is the only way to move it.
+  ///
+  /// The `SendMessage` is synchronous and returns when the drag loop ends;
+  /// the loop pumps messages, so Flutter keeps rendering while it runs.
+  static bool startDragging(int hwnd) {
+    if (hwnd == 0) return false;
+    _releaseCapture();
+    return _sendMessage(hwnd, _wmNclbuttondown, _htcaption, 0) != 0;
   }
 
   /// Moves the window into or out of the top-most band without touching its

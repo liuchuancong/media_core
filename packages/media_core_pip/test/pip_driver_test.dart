@@ -61,6 +61,9 @@ final class _FakePipWindow implements PipWindow {
 
   @override
   Future<void> setMinimumSize(Size size) async {}
+
+  @override
+  Future<void> startDragging() async {}
 }
 
 final class _FakeSystemPip implements SystemPip {

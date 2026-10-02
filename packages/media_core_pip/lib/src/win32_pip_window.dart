@@ -123,4 +123,9 @@ final class Win32PipWindow implements PipWindow {
     // No minimum-size concept: a compact window without WS_THICKFRAME cannot
     // be resized by the user in the first place.
   }
+
+  @override
+  Future<void> startDragging() async {
+    Win32WindowFfi.startDragging(_windowHandle);
+  }
 }

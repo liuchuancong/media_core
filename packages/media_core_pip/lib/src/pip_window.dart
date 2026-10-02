@@ -70,4 +70,12 @@ abstract interface class PipWindow {
   /// programmatic resizes (macOS `contentMinSize`) cannot reach the compact
   /// size otherwise. Backends without a minimum-size concept ignore the call.
   Future<void> setMinimumSize(Size size);
+
+  /// Begins a native drag of the small window.
+  ///
+  /// Called while the pointer is down on the small window surface. The
+  /// compact window has no title bar, so a surface-initiated drag is the only
+  /// way to move it. The call returns when the drag ends. Backends whose
+  /// window cannot be dragged this way ignore the call.
+  Future<void> startDragging();
 }

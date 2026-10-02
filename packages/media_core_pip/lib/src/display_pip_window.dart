@@ -192,6 +192,12 @@ final class DisplayAwarePipWindow implements PipWindow {
   @override
   Future<void> setMinimumSize(Size size) => window.setMinimumSize(size);
 
+  @override
+  Future<void> startDragging() async {
+    if (!_compact) return;
+    await window.startDragging();
+  }
+
   /// Persists the current small-window geometry when remembered bounds are on.
   Future<void> captureGeometry() {
     return _serialize(() async {
