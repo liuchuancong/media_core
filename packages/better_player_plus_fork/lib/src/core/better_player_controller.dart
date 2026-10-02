@@ -418,6 +418,19 @@ class BetterPlayerController {
 
   ///Internal method which invokes videoPlayerController source setup.
   Future<void> _setupDataSource(BetterPlayerDataSource betterPlayerDataSource) async {
+    // The merge data source is implemented in the Android player only.
+    // Silently ignoring the field would play the video without its
+    // audio and report nothing wrong, so ask loudly instead — iOS can
+    // still play the same pair by folding it into one file first.
+    if (betterPlayerDataSource.mergeAudioSources != null && !Platform.isAndroid) {
+      throw UnsupportedError(
+        'BetterPlayerDataSource.mergeAudioSources is supported on Android '
+        'only. On this platform, merge the video and audio resources into '
+        'one file (or use a player with native multi-source support) and '
+        'set up that single source instead.',
+      );
+    }
+
     switch (betterPlayerDataSource.type) {
       case BetterPlayerDataSourceType.network:
         await videoPlayerController?.setNetworkDataSource(

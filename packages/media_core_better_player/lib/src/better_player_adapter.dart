@@ -343,6 +343,21 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       // play a silent picture with no signal that audio existed.
       final composite = MediaSourceBridge.compositeFromPlayerSource(source);
       if (composite != null && composite.hasVideo && composite.hasAudio) {
+        if (!Platform.isAndroid) {
+          // The fork's merge path is Android-only. Past this point the
+          // field would be serialized to a plugin that drops it on
+          // silence, which is the exact "picture plays, audio gone,
+          // nobody asked" outcome the composite model was built to
+          // make impossible — so refuse here instead of trusting the
+          // capability set to have been chosen correctly upstream.
+          throw UnsupportedError(
+            'BetterPlayer cannot merge a composite source on this '
+            'platform; register it with capabilitiesForPlatform() (which '
+            'declares none off Android) so the planner sends composite '
+            'sources to the remux leg, or use a backend with native '
+            'composite support.',
+          );
+        }
         final video = composite.primaryVideo!;
         resolvedDataSource = BetterPlayerDataSource(
           resolved.$1,
