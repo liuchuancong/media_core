@@ -17,6 +17,8 @@ final class _FakePipWindow implements PipWindow {
   Size? lastSize;
   Offset? lastPosition;
   double? lastAspectRatio;
+  double? pushedAspectRatio;
+  int setAspectCount = 0;
   bool? lastAlwaysOnTop;
   bool? lastResizable;
 
@@ -52,6 +54,12 @@ final class _FakePipWindow implements PipWindow {
   @override
   Future<void> restore(PipWindowSnapshot snapshot) async {
     restoreCount++;
+  }
+
+  @override
+  Future<void> setAspectRatio(double aspectRatio) async {
+    pushedAspectRatio = aspectRatio;
+    setAspectCount++;
   }
 
   @override
@@ -151,6 +159,46 @@ void main() {
 
       expect(window.lastSize, const Size(180, 320));
       expect(window.lastAspectRatio, closeTo(1080 / 1920, 0.001));
+    });
+
+    test('re-shapes the open window when the stream changes orientation', () async {
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      expect(window.pushedAspectRatio, isNull);
+
+      // A portrait stream that only reports its size after the first frame, or
+      // a room that switches shape mid-play: the window must follow it, or the
+      // old shape stays and the picture arrives with black bars.
+      driver.onVideoSize(1080, 1920);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(window.pushedAspectRatio, closeTo(1080 / 1920, 0.001));
+    });
+
+    test('leaves the window shape alone while PiP is closed', () async {
+      await driver.initialize();
+      driver.onVideoSize(1080, 1920);
+
+      expect(window.setAspectCount, 0);
+    });
+
+    test('never re-shapes a window the host unlocked', () async {
+      final unlocked = PipDriver(
+        platform: PipPlatform.desktop,
+        desktopWindow: window,
+        config: PipConfig.defaults.copyWith(lockAspectRatio: false),
+      );
+      addTearDown(unlocked.dispose);
+
+      await unlocked.initialize();
+      unlocked.onVideoSize(1920, 1080);
+      await unlocked.apply(_player(), PresentationRequest.pip());
+      unlocked.onVideoSize(1080, 1920);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(window.setAspectCount, 0);
     });
 
     test(

@@ -190,6 +190,14 @@ final class DisplayAwarePipWindow implements PipWindow {
   }
 
   @override
+  Future<void> setAspectRatio(double aspectRatio) {
+    return _serialize(() async {
+      if (!_compact) return;
+      await window.setAspectRatio(aspectRatio);
+    });
+  }
+
+  @override
   Future<void> setMinimumSize(Size size) => window.setMinimumSize(size);
 
   @override

@@ -71,6 +71,9 @@ final class _FakeDesktopWindow implements PipWindow {
   Future<void> setMinimumSize(Size size) async {}
 
   @override
+  Future<void> setAspectRatio(double aspectRatio) async {}
+
+  @override
   Future<void> startDragging() async {}
 }
 

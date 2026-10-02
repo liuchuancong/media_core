@@ -71,6 +71,17 @@ abstract interface class PipWindow {
   /// size otherwise. Backends without a minimum-size concept ignore the call.
   Future<void> setMinimumSize(Size size);
 
+  /// Re-derives the compact window's shape for a video whose aspect changed.
+  ///
+  /// The small window is sized from the aspect known when PiP began, and a
+  /// stream can report its real size later or switch orientation while playing.
+  /// Without this the window keeps the old shape and the new picture arrives
+  /// with black bars, which the shape snap then locks in.
+  ///
+  /// Backends that snap the window themselves re-derive the shape; a backend
+  /// that relies on an OS aspect lock updates that lock instead.
+  Future<void> setAspectRatio(double aspectRatio);
+
   /// Begins a native drag of the small window.
   ///
   /// Called while the pointer is down on the small window surface. The

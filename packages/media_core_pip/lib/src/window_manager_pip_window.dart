@@ -83,5 +83,8 @@ final class WindowManagerPipWindow implements PipWindow {
   Future<void> setMinimumSize(Size size) => windowManager.setMinimumSize(size);
 
   @override
+  Future<void> setAspectRatio(double aspectRatio) => windowManager.setAspectRatio(aspectRatio);
+
+  @override
   Future<void> startDragging() => windowManager.startDragging();
 }

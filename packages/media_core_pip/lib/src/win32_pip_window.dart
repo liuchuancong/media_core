@@ -38,7 +38,12 @@ final class Win32PipWindow implements PipWindow {
   Timer? _snapTimer;
   Size _lastSeenBounds = Size.zero;
   int _stableTicks = 0;
-  double _aspectRatio = 16 / 9;
+
+  /// The video shape the snap aligns to, or null when the host unlocked it.
+  ///
+  /// A 16/9 fallback here would silently re-lock a window the host asked to
+  /// keep free-shaped, so "unknown" has to stay "no snap".
+  double? _aspectRatio;
 
   int get _windowHandle {
     if (_hwnd == null || _hwnd == 0) {
@@ -84,9 +89,7 @@ final class Win32PipWindow implements PipWindow {
     // OS-level aspect lock would fight that resize on the next size report,
     // so [aspectRatio] is deliberately not applied here — it feeds the
     // post-resize snap instead.
-    _aspectRatio = aspectRatio != null && aspectRatio > 0
-        ? aspectRatio
-        : 16 / 9;
+    _aspectRatio = aspectRatio != null && aspectRatio > 0 ? aspectRatio : null;
     Win32WindowFfi.setResizable(hwnd, resizable: resizable);
     Win32WindowFfi.setSkipTaskbar(hwnd, skip: skipTaskbar);
     Win32WindowFfi.setRoundedCorners(hwnd, round: true);
@@ -168,23 +171,26 @@ final class Win32PipWindow implements PipWindow {
     _stableTicks++;
     if (_stableTicks < 2) return;
 
+    final aspectRatio = _aspectRatio;
+    if (aspectRatio == null) return;
+
     double targetWidth;
     double targetHeight;
-    if (_aspectRatio >= 1.0) {
+    if (aspectRatio >= 1.0) {
       // Landscape: the width is the long side.
       targetWidth = bounds.width;
-      targetHeight = targetWidth / _aspectRatio;
+      targetHeight = targetWidth / aspectRatio;
       if (targetHeight < 90) {
         targetHeight = 90;
-        targetWidth = targetHeight * _aspectRatio;
+        targetWidth = targetHeight * aspectRatio;
       }
     } else {
       // Portrait: the height is the long side.
       targetHeight = bounds.height;
-      targetWidth = targetHeight * _aspectRatio;
+      targetWidth = targetHeight * aspectRatio;
       if (targetWidth < 140) {
         targetWidth = 140;
-        targetHeight = targetWidth / _aspectRatio;
+        targetHeight = targetWidth / aspectRatio;
       }
     }
     if ((targetWidth - bounds.width).abs() < 3 &&
@@ -197,6 +203,21 @@ final class Win32PipWindow implements PipWindow {
     );
     _stableTicks = 0;
     _lastSeenBounds = Size(targetWidth, targetHeight);
+  }
+
+  @override
+  Future<void> setAspectRatio(double aspectRatio) async {
+    if (aspectRatio <= 0 || (aspectRatio - (_aspectRatio ?? 0)).abs() < 0.01) {
+      return;
+    }
+    _aspectRatio = aspectRatio;
+    // The snap only fires after the bounds look settled, which is how a user
+    // drag is told apart from a programmatic resize. A video that changed
+    // shape on its own produces no drag at all, so the settle counters are
+    // reset here to make the next ticks re-derive the window from the new
+    // aspect instead of waiting for an interaction that is not coming.
+    _stableTicks = 0;
+    _lastSeenBounds = Size.zero;
   }
 
   @override

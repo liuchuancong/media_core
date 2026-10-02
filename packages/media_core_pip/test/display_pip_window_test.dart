@@ -82,6 +82,13 @@ final class _FakeInnerWindow implements PipWindow {
   }
 
   @override
+  Future<void> setAspectRatio(double aspectRatio) async {
+    aspectPushCount++;
+  }
+
+  int aspectPushCount = 0;
+
+  @override
   Future<void> startDragging() async {
     dragCount++;
   }

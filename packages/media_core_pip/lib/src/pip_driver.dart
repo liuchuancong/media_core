@@ -188,12 +188,23 @@ final class PipDriver implements KernelPresentationDriver {
   }
 
   /// Feeds the latest video size, used for the small window's shape.
+  ///
+  /// Called again when the picture changes shape — a stream that reports its
+  /// size only after the first frame, or one that switches between landscape
+  /// and portrait — the open window is re-derived from the new aspect.
   void onVideoSize(int width, int height) {
     if (width <= 0 || height <= 0) {
       return;
     }
     _videoWidth = width;
     _videoHeight = height;
+    if (!_isPip || platform != PipPlatform.desktop || !config.lockAspectRatio) {
+      return;
+    }
+    final aspectRatio = _aspectRatio();
+    if (aspectRatio != null) {
+      unawaited(_desktopWindow?.setAspectRatio(aspectRatio));
+    }
   }
 
   /// Feeds the video widget's rectangle, used as the mobile source hint.
