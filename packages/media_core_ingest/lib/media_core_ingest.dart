@@ -28,6 +28,8 @@ library;
 
 export 'src/ffmpeg_ingest_relay.dart';
 export 'src/hls_manifest_kind.dart';
+export 'src/hls_session_cookies.dart';
+export 'src/hls_source_query_policy.dart';
 export 'src/ingest_ffmpeg.dart';
 export 'src/ingest_plan.dart';
 export 'src/loopback_ingest_relay.dart';

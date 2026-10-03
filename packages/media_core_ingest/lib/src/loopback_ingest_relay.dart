@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'hls_session_cookies.dart';
+
 /// Rewrites an HLS manifest tree so every child is an absolute loopback URL.
 ///
 /// The player then resolves nothing itself: it is handed
@@ -26,12 +28,16 @@ final class LoopbackIngestRelay {
     required String secret,
     required Duration manifestTimeout,
     required int maximumManifestBytes,
+    required Uri Function(Uri)? childUriPolicy,
+    required bool sessionCookies,
   }) : _server = server,
        _client = client,
        _headers = headers,
        _secret = secret,
        _manifestTimeout = manifestTimeout,
-       _maximumManifestBytes = maximumManifestBytes {
+       _maximumManifestBytes = maximumManifestBytes,
+       _childUriPolicy = childUriPolicy,
+       _cookies = sessionCookies ? HlsSessionCookies() : null {
     _children['root.m3u8'] = _Child(uri: upstream, manifest: true);
   }
 
@@ -41,10 +47,17 @@ final class LoopbackIngestRelay {
   /// [rootManifest] is a body the caller already fetched (for example while
   /// classifying the manifest). Supplying it means the upstream manifest is read
   /// once instead of twice; it is served rewritten on the first request.
+  ///
+  /// [childUriPolicy] is applied to every *upstream* child request, which is how
+  /// a provider that expects its manifest token on children keeps it (the player
+  /// only ever sees loopback URLs). [sessionCookies] keeps the provider's
+  /// `Set-Cookie` values for the origin and replays them on children.
   static Future<LoopbackIngestRelay> start({
     required Uri source,
     Map<String, String> headers = const <String, String>{},
     String? rootManifest,
+    Uri Function(Uri)? childUriPolicy,
+    bool sessionCookies = false,
     Duration manifestTimeout = const Duration(seconds: 15),
     int maximumManifestBytes = 8 * 1024 * 1024,
   }) async {
@@ -72,6 +85,8 @@ final class LoopbackIngestRelay {
       secret: _newSecret(),
       manifestTimeout: manifestTimeout,
       maximumManifestBytes: maximumManifestBytes,
+      childUriPolicy: childUriPolicy,
+      sessionCookies: sessionCookies,
     );
     server.listen(relay._handle, onError: (Object _) {}, cancelOnError: false);
     if (rootManifest != null) {
@@ -96,6 +111,8 @@ final class LoopbackIngestRelay {
   final String _secret;
   final Duration _manifestTimeout;
   final int _maximumManifestBytes;
+  final Uri Function(Uri)? _childUriPolicy;
+  final HlsSessionCookies? _cookies;
 
   final Map<String, _Child> _children = <String, _Child>{};
 
@@ -301,12 +318,25 @@ final class LoopbackIngestRelay {
     Uri uri, {
     String? range,
   }) async {
-    final HttpClientRequest request = await _client.openUrl(method, uri);
+    // The policy and the cookie jar describe the *upstream* contract, so they
+    // apply to the request we make, never to the loopback URL the player sees.
+    final Uri upstream = _childUriPolicy?.call(uri) ?? uri;
+    final HttpClientRequest request = await _client.openUrl(method, upstream);
     _headers.forEach(request.headers.set);
     if (range != null && range.isNotEmpty) {
       request.headers.set(HttpHeaders.rangeHeader, range);
     }
-    return request.close();
+    final String? cookie = _cookies?.headerFor(upstream);
+    if (cookie != null) {
+      request.headers.set(HttpHeaders.cookieHeader, cookie);
+    }
+    final HttpClientResponse response = await request.close();
+    final List<String>? setCookie =
+        response.headers[HttpHeaders.setCookieHeader];
+    if (setCookie != null) {
+      _cookies?.receive(upstream, setCookie);
+    }
+    return response;
   }
 
   Future<void> _fail(HttpRequest request, int status) async {
