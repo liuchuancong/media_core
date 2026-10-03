@@ -4,11 +4,14 @@ import 'package:media_core/media_core.dart';
 /// One live playback request: the sources to try, in order.
 ///
 /// Callers hand over wrapped [PlayerSource]s — the type the whole framework
-/// scores and opens against — and nothing else. There are no raw URL strings
-/// and no separate header map here: protocol, format, headers and identity
-/// are declared by the caller on each source, because those are exactly the
-/// fields backend selection reads. A request built from URLs the framework
-/// has to re-parse is a request whose selection inputs were guessed.
+/// scores and opens against. Protocol, format, headers and identity are
+/// declared by the caller on each source, because those are exactly the
+/// fields backend selection reads.
+///
+/// [LiveSourceRequest.fromUrls] is the exception, and it is labelled as one:
+/// most live-site APIs hand over strings and nothing else, so it wraps them —
+/// but it can only *infer* protocol and format from the scheme and extension.
+/// A caller that knows better than inference should build [sources] directly.
 ///
 /// Recovery scope is declared here as well. The number of sources decides
 /// how much *line* fallback there is — and nothing else:
