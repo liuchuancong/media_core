@@ -52,12 +52,18 @@ final class LoopbackIngestRelay {
   /// a provider that expects its manifest token on children keeps it (the player
   /// only ever sees loopback URLs). [sessionCookies] keeps the provider's
   /// `Set-Cookie` values for the origin and replays them on children.
+  ///
+  /// [findProxy] is the upstream proxy directive for every request this relay
+  /// makes itself. Without it the relay goes direct even when the host player is
+  /// proxied, so a provider that is only reachable through a proxy would read the
+  /// manifest for the caller and then fail on its own fetches.
   static Future<LoopbackIngestRelay> start({
     required Uri source,
     Map<String, String> headers = const <String, String>{},
     String? rootManifest,
     Uri Function(Uri)? childUriPolicy,
     bool sessionCookies = false,
+    String Function(Uri url)? findProxy,
     Duration manifestTimeout = const Duration(seconds: 15),
     int maximumManifestBytes = 8 * 1024 * 1024,
   }) async {
@@ -77,9 +83,11 @@ final class LoopbackIngestRelay {
       0,
       shared: false,
     );
+    final client = HttpClient()..connectionTimeout = manifestTimeout;
+    if (findProxy != null) client.findProxy = findProxy;
     final relay = LoopbackIngestRelay._(
       server: server,
-      client: HttpClient()..connectionTimeout = manifestTimeout,
+      client: client,
       upstream: source,
       headers: Map<String, String>.unmodifiable(headers),
       secret: _newSecret(),
