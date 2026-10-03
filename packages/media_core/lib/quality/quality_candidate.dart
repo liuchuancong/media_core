@@ -61,9 +61,16 @@ final class QualityCandidate extends Equatable {
   /// bitrate and quality label) sharing one or more audio essences;
   /// [audioTracks] carries the audio the switch must keep for every
   /// quality. If the composite has no audio, pass an empty list.
+  ///
+  /// [subtitleTracks] and [live] carry over from the source being
+  /// switched: dropping the captions would play the same picture with
+  /// less, and dropping the live declaration would reclassify a
+  /// broadcast as VOD, turning off every downstream `isLive` guard.
   static List<QualityCandidate> fromCompositeTracks(
     List<MediaTrack> videoTracks, {
     List<MediaTrack> audioTracks = const <MediaTrack>[],
+    List<MediaTrack> subtitleTracks = const <MediaTrack>[],
+    bool live = false,
     String Function(MediaTrack track)? labelOf,
   }) {
     return videoTracks.map((track) {
@@ -72,6 +79,8 @@ final class QualityCandidate extends Equatable {
         source: CompositeMediaSource(
           videoTracks: [track],
           audioTracks: audioTracks,
+          subtitleTracks: subtitleTracks,
+          live: live,
         ),
         bitrate: track.bitrate,
       );

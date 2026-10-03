@@ -85,7 +85,10 @@ final class PlayerAdapterSelector {
     }
 
     PlayerAdapterRegistration? best;
-    var bestScore = -1;
+    // Same sentinel as [selectMedia]: a registration can score below zero
+    // (negative priority, no protocol or format match), and a `-1` floor
+    // here would report "no enabled backend" while candidates exist.
+    var bestScore = -1 << 30;
 
     for (final candidate in candidates) {
       final candidateScore = score(candidate, source);

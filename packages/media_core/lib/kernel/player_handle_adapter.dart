@@ -38,7 +38,13 @@ extension _HandleAdapterBridge on PlayerHandle {
       }
 
       _onAdapterEvent(event);
-    }, onError: (_) {});
+    },
+        // An error delivered through the stream itself — not wrapped in a
+        // PlayerAdapterErrorEvent — still has to reach the session, or the
+        // backend fails and the handle keeps reporting the last good state.
+        onError: (Object error, StackTrace stackTrace) {
+          _handleAdapterError('adapter stream error', error, stackTrace);
+        });
   }
 
   /// Replaces the active adapter and moves the handle's own subscription
@@ -96,8 +102,17 @@ extension _HandleAdapterBridge on PlayerHandle {
 
     try {
       await adapter.setAudioOnly(_audioOnly);
-    } catch (_) {
+    } catch (error, stackTrace) {
       // See above: the preference is re-applied on the next open/swap.
+      // It is still logged, because a swap that comes back with the
+      // picture on and the audio-only request dropped is invisible
+      // everywhere else.
+      MediaCoreLog.warning(
+        LogCategory.player,
+        'setAudioOnly($_audioOnly) failed on ${_registration.id}',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 

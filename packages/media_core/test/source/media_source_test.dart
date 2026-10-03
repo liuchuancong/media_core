@@ -289,6 +289,23 @@ void main() {
       expect(upgraded.compositeSupport, CompositeSupport.externalAudio);
       expect(upgraded.copyWith().compositeSupport, CompositeSupport.externalAudio);
     });
+
+    test('copyWith keeps every flag it is not told to change', () {
+      // A capability dropped by copyWith is invisible: media_kit narrows
+      // its own declarations through copyWith, so a missing entry here
+      // silently turns a claimed feature off (or on) per platform.
+      const base = PlayerAdapterCapabilities(
+        supportsEngineOptions: true,
+        compositeSupport: CompositeSupport.externalAudio,
+      );
+
+      final narrowed = base.copyWith(supportsEngineOptions: false);
+
+      expect(narrowed.supportsEngineOptions, isFalse);
+      expect(narrowed.compositeSupport, CompositeSupport.externalAudio);
+      expect(narrowed.copyWith().supportsEngineOptions, isFalse);
+      expect(narrowed, isNot(base));
+    });
   });
 
   group('MediaSourceBridge', () {

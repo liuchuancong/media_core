@@ -1,3 +1,5 @@
+import 'dart:convert' show utf8;
+
 import 'package:xml/xml.dart';
 
 /// A UPnP service description used when building a SOAP action.
@@ -262,7 +264,11 @@ abstract final class Soap {
       headers: <String, String>{
         'SOAPAction': quoted,
         'Content-Type': 'text/xml; charset="utf-8"',
-        'Content-Length': '${body.length}',
+        // The transport writes the body as UTF-8, so the declared length
+        // has to be the byte count: a CJK track title inside the DIDL
+        // makes `body.length` (UTF-16 code units) too small and the
+        // renderer reads a truncated envelope.
+        'Content-Length': '${utf8.encode(body).length}',
       },
     );
   }

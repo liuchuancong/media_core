@@ -19,6 +19,19 @@ abstract final class FijkHelper {
 
       if (key.isEmpty || value.isEmpty) continue;
 
+      // The name is written verbatim into ijkplayer's CRLF-joined
+      // `headers` option, so a name carrying a newline or a colon would
+      // inject a whole extra header line. Values can be sanitized by
+      // substitution; a name cannot, so it is dropped and reported.
+      if (RegExp(r'[\x0d\x0a\x00:]').hasMatch(key)) {
+        MediaCoreLog.warning(
+          LogCategory.network,
+          'dropped a request header whose name is not a valid token',
+          fields: <String, Object?>{'header': key},
+        );
+        continue;
+      }
+
       if (key.toLowerCase() == 'user-agent') {
         userAgent = value;
       } else {

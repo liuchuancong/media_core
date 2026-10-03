@@ -12,6 +12,7 @@ import 'package:media_core/source/media_source.dart';
 import 'package:media_core/source/media_source_bridge.dart';
 import 'package:media_core/source/media_track.dart';
 import 'package:media_core/source/media_track_type.dart';
+import 'package:media_core/source/source_type.dart';
 import 'package:media_core/source/player_source.dart';
 import 'package:media_core/source/source_inspector_chain.dart';
 import 'package:media_core/source/source_resolve_context.dart';
@@ -130,6 +131,50 @@ void main() {
     });
   });
 
+  group('MediaSourceBridge live declaration', () {
+    test('a declared live source bridges as SourceType.live', () {
+      final live = ProgressiveMediaSource(
+        track: _videoTrack('https://example.com/index.m3u8'),
+        live: true,
+      );
+
+      final bridged = live.toPlayerSource();
+
+      expect(bridged.type, SourceType.live);
+      expect(bridged.isLive, isTrue);
+    });
+
+    test('a live composite keeps the declaration across the bridge', () {
+      final pair = CompositeMediaSource(
+        videoTracks: [_videoTrack('https://example.com/live_v.m4s')],
+        audioTracks: [
+          MediaTrack(
+            uri: Uri.parse('https://example.com/live_a.m4s'),
+            kind: MediaTrackType.audio,
+          ),
+        ],
+        live: true,
+      );
+
+      expect(pair.toPlayerSource().isLive, isTrue);
+    });
+
+    test('an HLS URL without the declaration stays on demand', () {
+      // The scheme says nothing about liveness — only the provider does.
+      // Inferring live from `.m3u8` would put every VOD HLS asset behind
+      // the live guards, and inferring VOD from a missing duration would
+      // put every live stream behind the seek bar.
+      final vod = ProgressiveMediaSource(
+        track: _videoTrack('https://example.com/index.m3u8'),
+      );
+
+      final bridged = vod.toPlayerSource();
+
+      expect(bridged.isLive, isFalse);
+      expect(bridged.type, SourceType.remote);
+    });
+  });
+
   group('PlayerKernel bridge metadata across resolution', () {
     test('composite metadata survives a resolver that carries its own source', () async {
       final kernel = PlayerKernel(sourceService: _serviceReplacing())
@@ -179,7 +224,7 @@ void main() {
             'message',
             allOf(
               contains('compositeSupport: none'),
-              contains('createFromMedia'),
+              contains('native or external-audio'),
             ),
           ),
         ),

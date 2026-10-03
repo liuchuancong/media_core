@@ -87,9 +87,9 @@ void main() {
 
     test('composite source still returns a none backend when it is all that exists', () {
       // A registry without any composite-capable entry must still hand
-      // back the single-URL backend so the caller can decide between
-      // remuxing and rejecting via the planner. Returning null would
-      // hide that failure at the wrong layer.
+      // back the single-URL backend so the planner is the one that
+      // refuses, with a reason. Returning null would hide that failure
+      // at the wrong layer.
       final registry = PlayerAdapterRegistry()
         ..register(_reg('fijk', capabilities: _caps()));
       final selector = PlayerAdapterSelector(registry);
@@ -334,9 +334,10 @@ void _liveScoringTests() {
     });
 
     test('a live composite still prefers composite support over live support', () {
-      // A live composite cannot be remuxed at all, so a backend that
-      // merely holds live open but takes one input is worse than one
-      // that takes two: the composite bonus must outrank the live one.
+      // A live composite on a single-URL backend is refused outright, so
+      // a backend that merely holds live open but takes one input is
+      // worse than one that takes two: the composite bonus must outrank
+      // the live one.
       final registry = PlayerAdapterRegistry()
         ..register(_reg('live-single', capabilities: _caps(live: true)))
         ..register(_reg('media3', capabilities: _caps(composite: CompositeSupport.native)));

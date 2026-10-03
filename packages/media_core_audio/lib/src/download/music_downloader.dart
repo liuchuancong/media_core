@@ -317,8 +317,40 @@ final class MusicDownloader {
     };
   }
 
+  /// Joins [headers] into the CRLF-separated blob ffmpeg's `-headers`
+  /// option expects.
+  ///
+  /// Values are sanitized by substitution (a newline inside a value would
+  /// start a second header line). Names cannot be sanitized — ffmpeg
+  /// writes them verbatim — so a name that is not a valid token is
+  /// rejected outright: letting it through would be request-header
+  /// injection into the CDN call, and no legitimate caller sends one.
   String _buildHeader(Map<String, String> headers) {
-    return headers.entries.map((entry) => '${entry.key}: ${entry.value}\r\n').join();
+    final buffer = StringBuffer();
+
+    for (final entry in headers.entries) {
+      final name = entry.key.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      if (RegExp(r'[\x0d\x0a\x00:]').hasMatch(name)) {
+        throw ArgumentError.value(
+          entry.key,
+          'headers',
+          'header name is not a valid token and would inject a second '
+              'header line into the ffmpeg request',
+        );
+      }
+
+      final value = entry.value.replaceAll(RegExp(r'[\x0d\x0a\x00]+'), ' ').trim();
+      if (value.isEmpty) {
+        continue;
+      }
+
+      buffer.write('$name: $value\r\n');
+    }
+
+    return buffer.toString();
   }
 
   /// Picks the most useful line out of an ffmpeg log tail.

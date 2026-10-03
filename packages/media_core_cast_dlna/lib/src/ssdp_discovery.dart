@@ -145,7 +145,6 @@ class SsdpDiscovery implements SsdpSource {
 
   /// Stops listening and releases the socket.
   @override
-  @override
   Future<void> stop() async {
     _searchTimer?.cancel();
     _searchTimer = null;

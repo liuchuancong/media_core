@@ -55,8 +55,16 @@ extension PlayerHandlePlayback on PlayerHandle {
 
     try {
       await adapter.setVolume(0.0);
-    } catch (_) {
-      // Best effort: re-applied on the next open/swap.
+    } catch (error, stackTrace) {
+      // Best effort: re-applied on the next open/swap. Logged because a
+      // player that comes back audible after a swap is otherwise
+      // indistinguishable from one the user unmuted.
+      MediaCoreLog.warning(
+        LogCategory.player,
+        're-applying mute failed on ${_registration.id}',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 

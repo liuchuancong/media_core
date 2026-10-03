@@ -85,7 +85,9 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// and reopens it on every timeout, forever.
   ///
   /// `supportsScreenshot` is narrowed the same way: mpv's `screenshot`
-  /// needs the native backend, so the web build must not claim it.
+  /// needs the native backend, so the web build must not claim it. Engine
+  /// options are property writes through the same surface and are
+  /// narrowed with it.
   static PlayerAdapterCapabilities _honestCapabilities(PlayerAdapterCapabilities capabilities) {
     var result = capabilities;
 
@@ -97,13 +99,20 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       result = result.copyWith(supportsScreenshot: false);
     }
 
+    // Engine options are mpv property writes through NativePlayer, so the
+    // web build has no surface to write to; every option would come back
+    // `unsupported` and the caller would rebuild players for nothing.
+    if (kIsWeb && result.supportsEngineOptions) {
+      result = result.copyWith(supportsEngineOptions: false);
+    }
+
     // The composite side channel is mpv's `audio-files` / `sub-files` list,
     // reached through NativePlayer commands. On web media_kit drives an HTML
     // video element with no such platform surface, so keeping the declared
     // externalAudio support would let the planner route a DASH pair here and
     // then drop the audio at the first null platform — a silent failure with
-    // a permission slip. Web takes the honest `none`, which sends composite
-    // sources to the remux leg (or an explicit refusal where no FFmpeg runs).
+    // a permission slip. Web takes the honest `none`, so a composite source
+    // there is refused with a reason instead of playing video-only.
     if (kIsWeb && result.compositeSupport != CompositeSupport.none) {
       result = result.copyWith(compositeSupport: CompositeSupport.none);
     }
@@ -331,10 +340,15 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     for (final option in options) {
       // mpv takes property writes on a running player through
       // `NativePlayer.setProperty`; the request is delivered to the live
-      // instance and the engine applies what its runtime allows.
-      await _setNativeProperty(option.key, _mpvOptionValue(option.value));
+      // instance and the engine applies what its runtime allows. An
+      // option the engine refuses is reported as unsupported rather than
+      // applied, so the caller can rebuild the player with it instead of
+      // assuming the tuning landed.
+      final applied = await _setNativeProperty(option.key, _mpvOptionValue(option.value));
 
-      outcomes.add(EngineOptionOutcome.appliedLive);
+      outcomes.add(
+        applied ? EngineOptionOutcome.appliedLive : EngineOptionOutcome.unsupported,
+      );
     }
 
     return outcomes;
@@ -526,8 +540,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     for (final entry in headers.entries) {
       // A header value carrying CR/LF would inject additional request lines
       // (or, for `http-header-fields`, a whole extra header) into what mpv
-      // sends to the CDN. The same rule the FFmpeg remuxer applies: drop the
-      // value, never sanitize it into something the site did not issue.
+      // sends to the CDN: drop the value, never sanitize it into something
+      // the site did not issue.
       if (entry.value.contains('\r') || entry.value.contains('\n')) {
         MediaCoreLog.warning(
           LogCategory.network,
@@ -539,7 +553,16 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         try {
           // ignore: avoid_dynamic_calls
           await (native as dynamic).setProperty('user-agent', entry.value);
-        } catch (_) {}
+        } catch (error) {
+          // The side-channel fetch runs without a user agent, which is
+          // exactly the request a CDN answers with 403; the audio track
+          // then fails for a reason nothing else would report.
+          MediaCoreLog.warning(
+            LogCategory.network,
+            'side-channel user-agent was not applied: $error',
+            error: error,
+          );
+        }
         continue;
       }
       fields.add('${entry.key}: ${entry.value}');
@@ -548,12 +571,20 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     try {
       // ignore: avoid_dynamic_calls
       await (native as dynamic).setProperty('http-header-fields', fields);
-    } catch (_) {
+    } catch (error) {
       // Older mpv builds take a comma-joined string; best-effort fallback.
       try {
         // ignore: avoid_dynamic_calls
         await (native as dynamic).setProperty('http-header-fields', fields.join(','));
-      } catch (_) {}
+      } catch (fallbackError) {
+        MediaCoreLog.warning(
+          LogCategory.network,
+          'side-channel request headers were not applied in either form '
+              '($error / $fallbackError); the extra essences will be '
+              'fetched without Referer or Cookie',
+          error: fallbackError,
+        );
+      }
     }
   }
 
@@ -709,7 +740,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     } catch (error) {
       // The web backend throws instead of declaring no capability; the caller
       // falls back to the rendered surface, which is the only route there.
-      MediaCoreLog.warning(LogCategory.renderer, 'captureFrame failed: \$error', error: error);
+      MediaCoreLog.warning(LogCategory.renderer, 'captureFrame failed: $error', error: error);
 
       return null;
     }
@@ -757,13 +788,14 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _subscriptions.add(s.tracks.listen(_onTracks));
   }
 
-  /// Records the video codec, and reacts when the device cannot decode it.
+  /// Reports a video codec this device has no hardware decoder for.
   ///
-  /// Two things happen once the platform says this codec has no hardware
-  /// decoder here: the next open of the same source starts in software instead
-  /// of spending a failed hardware attempt on it, and — while no frame has been
-  /// decoded yet — the current open switches over immediately, which is free
-  /// because nothing has been shown.
+  /// media_kit chooses the decoder through `videoControllerConfiguration`
+  /// when the player is constructed, so there is no mid-playback
+  /// switchover to perform here — claiming one would be a capability the
+  /// surface cannot honor. What the track list can do is make the
+  /// mismatch visible: without this, a device that cannot decode the
+  /// stream in hardware just shows no frames and nothing says why.
   void _onTracks(mk.Tracks tracks) {
     for (final track in tracks.video) {
       final codec = VideoCodec.tryParse(track.codec);
@@ -772,13 +804,19 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         continue;
       }
 
-
       final hardware = _codecs.canDecodeInHardware(codec, width: _width ?? 0, height: _height ?? 0);
 
       if (hardware != false) {
         return;
       }
 
+      MediaCoreLog.warning(
+        LogCategory.renderer,
+        'no hardware decoder for ${track.codec} on this device; frames '
+            'depend on software decoding',
+        fields: <String, Object?>{'codec': track.codec},
+      );
+      return;
     }
   }
 

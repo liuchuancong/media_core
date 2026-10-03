@@ -118,7 +118,7 @@ final class PlayerControlsController extends ChangeNotifier {
   /// Live streams report no duration and adapters may not support seeking at
   /// all; a bar hides the progress area instead of offering a dead control.
   bool get canSeek {
-    if (!hasSource) {
+    if (!hasSource || isLive) {
       return false;
     }
 
@@ -130,7 +130,13 @@ final class PlayerControlsController extends ChangeNotifier {
   }
 
   /// Whether the stream is live (no seekable timeline).
-  bool get isLive => hasSource && !handle.playback.hasDuration;
+  ///
+  /// Read from the provider-declared flag rather than inferred from a
+  /// missing duration: a VOD that is still loading has no duration yet
+  /// and would flash a LIVE badge, while a live engine that reports
+  /// elapsed time as its duration would offer a seek bar it cannot
+  /// honor.
+  bool get isLive => handle.source?.isLive ?? false;
 
   /// Current position.
   Duration get position => handle.playback.position;

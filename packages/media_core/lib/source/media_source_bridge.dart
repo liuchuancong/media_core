@@ -63,7 +63,7 @@ extension MediaSourceBridge on MediaSource {
     return PlayerSource(
       id: id ?? _stableIdFor(primary),
       uri: primary?.uri ?? Uri(),
-      type: _sourceTypeFor(primary),
+      type: _sourceTypeFor(this, primary),
       protocol: primary?.protocol ?? SourceProtocol.unknown,
       mediaType: _mediaTypeFor(this, primary),
       format: primary?.format ?? SourceFormat.unknown,
@@ -127,7 +127,16 @@ SourceMediaType _mediaTypeFor(MediaSource source, MediaTrack? primary) {
   return primary?.mediaType ?? SourceMediaType.unknown;
 }
 
-SourceType _sourceTypeFor(MediaTrack? primary) {
+SourceType _sourceTypeFor(MediaSource source, MediaTrack? primary) {
+  // [MediaSource.live] is declared by the provider, so it outranks the
+  // protocol mapping below: an HLS event URL is `remote` by scheme and
+  // live by declaration, and every downstream live guard (seek refusal,
+  // rate refusal, recovery skipping the position restore) keys off
+  // `PlayerSource.isLive`. Dropping the flag here turns those guards
+  // off for exactly the streams that need them.
+  if (source.live) {
+    return SourceType.live;
+  }
   if (primary == null) {
     return SourceType.unknown;
   }

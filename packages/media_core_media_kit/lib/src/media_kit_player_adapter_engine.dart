@@ -15,16 +15,30 @@ extension _MediaKitEngineConfig on MediaKitPlayerAdapter {
     );
   }
 
-  Future<void> _setNativeProperty(String name, String value) async {
+  /// Writes one mpv property and reports whether the engine took it.
+  ///
+  /// A `null` platform means there is no native surface at all (web, or a
+  /// player that has not been created yet) and a rejected property is the
+  /// engine's own answer. Both have to reach the caller: an option
+  /// reported as applied while it was dropped leaves the host believing
+  /// its tuning took effect, which is the failure this class exists to
+  /// avoid.
+  Future<bool> _setNativeProperty(String name, String value) async {
     final native = _player?.platform;
 
-    if (native == null) return;
+    if (native == null) return false;
 
     try {
       // ignore: avoid_dynamic_calls
       await (native as dynamic).setProperty(name, value);
-    } catch (_) {
-      // Best-effort.
+      return true;
+    } catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.player,
+        'mpv rejected property "$name": $error',
+        error: error,
+      );
+      return false;
     }
   }
 }

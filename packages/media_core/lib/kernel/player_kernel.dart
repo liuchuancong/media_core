@@ -32,6 +32,9 @@ import 'package:media_core/source/media_source_bridge.dart';
 import 'package:media_core/planning/media_source_plan.dart';
 import 'package:media_core/planning/media_source_planner.dart';
 import 'package:media_core/source/player_source.dart';
+import 'package:media_core/source/source_format.dart';
+import 'package:media_core/source/source_media_type.dart';
+import 'package:media_core/source/source_protocol.dart';
 import 'package:media_core/source/source_service.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core_memory/media_core_memory.dart';
@@ -766,12 +769,38 @@ final class PlayerKernel {
       if (carried != null) {
         return _preserveBridgeMetadata(carried, source);
       }
-      if (resolved.uri != source.uri) {
-        return source.copyWith(uri: resolved.uri);
-      }
-      return source;
-    } catch (_) {
-      // Resolution is an enhancement; the original source still opens.
+
+      // A resolver that answers with a fresh address still owes the
+      // access details that go with it: a signed URL and the Referer or
+      // token that unlocks it arrive together, and copying one without
+      // the other yields an open that 403s and blames the backend.
+      // `unknown` means "the resolver had nothing to say", so those
+      // fields stay as they were.
+      return source.copyWith(
+        uri: resolved.uri,
+        headers: resolved.headers,
+        protocol: resolved.protocol == SourceProtocol.unknown
+            ? source.protocol
+            : resolved.protocol,
+        mediaType: resolved.mediaType == SourceMediaType.unknown
+            ? source.mediaType
+            : resolved.mediaType,
+        format: resolved.format == SourceFormat.unknown
+            ? source.format
+            : resolved.format,
+      );
+    } catch (error, stackTrace) {
+      // Resolution is an enhancement, so the original source still
+      // opens — but a resolver that throws (expired token, dead
+      // provider) has to leave a trace, or the failure resurfaces as a
+      // backend error nobody can attribute.
+      MediaCoreLog.warning(
+        LogCategory.source,
+        'source resolution failed; opening the unresolved source',
+        error: error,
+        stackTrace: stackTrace,
+        fields: <String, Object?>{'uri': source.uri.toString()},
+      );
       return source;
     }
   }

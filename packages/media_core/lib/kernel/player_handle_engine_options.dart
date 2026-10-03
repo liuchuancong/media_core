@@ -192,7 +192,7 @@ extension PlayerHandleEngineOptions on PlayerHandle {
 
         if (source != null) {
           await nextAdapter.open(source);
-          await _prepareStagedAdapter(nextAdapter, session);
+          await _prepareStagedAdapter(nextAdapter, session, source);
         }
 
         if (!_isOperationCurrent(operationGeneration) || _disposed) {

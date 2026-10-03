@@ -550,9 +550,16 @@ final class PlayerHandle implements RecoveryTarget {
   /// Stream duration, `Duration.zero` while unknown.
   Duration get duration => _runtime.playback.current.duration;
 
-  /// Buffered position, approximated by the current position on engines
-  /// that do not report a separate buffer window.
-  Duration get buffered => _runtime.playback.current.position;
+  /// Buffered position: the end of the contiguous stretch at or ahead
+  /// of the playhead.
+  ///
+  /// A backend that reports no ranges answers with the position itself,
+  /// which reads as "no ahead fill" rather than inventing data; check
+  /// [buffer] for the ranges behind the answer.
+  Duration get buffered {
+    final state = _runtime.playback.current;
+    return state.buffer.bufferedEndAt(state.position);
+  }
 
   /// Current volume (0.0–1.0) as last commanded or mirrored.
   double get volume => _runtime.playback.current.volume;

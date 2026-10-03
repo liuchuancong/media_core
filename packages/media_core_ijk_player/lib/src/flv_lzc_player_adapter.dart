@@ -269,9 +269,15 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onSeek(Duration position) {
-    // ijk stalls or errors seeking an FLV live source.
+    // ijk stalls or errors seeking an FLV live source. Refusing loudly
+    // is the honest answer: a silent no-op leaves the caller believing
+    // a seek happened, which is how a live viewer ends up staring at a
+    // progress bar that moved and a stream that did not.
     if (_liveSource) {
-      return Future<void>.value();
+      throw UnsupportedError(
+        'ijk_player cannot seek a live source: there is no seekable window '
+        'to move within, and ijk stalls or errors when asked to.',
+      );
     }
 
     return _player.seekTo(position.inMilliseconds);
@@ -352,7 +358,7 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       return bytes.isEmpty ? null : bytes;
     } catch (error) {
-      MediaCoreLog.warning(LogCategory.renderer, 'captureFrame failed: \$error', error: error);
+      MediaCoreLog.warning(LogCategory.renderer, 'captureFrame failed: $error', error: error);
 
       return null;
     }

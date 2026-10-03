@@ -196,7 +196,7 @@ final class PlayerTransportState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [command, position, duration, volume, rate, initialized, updatedAt, buffering];
+  List<Object?> get props => [command, position, duration, volume, rate, initialized, updatedAt, buffering, buffer];
 
   @override
   String toString() {

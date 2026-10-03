@@ -372,7 +372,7 @@ extension PlayerHandleRecovery on PlayerHandle {
 
         if (source != null) {
           await nextAdapter.open(source);
-          await _prepareStagedAdapter(nextAdapter, session);
+          await _prepareStagedAdapter(nextAdapter, session, source);
         }
 
         if (!_isOperationCurrent(operationGeneration) || _disposed) {
@@ -446,7 +446,16 @@ extension PlayerHandleRecovery on PlayerHandle {
   }
 
   /// Sends the session state to a staged adapter before it goes live.
-  Future<void> _prepareStagedAdapter(PlayerAdapter adapter, RecoverySession session) async {
+  ///
+  /// The position restore is skipped for a live source: the saved
+  /// position is a moment in a broadcast that no longer exists, and
+  /// seeking a live stream to it either fails or lands the viewer
+  /// behind the edge.
+  Future<void> _prepareStagedAdapter(
+    PlayerAdapter adapter,
+    RecoverySession session,
+    PlayerSource source,
+  ) async {
     await _applyAudioOnly(adapter);
 
     if (session.volume != 1.0) {
@@ -457,7 +466,7 @@ extension PlayerHandleRecovery on PlayerHandle {
       await adapter.setRate(session.rate);
     }
 
-    if (session.position > Duration.zero) {
+    if (session.position > Duration.zero && !source.isLive) {
       await adapter.seek(session.position);
     }
 
@@ -483,7 +492,10 @@ extension PlayerHandleRecovery on PlayerHandle {
       await adapter.setRate(session.rate);
     }
 
-    if (session.position > Duration.zero) {
+    // A live source has no position to return to: the saved value is a
+    // moment in a broadcast that is already gone, and seeking to it
+    // either errors or strands the viewer behind the live edge.
+    if (session.position > Duration.zero && source?.isLive != true) {
       await adapter.seek(session.position);
 
       await _runtime.playback.seek(session.position);
