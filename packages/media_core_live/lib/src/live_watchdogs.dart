@@ -55,6 +55,12 @@ part 'live_watchdog_arms.dart';
 /// - [LiveStallKind.videoFrameStallTimeout]
 ///   Playing state remained true but no new video frame arrived.
 ///
+/// - [LiveStallKind.positionStallTimeout]
+///   Playing, not buffering, and the position stopped advancing. The
+///   detector of last resort: every adapter reports position, so this is
+///   the one that works on engines with no frame heartbeat. It only arms
+///   after the engine has reported a position at all.
+///
 /// All watchdogs are source-local. The owner should call [cancelAll] when
 /// the current source/generation is retired.
 ///
@@ -739,6 +745,11 @@ final class LiveWatchdogs {
     _frameProgress.close();
   }
 
+  /// Forgets the position signal of the previous engine or source.
+  ///
+  /// Called when the adapter or the source changed: whether the new one
+  /// reports position is unknown until it does, and judging it by the
+  /// previous one's signal would either false-stall or false-clear.
   void resetPositionSignal() {
     if (_disposed) {
       return;

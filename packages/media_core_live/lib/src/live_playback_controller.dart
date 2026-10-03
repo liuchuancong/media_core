@@ -96,15 +96,16 @@ final class LivePlaybackController {
   bool _draining = false;
   bool _disposed = false;
 
-  /// Whether a sweep task is running right now.
+  /// Last adapter error seen while a sweep is running.
   ///
-  /// While it is, adapter errors and watchdog stalls are the *running
-  /// sweep's* business — its catch already advances to the next
-  /// candidate. Enqueueing a recover task on top used to start a second
-  /// sweep that re-opened line 0 behind the first one's back, which is
-  /// Last adapter error seen while a sweep is running. The verification
-  /// loop checks it so an engine-reported failure fails the candidate
-  /// immediately instead of waiting out the full verification window.
+  /// The verification loop checks this, so an engine-reported failure fails
+  /// the candidate immediately instead of waiting out the full verification
+  /// window.
+  ///
+  /// While a sweep is running, adapter errors and watchdog stalls are the
+  /// *running sweep's* business — its own catch already advances to the next
+  /// candidate. Enqueueing a recovery task on top used to start a second
+  /// sweep that re-opened line 0 behind the first one's back.
   String? _sweepAdapterError;
 
   /// Bumped by [play] and [close]. A sweep captures it when it starts and
@@ -315,7 +316,13 @@ final class LivePlaybackController {
   /// Current playback position on the attached engine.
   Duration get position => _handle?.position ?? Duration.zero;
 
-  /// Stream duration on the attached engine (zero for live streams).
+  /// Stream duration on the attached engine, `Duration.zero` while no handle
+  /// is attached.
+  ///
+  /// Passed through exactly as the engine reports it, which is not the same
+  /// thing on every backend: some answer zero for a live line, others answer
+  /// the elapsed time since the stream started. A UI that needs "is this
+  /// live" reads the source declaration, not this value.
   Duration get duration => _handle?.duration ?? Duration.zero;
 
   /// Restricts playback to the audio track.

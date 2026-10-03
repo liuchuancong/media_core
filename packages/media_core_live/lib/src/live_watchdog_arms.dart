@@ -256,12 +256,6 @@ extension _LiveWatchdogArms on LiveWatchdogs {
     _positionStallSubscription = null;
   }
 
-  /// Forgets the position signal of the previous engine or source.
-  ///
-  /// Called when the adapter or the source changed: whether the new one
-  /// reports position is unknown until it does, and judging it by the
-  /// previous one's signal would either false-stall or false-clear.
-
   /// Why the position-stall watchdog must not arm, or `null` when it may.
   String? _positionStallSkipReason() {
     if (!_canWatch) return 'watchdogs disabled';
