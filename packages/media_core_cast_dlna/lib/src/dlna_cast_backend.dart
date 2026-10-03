@@ -39,13 +39,34 @@ class DlnaCastBackend implements MediaCastBackend {
     SsdpSource? discovery,
     DescriptionFetcher? fetchDescription,
     SoapPoster? post,
-  }) : _discovery = discovery ?? SsdpDiscovery(),
-       _fetchDescription = fetchDescription ?? HttpDescriptionFetcher().call,
-       _post = post ?? HttpSoapTransport().call;
+  }) : _discovery = discovery ?? SsdpDiscovery() {
+    // The defaults each own an HttpClient. Keeping the object rather than
+    // only its `call` tear-off is what makes [dispose] able to close the
+    // pooled sockets; a caller-supplied function owns its own transport and
+    // is left alone.
+    if (fetchDescription != null) {
+      _fetchDescription = fetchDescription;
+    } else {
+      final fetcher = HttpDescriptionFetcher();
+      _ownedFetcher = fetcher;
+      _fetchDescription = fetcher.call;
+    }
+
+    if (post != null) {
+      _post = post;
+    } else {
+      final transport = HttpSoapTransport();
+      _ownedTransport = transport;
+      _post = transport.call;
+    }
+  }
 
   final SsdpSource _discovery;
-  final DescriptionFetcher _fetchDescription;
-  final SoapPoster _post;
+  late final DescriptionFetcher _fetchDescription;
+  late final SoapPoster _post;
+
+  HttpDescriptionFetcher? _ownedFetcher;
+  HttpSoapTransport? _ownedTransport;
 
   final StreamController<CastEvent> _events = StreamController<CastEvent>.broadcast();
   final Map<String, CastDevice> _devices = <String, CastDevice>{};
@@ -98,6 +119,10 @@ class DlnaCastBackend implements MediaCastBackend {
     _descriptions.clear();
     _usnToUdn.clear();
     _fetching.clear();
+    // Only the transports this backend created are its to close; a
+    // caller-supplied function brings its own lifecycle.
+    _ownedFetcher?.close();
+    _ownedTransport?.close();
     await _events.close();
   }
 

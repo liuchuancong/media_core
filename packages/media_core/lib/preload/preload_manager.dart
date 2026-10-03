@@ -50,6 +50,7 @@ final class PreloadManager {
 
   void complete(PreloadTask task) {
     task.complete();
+    _forget(task);
 
     _updateMetrics(completed: currentMetrics.completed + 1);
 
@@ -58,6 +59,7 @@ final class PreloadManager {
 
   void fail(PreloadTask task) {
     task.fail();
+    _forget(task);
 
     _updateMetrics(failed: currentMetrics.failed + 1);
 
@@ -66,10 +68,21 @@ final class PreloadManager {
 
   void cancel(PreloadTask task) {
     task.cancel();
+    _forget(task);
 
     _updateMetrics(cancelled: currentMetrics.cancelled + 1);
 
     _reportMemory();
+  }
+
+  /// Drops a finished task from the open-preload ledger.
+  ///
+  /// [_reportMemory] multiplies the open count by a per-stream estimate, so a
+  /// task left behind after it completed, failed or was cancelled keeps
+  /// claiming memory nobody holds — and the shared account is what other
+  /// modules read when they decide whether to shed work.
+  void _forget(PreloadTask task) {
+    _tasks.removeWhere((_, candidate) => identical(candidate, task));
   }
 
   /// Reports the preloads still open.

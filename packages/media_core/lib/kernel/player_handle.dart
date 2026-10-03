@@ -759,6 +759,13 @@ final class _HandleRecoveryCandidates implements RecoveryCandidateProvider {
 
     final selector = _handle._selector ?? PlayerAdapterSelector(registry);
 
+    // A composite handed to a single-URL backend plays video with no audio
+    // and reports nothing, so recovery must not offer one as a swap target:
+    // the ladder would burn every rung on a swap that cannot work, and an
+    // adapter that implements PlayerAdapter directly would not even throw.
+    final bridged = source == null ? null : MediaSourceBridge.fromPlayerSource(source);
+    final needsComposite = bridged is CompositeMediaSource;
+
     // Ordering is the selector's job: it already scores protocol, format
     // and live support, so recovery does not re-implement "which backend
     // is most likely to play this".
@@ -766,6 +773,8 @@ final class _HandleRecoveryCandidates implements RecoveryCandidateProvider {
         .candidatesFor(source ?? PlayerSource.unknown())
         .where((registration) => registration.id != currentBackendId)
         .where((registration) => registration.enabled)
+        .where((registration) =>
+            !needsComposite || registration.capabilities.supportsComposite)
         .toList(growable: false);
 
     return RecoveryCandidates(sources: sources, backends: backends);
