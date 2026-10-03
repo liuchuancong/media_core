@@ -37,9 +37,14 @@ final class LoopbackIngestRelay {
 
   /// Starts a relay for [source]. The returned relay owns the port until
   /// [close]; callers hand [inputUri] to the player.
+  ///
+  /// [rootManifest] is a body the caller already fetched (for example while
+  /// classifying the manifest). Supplying it means the upstream manifest is read
+  /// once instead of twice; it is served rewritten on the first request.
   static Future<LoopbackIngestRelay> start({
     required Uri source,
     Map<String, String> headers = const <String, String>{},
+    String? rootManifest,
     Duration manifestTimeout = const Duration(seconds: 15),
     int maximumManifestBytes = 8 * 1024 * 1024,
   }) async {
@@ -69,6 +74,9 @@ final class LoopbackIngestRelay {
       maximumManifestBytes: maximumManifestBytes,
     );
     server.listen(relay._handle, onError: (Object _) {}, cancelOnError: false);
+    if (rootManifest != null) {
+      relay._servedBodies['root.m3u8'] = rootManifest;
+    }
     return relay;
   }
 
@@ -94,6 +102,10 @@ final class LoopbackIngestRelay {
   /// Upstream URL -> the child name serving it, so a repeated URI is registered
   /// once and the playlist stays small.
   final Map<String, String> _byUpstream = <String, String>{};
+
+  /// Bodies the caller already fetched, keyed by child name: they are served
+  /// rewritten on the first request instead of being fetched again.
+  final Map<String, String> _servedBodies = <String, String>{};
   int _nextId = 0;
   bool _closed = false;
 
@@ -136,7 +148,7 @@ final class LoopbackIngestRelay {
     }
     try {
       if (child.manifest) {
-        await _serveManifest(request, child.uri);
+        await _serveManifest(request, name, child.uri);
       } else {
         await _proxyChild(request, child.uri);
       }
@@ -147,17 +159,24 @@ final class LoopbackIngestRelay {
     }
   }
 
-  Future<void> _serveManifest(HttpRequest request, Uri manifest) async {
-    final HttpClientResponse upstream = await _open(
-      request.method == 'HEAD' ? 'GET' : 'GET',
-      manifest,
-    );
-    if (upstream.statusCode != HttpStatus.ok) {
-      await upstream.drain<void>();
-      await _fail(request, upstream.statusCode);
-      return;
+  Future<void> _serveManifest(
+    HttpRequest request,
+    String name,
+    Uri manifest,
+  ) async {
+    final String? preloaded = _servedBodies.remove(name);
+    final String body;
+    if (preloaded != null) {
+      body = preloaded;
+    } else {
+      final HttpClientResponse upstream = await _open('GET', manifest);
+      if (upstream.statusCode != HttpStatus.ok) {
+        await upstream.drain<void>();
+        await _fail(request, upstream.statusCode);
+        return;
+      }
+      body = await _readManifest(upstream);
     }
-    final String body = await _readManifest(upstream);
     if (_closed) return;
     final String rewritten = _rewrite(body, manifest);
     final HttpResponse response = request.response;
