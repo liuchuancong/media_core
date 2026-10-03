@@ -252,6 +252,61 @@ void main() {
       await kernel.dispose();
     }, timeout: const Timeout(Duration(seconds: 30)));
 
+    test('an engine error during a staged attempt ends verification with the real reason', () async {
+      // The first open of a session is always staged — there is no player to
+      // replace — and a staged attempt had no adapter subscription until it
+      // committed. A playlist that 404s therefore looked like a frozen
+      // position for the whole window, and the reason the engine had already
+      // stated never reached the report.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(kernel, sourceReadyTimeout: const Duration(seconds: 12));
+
+      final previousLevel = MediaCoreLog.level;
+      final sink = MediaCoreLog.attachMemorySink();
+      MediaCoreLog.level = LogLevel.warning;
+      addTearDown(() {
+        MediaCoreLog.removeSink(sink);
+        MediaCoreLog.level = previousLevel;
+      });
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      final started = DateTime.now();
+      final playing = controller.play(
+        _request(['https://a.example/live.m3u8'], allowEngineFallback: false),
+      );
+
+      await _untilPlayRequested(adapters['engine-a']!);
+      adapters['engine-a']!.emitError('Failed to open https://a.example/live.m3u8.');
+      await playing;
+      final elapsed = DateTime.now().difference(started);
+
+      expect(
+        elapsed,
+        lessThan(const Duration(seconds: 6)),
+        reason: 'the engine had already said why; verification must not sit out its 12s window',
+      );
+      expect(failures, hasLength(1));
+      expect(failures.single.code, PlayerErrorCode.noPlayableStream);
+
+      final candidateFailures = sink
+          .forCategory(LogCategory.recovery)
+          .where((record) => record.message.startsWith('candidate failed'))
+          .toList(growable: false);
+      expect(candidateFailures, isNotEmpty);
+      expect(
+        candidateFailures.first.error.toString(),
+        contains('Failed to open'),
+        reason: 'the reported cause must be the engine error, not "position frozen at 0ms"',
+      );
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
     test('a zero deadline turns verification off with the watchdog', () async {
       // `sourceReadyTimeout: 0` already means "no opened-but-not-playing
       // watchdog"; verification is that deadline, so it must stand down too
@@ -349,6 +404,22 @@ void main() {
       await kernel.dispose();
     }, timeout: const Timeout(Duration(seconds: 40)));
   });
+}
+
+/// Waits until the sweep has opened the source and asked for playback — the
+/// moment verification starts polling, and therefore the only point from which
+/// an injected adapter error is a fair test of the fast-fail path.
+Future<void> _untilPlayRequested(FakePlayerAdapter adapter) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+
+  while (DateTime.now().isBefore(deadline)) {
+    if (adapter.calls.contains('play')) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+
+  fail('the engine was never asked to play');
 }
 
 /// Drives the mirror's position forward while a sweep is verifying.

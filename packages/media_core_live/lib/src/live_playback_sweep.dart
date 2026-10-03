@@ -263,6 +263,21 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     final staged = await kernel.create(preferredBackend: engine);
 
+    // A staged attempt owns no subscription until it commits, so an engine
+    // that fails *while opening* — a playlist that 404s, a refused connection
+    // — told the sweep nothing at all: verification sat out its whole window
+    // and then reported "position frozen", blaming the stream for what the
+    // engine had already stated. Observe errors only; playback state and the
+    // watchdogs stay unattached until commit, exactly as before.
+    final stagedErrors = staged.adapterEvents.listen(
+      (event) {
+        if (event case PlayerAdapterErrorEvent(:final message)) {
+          _sweepAdapterError ??= message;
+        }
+      },
+      onError: (Object _) {},
+    );
+
     try {
       staged.setRecoveryEnabled(false);
       staged.declarePlayIntent(true);
@@ -297,6 +312,10 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
       _attach(staged);
 
+      // After the commit, not before: cancelling first would open a gap in
+      // which an error event reaches neither listener.
+      await stagedErrors.cancel();
+
       if (previous != null && !previous.disposed) {
         try {
           await kernel.release(previous.id);
@@ -305,6 +324,8 @@ extension _LivePlaybackSweep on LivePlaybackController {
         }
       }
     } catch (error) {
+      await stagedErrors.cancel();
+
       try {
         await kernel.release(staged.id);
       } catch (_) {
