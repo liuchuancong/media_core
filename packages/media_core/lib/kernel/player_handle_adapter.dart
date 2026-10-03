@@ -365,7 +365,14 @@ extension _HandleAdapterBridge on PlayerHandle {
       'adapter error on ${_registration.id}: $message',
       error: error,
       stackTrace: stackTrace,
-      fields: <String, Object?>{'recoveryEnabled': _options.enableRecovery && config.enableRecovery},
+      // The effective gate below, not the configured defaults: reporting only
+      // `_options.enableRecovery && config.enableRecovery` printed
+      // `recoveryEnabled=true` for a handle whose recovery the playback owner
+      // had explicitly disabled, which reads as "the ladder is running" during
+      // a triage where it is not.
+      fields: <String, Object?>{
+        'recoveryEnabled': _recoveryEnabled && _options.enableRecovery && config.enableRecovery,
+      },
     );
 
     if (!_recoveryEnabled || !_options.enableRecovery || !config.enableRecovery) {
