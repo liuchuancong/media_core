@@ -66,10 +66,16 @@ LiveSourceRequest _request(List<String> urls, {bool? allowEngineFallback}) {
 
 /// Watchdogs off: these tests drive the sweep, and a stall detector firing in
 /// the middle of one would make the assertion about the wrong decision.
-LivePlaybackController _controller(PlayerKernel kernel) {
+///
+/// [sourceReadyTimeout] is also the sweep's verification deadline, so tests
+/// that sit out a refusal shrink it instead of paying the production 18s.
+LivePlaybackController _controller(
+  PlayerKernel kernel, {
+  Duration sourceReadyTimeout = const Duration(seconds: 18),
+}) {
   return LivePlaybackController(
     kernel,
-    watchdogs: LiveWatchdogs(enabled: false),
+    watchdogs: LiveWatchdogs(enabled: false, sourceReadyTimeout: sourceReadyTimeout),
   );
 }
 
@@ -81,7 +87,7 @@ void main() {
       // abandoned, and the caller must hear about it exactly once.
       final adapters = {'engine-a': _fake('engine-a')};
       final kernel = _kernel(adapters);
-      final controller = _controller(kernel);
+      final controller = _controller(kernel, sourceReadyTimeout: const Duration(milliseconds: 600));
 
       final failures = <PlayerFailure>[];
       final subscription = controller.onError.listen(failures.add);
@@ -185,6 +191,93 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 60)));
   });
 
+  group('sweep verification deadline', () {
+    test('the configured deadline gates a silent candidate, not a private one', () async {
+      // Verification used to carry its own 8s constant while the watchdog
+      // bundle declared 18s for the same question — so the tighter of the two
+      // decided, and a caller tuning `sourceReadyTimeout` had no effect on the
+      // gate that actually ran. A short deadline must now end the attempt.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(kernel, sourceReadyTimeout: const Duration(milliseconds: 400));
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      final started = DateTime.now();
+      await controller.play(
+        _request(['https://a.example/live.flv'], allowEngineFallback: false),
+      );
+      final elapsed = DateTime.now().difference(started);
+
+      expect(failures, hasLength(1));
+      expect(failures.single.code, PlayerErrorCode.noPlayableStream);
+      expect(
+        elapsed,
+        lessThan(const Duration(seconds: 4)),
+        reason: 'the gate must use the configured 400ms, not a constant of its own',
+      );
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('a source that only starts advancing late is adopted, not refused', () async {
+      // The shape of a multi-variant HLS master: the demuxer opens every
+      // rendition before a clock exists, so position stays at zero for a while
+      // even though the engine is working. Nothing reports "still probing", so
+      // the deadline is the only thing that may judge it.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(kernel, sourceReadyTimeout: const Duration(seconds: 3));
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      final playing = controller.play(
+        _request(['https://a.example/live.flv'], allowEngineFallback: false),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      adapters['engine-a']!.updatePosition(const Duration(seconds: 1));
+      await playing;
+
+      expect(failures, isEmpty);
+      expect(controller.handle, isNotNull);
+      expect(controller.sourceIndex, 0);
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('a zero deadline turns verification off with the watchdog', () async {
+      // `sourceReadyTimeout: 0` already means "no opened-but-not-playing
+      // watchdog"; verification is that deadline, so it must stand down too
+      // rather than refuse every candidate on the spot.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(kernel, sourceReadyTimeout: Duration.zero);
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      await controller.play(
+        _request(['https://a.example/live.flv'], allowEngineFallback: false),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(failures, isEmpty);
+      expect(controller.handle, isNotNull);
+      expect(adapters['engine-a']!.calls, contains('play'));
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 30)));
+  });
+
   group('LivePlaybackController lifecycle', () {
     test('close releases the handle and returns the session to idle', () async {
       final adapters = {'engine-a': _fake('engine-a')};
@@ -264,7 +357,7 @@ void main() {
 /// stands in for a stream that is actually advancing. It seeks the adapters
 /// rather than `controller.handle`, because the handle is only published once
 /// verification has already passed — during the sweep it is still staged.
-/// Verification polls every 250 ms inside an 8 s window, which this covers.
+/// Verification polls every 250 ms inside its deadline, which this covers.
 Future<void> _pumpPosition(
   Iterable<FakePlayerAdapter> adapters, {
   Duration window = const Duration(seconds: 4),

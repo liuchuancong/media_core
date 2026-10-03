@@ -107,6 +107,21 @@ final class LiveWatchdogs {
   /// Opened-but-not-playing deadline.
   ///
   /// Zero disables this watchdog.
+  ///
+  /// This is also how long the sweep's verification gives a candidate to
+  /// produce its first position advance — one question, one deadline.
+  /// Verification runs *before* this watchdog is armed, so the two never
+  /// overlap; they are the same tolerance applied to consecutive phases.
+  ///
+  /// It is deliberately generous. A live source can legitimately take this
+  /// long to show a position while the engine is still working: an HLS
+  /// master whose variants carry no CODECS attributes makes the demuxer
+  /// probe every rendition — playlist, init segment and media segment per
+  /// rendition, each one a separate connection — before the first frame
+  /// exists. Judging that phase by a tighter window condemned healthy
+  /// players (Steam broadcasts took ~8s of probing and were torn down at
+  /// exactly that point, and a single-variant AWS IVS line legitimately
+  /// needed 6.8s).
   final Duration sourceReadyTimeout;
 
   /// Grace before an unexpected `playing=false` triggers a resume request.

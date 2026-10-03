@@ -354,8 +354,25 @@ extension _LivePlaybackSweep on LivePlaybackController {
   /// after engine that was already on screen. A stream that moves at all
   /// has passed verification; if it later stops moving, the position-stall
   /// watchdog is the detector for that, not this gate.
+  ///
+  /// The deadline is [LiveWatchdogs.sourceReadyTimeout] — the tolerance
+  /// this module already declares for "opened but not playing", of which
+  /// this is the first phase. It used to be a private, tighter constant,
+  /// which meant one question with two deadlines and the stricter one
+  /// winning: engines that were demonstrably still working (fetching the
+  /// renditions of a multi-variant HLS master) were reported as frozen.
+  /// Silence at this point is not evidence of death, because there is no
+  /// signal that says "still probing" — no position and no buffering
+  /// report exist until the demuxer has finished opening.
   Future<void> _verifyPlayback(PlayerHandle handle, PlayerSource source) async {
-    final until = DateTime.now().add(_verificationWindow);
+    final window = watchdogs.sourceReadyTimeout;
+
+    // Zero turns the deadline off, and verification *is* that deadline.
+    if (window <= Duration.zero) {
+      return;
+    }
+
+    final until = DateTime.now().add(window);
     var last = handle.playbackStream.value.position;
 
     while (DateTime.now().isBefore(until)) {
@@ -391,7 +408,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
     throw StateError(
       '${source.uri} on ${handle.backendId} opened but never played '
       '(position frozen at ${last.inMilliseconds}ms for '
-      '${_verificationWindow.inSeconds}s).',
+      '${window.inSeconds}s).',
     );
   }
 

@@ -17,9 +17,6 @@ import 'package:media_core_live/src/live_watchdogs.dart';
 part 'live_playback_sweep.dart';
 part 'live_playback_pipeline.dart';
 
-/// How long a freshly opened source has to prove that playback is real.
-const Duration _verificationWindow = Duration(seconds: 8);
-
 /// Resolves the sources for the next engine of a sweep.
 ///
 /// Invoked *before* the controller attaches the next engine, with the
@@ -61,7 +58,8 @@ typedef EngineFallbackSourceResolver = Future<List<PlayerSource>> Function(
 /// "Fails" means one of: the open threw, the engine could not be attached,
 /// or — the case that used to look like a freeze — the source opened
 /// cleanly but playback position never advanced within
-/// [_verificationWindow]. Verification is what makes the sweep honest.
+/// [LiveWatchdogs.sourceReadyTimeout]. Verification is what makes the
+/// sweep honest.
 ///
 /// Watchdogs stay pure detectors: a stall or an adapter error becomes a
 /// recover task — reopen the current source once, then join the same
