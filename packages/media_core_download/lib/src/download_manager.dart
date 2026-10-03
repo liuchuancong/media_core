@@ -154,7 +154,21 @@ final class DownloadManager {
       fields: <String, Object?>{'id': task.id.value, 'url': task.url, 'priority': task.priority.name},
     );
 
-    unawaited(_register(task).then((_) => _pump()));
+    unawaited(
+      _register(task).then((_) => _pump()).catchError((Object error, StackTrace stackTrace) {
+        // Registration retries for a bounded time and then rethrows. The task
+        // has already been announced as queued, so giving up has to be
+        // announced too: otherwise the row sits in the queue forever and the
+        // only trace is an error nobody is listening for.
+        _log.error(
+          'download registration gave up; the task cannot be queued',
+          error: error,
+          stackTrace: stackTrace,
+          fields: <String, Object?>{'id': task.id.value, 'url': task.url},
+        );
+        _emit(task.copyWith(status: DownloadStatus.failed, error: error));
+      }),
+    );
     _emit(task.copyWith(status: DownloadStatus.queued, clearError: true));
   }
 

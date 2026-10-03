@@ -4,16 +4,26 @@ import 'package:media_core_audio/src/track/track_source.dart';
 
 /// One platform's music API, expressed as a source.
 ///
-/// The shape follows lx-music's "音源" concept: a source can *find* tracks and
-/// *resolve* them to audio and lyrics, and nothing else in the framework knows
-/// how any particular platform works. Implementations live in the host app
-/// (they carry site-specific crypto, tokens and headers), so this package only
-/// fixes the contract.
+/// The shape follows the "music source" concept a host app plugin ecosystem
+/// popularized: a source can *find* tracks and *resolve* them to audio and
+/// lyrics, and nothing else in the framework knows how any particular
+/// platform works. Implementations live in the host app (they carry
+/// site-specific crypto, tokens and headers), so this package only fixes the
+/// contract.
 ///
 /// Implementations **extend** this class (`extends MusicSource`) so the
-/// optional members below come for free: every method except [id]/[name] has a
-/// usable default, and a minimal source — a local folder, a plain HTTP index —
-/// therefore implements two members and still participates fully.
+/// optional members below come for free — which is why this is an
+/// `abstract class` and not an `abstract interface class`: an interface class
+/// could not be extended from outside this library, and the defaults are the
+/// point.
+///
+/// The defaults split by whether an empty answer is *true*:
+///
+/// - [trackDetail], [qualities], [catalogs] and [resolveLyric] answer "this
+///   source has nothing more to say", which is a fact about many sources.
+/// - [search] and [catalogItems] throw. A source that cannot search does not
+///   have zero results — reporting an empty page would put "no matches for
+///   your query" on screen for a platform that was never asked.
 abstract class MusicSource {
   /// Stable identifier, referenced by [MusicTrack.sourceId].
   String get id;
@@ -22,8 +32,12 @@ abstract class MusicSource {
   String get name;
 
   /// Searches this platform.
+  ///
+  /// A source with no search has to say so: the default throws rather than
+  /// returning an empty page, because an empty page is an answer about the
+  /// platform's contents and this knows nothing about them.
   Future<MusicSourcePage<MusicTrack>> search(String keyword, {int page = 1, int pageSize = 30}) async {
-    return const MusicSourcePage<MusicTrack>(items: <MusicTrack>[]);
+    throw UnsupportedError('MusicSource($id) does not implement search.');
   }
 
   /// Re-reads a track's metadata.
@@ -54,8 +68,15 @@ abstract class MusicSource {
   Future<List<MusicCatalog>> catalogs() async => const <MusicCatalog>[];
 
   /// Items of a catalog from [catalogs].
+  ///
+  /// Only ever called with a catalog this source advertised, so the default
+  /// throws: an empty page here would mean a list the source offered and
+  /// cannot fill, presented to the viewer as a catalog with nothing in it.
   Future<MusicSourcePage<MusicTrack>> catalogItems(MusicCatalog catalog, {int page = 1}) async {
-    return const MusicSourcePage<MusicTrack>(items: <MusicTrack>[]);
+    throw UnsupportedError(
+      'MusicSource($id) advertised catalog ${catalog.id} but does not '
+      'implement catalogItems.',
+    );
   }
 
   @override

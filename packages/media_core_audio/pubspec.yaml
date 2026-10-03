@@ -38,6 +38,8 @@ dependencies:
   ffmpeg_kit_extended_flutter: 0.6.2
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   flutter_lints: ^6.0.0
 
 # Native desktop-lyric overlay (Windows layered window / Android overlay
