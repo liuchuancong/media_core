@@ -18,6 +18,18 @@ final class _FakeEngine implements BarrageEngineApi {
   void clear() => clearCalls++;
 
   @override
+  void loadTimeline(List<BarrageItem> items) => timeline = items;
+
+  @override
+  void seekTo(Duration position) => seekPositions.add(position);
+
+  List<BarrageItem>? timeline;
+  final seekPositions = <Duration>[];
+
+  @override
+  double playbackRate = 1.0;
+
+  @override
   int retractWhere(bool Function(BarrageItem item) predicate) =>
       pushed.where(predicate).length;
 
@@ -189,6 +201,18 @@ void main() {
       );
     });
 
+    test('a timeline offset is passed through, and its absence is too', () {
+      final timed = BarrageItemMapper.toItem(
+        _chat(),
+        at: const Duration(seconds: 90),
+      );
+
+      expect(timed.at, const Duration(seconds: 90));
+      // A live message has no offset, and inventing one would schedule it
+      // against a timeline nobody loaded.
+      expect(BarrageItemMapper.toItem(_chat()).at, isNull);
+    });
+
     test('numeric weights round to the nearest FontWeight', () {
       expect(BarrageItemMapper.fontWeightFor(400), FontWeight.w400);
       expect(BarrageItemMapper.fontWeightFor(480), FontWeight.w500);
@@ -309,6 +333,38 @@ void main() {
       sink.onDanmaku(_chat());
 
       expect(engine.pushed, isEmpty);
+    });
+  });
+
+  group('the timeline surface a VOD host drives', () {
+    test('load, seek and rate all reach the engine through the controller', () {
+      final engine = _FakeEngine();
+      final controller = BarrageController()..attach(engine);
+
+      controller.loadTimeline([
+        BarrageItem(content: 'a', at: const Duration(seconds: 1)),
+        BarrageItem(content: 'b', at: const Duration(seconds: 2)),
+      ]);
+      expect(engine.timeline, hasLength(2));
+
+      controller.seekTo(const Duration(seconds: 30));
+      expect(engine.seekPositions, [const Duration(seconds: 30)]);
+
+      controller.playbackRate = 2.0;
+      expect(controller.playbackRate, 2.0);
+    });
+
+    test('dispose clears and detaches, so a stale sink cannot push', () {
+      final engine = _FakeEngine();
+      final controller = BarrageController()..attach(engine);
+      final staleSink = FlameBarrageSink(controller);
+
+      controller.dispose();
+      staleSink.onDanmaku(_chat());
+
+      expect(engine.clearCalls, 1);
+      expect(engine.pushed, isEmpty);
+      expect(controller.engine, isNull);
     });
   });
 }

@@ -23,13 +23,24 @@ abstract final class BarrageItemMapper {
   ///
   /// [priority] is passed through for lane contention; the engine, not this
   /// mapper, decides what a priority is worth.
-  static BarrageItem toItem(DanmakuMessage message, {int priority = 0}) {
+  ///
+  /// [at] places the message on a recorded stream's timeline, which the engine
+  /// dispatches when the media reaches it. Leave it null for a live room, where
+  /// a message belongs on screen the moment it arrives. `DanmakuMessage`
+  /// carries no media offset — `sentAt` is a wall clock — so the caller that
+  /// knows the timeline supplies it rather than this mapper guessing.
+  static BarrageItem toItem(
+    DanmakuMessage message, {
+    Duration? at,
+    int priority = 0,
+  }) {
     final style = message.style;
     final color = message.color;
 
     return BarrageItem(
       content: message.text,
       type: barrageTypeFor(style?.placement ?? DanmakuPlacement.scroll),
+      at: at,
       priority: priority,
       // The engine never reads the id, but the host does: it is the handle
       // `retractWhere` takes a recalled message back by.
