@@ -31,6 +31,7 @@ workspace:
   - packages/media_core_recording_ffmpeg
   - packages/media_core_download
   - packages/media_core_multiview
+  - packages/media_core_ingest
   - example
 dev_dependencies:
   melos: ^8.9.0

@@ -1,0 +1,20 @@
+name: media_core_ingest
+description: Playable input pipeline for media_core - decide when an upstream must be normalised (manifest rewrite, expiring URL, codec/container remux) and hand the player one loopback URL instead of teaching every host the same tricks.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # No FFmpeg runtime here on purpose: hosts inject their own through
+  # [IngestFfmpegStarter], so adding this package never links a second copy.
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
