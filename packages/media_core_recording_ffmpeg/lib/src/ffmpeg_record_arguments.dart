@@ -1,4 +1,4 @@
-import 'package:media_core/media_core.dart' show UriUtils;
+import 'package:media_core/media_core.dart' show HttpHeaderSanitizer, UriUtils;
 
 import 'package:media_core_recording_ffmpeg/src/ffmpeg_record_config.dart';
 
@@ -224,35 +224,19 @@ final class FfmpegRecordArguments {
     return const <String>{'rtmps', 'rtp', 'srt'}.contains(scheme);
   }
 
-  /// Normalizes HTTP headers for FFmpeg.
+  /// Validates [headers] against the framework's single rule.
   ///
-  /// Header names are lower-cased and restricted to the token characters FFmpeg
-  /// accepts, and values lose CR/LF/NUL: a header value is attacker-influenced
-  /// input reaching a native parser, and a newline in one would inject another
-  /// header.
+  /// Delegates to [HttpHeaderSanitizer]: a header that cannot be sent exactly
+  /// as given is an error naming that header, not something to rewrite or drop
+  /// quietly — the one that disappears is usually the credential, and what the
+  /// caller sees next is an unexplained 403.
   static Map<String, String> normalizeHeaders(Map<String, String>? headers) {
-    if (headers == null || headers.isEmpty) {
-      return <String, String>{};
-    }
-    final normalized = <String, String>{};
-    final validName = RegExp(r'^[A-Za-z0-9-]+$');
-    for (final entry in headers.entries) {
-      final name = entry.key.trim().toLowerCase();
-      final value = entry.value.replaceAll(RegExp(r'[\r\n\u0000]+'), ' ').trim();
-      if (name.isEmpty || value.isEmpty || !validName.hasMatch(name)) {
-        continue;
-      }
-      normalized[name] = value;
-    }
-    return normalized;
+    return HttpHeaderSanitizer.sanitize(headers);
   }
 
   /// Joins normalized headers into FFmpeg's `Name: value\r\n` block.
   static String buildHeader(Map<String, String> headers) {
-    if (headers.isEmpty) {
-      return '';
-    }
-    return '${headers.entries.map((entry) => '${entry.key}: ${entry.value}').join('\r\n')}\r\n';
+    return HttpHeaderSanitizer.ffmpegBlock(headers);
   }
 
   /// Makes [value] safe to use as a file name.

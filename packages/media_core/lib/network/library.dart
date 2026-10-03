@@ -16,6 +16,7 @@ library;
 // Public exports
 // ============================================================================
 
+export 'package:media_core/network/http_header_sanitizer.dart';
 export 'package:media_core/network/network_condition.dart';
 export 'package:media_core/network/network_manager.dart';
 export 'package:media_core/network/network_metrics.dart';

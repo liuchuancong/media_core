@@ -317,40 +317,13 @@ final class MusicDownloader {
     };
   }
 
-  /// Joins [headers] into the CRLF-separated blob ffmpeg's `-headers`
-  /// option expects.
+  /// Joins [headers] into the CRLF block ffmpeg's `-headers` option expects.
   ///
-  /// Values are sanitized by substitution (a newline inside a value would
-  /// start a second header line). Names cannot be sanitized — ffmpeg
-  /// writes them verbatim — so a name that is not a valid token is
-  /// rejected outright: letting it through would be request-header
-  /// injection into the CDN call, and no legitimate caller sends one.
+  /// Validation is the framework's, not this package's: see
+  /// [HttpHeaderSanitizer] for why a header that cannot be sent exactly as
+  /// given is an error rather than something to rewrite or drop.
   String _buildHeader(Map<String, String> headers) {
-    final buffer = StringBuffer();
-
-    for (final entry in headers.entries) {
-      final name = entry.key.trim();
-      if (name.isEmpty) {
-        continue;
-      }
-      if (RegExp(r'[\x0d\x0a\x00:]').hasMatch(name)) {
-        throw ArgumentError.value(
-          entry.key,
-          'headers',
-          'header name is not a valid token and would inject a second '
-              'header line into the ffmpeg request',
-        );
-      }
-
-      final value = entry.value.replaceAll(RegExp(r'[\x0d\x0a\x00]+'), ' ').trim();
-      if (value.isEmpty) {
-        continue;
-      }
-
-      buffer.write('$name: $value\r\n');
-    }
-
-    return buffer.toString();
+    return HttpHeaderSanitizer.ffmpegBlock(HttpHeaderSanitizer.sanitize(headers));
   }
 
   /// Picks the most useful line out of an ffmpeg log tail.

@@ -2,42 +2,23 @@ import 'package:flutter/rendering.dart';
 
 import 'package:flv_lzc/fijkplayer.dart';
 import 'package:media_core/media_core.dart';
-import 'package:media_core_logging/media_core_logging.dart';
 
 /// Helpers shared by the ijkplayer adapter.
 abstract final class FijkHelper {
   /// Translates the framework's source headers into ijkplayer's format
   /// options: a CRLF-terminated `headers` string, with `user_agent`
   /// lifted out because ijkplayer treats it separately.
+  ///
+  /// Validation is the framework's single rule — see [HttpHeaderSanitizer].
+  /// ijkplayer writes both names and values verbatim into a native option
+  /// string, so a header that cannot be sent exactly as given is refused
+  /// here rather than rewritten into something the site never issued.
   static Map<String, Object> sourceHeaderOptions(Map<String, String> headers) {
-    String? userAgent;
+    final sanitized = HttpHeaderSanitizer.sanitize(headers);
+    final userAgent = sanitized.remove('user-agent');
+
     final buffer = StringBuffer();
-
-    for (final entry in headers.entries) {
-      final key = entry.key.trim();
-      final value = entry.value.replaceAll(RegExp(r'[\x0d\x0a\x00]+'), ' ').trim();
-
-      if (key.isEmpty || value.isEmpty) continue;
-
-      // The name is written verbatim into ijkplayer's CRLF-joined
-      // `headers` option, so a name carrying a newline or a colon would
-      // inject a whole extra header line. Values can be sanitized by
-      // substitution; a name cannot, so it is dropped and reported.
-      if (RegExp(r'[\x0d\x0a\x00:]').hasMatch(key)) {
-        MediaCoreLog.warning(
-          LogCategory.network,
-          'dropped a request header whose name is not a valid token',
-          fields: <String, Object?>{'header': key},
-        );
-        continue;
-      }
-
-      if (key.toLowerCase() == 'user-agent') {
-        userAgent = value;
-      } else {
-        buffer.write('$key:$value\r\n');
-      }
-    }
+    sanitized.forEach((name, value) => buffer.write('$name:$value\r\n'));
 
     return <String, Object>{
       'headers': buffer.toString(),

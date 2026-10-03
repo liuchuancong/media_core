@@ -551,40 +551,36 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// `user-agent` is its own option; every other header goes into the
   /// `http-header-fields` list as a `Name: value` line (replaced wholesale so
   /// a re-attach never stacks duplicates).
+  ///
+  /// Validation is the framework's single rule — see [HttpHeaderSanitizer].
+  /// A header that cannot be sent exactly as given is refused here rather
+  /// than dropped: this path feeds the side-channel essences, so a silently
+  /// missing Referer shows up as an audio track that 403s while the video
+  /// keeps playing.
   Future<void> _applyTrackNetworkHeaders(dynamic native, Map<String, String> headers) async {
     if (headers.isEmpty) return;
-    final fields = <String>[];
-    for (final entry in headers.entries) {
-      // A header value carrying CR/LF would inject additional request lines
-      // (or, for `http-header-fields`, a whole extra header) into what mpv
-      // sends to the CDN: drop the value, never sanitize it into something
-      // the site did not issue.
-      if (entry.value.contains('\r') || entry.value.contains('\n')) {
+
+    final sanitized = HttpHeaderSanitizer.sanitize(headers);
+    final userAgent = sanitized.remove('user-agent');
+
+    if (userAgent != null) {
+      try {
+        // ignore: avoid_dynamic_calls
+        await (native as dynamic).setProperty('user-agent', userAgent);
+      } catch (error) {
+        // The side-channel fetch runs without a user agent, which is exactly
+        // the request a CDN answers with 403; the audio track then fails for
+        // a reason nothing else would report.
         MediaCoreLog.warning(
           LogCategory.network,
-          'dropped side-channel header ${entry.key}: contains CR/LF',
+          'side-channel user-agent was not applied: $error',
+          error: error,
         );
-        continue;
       }
-      if (entry.key.toLowerCase() == 'user-agent') {
-        try {
-          // ignore: avoid_dynamic_calls
-          await (native as dynamic).setProperty('user-agent', entry.value);
-        } catch (error) {
-          // The side-channel fetch runs without a user agent, which is
-          // exactly the request a CDN answers with 403; the audio track
-          // then fails for a reason nothing else would report.
-          MediaCoreLog.warning(
-            LogCategory.network,
-            'side-channel user-agent was not applied: $error',
-            error: error,
-          );
-        }
-        continue;
-      }
-      fields.add('${entry.key}: ${entry.value}');
     }
-    if (fields.isEmpty) return;
+
+    if (sanitized.isEmpty) return;
+    final fields = HttpHeaderSanitizer.mpvFields(sanitized);
     try {
       // ignore: avoid_dynamic_calls
       await (native as dynamic).setProperty('http-header-fields', fields);

@@ -184,18 +184,33 @@ void main() {
       expect(headerBlock, endsWith('\r\n'));
     });
 
-    test('rejects hostile headers', () {
+    test('a hostile header is refused, not rewritten or dropped', () {
+      // The rule belongs to the framework (HttpHeaderSanitizer): send it exactly
+      // as given or fail. A rewritten value is one the site never issued, and
+      // a dropped one is usually the credential — which surfaces later as an
+      // unexplained 403 instead of as the caller's bug.
+      expect(
+        () => FfmpegRecordArguments.normalizeHeaders(<String, String>{'X-Bad\nInjected': 'value'}),
+        throwsA(isA<HttpHeaderError>()),
+      );
+      expect(
+        () => FfmpegRecordArguments.normalizeHeaders(<String, String>{'X-Inject': 'a\r\nX-Evil: 1'}),
+        throwsA(isA<HttpHeaderError>()),
+      );
+      expect(
+        () => FfmpegRecordArguments.normalizeHeaders(<String, String>{'X-Empty': '   '}),
+        throwsA(isA<HttpHeaderError>()),
+      );
+    });
+
+    test('clean headers pass through with lower-cased names', () {
       final normalized = FfmpegRecordArguments.normalizeHeaders(<String, String>{
         'X-Ok': 'value',
-        'X-Bad\nInjected': 'value',
-        'X-Empty': '   ',
-        'X-Inject': 'a\r\nX-Evil: 1',
+        'Referer': 'https://e.example/',
       });
 
-      expect(normalized.keys, contains('x-ok'));
-      expect(normalized.containsKey('x-bad\ninjected'), isFalse);
-      expect(normalized.containsKey('x-empty'), isFalse);
-      expect(normalized['x-inject'], 'a X-Evil: 1', reason: 'a newline would inject another header');
+      expect(normalized.keys, containsAll(<String>['x-ok', 'referer']));
+      expect(FfmpegRecordArguments.buildHeader(normalized), contains('x-ok: value\r\n'));
     });
 
     test('keeps a hostile file prefix inside the output directory', () {

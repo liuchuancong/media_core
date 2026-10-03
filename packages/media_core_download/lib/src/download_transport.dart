@@ -184,36 +184,15 @@ final class HttpDownloadTransport implements DownloadTransport {
     _client = io.HttpClient();
   }
 
-  /// Applies caller headers, dropping anything that would forge another header.
+  /// Applies caller headers to a ranged request.
   ///
-  /// Header values reach a native parser; a name with a colon or a value with a
-  /// newline is an injection, not a header.
+  /// Validation is the framework's single rule — see [HttpHeaderSanitizer].
+  /// A header that cannot be sent exactly as given throws rather than being
+  /// dropped, because the one that disappears is usually the credential and
+  /// what follows is an unexplained 403.
   static void applyHeaders(io.HttpClientRequest request, Map<String, String> headers) {
-    headers.forEach((name, value) {
-      final safeName = name.trim().toLowerCase();
-      if (safeName.isEmpty || safeName.contains(RegExp(r'[\r\n:]'))) {
-        // Not a header name, so it is not sent; saying so is the difference
-        // between a dropped header and a mysterious 403 three requests later.
-        MediaCoreLog.warning(
-          LogCategory.download,
-          'dropped a request header whose name is not a valid token',
-          fields: <String, Object?>{'header': name},
-        );
-        return;
-      }
-      try {
-        request.headers.set(safeName, value.replaceAll(RegExp(r'[\r\n\u0000]+'), ' '));
-      } catch (error) {
-        // A header this client refuses is dropped rather than failing the
-        // whole transfer — but a dropped Authorization or Cookie is exactly
-        // what turns into an unexplained 403, so it is reported.
-        MediaCoreLog.warning(
-          LogCategory.download,
-          'the HTTP client refused a request header: $error',
-          error: error,
-          fields: <String, Object?>{'header': safeName},
-        );
-      }
+    HttpHeaderSanitizer.sanitize(headers).forEach((name, value) {
+      request.headers.set(name, value);
     });
   }
 
