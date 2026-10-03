@@ -48,6 +48,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     this.playerConfiguration,
     this.videoControllerConfiguration,
     this.customInputOpener,
+    this.beforeOpen,
   }) : _injectedPlayer = player,
        super(capabilities: _honestCapabilities(capabilities));
 
@@ -71,6 +72,19 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// not configuration: the adapter stores nothing and decides nothing
   /// about the input's contents.
   final Future<void> Function(mk.Player player, Object recipe)? customInputOpener;
+
+  /// Per-source engine properties, injected by the host.
+  ///
+  /// Runs from [onBeforeOpen]: after the engine exists and before it is handed
+  /// the URL, so a property the host derives from the source itself (a demuxer
+  /// it already knows from the platform's manifest, a proxy that must not apply
+  /// to a loopback input) lands on the open that needs it. Assembly-time engine
+  /// options cannot express this — they are one value for the adapter's whole
+  /// lifetime, while the answer here changes with each source.
+  ///
+  /// Contract glue like [customInputOpener]: the adapter stores nothing and
+  /// decides nothing about which properties the host wants applied.
+  final Future<void> Function(mk.Player player, PlayerSource source)? beforeOpen;
 
   /// Narrows [capabilities] to what this platform actually implements.
   ///
@@ -369,6 +383,9 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _liveSource = source.isLive;
     _hasDecodedVideoFrame = false;
     _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
+
+    final hook = beforeOpen;
+    if (hook != null) await hook(player, source);
   }
 
   @override

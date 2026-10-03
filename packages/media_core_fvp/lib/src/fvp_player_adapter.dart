@@ -332,8 +332,13 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     _player = player;
 
-    // Native decoder / audio-backend lists, verbatim; null leaves the
-    // engine's own default order. The adapter picks nothing here.
+    // Native decoder / audio-backend lists, verbatim. The default names two
+    // software decoders: whether FFmpeg then reaches a hardware path on its
+    // own is engine- and device-dependent and is not verified here, which is
+    // why `supportsHardwareDecoder` is a claim about mdk rather than about
+    // this list. Passing `videoDecoders: null` is not the same as omitting it
+    // — the fallback below replaces it, so a caller who wants mdk's own order
+    // has to pass the list explicitly.
     player.videoDecoders = videoDecoders ?? const <String>['FFmpeg', 'dav1d'];
     final backends = audioBackends;
     if (backends != null) player.audioBackends = backends;

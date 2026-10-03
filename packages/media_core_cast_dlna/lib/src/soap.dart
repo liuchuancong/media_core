@@ -54,7 +54,6 @@ abstract final class Soap {
     required SoapServiceRef service,
     required String didl,
     required String url,
-    String metadata = '',
     int instanceId = 0,
   }) {
     return _request(

@@ -23,6 +23,7 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
     this.videoControllerConfiguration,
     this.videoControllerConfigurationBuilder,
     this.customInputOpener,
+    this.beforeOpen,
     this.configure,
   });
 
@@ -42,6 +43,9 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
 
   final Future<void> Function(mk.Player player, Object recipe)? customInputOpener;
 
+  /// Per-source engine properties; see [MediaKitPlayerAdapter.beforeOpen].
+  final Future<void> Function(mk.Player player, PlayerSource source)? beforeOpen;
+
   final void Function(MediaKitPlayerAdapter adapter)? configure;
 
   @override
@@ -52,6 +56,7 @@ final class MediaKitAdapterFactory implements PlayerAdapterFactory {
       playerConfiguration: playerConfiguration,
       videoControllerConfiguration: videoControllerConfigurationBuilder?.call() ?? videoControllerConfiguration,
       customInputOpener: customInputOpener,
+      beforeOpen: beforeOpen,
     );
 
     configure?.call(adapter);
@@ -85,6 +90,7 @@ void registerMediaKitFactory(
   mkv.VideoControllerConfiguration? videoControllerConfiguration,
   mkv.VideoControllerConfiguration Function()? videoControllerConfigurationBuilder,
   Future<void> Function(mk.Player player, Object recipe)? customInputOpener,
+  Future<void> Function(mk.Player player, PlayerSource source)? beforeOpen,
   void Function(MediaKitPlayerAdapter adapter)? configure,
 }) {
   factory.register(id, () {
@@ -94,6 +100,7 @@ void registerMediaKitFactory(
       playerConfiguration: playerConfiguration,
       videoControllerConfiguration: videoControllerConfigurationBuilder?.call() ?? videoControllerConfiguration,
       customInputOpener: customInputOpener,
+      beforeOpen: beforeOpen,
     );
 
     configure?.call(adapter);
@@ -111,6 +118,7 @@ void registerMediaKitRegistry(
   mkv.VideoControllerConfiguration? videoControllerConfiguration,
   mkv.VideoControllerConfiguration Function()? videoControllerConfigurationBuilder,
   Future<void> Function(mk.Player player, Object recipe)? customInputOpener,
+  Future<void> Function(mk.Player player, PlayerSource source)? beforeOpen,
   void Function(MediaKitPlayerAdapter adapter)? configure,
 }) {
   registry.register(
@@ -120,6 +128,7 @@ void registerMediaKitRegistry(
       videoControllerConfiguration: videoControllerConfiguration,
       videoControllerConfigurationBuilder: videoControllerConfigurationBuilder,
       customInputOpener: customInputOpener,
+      beforeOpen: beforeOpen,
       configure: configure,
     ).registration(priority: priority),
   );

@@ -28,8 +28,15 @@ final class FfmpegRecordArguments {
 
   /// Protocols FFmpeg is allowed to open.
   ///
-  /// Deliberately explicit: a live URL is attacker-influenced input, and the
-  /// whitelist is what keeps it from being read as a `file:` or `data:` URI.
+  /// Explicit rather than "whatever the build supports", so a protocol this
+  /// package has not reasoned about cannot be reached by accident.
+  ///
+  /// It is **not** a defence against a hostile input URL: `file` has to stay
+  /// listed because FFmpeg needs it to write the local segment output, and
+  /// the whitelist applies to the IO layer as a whole rather than to inputs
+  /// alone. Deciding that a URL is a network address and not a local path
+  /// belongs to whoever knows where the URL came from — this builder only
+  /// formats arguments.
   static const String protocolWhitelist =
       'httpproxy,udp,rtp,rtsp,rtmp,rtmps,srt,tcp,tls,data,file,http,https,crypto';
 
