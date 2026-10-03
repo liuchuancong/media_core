@@ -19,6 +19,7 @@ export 'package:media_core_danmaku/src/danmaku_message.dart';
 export 'package:media_core_danmaku/src/danmaku_message_gate.dart';
 export 'package:media_core_danmaku/src/danmaku_overlay_config.dart';
 export 'package:media_core_danmaku/src/danmaku_overlay_session.dart';
+export 'package:media_core_danmaku/src/danmaku_player_binding.dart';
 export 'package:media_core_danmaku/src/danmaku_repeated_filter.dart';
 export 'package:media_core_danmaku/src/danmaku_session_state.dart';
 export 'package:media_core_danmaku/src/danmaku_similarity_filter.dart';
