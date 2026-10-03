@@ -1,3 +1,5 @@
+import 'package:flame_barrage/flame_barrage.dart';
+
 /// User-facing configuration for a danmaku overlay on a small surface.
 ///
 /// A small window is not a small player: a 320-pixel-wide picture-in-picture
@@ -6,6 +8,11 @@
 /// value that works on the main surface is wrong on the small one — which is
 /// why the overlay carries its own configuration instead of reusing the main
 /// session's.
+///
+/// The rendering knobs are the engine's vocabulary, and [toBarrageConfig] is
+/// the single place that speaks it: a host that renders this surface with
+/// flame_barrage gets one set of values instead of translating `area` to
+/// `displayAreaFraction` by hand in two directions.
 final class DanmakuOverlayConfig {
   const DanmakuOverlayConfig({
     this.enabled = true,
@@ -115,6 +122,35 @@ final class DanmakuOverlayConfig {
       showStroke: showStroke ?? this.showStroke,
       strokeWidth: strokeWidth ?? this.strokeWidth,
       clearOnHide: clearOnHide ?? this.clearOnHide,
+    );
+  }
+
+  /// The same rendering decisions, in the engine's vocabulary.
+  ///
+  /// [baseSpeed] is the pixels-per-second that [speedMultiplier] multiplies.
+  /// The engine's speed is absolute and this config's is relative, so the
+  /// reference has to come from somewhere: pass the main surface's speed and
+  /// the small window keeps the relationship the multiplier expresses.
+  ///
+  /// Four fields have no engine counterpart and stay here, because they are
+  /// about this surface rather than about how a message looks:
+  ///
+  /// - [enabled] and [clearOnHide] are policy the session applies.
+  /// - [scaleWithSurface], [referenceWidth], [minScale] and [maxScale] scale
+  ///   the font by the surface width, and the engine is never told how wide
+  ///   its surface is. A host that wants the scaled size computes it (the
+  ///   session already does, in `DanmakuOverlaySession.fontSizeFor`) and
+  ///   passes the result as `fontSize` on the returned config's `copyWith`.
+  BarrageConfig toBarrageConfig({double baseSpeed = 120}) {
+    return BarrageConfig(
+      fontSize: fontSize,
+      opacity: opacity,
+      fps: fps,
+      area: displayAreaFraction,
+      showStroke: showStroke,
+      strokeWidth: strokeWidth,
+      baseSpeed: baseSpeed * speedMultiplier,
+      maxVisibleCount: maxMessages,
     );
   }
 }

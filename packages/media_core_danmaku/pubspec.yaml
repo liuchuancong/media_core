@@ -16,9 +16,7 @@ dependencies:
   media_core_memory:
     path: ../media_core_memory
 
-  # Rendering engine this package drives: it owns the lanes, the paint and
-  # the caches, so nothing here measures or positions text.
-  flame_barrage: ^0.0.8
+  flame_barrage: ^0.0.9
 
   # Session state and failure streams
   rxdart: ^0.28.0
