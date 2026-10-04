@@ -192,7 +192,7 @@ final class _PresentationDemoPageState extends State<PresentationDemoPage> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
-          Text('弹幕 / danmaku（活动 ${live.length} 条，enabled=${_danmaku.config.enabled}）',
+          Text('弹幕 / danmaku（活动 ${live.length} 条，enabled=${_danmaku.isEnabled}）',
               style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 6),
           // A real overlay renders and animates these; the demo shows the

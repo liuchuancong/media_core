@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:flame_barrage/flame_barrage.dart';
 import 'package:media_core_memory/media_core_memory.dart';
 
 import 'package:media_core_danmaku/src/danmaku_message.dart';
-import 'package:media_core_danmaku/src/danmaku_overlay_config.dart';
 
 /// One message scheduled on a small surface.
+///
+/// Every presentation value here comes from the [BarrageConfig] the session
+/// was given, so a host that renders this surface with flame_barrage and one
+/// that renders it with its own painter read the same numbers from the same
+/// place. Nothing is scaled or invented on the way through.
 final class DanmakuOverlayItem {
   const DanmakuOverlayItem({
     required this.message,
@@ -14,7 +19,7 @@ final class DanmakuOverlayItem {
     required this.lifetime,
     required this.fontSize,
     required this.opacity,
-    required this.speedMultiplier,
+    required this.speed,
     required this.displayAreaFraction,
   });
 
@@ -25,20 +30,19 @@ final class DanmakuOverlayItem {
 
   /// How long the item should stay on screen.
   ///
-  /// Derived from the message's own style when it has one (a fixed-placement
-  /// message carries its own duration), otherwise from the overlay's scaling
-  /// rules: a scaled-down font covers the same distance faster, so the lifetime
-  /// is stretched to keep the text readable.
+  /// A fixed-placement message carries its own duration; a scrolling one gets
+  /// the time it takes to cross the surface at [speed], which is the same
+  /// relationship the engine uses.
   final Duration lifetime;
 
-  /// Font size already scaled for the surface.
+  /// Font size, the message's own override winning over the config's.
   final double fontSize;
 
-  /// Opacity already combined with the overlay's own.
+  /// Opacity, the message's own multiplied by the config's.
   final double opacity;
 
-  /// Speed multiplier the renderer should apply.
-  final double speedMultiplier;
+  /// Scroll speed in logical pixels per second.
+  final double speed;
 
   /// Fraction of the surface height available to danmaku.
   final double displayAreaFraction;
@@ -50,7 +54,7 @@ final class DanmakuOverlayItem {
   String toString() => 'DanmakuOverlayItem(${message.userName}: ${message.text})';
 }
 
-/// Danmaku on a small surface: its own queue, its own style, its own bound.
+/// Danmaku on a small surface: its own queue, its own bound, its own lifetime.
 ///
 /// Responsibilities:
 ///
@@ -58,7 +62,6 @@ final class DanmakuOverlayItem {
 ///   surface's queue
 /// - drop what no longer fits instead of building a backlog
 /// - empty itself when the surface goes away
-/// - scale the presentation to the surface's size
 ///
 /// It does not:
 ///
@@ -66,14 +69,24 @@ final class DanmakuOverlayItem {
 /// - draw anything (the host renders [items])
 /// - decide when a small surface exists (the host owns the window; this binds
 ///   to its visibility stream)
+/// - own any rendering knob: those are [BarrageConfig]'s, and this class only
+///   reads them
 ///
 /// ## Why the queue is separate
 ///
 /// The main surface keeps a long queue on purpose: a viewer reading a busy room
-/// wants a backlog. A small window does not — twelve messages is already more
-/// than a 320-pixel window can show before they leave the screen, and a queue
-/// that grows while the window is hidden replays stale chat when it returns.
-/// Keeping the two apart is what lets both behave correctly.
+/// wants a backlog. A small window does not — `maxVisibleCount` messages is
+/// already more than a 320-pixel window can show before they leave the screen,
+/// and a queue that grows while the window is hidden replays stale chat when it
+/// returns. Keeping the two apart is what lets both behave correctly.
+///
+/// ## Why the rendering values are not this class's
+///
+/// A small window needs smaller text, and the answer to that is a smaller
+/// `fontSize` in the [BarrageConfig] handed to this surface — the same answer
+/// the engine gives. A second set of knobs here, with its own names and its own
+/// scaling rules, is how one surface ends up drawing at a size the other
+/// surface's config never mentioned.
 ///
 /// ## Binding instead of depending
 ///
@@ -83,18 +96,36 @@ final class DanmakuOverlayItem {
 /// knows nothing about picture-in-picture, floating windows or their platform
 /// drivers, and those packages need no danmaku dependency to be usable.
 final class DanmakuOverlaySession {
-  DanmakuOverlaySession({DanmakuOverlayConfig config = DanmakuOverlayConfig.defaults}) : _config = config;
+  /// Creates an overlay driven by [config].
+  ///
+  /// [enabled] and [clearOnHide] are policy rather than presentation, which is
+  /// why they live here and not in [BarrageConfig]: whether a hidden surface
+  /// keeps its queue is a decision about this session, not about how a message
+  /// looks.
+  DanmakuOverlaySession({
+    BarrageConfig config = const BarrageConfig(),
+    this.clearOnHide = true,
+    bool enabled = true,
+  }) : _config = config,
+       _enabled = enabled;
 
-  DanmakuOverlayConfig _config;
+  BarrageConfig _config;
+  bool _enabled;
+
+  /// Whether the overlay is emptied when its surface is hidden.
+  ///
+  /// On by default: a danmaku queue that survives the small window would replay
+  /// its backlog the next time the window appears, which reads as a glitch.
+  final bool clearOnHide;
 
   /// Insertion-ordered so the oldest message can be dropped in O(1).
   final LinkedHashMap<int, DanmakuOverlayItem> _items = LinkedHashMap<int, DanmakuOverlayItem>();
 
   /// Ledger of the queued messages.
   ///
-  /// An overlay queue is small by design ([DanmakuOverlayConfig.maxMessages]),
-  /// which is exactly why it is worth counting: a wall of cells each holding
-  /// their own queue is where "small by design" stops being small.
+  /// An overlay queue is small by design, which is exactly why it is worth
+  /// counting: a wall of cells each holding their own queue is where "small by
+  /// design" stops being small.
   /// This instance's key in the shared account.
   late final String _memoryKey = memoryContributorKey(this);
 
@@ -108,14 +139,17 @@ final class DanmakuOverlaySession {
   bool _surfaceVisible = false;
   bool _disposed = false;
 
-  /// Current configuration.
-  DanmakuOverlayConfig get config => _config;
+  /// The rendering configuration this overlay reads.
+  BarrageConfig get config => _config;
 
   /// Whether the overlay accepts messages right now.
   ///
-  /// Requires both a visible surface and [DanmakuOverlayConfig.enabled]: a
-  /// hidden window keeps nothing.
-  bool get isActive => !_disposed && _surfaceVisible && _config.enabled;
+  /// Requires both a visible surface and [setEnabled]: a hidden window keeps
+  /// nothing.
+  bool get isActive => !_disposed && _surfaceVisible && _enabled;
+
+  /// Whether this overlay is switched on at all.
+  bool get isEnabled => _enabled;
 
   /// Whether the surface this overlay is bound to is currently visible.
   bool get isSurfaceVisible => _surfaceVisible;
@@ -147,19 +181,30 @@ final class DanmakuOverlaySession {
     _handleVisibility(false);
   }
 
-  /// Applies a new configuration.
+  /// Applies a new rendering configuration.
   ///
-  /// Shrinking [DanmakuOverlayConfig.maxMessages] trims immediately, and
-  /// disabling the overlay empties it: a disabled overlay that keeps messages
-  /// would replay them the moment it is enabled again.
-  void updateConfig(DanmakuOverlayConfig config) {
+  /// A smaller `maxVisibleCount` trims immediately: the bound is the reason
+  /// this queue exists, and honouring it late is the same as not honouring it.
+  void updateConfig(BarrageConfig config) {
     _ensureNotDisposed();
     _config = config;
-    if (!config.enabled) {
-      clear();
+    _trim();
+    _notifyActiveChanged();
+  }
+
+  /// Switches the overlay on or off.
+  ///
+  /// Turning it off empties it: a disabled overlay that keeps messages would
+  /// replay them the moment it is enabled again.
+  void setEnabled(bool enabled) {
+    _ensureNotDisposed();
+    if (_enabled == enabled) {
       return;
     }
-    _trim();
+    _enabled = enabled;
+    if (!enabled) {
+      clear();
+    }
     _notifyActiveChanged();
   }
 
@@ -168,8 +213,8 @@ final class DanmakuOverlaySession {
   /// Returns whether it was queued. A message is refused when the overlay is
   /// inactive (hidden or disabled) — the caller does not need to check first.
   ///
-  /// [surfaceWidth] is what the font size is scaled against; pass the current
-  /// window width when it is known.
+  /// [surfaceWidth] is what a scrolling message's lifetime is measured
+  /// against; without it the engine's own dwell time is used.
   bool enqueue(DanmakuMessage message, {double? surfaceWidth, DateTime? now}) {
     _ensureNotDisposed();
     if (!isActive) {
@@ -185,7 +230,7 @@ final class DanmakuOverlaySession {
     // Evicting the oldest is deliberate: on a small surface the newest message
     // is the one the viewer can still act on, and a full queue means the
     // overlay is behind, not that the incoming message is unwanted.
-    while (_items.length >= _config.maxMessages) {
+    while (_items.length >= _config.maxVisibleCount) {
       _items.remove(_items.keys.first);
     }
 
@@ -221,31 +266,9 @@ final class DanmakuOverlaySession {
     _reportMemory(note: 'overlay cleared');
   }
 
-  /// Reports the queued messages and their estimated cost.
-  void _reportMemory({String? note}) {
-    _memory.report(_memoryKey, 
-      items: _items.length,
-      bytes: _items.length * MemoryEstimates.danmakuMessage,
-      note: note ?? '${_items.length}/${_config.maxMessages} queued',
-    );
-  }
-
-  /// Font size for a surface of [surfaceWidth] logical pixels.
-  ///
-  /// Below the reference width the text shrinks, above it grows, bounded by
-  /// [DanmakuOverlayConfig.minScale] and [DanmakuOverlayConfig.maxScale] so a
-  /// tiny window stays legible and a maximised one does not turn into a banner.
-  double fontSizeFor(double surfaceWidth) {
-    final base = _config.fontSize;
-    if (!_config.scaleWithSurface || surfaceWidth <= 0 || _config.referenceWidth <= 0) {
-      return base;
-    }
-    final scale = (surfaceWidth / _config.referenceWidth).clamp(_config.minScale, _config.maxScale);
-    return base * scale;
-  }
-
   /// Display area for a surface of [surfaceHeight], in logical pixels.
-  double displayAreaFor(double surfaceHeight) => surfaceHeight * _config.displayAreaFraction.clamp(0.1, 1.0);
+  double displayAreaFor(double surfaceHeight) =>
+      surfaceHeight * _config.area.clamp(0.1, 1.0);
 
   /// Releases the overlay.
   Future<void> dispose() async {
@@ -264,45 +287,53 @@ final class DanmakuOverlaySession {
   // Internals
   // ---------------------------------------------------------------------------
 
+  void _reportMemory({String? note}) {
+    _memory.report(_memoryKey,
+      items: _items.length,
+      bytes: _items.length * MemoryEstimates.danmakuMessage,
+      note: note ?? '${_items.length}/${_config.maxVisibleCount} queued',
+    );
+  }
+
   void _handleVisibility(bool visible) {
     if (visible == _surfaceVisible) {
       return;
     }
     _surfaceVisible = visible;
-    if (!visible && _config.clearOnHide) {
+    if (!visible && clearOnHide) {
       clear();
     }
     _notifyActiveChanged();
   }
 
   DanmakuOverlayItem _buildItem(DanmakuMessage message, {double? surfaceWidth, required DateTime at}) {
-    final width = surfaceWidth ?? _config.referenceWidth;
-    final fontSize = fontSizeFor(width);
     final style = message.style;
+    final fontSize = style?.fontSize ?? _config.fontSize;
+    final speed = _config.baseSpeed <= 0 ? 1.0 : _config.baseSpeed;
 
-    // A scaled font covers the same fraction of the surface in less time, so
-    // the lifetime is stretched by the inverse of the scale to keep the reading
-    // window roughly constant.
-    final scale = _config.fontSize <= 0 ? 1.0 : fontSize / _config.fontSize;
-    final speed = _config.speedMultiplier.clamp(0.1, 10.0);
-    final baseLifetime = Duration(milliseconds: (6000 / speed / (scale <= 0 ? 1 : scale)).round());
+    // A scrolling message is on screen for as long as it takes to cross the
+    // surface — the same relationship the engine uses. Without a width there
+    // is nothing to cross, so the engine's own dwell time stands in.
+    final crossing = surfaceWidth != null && surfaceWidth > 0
+        ? Duration(milliseconds: ((surfaceWidth / speed) * 1000).round())
+        : _config.fixedDuration;
     final lifetime = style != null && style.placement != DanmakuPlacement.scroll
         ? Duration(milliseconds: style.fixedDurationMs)
-        : baseLifetime;
+        : crossing;
 
     return DanmakuOverlayItem(
       message: message,
       enqueuedAt: at,
       lifetime: lifetime,
       fontSize: fontSize,
-      opacity: (message.style?.opacity ?? 1) * _config.opacity.clamp(0.0, 1.0),
-      speedMultiplier: speed,
-      displayAreaFraction: _config.displayAreaFraction.clamp(0.1, 1.0),
+      opacity: (style?.opacity ?? 1) * _config.opacity.clamp(0.0, 1.0),
+      speed: speed,
+      displayAreaFraction: _config.area.clamp(0.1, 1.0),
     );
   }
 
   void _trim() {
-    while (_items.length > _config.maxMessages) {
+    while (_items.length > _config.maxVisibleCount) {
       _items.remove(_items.keys.first);
     }
   }

@@ -539,8 +539,8 @@ void main() {
 
       await wall.setVideoFocus(0);
 
-      expect(first.config.enabled, isTrue);
-      expect(second.config.enabled, isFalse);
+      expect(first.isEnabled, isTrue);
+      expect(second.isEnabled, isFalse);
     });
 
     test('focus moving hands the feed over', () async {
@@ -552,8 +552,8 @@ void main() {
 
       await wall.setVideoFocus(1);
 
-      expect(first.config.enabled, isFalse);
-      expect(second.config.enabled, isTrue);
+      expect(first.isEnabled, isFalse);
+      expect(second.isEnabled, isTrue);
       expect(wall.focusedDanmaku, same(second));
     });
 
@@ -570,8 +570,8 @@ void main() {
 
         await wall.setVideoFocus(0);
 
-        expect(first.config.enabled, isTrue);
-        expect(second.config.enabled, isTrue);
+        expect(first.isEnabled, isTrue);
+        expect(second.isEnabled, isTrue);
       },
     );
   });

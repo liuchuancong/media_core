@@ -234,7 +234,7 @@ extension _MultiviewControllerInternals on MultiviewController {
       // One queue per cell, fed only while the cell is the one being read.
       final shouldFeed =
           !_config.danmakuOnlyOnFocused || cell.index == _focusedIndex;
-      session.updateConfig(session.config.copyWith(enabled: shouldFeed));
+      session.setEnabled(shouldFeed);
     }
   }
 
