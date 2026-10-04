@@ -98,6 +98,72 @@ final class FfmpegIngestRelay {
   /// Name FFmpeg writes and the player reads.
   static const String ingestPlaylistName = 'index.m3u8';
 
+  /// Starts a DASH merge pipeline: two separate essence URLs (video m4s +
+  /// audio m4s) are muxed by FFmpeg into one rolling loopback HLS tree.
+  ///
+  /// The player only ever sees [inputUri]; the merge is transparent. Both
+  /// inputs share [headers] (bilibili DASH gives one Referer for the pair),
+  /// but [audioHeaders] overrides for the audio leg when the CDN differs.
+  static Future<FfmpegIngestRelay> startDashMerge({
+    required Uri videoSource,
+    required Uri audioSource,
+    required IngestFfmpegStarter startFfmpeg,
+    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? audioHeaders,
+    Duration segmentDuration = const Duration(seconds: 2),
+    int playlistSize = 4,
+    Duration startupTimeout = const Duration(seconds: 12),
+  }) async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'media_core_dash_',
+    );
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+      shared: false,
+    );
+    final String playlistPath =
+        '${directory.path}${Platform.pathSeparator}$ingestPlaylistName';
+    IngestFfmpegProcess? execution;
+    try {
+      execution = await startFfmpeg(
+        buildDashMergeArguments(
+          videoSource: videoSource,
+          audioSource: audioSource,
+          headers: headers,
+          audioHeaders: audioHeaders,
+          outputDirectory: directory.path,
+          segmentDuration: segmentDuration,
+          playlistSize: playlistSize,
+        ),
+      );
+      final relay = FfmpegIngestRelay._(
+        server: server,
+        directory: directory,
+        execution: execution,
+        source: videoSource,
+      );
+      unawaited(
+        execution.exitCode.then((int code) {
+          relay._exited = true;
+          relay._exitCode = code;
+        }),
+      );
+      server.listen(
+        relay._handle,
+        onError: (Object _) {},
+        cancelOnError: false,
+      );
+      await relay._awaitPlaylist(File(playlistPath), startupTimeout);
+      return relay;
+    } catch (_) {
+      await execution?.stop();
+      await server.close(force: true);
+      await _deleteQuietly(directory);
+      rethrow;
+    }
+  }
+
   /// Stable argument list, exposed for tests and for hosts that log it.
   static List<String> buildIngestArguments({
     required Uri source,
@@ -150,6 +216,65 @@ final class FfmpegIngestRelay {
       '$outputDirectory$separator$ingestPlaylistName',
     ];
     return arguments;
+  }
+
+  /// DASH merge argument list: two inputs (video m4s + audio m4s), stream-copy
+  /// into one rolling HLS tree. Exposed for tests and host logging.
+  ///
+  /// FFmpeg's `-headers` binds to the *next* `-i`, so each input carries its
+  /// own header block. `-map 0:v:0 -map 1:a:0` pins the first video stream
+  /// from input 0 and the first audio stream from input 1 — a DASH manifest
+  /// can list alternates, and an unmapped merge would silently pick whichever
+  /// FFmpeg likes best.
+  static List<String> buildDashMergeArguments({
+    required Uri videoSource,
+    required Uri audioSource,
+    required String outputDirectory,
+    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? audioHeaders,
+    Duration segmentDuration = const Duration(seconds: 2),
+    int playlistSize = 4,
+  }) {
+    final String separator = Platform.pathSeparator;
+    final Map<String, String> effectiveAudioHeaders = audioHeaders ?? headers;
+    return <String>[
+      '-hide_banner',
+      '-loglevel',
+      'warning',
+      if (headers.isNotEmpty) ...<String>[
+        '-headers',
+        headers.entries
+            .map((MapEntry<String, String> e) => '${e.key}: ${e.value}\r\n')
+            .join(),
+      ],
+      '-i',
+      videoSource.toString(),
+      if (effectiveAudioHeaders.isNotEmpty) ...<String>[
+        '-headers',
+        effectiveAudioHeaders.entries
+            .map((MapEntry<String, String> e) => '${e.key}: ${e.value}\r\n')
+            .join(),
+      ],
+      '-i',
+      audioSource.toString(),
+      '-c',
+      'copy',
+      '-map',
+      '0:v:0',
+      '-map',
+      '1:a:0',
+      '-f',
+      'hls',
+      '-hls_time',
+      (segmentDuration.inMilliseconds / 1000).toStringAsFixed(3),
+      '-hls_list_size',
+      playlistSize.toString(),
+      '-hls_flags',
+      'delete_segments+append_list+omit_endlist',
+      '-hls_segment_filename',
+      '$outputDirectory${separator}segment%05d.ts',
+      '$outputDirectory$separator$ingestPlaylistName',
+    ];
   }
 
   final HttpServer _server;
