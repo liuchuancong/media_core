@@ -182,8 +182,12 @@ extension _LivePlaybackPipeline on LivePlaybackController {
     };
   }
 
-  Future<void> _runRecoverTask(TaskCancelToken token) {
-    return _sweep(startAtCurrent: true);
+  /// Re-opens a line that just died — after offering the caller a chance to
+  /// replace it. See [_refreshSourcesForRecovery].
+  Future<void> _runRecoverTask(TaskCancelToken token) async {
+    await _refreshSourcesForRecovery();
+
+    await _sweep(startAtCurrent: true);
   }
 
   /// Re-aligns the mirrored playback state with the adapter's own semantic

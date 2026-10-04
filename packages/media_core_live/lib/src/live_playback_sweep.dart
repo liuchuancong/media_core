@@ -161,6 +161,61 @@ extension _LivePlaybackSweep on LivePlaybackController {
     return true;
   }
 
+  /// Offers [onRecoverySources] the lines that just died and adopts what it
+  /// hands back.
+  ///
+  /// A signed live URL expires on the platform's clock, not the player's, so
+  /// re-opening the line that stalled retries an address the server has
+  /// already rejected — the sweep then burns every candidate and every engine
+  /// on one stale signature and reports the stream as dead. The refresh is a
+  /// round-trip to the platform, which makes it the recovery's only await
+  /// that a newer command can overtake: the answer is fenced on the play
+  /// generation, and a caller that throws or has nothing fresher leaves the
+  /// sweep on the lines it already holds.
+  Future<void> _refreshSourcesForRecovery() async {
+    final resolver = onRecoverySources;
+
+    if (resolver == null || _sources.isEmpty) {
+      return;
+    }
+
+    final generation = _playGeneration;
+
+    try {
+      final refreshed = await resolver(_sources);
+
+      // play, switchLine, retry, pause, close and dispose all bump the
+      // generation before they queue their own task; a refresh that lands
+      // after one of them belongs to a playback that no longer exists, and
+      // adopting it would swap the lines out from under the newer command.
+      if (generation != _playGeneration || refreshed.isEmpty) {
+        return;
+      }
+
+      _sources = List<PlayerSource>.unmodifiable(refreshed);
+      // The refreshed list arrives in preference order, so the line to try
+      // first is index 0 — and the engine-switch resume point follows it,
+      // having been the line the user was watching before the refresh.
+      _sourceIndex = 0;
+      _sweepStart = 0;
+
+      _reportMemory();
+
+      MediaCoreLog.info(
+        LogCategory.recovery,
+        'recovery sources refreshed by the caller',
+        fields: <String, Object?>{'lines': _sources.length, 'first': _sources.first.uri.toString()},
+      );
+    } catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.recovery,
+        'recovery source refresh failed — reusing the current lines',
+        error: error,
+        fields: <String, Object?>{'lines': _sources.length},
+      );
+    }
+  }
+
   /// Opens [source] on [engine], starts playback and verifies it.
   ///
   /// Line switches inside one engine re-open the existing handle. An

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_core/media_core.dart';
@@ -72,10 +74,12 @@ LiveSourceRequest _request(List<String> urls, {bool? allowEngineFallback}) {
 LivePlaybackController _controller(
   PlayerKernel kernel, {
   Duration sourceReadyTimeout = const Duration(seconds: 18),
+  RecoverySourceResolver? onRecoverySources,
 }) {
   return LivePlaybackController(
     kernel,
     watchdogs: LiveWatchdogs(enabled: false, sourceReadyTimeout: sourceReadyTimeout),
+    onRecoverySources: onRecoverySources,
   );
 }
 
@@ -331,6 +335,131 @@ void main() {
       await controller.dispose();
       await kernel.dispose();
     }, timeout: const Timeout(Duration(seconds: 30)));
+  });
+
+  group('recovery source refresh', () {
+    test('a recovery opens the fresh lines instead of retrying the dead one', () async {
+      // The shape of an expired signed URL: the platform rejects the address
+      // the player is holding, so re-opening it can only fail again. What the
+      // caller can do — and the sweep cannot — is ask the platform once more.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final askedWith = <List<String>>[];
+      final controller = _controller(
+        kernel,
+        onRecoverySources: (current) async {
+          askedWith.add(current.map((source) => source.uri.host).toList(growable: false));
+          return <PlayerSource>[
+            _line('https://fresh.example/live.flv'),
+            _line('https://fresh-backup.example/live.flv'),
+          ];
+        },
+      );
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      final playing = controller.play(
+        _request(['https://a.example/live.flv'], allowEngineFallback: false),
+      );
+      await _pumpPosition(adapters.values);
+      await playing;
+
+      expect(adapters['engine-a']!.openedSources.single.uri.host, 'a.example');
+
+      adapters['engine-a']!.emitError('Server returned 403 Forbidden');
+      await _pumpPosition(adapters.values);
+
+      expect(askedWith, [
+        ['a.example'],
+      ], reason: 'the refresh must be offered the lines that just died');
+      expect(controller.sources.map((source) => source.uri.host), [
+        'fresh.example',
+        'fresh-backup.example',
+      ]);
+      expect(controller.sourceIndex, 0);
+      expect(adapters['engine-a']!.openedSources.last.uri.host, 'fresh.example');
+      expect(failures, isEmpty);
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('an answer that lands after a newer play is discarded', () async {
+      // The refresh is the recovery's only await that a user command can
+      // overtake. Adopting a late answer would swap the lines out from under
+      // the playback the user actually asked for.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final gate = Completer<List<PlayerSource>>();
+      final controller = _controller(kernel, onRecoverySources: (_) => gate.future);
+
+      final playing = controller.play(
+        _request(['https://a.example/live.flv'], allowEngineFallback: false),
+      );
+      await _pumpPosition(adapters.values);
+      await playing;
+
+      // The recovery starts and blocks in the refresh; `play` bumps the
+      // generation synchronously and queues its own task behind it.
+      adapters['engine-a']!.emitError('Server returned 403 Forbidden');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final next = controller.play(
+        _request(['https://b.example/live.flv'], allowEngineFallback: false),
+      );
+      gate.complete(<PlayerSource>[_line('https://stale.example/live.flv')]);
+
+      await _pumpPosition(adapters.values);
+      await next;
+
+      expect(controller.sources.map((source) => source.uri.host), ['b.example']);
+      expect(
+        adapters['engine-a']!.openedSources.map((source) => source.uri.host),
+        isNot(contains('stale.example')),
+        reason: 'a superseded refresh must never reach an engine',
+      );
+
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('a refresh that throws leaves the sweep on the line it had', () async {
+      // Recovery answers to a stall. A platform that cannot be reached for
+      // fresh lines is not a second failure — the sweep still owes its attempt
+      // on the sources it holds.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(
+        kernel,
+        onRecoverySources: (_) async => throw StateError('the platform is unreachable'),
+      );
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      final playing = controller.play(
+        _request(['https://a.example/live.flv'], allowEngineFallback: false),
+      );
+      await _pumpPosition(adapters.values);
+      await playing;
+
+      adapters['engine-a']!.emitError('Server returned 403 Forbidden');
+      await _pumpPosition(adapters.values);
+
+      expect(controller.sources.map((source) => source.uri.host), ['a.example']);
+      expect(
+        adapters['engine-a']!.openedSources,
+        hasLength(2),
+        reason: 'the sweep must still run: a dead refresh is not a dead recovery',
+      );
+      expect(adapters['engine-a']!.openedSources.last.uri.host, 'a.example');
+      expect(failures, isEmpty);
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 
   group('LivePlaybackController lifecycle', () {

@@ -30,6 +30,21 @@ typedef EngineFallbackSourceResolver = Future<List<PlayerSource>> Function(
   List<PlayerSource> currentSources,
 );
 
+/// Resolves fresh sources for a recovery attempt.
+///
+/// Invoked at the top of a recover task — a watchdog stall or an adapter
+/// error during otherwise normal playback — before the sweep re-opens
+/// anything, with the sources that just died. Signed live URLs expire on
+/// the platform's clock, not the player's, so re-opening the line that
+/// stalled retries an address the server has already rejected; the caller
+/// is the only party that can ask the platform again.
+///
+/// Return the candidates **in preference order** — the sweep starts at
+/// index 0 — an empty list to reuse the current ones, and let a failure
+/// propagate: the recovery keeps the lines it has and reports the stall
+/// instead of hanging on the refresh.
+typedef RecoverySourceResolver = Future<List<PlayerSource>> Function(List<PlayerSource> currentSources);
+
 /// Orchestrates live playback on top of a [PlayerKernel].
 ///
 /// One structural idea holds the module together: **every action is a task
@@ -62,14 +77,19 @@ typedef EngineFallbackSourceResolver = Future<List<PlayerSource>> Function(
 /// sweep honest.
 ///
 /// Watchdogs stay pure detectors: a stall or an adapter error becomes a
-/// recover task — reopen the current source once, then join the same
-/// sweep. The kernel-side recovery ladder is disabled for live players, so
-/// there is exactly one recovery path and the caller can read all of it
-/// here.
+/// recover task, which offers the caller a chance to hand over fresh lines
+/// ([onRecoverySources]) and then joins the same sweep — on the refreshed
+/// lines if there are any, on the line that was playing otherwise. The
+/// kernel-side recovery ladder is disabled for live players, so there is
+/// exactly one recovery path and the caller can read all of it here.
 
 final class LivePlaybackController {
-  LivePlaybackController(this.kernel, {LiveWatchdogs? watchdogs, this.onEngineFallbackSources})
-    : watchdogs = watchdogs ?? LiveWatchdogs() {
+  LivePlaybackController(
+    this.kernel, {
+    LiveWatchdogs? watchdogs,
+    this.onEngineFallbackSources,
+    this.onRecoverySources,
+  }) : watchdogs = watchdogs ?? LiveWatchdogs() {
     _wireWatchdogs();
   }
 
@@ -81,6 +101,13 @@ final class LivePlaybackController {
   ///
   /// Null — the default — reuses the existing lines for the next engine.
   final EngineFallbackSourceResolver? onEngineFallbackSources;
+
+  /// Called before a recovery attempt re-opens anything, so an expired
+  /// signed URL can be replaced instead of retried. See
+  /// [RecoverySourceResolver].
+  ///
+  /// Null — the default — re-opens the lines the sweep already holds.
+  final RecoverySourceResolver? onRecoverySources;
 
   /// Watchdog bundle inferring stalls.
   final LiveWatchdogs watchdogs;
