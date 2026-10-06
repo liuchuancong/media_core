@@ -27,6 +27,7 @@ final class LoopbackIngestRelay {
     required Map<String, String> headers,
     required String secret,
     required Duration manifestTimeout,
+    required Duration childIdleTimeout,
     required int maximumManifestBytes,
     required Uri Function(Uri)? childUriPolicy,
     required bool sessionCookies,
@@ -35,6 +36,7 @@ final class LoopbackIngestRelay {
        _headers = headers,
        _secret = secret,
        _manifestTimeout = manifestTimeout,
+       _childIdleTimeout = childIdleTimeout,
        _maximumManifestBytes = maximumManifestBytes,
        _childUriPolicy = childUriPolicy,
        _cookies = sessionCookies ? HlsSessionCookies() : null {
@@ -53,6 +55,9 @@ final class LoopbackIngestRelay {
   /// only ever sees loopback URLs). [sessionCookies] keeps the provider's
   /// `Set-Cookie` values for the origin and replays them on children.
   ///
+  /// [childIdleTimeout] bounds how long a proxied child may go without sending
+  /// another byte, and how long the relay may wait for its response headers.
+  ///
   /// [findProxy] is the upstream proxy directive for every request this relay
   /// makes itself. Without it the relay goes direct even when the host player is
   /// proxied, so a provider that is only reachable through a proxy would read the
@@ -65,6 +70,7 @@ final class LoopbackIngestRelay {
     bool sessionCookies = false,
     String Function(Uri url)? findProxy,
     Duration manifestTimeout = const Duration(seconds: 15),
+    Duration childIdleTimeout = const Duration(seconds: 10),
     int maximumManifestBytes = 8 * 1024 * 1024,
   }) async {
     if (!const <String>{
@@ -92,6 +98,7 @@ final class LoopbackIngestRelay {
       headers: Map<String, String>.unmodifiable(headers),
       secret: _newSecret(),
       manifestTimeout: manifestTimeout,
+      childIdleTimeout: childIdleTimeout,
       maximumManifestBytes: maximumManifestBytes,
       childUriPolicy: childUriPolicy,
       sessionCookies: sessionCookies,
@@ -118,6 +125,7 @@ final class LoopbackIngestRelay {
   final Map<String, String> _headers;
   final String _secret;
   final Duration _manifestTimeout;
+  final Duration _childIdleTimeout;
   final int _maximumManifestBytes;
   final Uri Function(Uri)? _childUriPolicy;
   final HlsSessionCookies? _cookies;
@@ -295,11 +303,19 @@ final class LoopbackIngestRelay {
   }
 
   Future<void> _proxyChild(HttpRequest request, Uri upstream) async {
+    // The child idle timeout is a gap between bytes, not a total budget: a live
+    // segment can be large and a large one is not a stalled one. What must not
+    // happen is the relay waiting forever on an upstream that accepted the
+    // request and then said nothing — the player has no clock for that case, so
+    // the sweep reads it as a stream that opened and never played, and the
+    // provider gets blamed for a fetch this relay never finished. The deadline
+    // also has to sit inside the sweep's verification window, or the verdict
+    // arrives before the reason does.
     final HttpClientResponse response = await _open(
       request.method,
       upstream,
       range: request.headers.value(HttpHeaders.rangeHeader),
-    );
+    ).timeout(_childIdleTimeout);
     if (_closed) {
       await response.drain<void>();
       return;
@@ -317,7 +333,7 @@ final class LoopbackIngestRelay {
       final String? value = response.headers.value(header);
       if (value != null) target.headers.set(header, value);
     }
-    await target.addStream(response);
+    await target.addStream(response.timeout(_childIdleTimeout));
     await target.close();
   }
 
