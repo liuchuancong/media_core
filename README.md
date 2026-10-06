@@ -121,6 +121,7 @@ adapter 报错后，唯一决策点 `RecoveryLadder` 按梯级推进，每一步
 | `media_core_fullscreen`       | 全屏         | 系统全屏与窗口级全屏两种变体，含横竖屏适配策略                                                                                 |
 | `media_core_pip`              | 画中画       | 桌面置顶小窗（可锁宽高比）+ Android 系统 PiP；移动端"能进不能出"是平台事实，如实返回                                           |
 | `media_core_floating`         | 应用内小窗   | widget 树内可拖拽、贴边吸附的浮层；纯几何，无平台分支                                                                          |
+| `floating`                    | 三方快照     | 安卓系统 PiP 上游插件 6.0.0 的源码快照，为 AGP 9 内置 Kotlin 与状态观测打过补丁，`media_core_pip` 按路径依赖它；补丁清单见 `packages/floating/PATCHES.md` |
 | `media_core_logging`          | 分级日志     | 全局枢纽：分级/分类开关、多 sink（控制台/内存环/文件轮转）、作用域字段                                                         |
 | `media_core_memory`           | 内存记账     | 按贡献者申报求和 + 设备实测快照；预算阈值驱动的四级压力                                                                        |
 
@@ -211,7 +212,8 @@ packages/
   media_core_download/              下载（队列 + 续传 + 重试）
   media_core_logging/               分级日志
   media_core_memory/                内存记账
-examples/example/                   示例 App：9 个可运行页面 + 14 个模块速览
+  floating/                         三方源码快照：安卓系统 PiP 插件（补丁见 packages/floating/PATCHES.md）
+example</* */s/example/                   示例 App：9 个可运行页面 + 14 个模块速览
 ```
 
 `media_kit`、`media_kit_video` 与 `fvp` 不随本仓库分发：前两个按 `packages/media_core_media_kit` 里固定的 ref

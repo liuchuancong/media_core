@@ -32,6 +32,8 @@ workspace:
   - packages/media_core_download
   - packages/media_core_multiview
   - packages/media_core_ingest
+  # Upstream snapshot patched for AGP 9 built-in Kotlin; see packages/floating/PATCHES.md
+  - packages/floating
   - example
 dev_dependencies:
   melos: ^8.9.0
