@@ -110,10 +110,7 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
   /// the old coordinates describe a surface that no longer exists.
   Size? _placedForSurface;
 
-  /// Window size at the start of the running corner drag.
-  Size? _resizeOrigin;
-
-  /// Whether a corner drag has taken ownership of the window size.
+  /// Whether a resize drag has taken ownership of the window size.
   ///
   /// Without this the next build compares the rect against the configured
   /// default size, finds them different, and puts the window back — a resize
@@ -230,6 +227,23 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
     return widget.placement.drag(current: saved, delta: Offset.zero, surface: surface, resizeTo: saved.size);
   }
 
+  /// The video's shape while the configuration asks the window to follow it.
+  ///
+  /// Null before the first frame reports a size, and for hosts that opted out
+  /// of [FloatingPlacementConfig.aspectRatioFromVideo]: those windows keep the
+  /// free-form resize the grip always had.
+  double? get _videoAspectRatio {
+    if (!widget.placement.config.aspectRatioFromVideo) {
+      return null;
+    }
+    final width = widget.videoWidth;
+    final height = widget.videoHeight;
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return width / height;
+  }
+
   void _reportRect() {
     final rect = _rect;
     if (rect == null) return;
@@ -308,73 +322,146 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
     }
 
     if (widget.placement.config.resizableByDrag) {
-      // The grip is a sibling above the move recognizer, not inside it: as a
-      // descendant it lost every pan to the window-move recognizer, which then
-      // slid the window instead of resizing it.
-      result = Stack(fit: StackFit.expand, children: [result, _buildResizeGrip()]);
+      // The grips are siblings above the move recognizer, not inside it: as a
+      // descendant the grip lost every pan to the window-move recognizer, which
+      // then slid the window instead of resizing it.
+      result = Stack(fit: StackFit.expand, children: [result, _buildResizeGrips()]);
     }
 
     return result;
   }
-  /// Corner grip: dragging it resizes the window, dragging the picture moves it.
+
+  /// A grip for every configured edge and corner.
   ///
-  /// The grip owns its own hit region on top of the surface so its pan is not
-  /// claimed by the window-move recognizer wrapped around everything below.
-  Widget _buildResizeGrip() {
-    return Positioned(
-      right: 0,
-      bottom: 0,
-      child: GestureDetector(
-        key: widget.resizeControlKey,
-        behavior: HitTestBehavior.opaque,
-        onPanStart: (_) => _resizeOrigin = _rect?.size,
-        onPanUpdate: (details) {
-          final origin = _resizeOrigin;
-          final current = _rect;
-          final surface = _placedForSurface;
-          if (origin == null || current == null || surface == null) {
-            return;
-          }
-          setState(() {
-            _userSized = true;
-            _rect = widget.placement.drag(
-              current: current,
-              delta: Offset.zero,
-              surface: surface,
-              resizeTo: Size(origin.width + details.delta.dx, origin.height + details.delta.dy),
-            );
-          });
-        },
-        onPanEnd: (_) {
-          _resizeOrigin = null;
-          _reportRect();
-        },
-        onPanCancel: () {
-          _resizeOrigin = null;
-          _reportRect();
-        },
-        child: Semantics(
-          button: true,
-          label: 'Resize small window',
-          child: Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Color(0x66000000),
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(8)),
-            ),
-            child: const Text(
-              '⌟',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 14, height: 1),
-            ),
-          ),
-        ),
+  /// A single corner grip forces the viewer to drag across the picture to
+  /// widen the window to the left; the whole frame being draggable is what a
+  /// small window wants, so the host asks for the handles it wants (all of
+  /// them by default in the app) and this widget draws one grip each.
+  Widget _buildResizeGrips() {
+    final handles = widget.placement.config.effectiveResizeHandles;
+    if (handles.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    // Corners after edges: a corner's own area belongs to the corner.
+    final ordered = <FloatingResizeHandle>[
+      ...handles.where((handle) => !handle.isCorner),
+      ...handles.where((handle) => handle.isCorner),
+    ];
+    return Stack(
+      fit: StackFit.expand,
+      children: [for (final handle in ordered) _buildResizeHandle(handle)],
+    );
+  }
+
+  /// One resize grip: an edge strip or a corner square.
+  ///
+  /// The top strip stops short of the window controls, so a tap meant for
+  /// close or expand is never read as a resize.
+  Widget _buildResizeHandle(FloatingResizeHandle handle) {
+    final controlsReserved = (widget.onExpand != null || widget.onClose != null) ? 2 * _minTargetSize : 0.0;
+    final key = handle == FloatingResizeHandle.bottomRight && widget.resizeControlKey != null
+        ? widget.resizeControlKey
+        : ValueKey<String>('floating-resize-${handle.name}');
+    final grip = GestureDetector(
+      key: key,
+      behavior: HitTestBehavior.opaque,
+      onPanUpdate: (details) {
+        final current = _rect;
+        final surface = _placedForSurface;
+        if (current == null || surface == null) {
+          return;
+        }
+        setState(() {
+          _userSized = true;
+          _rect = widget.placement.resize(
+            current: current,
+            delta: details.delta,
+            surface: surface,
+            handle: handle,
+            aspectRatio: _videoAspectRatio,
+          );
+        });
+      },
+      onPanEnd: (_) => _reportRect(),
+      onPanCancel: _reportRect,
+      child: Semantics(
+        button: true,
+        label: 'Resize small window ${handle.label}',
+        child: handle.isCorner
+            ? Container(
+                width: _resizeCornerSize,
+                height: _resizeCornerSize,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(color: Color(0x33000000)),
+                child: const Text(
+                  '⌟',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 12, height: 1),
+                ),
+              )
+            : Center(
+                child: Container(
+                  width: handle.isLeft || handle.isRight ? 3 : double.infinity,
+                  height: handle.isTop || handle.isBottom ? 3 : double.infinity,
+                  color: const Color(0x33FFFFFF),
+                ),
+              ),
       ),
+    );
+
+    if (handle.isLeft) {
+      return Positioned(
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: _resizeEdgeThickness,
+        child: grip,
+      );
+    }
+    if (handle.isRight) {
+      return Positioned(
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: _resizeEdgeThickness,
+        child: grip,
+      );
+    }
+    if (handle.isTop) {
+      return Positioned(
+        left: 0,
+        top: 0,
+        right: controlsReserved,
+        height: _resizeEdgeThickness,
+        child: grip,
+      );
+    }
+    if (handle.isBottom) {
+      return Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: _resizeEdgeThickness,
+        child: grip,
+      );
+    }
+    // Corners: the square sits in the corner its name says; the top-right one
+    // again keeps clear of the controls.
+    return Positioned(
+      left: handle.isLeft ? 0 : null,
+      right: handle.isRight ? (handle.isTop ? controlsReserved : 0) : null,
+      top: handle.isTop ? 0 : null,
+      bottom: handle.isBottom ? 0 : null,
+      child: grip,
     );
   }
 }
+
+/// Thickness of an edge resize strip, in logical pixels.
+const double _resizeEdgeThickness = 18;
+
+/// Size of a corner resize square, in logical pixels.
+const double _resizeCornerSize = 32;
 
 /// Smallest comfortable touch target, kept local so this package does not have
 /// to depend on the material library for one number.

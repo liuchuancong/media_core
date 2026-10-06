@@ -25,6 +25,78 @@ enum FloatingAnchor {
   }
 }
 
+/// Which edge or corner a resize drag moves.
+///
+/// Every edge and every corner is addressable, so a host can offer the whole
+/// frame as a grip instead of one corner: on a small window a viewer reaches
+/// for whichever side is closest, and a single bottom-right grip forces a drag
+/// across the picture to widen the window to the left.
+enum FloatingResizeHandle {
+  left,
+  right,
+  top,
+  bottom,
+  topLeft,
+  topRight,
+  bottomLeft,
+  bottomRight;
+
+  /// Whether the handle moves the left edge.
+  bool get isLeft => this == left || this == topLeft || this == bottomLeft;
+
+  /// Whether the handle moves the right edge.
+  bool get isRight => this == right || this == topRight || this == bottomRight;
+
+  /// Whether the handle moves the top edge.
+  bool get isTop => this == top || this == topLeft || this == topRight;
+
+  /// Whether the handle moves the bottom edge.
+  bool get isBottom => this == bottom || this == bottomLeft || this == bottomRight;
+
+  /// Whether the handle sits on a corner (both axes move).
+  bool get isCorner => (isLeft || isRight) && (isTop || isBottom);
+
+  /// Letters naming the corner for a semantics label (`topLeft` → `top left`).
+  String get label => switch (this) {
+    FloatingResizeHandle.left => 'left',
+    FloatingResizeHandle.right => 'right',
+    FloatingResizeHandle.top => 'top',
+    FloatingResizeHandle.bottom => 'bottom',
+    FloatingResizeHandle.topLeft => 'top left',
+    FloatingResizeHandle.topRight => 'top right',
+    FloatingResizeHandle.bottomLeft => 'bottom left',
+    FloatingResizeHandle.bottomRight => 'bottom right',
+  };
+
+  /// All four edges and four corners: the whole frame resizes.
+  static const Set<FloatingResizeHandle> all = <FloatingResizeHandle>{
+    FloatingResizeHandle.left,
+    FloatingResizeHandle.right,
+    FloatingResizeHandle.top,
+    FloatingResizeHandle.bottom,
+    FloatingResizeHandle.topLeft,
+    FloatingResizeHandle.topRight,
+    FloatingResizeHandle.bottomLeft,
+    FloatingResizeHandle.bottomRight,
+  };
+
+  /// The four corners only.
+  static const Set<FloatingResizeHandle> corners = <FloatingResizeHandle>{
+    FloatingResizeHandle.topLeft,
+    FloatingResizeHandle.topRight,
+    FloatingResizeHandle.bottomLeft,
+    FloatingResizeHandle.bottomRight,
+  };
+
+  /// The four edges only.
+  static const Set<FloatingResizeHandle> edges = <FloatingResizeHandle>{
+    FloatingResizeHandle.left,
+    FloatingResizeHandle.right,
+    FloatingResizeHandle.top,
+    FloatingResizeHandle.bottom,
+  };
+}
+
 /// Tunables for the in-app small window's geometry.
 final class FloatingPlacementConfig {
   const FloatingPlacementConfig({
@@ -40,6 +112,8 @@ final class FloatingPlacementConfig {
     this.dragSnapThreshold = 48,
     this.resizableByDrag = false,
     this.aspectRatioFromVideo = true,
+    this.resizeHandles = const <FloatingResizeHandle>{FloatingResizeHandle.bottomRight},
+    this.resizeKeepsAspectRatio = true,
   });
 
   /// Caller-accepted defaults.
@@ -87,6 +161,25 @@ final class FloatingPlacementConfig {
   /// in a fixed 16:9 box wastes most of the window on black.
   final bool aspectRatioFromVideo;
 
+  /// Which edges and corners offer a resize grip.
+  ///
+  /// Only read while [resizableByDrag] is on. An empty set means "no grip at
+  /// all"; the historical single bottom-right grip is the default so a host
+  /// that never mentions handles keeps the window it had.
+  final Set<FloatingResizeHandle> resizeHandles;
+
+  /// Whether a resize keeps the video's shape.
+  ///
+  /// On by default, matching the original corner grip: the window stays a
+  /// letterbox-free video surface. A host that lets the viewer choose any
+  /// width and height (a freely shaped small window) turns this off together
+  /// with [resizeHandles].
+  final bool resizeKeepsAspectRatio;
+
+  /// The handles actually offered: [resizeHandles] when the window resizes.
+  Set<FloatingResizeHandle> get effectiveResizeHandles =>
+      resizableByDrag ? resizeHandles : const <FloatingResizeHandle>{};
+
   FloatingPlacementConfig copyWith({
     FloatingAnchor? anchor,
     double? margin,
@@ -100,6 +193,8 @@ final class FloatingPlacementConfig {
     double? dragSnapThreshold,
     bool? resizableByDrag,
     bool? aspectRatioFromVideo,
+    Set<FloatingResizeHandle>? resizeHandles,
+    bool? resizeKeepsAspectRatio,
   }) {
     return FloatingPlacementConfig(
       anchor: anchor ?? this.anchor,
@@ -114,6 +209,8 @@ final class FloatingPlacementConfig {
       dragSnapThreshold: dragSnapThreshold ?? this.dragSnapThreshold,
       resizableByDrag: resizableByDrag ?? this.resizableByDrag,
       aspectRatioFromVideo: aspectRatioFromVideo ?? this.aspectRatioFromVideo,
+      resizeHandles: resizeHandles ?? this.resizeHandles,
+      resizeKeepsAspectRatio: resizeKeepsAspectRatio ?? this.resizeKeepsAspectRatio,
     );
   }
 }
@@ -184,23 +281,113 @@ final class FloatingWindowPlacement {
   ///
   /// [window] is the size after the drag: with [FloatingPlacementConfig
   /// .resizableByDrag] a corner drag resizes, otherwise it moves.
+  ///
+  /// [resizeTo] is the size the grip asked for. [aspectRatio] keeps a resize on
+  /// the video's shape: a small window is a video surface, and a free-form box
+  /// letterboxes the picture inside it. The size floors still win when they
+  /// conflict, so a window dragged to the smallest allowed width may end up a
+  /// little wider than the source.
   Rect drag({
     required Rect current,
     required Offset delta,
     required Size surface,
     Size? resizeTo,
+    double? aspectRatio,
   }) {
     if (!config.draggable) {
       return current;
     }
 
     if (config.resizableByDrag && resizeTo != null) {
-      final clamped = _clampSize(resizeTo, surface);
+      final target = _onAspectRatio(resizeTo, current.size, aspectRatio);
+      final clamped = _clampSize(target, surface);
       final moved = current.topLeft + delta;
       return _clampRect(Rect.fromLTWH(moved.dx, moved.dy, clamped.width, clamped.height), surface);
     }
 
     return _clampRect(current.shift(delta), surface);
+  }
+
+  /// Applies a resize drag of [handle] to [current] by [delta].
+  ///
+  /// The opposite edge (or edges) of the dragged one stay put, which is what
+  /// makes an edge grip feel attached to the side the viewer grabbed. The
+  /// result is clamped the same way a placement is: no smaller than the
+  /// configured floors, no wider than the surface fraction, and always inside
+  /// [surface].
+  ///
+  /// With [FloatingPlacementConfig.resizeKeepsAspectRatio] the window keeps the
+  /// video's shape: the axis the finger moved further drives both sides, the
+  /// dragged edge stays under the finger, and the perpendicular axis grows
+  /// around the window's centre (a corner keeps its opposite corner fixed).
+  Rect resize({
+    required Rect current,
+    required Offset delta,
+    required Size surface,
+    required FloatingResizeHandle handle,
+    double? aspectRatio,
+  }) {
+    final ratio = config.resizeKeepsAspectRatio ? aspectRatio : null;
+    final locked = ratio != null && ratio.isFinite && ratio > 0;
+
+    var left = current.left;
+    var top = current.top;
+    var right = current.right;
+    var bottom = current.bottom;
+
+    if (locked) {
+      final requested = Size(
+        handle.isLeft
+            ? current.width - delta.dx
+            : handle.isRight
+            ? current.width + delta.dx
+            : current.width,
+        handle.isTop
+            ? current.height - delta.dy
+            : handle.isBottom
+            ? current.height + delta.dy
+            : current.height,
+      );
+      final target = _clampSize(_onAspectRatio(requested, current.size, ratio), surface);
+      final horizontal = handle.isLeft || handle.isRight;
+      final vertical = handle.isTop || handle.isBottom;
+      // The dragged edge follows the finger; the opposite one is the anchor.
+      final leftEdge = horizontal
+          ? (handle.isLeft ? right - target.width : left)
+          : current.center.dx - target.width / 2;
+      final topEdge = vertical
+          ? (handle.isTop ? bottom - target.height : top)
+          : current.center.dy - target.height / 2;
+      return _clampRect(Rect.fromLTWH(leftEdge, topEdge, target.width, target.height), surface);
+    }
+
+    if (handle.isLeft) left += delta.dx;
+    if (handle.isRight) right += delta.dx;
+    if (handle.isTop) top += delta.dy;
+    if (handle.isBottom) bottom += delta.dy;
+
+    final maxWidth = surface.width * config.maxWidthFraction.clamp(0.1, 1.0);
+    final minWidth = config.minWidth;
+    final minHeight = config.minHeight;
+    final width = (right - left).clamp(minWidth, maxWidth > minWidth ? maxWidth : minWidth);
+    final height = (bottom - top).clamp(minHeight, surface.height > minHeight ? surface.height : minHeight);
+    // A clamped size pushes back the edge that was dragged, not the anchor.
+    final anchoredLeft = handle.isLeft ? right - width : left;
+    final anchoredTop = handle.isTop ? bottom - height : top;
+    return _clampRect(Rect.fromLTWH(anchoredLeft, anchoredTop, width, height), surface);
+  }
+
+  /// The [requested] size, refitted to [ratio] from [from].
+  ///
+  /// Whichever axis the finger moved further drives the result, so the grip
+  /// follows the hand instead of jumping to the other edge.
+  Size _onAspectRatio(Size requested, Size from, double? ratio) {
+    if (ratio == null || !ratio.isFinite || ratio <= 0) {
+      return requested;
+    }
+    final widthDriven = (requested.width - from.width).abs() >= (requested.height - from.height).abs();
+    final width = widthDriven ? requested.width : requested.height * ratio;
+    return Size(width, width / ratio);
   }
 
   /// Snaps [rect] to the nearest edge after a drag ends.
