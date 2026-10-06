@@ -29,6 +29,7 @@ final class MaterialPlayerControls extends StatelessWidget {
     super.key,
     this.theme,
     this.showTitle = true,
+    this.showTopBar = true,
     this.showOverflowMenu = true,
     this.showSkipButtons = false,
     this.skipStep = const Duration(seconds: 10),
@@ -43,6 +44,13 @@ final class MaterialPlayerControls extends StatelessWidget {
 
   /// Whether the title rides in the top bar.
   final bool showTitle;
+
+  /// Whether the top bar is rendered at all.
+  ///
+  /// False leaves the top of the picture to the host — a page that draws its
+  /// own header (back button, speed chip, overflow) over the video would
+  /// otherwise stack two bars in the same corner.
+  final bool showTopBar;
 
   /// Whether the overflow menu is offered.
   ///
@@ -62,7 +70,8 @@ final class MaterialPlayerControls extends StatelessWidget {
   /// Padding around the whole set.
   final EdgeInsets padding;
 
-  PlayerControlsTheme get _theme => theme ?? const PlayerControlsTheme.material();
+  PlayerControlsTheme get _theme =>
+      theme ?? const PlayerControlsTheme.material();
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +88,13 @@ final class MaterialPlayerControls extends StatelessWidget {
             padding: padding,
             child: Column(
               children: <Widget>[
-                _TopBar(controller: controller, theme: theme, showTitle: showTitle, showMenu: showOverflowMenu),
+                if (showTopBar)
+                  _TopBar(
+                    controller: controller,
+                    theme: theme,
+                    showTitle: showTitle,
+                    showMenu: showOverflowMenu,
+                  ),
                 Expanded(
                   child: _CenterControls(
                     controller: controller,
@@ -99,7 +114,12 @@ final class MaterialPlayerControls extends StatelessWidget {
 }
 
 final class _TopBar extends StatelessWidget {
-  const _TopBar({required this.controller, required this.theme, required this.showTitle, required this.showMenu});
+  const _TopBar({
+    required this.controller,
+    required this.theme,
+    required this.showTitle,
+    required this.showMenu,
+  });
 
   final PlayerControlsController controller;
   final PlayerControlsTheme theme;
@@ -118,7 +138,14 @@ final class _TopBar extends StatelessWidget {
         child: Row(
           children: <Widget>[
             if (showTitle && title != null)
-              Expanded(child: Text(title, style: theme.titleTextStyle, maxLines: 1, overflow: TextOverflow.ellipsis))
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.titleTextStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
             else
               const Spacer(),
             if (controller.canCaptureScreenshot)
@@ -177,7 +204,10 @@ final class _OverflowMenu extends StatelessWidget {
                 const SizedBox(width: 12),
                 const Text('Playback speed'),
                 const Spacer(),
-                Text('${controller.rate.toStringAsFixed(2)}x', style: const TextStyle(color: Colors.black54)),
+                Text(
+                  '${controller.rate.toStringAsFixed(2)}x',
+                  style: const TextStyle(color: Colors.black54),
+                ),
               ],
             ),
           ),
@@ -291,7 +321,13 @@ final class _BottomBar extends StatelessWidget {
                 children: <Widget>[
                   // YouTube-Android order: elapsed, slider, duration, then the
                   // glyphs at the end of the same row.
-                  Expanded(child: PlayerTimeline(controller: controller, theme: theme, barHeight: 26)),
+                  Expanded(
+                    child: PlayerTimeline(
+                      controller: controller,
+                      theme: theme,
+                      barHeight: 26,
+                    ),
+                  ),
                   PlayerIconButton(
                     icon: icons.volumeFor(muted: controller.isMuted),
                     theme: theme,
@@ -299,12 +335,16 @@ final class _BottomBar extends StatelessWidget {
                     onPressed: controller.toggleMute,
                   ),
                   PlayerIconButton(
-                    icon: icons.fullscreenFor(active: controller.actions.canExitFullscreen),
+                    icon: icons.fullscreenFor(
+                      active: controller.actions.canExitFullscreen,
+                    ),
                     theme: theme,
                     tooltip: 'Fullscreen',
                     onPressed: controller.actions.canExitFullscreen
                         ? controller.exitFullscreen
-                        : (controller.actions.canEnterFullscreen ? controller.enterFullscreen : null),
+                        : (controller.actions.canEnterFullscreen
+                              ? controller.enterFullscreen
+                              : null),
                   ),
                 ],
               )
@@ -312,11 +352,21 @@ final class _BottomBar extends StatelessWidget {
                 children: <Widget>[
                   if (controller.isLive)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: theme.accent, borderRadius: BorderRadius.circular(3)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.accent,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                       child: const Text(
                         'LIVE',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFFFFFFF)),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFFFFFF),
+                        ),
                       ),
                     ),
                   const Spacer(),
