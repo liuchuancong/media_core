@@ -4,7 +4,14 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core_floating/media_core_floating.dart';
 
-Future<void> _pump(WidgetTester tester, {bool resizable = true}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  bool resizable = true,
+  int? videoWidth,
+  int? videoHeight,
+  double maxWidthFraction = 0.5,
+  bool aspectRatioFromVideo = true,
+}) async {
   final visibility = StreamController<bool>.broadcast();
   addTearDown(visibility.close);
 
@@ -16,14 +23,18 @@ Future<void> _pump(WidgetTester tester, {bool resizable = true}) async {
         child: FloatingWindowOverlay(
           visible: visibility.stream,
           initiallyVisible: true,
+          videoWidth: videoWidth,
+          videoHeight: videoHeight,
           placement: FloatingWindowPlacement(
             config: FloatingPlacementConfig(
               width: 300,
               height: 200,
               minWidth: 100,
               minHeight: 80,
+              maxWidthFraction: maxWidthFraction,
               snapToEdge: false,
               resizableByDrag: resizable,
+              aspectRatioFromVideo: aspectRatioFromVideo,
             ),
           ),
           resizeControlKey: const Key('resize-grip'),
@@ -69,6 +80,46 @@ void main() {
       await _pump(tester, resizable: false);
 
       expect(find.byKey(const Key('resize-grip')), findsNothing);
+    });
+
+    testWidgets('a landscape source keeps its shape while the grip grows it', (tester) async {
+      await _pump(tester, videoWidth: 1920, videoHeight: 1080, maxWidthFraction: 0.9);
+
+      final before = tester.getSize(find.byType(ColoredBox));
+      await tester.drag(find.byKey(const Key('resize-grip')), const Offset(60, 10));
+      await tester.pump();
+
+      final after = tester.getSize(find.byType(ColoredBox));
+      expect(after.width, greaterThan(before.width));
+      expect(after.height, greaterThan(before.height));
+      // The grip followed the horizontal pull and the height came with it,
+      // instead of the window turning into a box the video sits inside.
+      expect(after.width / after.height, closeTo(16 / 9, 0.01));
+    });
+
+    testWidgets('a portrait source keeps its shape while the grip shrinks it', (tester) async {
+      await _pump(tester, videoWidth: 1080, videoHeight: 1920, maxWidthFraction: 0.9);
+
+      final before = tester.getSize(find.byType(ColoredBox));
+      expect(before.height, greaterThan(before.width));
+
+      await tester.drag(find.byKey(const Key('resize-grip')), const Offset(-10, -60));
+      await tester.pump();
+
+      final after = tester.getSize(find.byType(ColoredBox));
+      expect(after.height, lessThan(before.height));
+      expect(after.width / after.height, closeTo(9 / 16, 0.01));
+    });
+
+    testWidgets('a host that ignores the video shape resizes freely', (tester) async {
+      await _pump(tester, videoWidth: 1920, videoHeight: 1080, aspectRatioFromVideo: false);
+
+      await tester.drag(find.byKey(const Key('resize-grip')), const Offset(60, 40));
+      await tester.pump();
+
+      final after = tester.getSize(find.byType(ColoredBox));
+      expect(after.width, closeTo(360, 1));
+      expect(after.height, closeTo(240, 1));
     });
   });
 
