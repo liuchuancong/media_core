@@ -387,25 +387,13 @@ class _FloatingWindowOverlayState extends State<FloatingWindowOverlay> {
       child: Semantics(
         button: true,
         label: 'Resize small window ${handle.label}',
-        child: handle.isCorner
-            ? Container(
-                width: _resizeCornerSize,
-                height: _resizeCornerSize,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(color: Color(0x33000000)),
-                child: const Text(
-                  '⌟',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 12, height: 1),
-                ),
-              )
-            : Center(
-                child: Container(
-                  width: handle.isLeft || handle.isRight ? 3 : double.infinity,
-                  height: handle.isTop || handle.isBottom ? 3 : double.infinity,
-                  color: const Color(0x33FFFFFF),
-                ),
-              ),
+        // Invisible on purpose: a small window is a picture, and strips or
+        // corner squares drawn on top of it read as dirt on the frame. The hit
+        // region is what matters — dragging an edge still resizes.
+        child: SizedBox(
+          width: handle.isCorner ? _resizeCornerSize : null,
+          height: handle.isCorner ? _resizeCornerSize : null,
+        ),
       ),
     );
 
