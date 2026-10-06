@@ -1,7 +1,9 @@
 /// Configuration for the system media surfaces.
 ///
-/// Notification icon names refer to Android drawable resources in the host app
-/// (`res/drawable`). Ship matching drawables or pass names of your own icons —
+/// Notification icon names are Android resource strings in `type/name` form
+/// (`drawable/ic_media_play`): audio_service's `getResourceId` splits on `/`
+/// and indexes `[1]`, so a bare name crashes `setState` on every publish.
+/// Ship matching drawables or pass resource strings of your own icons —
 /// a notification whose icons are missing shows no controls at all, which looks
 /// like a broken player rather than a missing asset.
 final class MediaSessionConfig {
@@ -16,13 +18,13 @@ final class MediaSessionConfig {
     this.pauseOnBecomingNoisy = true,
     this.duckFactor = 0.3,
     this.resumeAfterInterruption = true,
-    this.playIcon = 'ic_media_play',
-    this.pauseIcon = 'ic_media_pause',
-    this.stopIcon = 'ic_media_stop',
-    this.previousIcon = 'ic_media_previous',
-    this.nextIcon = 'ic_media_next',
-    this.rewindIcon = 'ic_media_rewind',
-    this.fastForwardIcon = 'ic_media_forward',
+    this.playIcon = 'drawable/ic_media_play',
+    this.pauseIcon = 'drawable/ic_media_pause',
+    this.stopIcon = 'drawable/ic_media_stop',
+    this.previousIcon = 'drawable/ic_media_previous',
+    this.nextIcon = 'drawable/ic_media_next',
+    this.rewindIcon = 'drawable/ic_media_rewind',
+    this.fastForwardIcon = 'drawable/ic_media_forward',
     this.seekStep = const Duration(seconds: 10),
     this.showSeekButtons = true,
     this.androidCompactActionIndices = const <int>[0, 1],
@@ -40,13 +42,13 @@ final class MediaSessionConfig {
     this.pauseOnBecomingNoisy = true,
     this.duckFactor = 0.3,
     this.resumeAfterInterruption = true,
-    this.playIcon = 'ic_media_play',
-    this.pauseIcon = 'ic_media_pause',
-    this.stopIcon = 'ic_media_stop',
-    this.previousIcon = 'ic_media_previous',
-    this.nextIcon = 'ic_media_next',
-    this.rewindIcon = 'ic_media_rewind',
-    this.fastForwardIcon = 'ic_media_forward',
+    this.playIcon = 'drawable/ic_media_play',
+    this.pauseIcon = 'drawable/ic_media_pause',
+    this.stopIcon = 'drawable/ic_media_stop',
+    this.previousIcon = 'drawable/ic_media_previous',
+    this.nextIcon = 'drawable/ic_media_next',
+    this.rewindIcon = 'drawable/ic_media_rewind',
+    this.fastForwardIcon = 'drawable/ic_media_forward',
     this.seekStep = const Duration(seconds: 10),
     this.showSeekButtons = true,
     this.androidCompactActionIndices = const <int>[0, 1, 2],
