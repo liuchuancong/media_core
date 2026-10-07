@@ -82,6 +82,8 @@ final class MediaCorePlayerView extends StatefulWidget {
     this.showControls = true,
     this.showTopBar = true,
     this.showOverflowMenu = true,
+    this.showSkipButtons = false,
+    this.skipStep = const Duration(seconds: 10),
     this.controls,
     this.controller,
     this.fit = BoxFit.contain,
@@ -157,6 +159,15 @@ final class MediaCorePlayerView extends StatefulWidget {
   /// through its own chrome (speed chips, PiP, floating) would otherwise ship
   /// two entrances for one action, in the library's fixed copy.
   final bool showOverflowMenu;
+
+  /// Whether skip buttons flank the play button in the transport bar.
+  ///
+  /// Off by default — Android apps usually leave those to gestures — but a
+  /// recording player wants visible ±[skipStep] jumps.
+  final bool showSkipButtons;
+
+  /// Amount the skip buttons jump.
+  final Duration skipStep;
 
   /// Replaces the style's own bar.
   final Widget Function(
@@ -348,6 +359,8 @@ final class _MediaCorePlayerViewState extends State<MediaCorePlayerView> {
         theme: theme,
         showTopBar: widget.showTopBar,
         showOverflowMenu: widget.showOverflowMenu,
+        showSkipButtons: widget.showSkipButtons,
+        skipStep: widget.skipStep,
       ),
       PlayerControlsStyle.cupertino => CupertinoPlayerControls(
         controller: controller,
