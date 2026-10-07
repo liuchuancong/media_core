@@ -81,6 +81,7 @@ final class MediaCorePlayerView extends StatefulWidget {
     this.keyboardShortcuts = true,
     this.showControls = true,
     this.showTopBar = true,
+    this.showOverflowMenu = true,
     this.controls,
     this.controller,
     this.fit = BoxFit.contain,
@@ -149,6 +150,13 @@ final class MediaCorePlayerView extends StatefulWidget {
   /// below the picture is unaffected. Only the Material style honours this
   /// today; other styles always render their top bar.
   final bool showTopBar;
+
+  /// Whether the bar's overflow menu is offered.
+  ///
+  /// False drops the ⋮ entry: a host that already exposes the same abilities
+  /// through its own chrome (speed chips, PiP, floating) would otherwise ship
+  /// two entrances for one action, in the library's fixed copy.
+  final bool showOverflowMenu;
 
   /// Replaces the style's own bar.
   final Widget Function(
@@ -339,6 +347,7 @@ final class _MediaCorePlayerViewState extends State<MediaCorePlayerView> {
         controller: controller,
         theme: theme,
         showTopBar: widget.showTopBar,
+        showOverflowMenu: widget.showOverflowMenu,
       ),
       PlayerControlsStyle.cupertino => CupertinoPlayerControls(
         controller: controller,
