@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_feed/media_core_feed.dart';
@@ -39,7 +41,9 @@ final class _PoolHandle implements PoolPlayerHandle {
   Future<void> setMute(bool muted) async {}
 
   @override
-  Stream<PlayerTransportState> get playbackStream => const Stream<PlayerTransportState>.empty();
+  Stream<PlayerTransportState> get playbackStream => _transport.stream;
+
+  final StreamController<PlayerTransportState> _transport = StreamController<PlayerTransportState>.broadcast();
 }
 
 final class _PoolHost implements PoolPlayerHost {
@@ -132,6 +136,22 @@ void main() {
       await controller.setVolume(0.3);
 
       expect(host.handles.first.volume, 0.3);
+    });
+
+    test('a page that subscribes before load() still receives transport state', () async {
+      // The host subscribes the moment it builds the feed, which is earlier
+      // than the first player existing. The old getter answered that with
+      // `Stream.empty()`, so the subscription stayed empty for the life of the
+      // page and the host's position/duration readouts never left zero.
+      final seen = <PlayerTransportState>[];
+      final subscription = controller.onPlaybackStateChanged.listen(seen.add);
+
+      await controller.load(_items(2));
+      host.handles.first._transport.add(const PlayerTransportState.initial());
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, hasLength(1));
+      await subscription.cancel();
     });
 
     test('disposing the feed leaves the pool its players', () async {

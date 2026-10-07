@@ -103,6 +103,14 @@ final class FeedPlayerController {
   final StreamController<int> _indexController = StreamController<int>.broadcast();
   final StreamController<FeedItemState> _stateController = StreamController<FeedItemState>.broadcast();
   final StreamController<PlayerFailure> _errorController = StreamController<PlayerFailure>.broadcast();
+  final StreamController<PlayerTransportState> _transportController =
+      StreamController<PlayerTransportState>.broadcast();
+
+  StreamSubscription<PlayerTransportState>? _transportSubscription;
+
+  /// The stream currently forwarded into [_transportController], for
+  /// identity-only re-attachment.
+  Object? _transportSource;
 
   /// All items of the feed.
   List<PlayerSource> get items => List<PlayerSource>.unmodifiable(_items);
@@ -190,6 +198,7 @@ final class FeedPlayerController {
     if (_handle == null || _handle!.disposed) {
       _handle = await kernel.create();
     }
+    _reattachTransport();
 
     final handle = _handle!;
     final source = _items[index];
@@ -267,6 +276,7 @@ final class FeedPlayerController {
 
       _pooledPlayer = pooled;
       _handle = pooled is KernelPoolPlayerHandle ? pooled.handle : null;
+      _reattachTransport();
       _setItemState(FeedItemState.playing);
     } catch (error) {
       MediaCoreLog.error(
@@ -319,8 +329,16 @@ final class FeedPlayerController {
   Future<void> setMute(bool muted) => _handle?.setMute(muted) ?? _pooledPlayer?.setMute(muted) ?? Future<void>.value();
 
   /// Playback state stream of the visible item's player.
-  Stream<PlayerTransportState> get onPlaybackStateChanged =>
-      _handle?.playbackStream ?? _pooledPlayer?.playbackStream ?? const Stream<PlayerTransportState>.empty();
+  ///
+  /// A stable stream, not a snapshot of whichever handle happens to exist at
+  /// the moment of the call. The old getter resolved
+  /// `_handle?.playbackStream ?? _pooledPlayer?... ?? Stream.empty()` eagerly,
+  /// so a page that subscribed as soon as it built the feed — before `load()`
+  /// created the first player — was handed an empty stream for the life of the
+  /// page, and its position/duration readouts never left zero. Re-attaching on
+  /// every player change also survives an item switch, where each item gets a
+  /// fresh handle.
+  Stream<PlayerTransportState> get onPlaybackStateChanged => _transportController.stream;
 
   /// Releases the shared player and the feed.
   ///
@@ -338,6 +356,11 @@ final class FeedPlayerController {
     _handle = null;
     _pooledPlayer = null;
 
+    final transport = _transportSubscription;
+    _transportSubscription = null;
+    _transportSource = null;
+    if (transport != null) unawaited(transport.cancel());
+
     // With a pool the handle is the pool's to take back: releasing it here
     // would return a player that another page is about to be shown on.
     if (handle != null && pool == null) {
@@ -351,6 +374,7 @@ final class FeedPlayerController {
     await _indexController.close();
     await _stateController.close();
     await _errorController.close();
+    await _transportController.close();
   }
 
   /// Reports the retained item list.
@@ -366,6 +390,34 @@ final class FeedPlayerController {
     if (!_indexController.isClosed) {
       _indexController.add(index);
     }
+  }
+
+  /// Points the transport stream at the player that is now visible.
+  ///
+  /// Idempotent by stream identity, and a handle's `playbackStream` is a
+  /// `ValueStream`, so one attachment also delivers the current value — that is
+  /// what makes a duration appear without waiting for the next tick.
+  void _reattachTransport() {
+    if (_disposed) return;
+
+    final stream = _handle?.playbackStream ?? _pooledPlayer?.playbackStream;
+    if (identical(_transportSource, stream)) return;
+    _transportSource = stream;
+
+    final previous = _transportSubscription;
+    _transportSubscription = null;
+    if (previous != null) unawaited(previous.cancel());
+
+    if (stream == null) return;
+
+    _transportSubscription = stream.listen(
+      (PlayerTransportState state) {
+        if (!_transportController.isClosed) _transportController.add(state);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!_transportController.isClosed) _transportController.addError(error, stackTrace);
+      },
+    );
   }
 
   void _setItemState(FeedItemState next) {
