@@ -343,7 +343,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // Options the caller pushed before this adapter was initialized ride
     // along to the engine's first moment.
     for (final option in consumeStashedEngineOptions()) {
-      await _setNativeProperty(option.key, _mpvOptionValue(option.value));
+      await _applyNativeOption(option);
     }
   }
 
@@ -357,8 +357,9 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       // instance and the engine applies what its runtime allows. An
       // option the engine refuses is reported as unsupported rather than
       // applied, so the caller can rebuild the player with it instead of
-      // assuming the tuning landed.
-      final applied = await _setNativeProperty(option.key, _mpvOptionValue(option.value));
+      // assuming the tuning landed. A list value is not a property write:
+      // see [mpvListOptionCommand].
+      final applied = await _applyNativeOption(option);
 
       outcomes.add(
         applied ? EngineOptionOutcome.appliedLive : EngineOptionOutcome.unsupported,
@@ -368,7 +369,11 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     return outcomes;
   }
 
-  /// Normalizes an option value into mpv's string dialect.
+  /// Normalizes a scalar option value into mpv's string dialect.
+  ///
+  /// A [List] does not come through here: mpv's string property write has no
+  /// entry separator for a list option, so those travel as a command
+  /// instead — see [mpvListOptionCommand].
   String _mpvOptionValue(Object? value) {
     return switch (value) {
       null => '',
