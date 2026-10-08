@@ -3,6 +3,9 @@ description: >-
   media_kit (libmpv) backend adapter for media_core: mpv-grade codec
   coverage and desktop playback behind the shared PlayerAdapter contract.
 version: 0.1.0
+# Blocked from publishing: media_kit / media_kit_video are pinned to the
+# Predidit fork by commit (pub.dev forbids git deps in published packages).
+publish_to: none
 repository: https://github.com/liuchuancong/media_core
 issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace

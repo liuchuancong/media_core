@@ -3,6 +3,9 @@ description: >-
   ijkplayer backend adapter for media_core on the flv_lzc fork: software
   decoding and legacy FLV handling behind the shared PlayerAdapter contract.
 version: 0.1.0
+# Blocked from publishing: flv_lzc is a git-only dependency
+# (pub.dev forbids git deps in published packages).
+publish_to: none
 repository: https://github.com/liuchuancong/media_core
 issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace

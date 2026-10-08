@@ -1,6 +1,9 @@
 name: media_core_pip
 description: Picture-in-picture for media_core - a desktop always-on-top small window and the Android system PiP window.
 version: 0.1.0
+# Blocked from publishing: the Android PiP backend `floating` is a patched
+# git fork whose pub.dev name is taken.
+publish_to: none
 repository: https://github.com/liuchuancong/media_core
 issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
