@@ -1,10 +1,13 @@
 name: media_core
 
-description: A cross-platform reusable media player core.
-
+description: >-
+  Platform-neutral core of a composable Flutter media player: one
+  PlayerAdapter contract for engine backends, plus orchestration, registry,
+  fallback, events and diagnostics.
 version: 0.1.0
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
 
-publish_to: none
 
 environment:
   sdk: ">=3.9.0 <4.0.0"
@@ -21,11 +24,11 @@ dependencies:
 
   # Levelled, categorised logging
   media_core_logging:
-    path: ../media_core_logging
+    ^0.1.0
 
   # Memory accounting and pressure
   media_core_memory:
-    path: ../media_core_memory
+    ^0.1.0
 
   # Value equality
   equatable: ^3.0.0

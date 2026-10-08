@@ -14,6 +14,7 @@ workspace:
   - packages/media_core_better_player
   - packages/media_core_cast_dlna
   - packages/media_core_native
+  - packages/media_core_native/example
   - packages/media_core_ijk_player
   - packages/media_core_fvp
   - packages/media_core_audio

@@ -1,7 +1,10 @@
 name: media_core_media_kit
-description: media_kit backend adapter for the media_core player framework.
-publish_to: none
+description: >-
+  media_kit (libmpv) backend adapter for media_core: mpv-grade codec
+  coverage and desktop playback behind the shared PlayerAdapter contract.
 version: 0.1.0
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
 
 environment:
@@ -12,15 +15,16 @@ dependencies:
   flutter:
     sdk: flutter
   media_core:
-    path: ../media_core
+    ^0.1.0
   media_core_logging:
-    path: ../media_core_logging
+    ^0.1.0
 
   # Upstream Predidit/media-kit, pinned. The repository no longer carries copies
   # of these two packages: the fork patches described in pure_live's
   # media_kit_video/PURELIVE_PATCH.md (Android Surface/vid ownership,
   # setVideoOutputEnabled, Windows frameRevision) are NOT in this revision, so
-  # nothing here may depend on them.
+  # nothing here may depend on them. One source per dependency: the commit pin
+  # is authoritative, no hosted fallback is possible.
   media_kit:
     git:
       url: https://github.com/Predidit/media-kit.git

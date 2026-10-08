@@ -1,7 +1,8 @@
 name: media_core_pip
 description: Picture-in-picture for media_core - a desktop always-on-top small window and the Android system PiP window.
-publish_to: none
 version: 0.1.0
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
 
 environment:
@@ -12,17 +13,23 @@ dependencies:
   flutter:
     sdk: flutter
   media_core:
-    path: ../media_core
+    ^0.1.0
 
   # Desktop small window (Windows, macOS, Linux)
   window_manager: ^0.5.2
 
-  # Android system picture-in-picture
+  # Android system picture-in-picture. Patched fork of pub.dev `floating`
+  # (AGP 9 built-in Kotlin build + FloatingSystemPip polling fixes); see
+  # packages/floating/PATCHES.md. A dependency can only have one source and the
+  # `floating` name is taken on pub.dev, so git is the only source here; the
+  # workspace snapshot under packages/floating shadows it for local resolution.
   floating:
-    path: ../floating
+    git:
+      url: https://github.com/liuchuancong/floating.git
+      ref: main
 
   media_core_win32:
-    path: ../media_core_win32
+    ^0.1.0
 
 dev_dependencies:
   flutter_lints: ^6.0.0

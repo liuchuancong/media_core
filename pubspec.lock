@@ -425,7 +425,7 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: HEAD
+      ref: "162030d642857109048a8e6858d502b8d73c754a"
       resolved-ref: "162030d642857109048a8e6858d502b8d73c754a"
       url: "https://github.com/liuchuancong/flv_lzc.git"
     source: git

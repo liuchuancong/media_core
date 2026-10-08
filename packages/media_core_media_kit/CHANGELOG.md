@@ -1,6 +1,6 @@
 ## Unreleased
 
-- Re-exports `package:media_kit/media_kit.dart` and `package:media_kit_video/media_kit_video.dart`, so a host that depends on this adapter alone gets the upstream API (`Media`, `Video`, `VideoController`, `PlayerConfiguration`, `MediaKit.ensureInitialized()`, …) without declaring them itself. `Player` and `PlayerState` stay hidden: `media_core` exports its own types under those names and an importer of both barrels would be ambiguous — import `package:media_kit/media_kit.dart` directly for those two.
+- Re-exports `package:media_kit/media_kit.dart` and `package:media_kit_video/media_kit_video.dart`, so a host that depends on this adapter alone gets the upstream API (`Media`, `Video`, `VideoController`, `PlayerConfiguration`, `MediaKit.ensureInitialized()`, …) without declaring them itself. Nothing is hidden: `media_core`'s own public types use composed names (`PlayerIdentity`, `PlayerCoreState`, `PlayerTransportState`, `PlayerMediaType`), so importing both barrels is unambiguous even for media_kit's `Player` and `PlayerState`.
 
 ## 0.1.0
 
@@ -8,6 +8,8 @@ Initial release.
 
 - Backend adapter: `MediaKitPlayerAdapter` + `MediaKitAdapterFactory` connect media_kit to the media_core adapter contract (`PlayerAdapter` + `PlayerVideo`).
 - View: `MediaKitVideoView` carries media_kit's rendering output.
-- Proxy: `MediaKitProxyUrlResolver` resolves stream addresses that must go through a proxy.
-- Configuration: `MediaKitPlayerConfig` declares engine-side options, including the CDN allowlist for legacy-HEVC FLV — streams on that list go through core's FLV rewriter and loopback relay before reaching the engine.
+- Engine options: `onApplyEngineOptions` writes mpv properties through `NativePlayer.setProperty` and reports per option what the engine actually took; a `List` value is a list option and travels as `change-list` (clear, then one `append` per entry) with a `<key>-count` read-back, because a comma-joined string makes mpv open one over-long file name.
+- Per-source hooks: `beforeOpen` applies engine properties derived from the source itself, and `customInputOpener` opens a host-owned input (the recipe rides in the source metadata under `kMediaKitCustomInputKey`). Proxy and whitelist decisions stay with the caller — this adapter ships no built-in preset.
+- Composite sources: declared `CompositeSupport.externalAudio`; the extra audio and subtitle essences are mounted on mpv's `audio-files` / `sub-files` side channel, with `audio-delay` alignment and the track's headers mirrored onto `user-agent` / `http-header-fields`. `kIsWeb` narrows the declaration to `none` (no `NativePlayer` to command), together with `supportsEngineOptions` and `supportsScreenshot`.
+- Option catalogs: `PlayerConsts` (`--vo` / `--ao` / `--hwdec`) and `MpvPlatformProfile` (per-platform filtering and normalization) for host-side expert settings.
 - Shares the kernel with the other backends: sessions, the recovery ladder and event normalization come from `media_core`.

@@ -1,7 +1,8 @@
 name: media_core_recording_ffmpeg
 description: FFmpeg recording backend for media_core - segmented MPEG-TS capture of network streams through ffmpeg_kit_extended_flutter.
-publish_to: none
 version: 0.1.0
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
 
 environment:
@@ -16,9 +17,9 @@ dependencies:
   # and the platform has to be told that (foreground service + wake lock on
   # Android, sleep assertions elsewhere).
   media_core_native:
-    path: ../media_core_native
+    ^0.2.0
   media_core:
-    path: ../media_core
+    ^0.1.0
 
   # FFmpeg runtime (argument-list API, session control, statistics)
   ffmpeg_kit_extended_flutter: 0.6.2

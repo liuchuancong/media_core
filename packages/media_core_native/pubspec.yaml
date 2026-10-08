@@ -2,9 +2,10 @@ name: media_core_native
 
 description: Native platform capability probe for media_core - codec support, device facts and system features, asked once and carried into every session.
 
-publish_to: none
 
 version: 0.2.0
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
 
 resolution: workspace
 
@@ -21,7 +22,7 @@ dependencies:
   # The vocabulary the probe answers in: PlatformCapabilities,
   # PlatformDeviceProfile, PlatformCodecCapabilities.
   media_core:
-    path: ../media_core
+    ^0.1.0
 
 dev_dependencies:
   flutter_test:

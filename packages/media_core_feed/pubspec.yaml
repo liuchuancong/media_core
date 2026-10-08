@@ -1,7 +1,8 @@
 name: media_core_feed
 description: Vertical feed playback for media_core - one shared player, swipe-attached items, optional next-item preload (TikTok/Douyin style).
-publish_to: none
 version: 0.1.0
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
 
 environment:
@@ -12,7 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   media_core:
-    path: ../media_core
+    ^0.1.0
 
 dev_dependencies:
   flutter_lints: ^6.0.0
