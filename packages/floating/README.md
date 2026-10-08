@@ -1,6 +1,15 @@
 # floating
 
-[![codecov](https://codecov.io/gh/wrbl606/floating/graph/badge.svg?token=C41QR8ZOEP)](https://codecov.io/gh/wrbl606/floating)
+> **fork 说明** —— 这里是 [`wrbl606/floating`](https://github.com/wrbl606/floating)
+> 6.0.0 的上游快照 fork，为 [media_core](https://github.com/liuchuancong/media_core)
+> 的 `media_core_pip` 提供 Android 系统画中画后端。改动清单见
+> [PATCHES.md](PATCHES.md)：AGP 9 内置 Kotlin 的构建修复，以及
+> `FloatingSystemPip` 状态轮询的行为修复。上游的 license 与署名保持不变
+> （MIT，Copyright © 2021 Marcin Wróblewski）。
+>
+> 本仓库**不**发布到 pub.dev：`floating` 这个名字已被上游占用，所以它以
+> git 依赖的形式被消费，而 pub.dev 不接受 git 依赖。需要它的包
+> （`media_core_pip`）因此也暂不发到 pub.dev。
 
 Picture in Picture management for Flutter. **Android only**
 
