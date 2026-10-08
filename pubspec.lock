@@ -372,9 +372,10 @@ packages:
   flame_barrage:
     dependency: "direct overridden"
     description:
-      path: "E:/software/flame_barrage"
-      relative: false
-    source: path
+      name: flame_barrage
+      sha256: "15541ff9c2b9afc003b3a607754a8dbcce8679b6868e9c1da83927f6389b9bc5"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.0.9"
   flutter:
     dependency: transitive
