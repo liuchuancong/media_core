@@ -8,6 +8,7 @@
 library;
 
 import 'package:media_core_notify/src/flutter_local_notifications_client.dart';
+import 'package:media_core_notify/src/foreground_jobs.dart';
 import 'package:media_core_notify/src/job_reporting.dart';
 import 'package:media_core_notify/src/notification_client.dart';
 import 'package:media_core_notify/src/notify_event.dart';
@@ -72,12 +73,25 @@ abstract final class MediaCoreNotify {
     final chosen = client ?? FlutterLocalNotificationsClient();
     _client = chosen;
     JobNotifications.installed(policy: jobOutcomes);
+    // The running-jobs line is armed here rather than left to a host call: a
+    // host that said "notify me about jobs" and then had to know that a second,
+    // separate attach step exists somewhere else would get the outcomes and never
+    // the line. `watch` waits for a background runtime to appear if there is none
+    // yet.
+    ForegroundJobs.watch();
 
     return await _ask<bool>(() => chosen.configure(setup), fallback: false);
   }
 
-  /// Forgets the client. Used by tests, and by a host tearing a process down.
-  static void disable() {
+  /// Forgets the client, taking the running-jobs line with it.
+  ///
+  /// Used by tests, and by a host tearing a process down. The line goes first and
+  /// is awaited: clearing a notification needs the client that draws it, and a
+  /// client dropped before that would leave a line on the shade with nothing left
+  /// that could ever take it away.
+  static Future<void> disable() async {
+    await ForegroundJobs.hide();
+
     _client = null;
     _setup = const NotifySetup();
     _nextId = kFirstPostedNotificationId;

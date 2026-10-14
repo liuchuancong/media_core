@@ -29,6 +29,9 @@ export 'package:media_core/adapter/library.dart';
 /// Audio focus, session, route, volume and mute management..
 export 'package:media_core/audio/library.dart';
 
+/// Background execution requests, leases, results and the lease registry..
+export 'package:media_core/background/library.dart';
+
 /// Debugging and fault-injection infrastructure..
 export 'package:media_core/bug/library.dart';
 

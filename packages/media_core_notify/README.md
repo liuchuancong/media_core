@@ -12,8 +12,10 @@ with, and one line that says what is running right now.
 - `NotifyTone` — what an event is allowed to do to the user (sound, banner,
   importance, whether it can be swiped away), decided in one table instead of at
   each call site.
-- `ForegroundJobs` — several running jobs sharing **one** notification line,
-  newest first with the others counted, reposted at most once per second.
+- `ForegroundJobs` — the running-jobs **line**: it reads the sessions the
+  background runtime holds and composes one notification from them (loudest
+  first, the rest counted), reposted at most once per second. It owns no list of
+  jobs and starts no service.
 - `LocalNotificationClient` — the seam. `FlutterLocalNotificationsClient` is the
   default implementation; nothing above that file touches the plugin.
 
@@ -29,10 +31,15 @@ with, and one line that says what is running right now.
   idle-sleep prevention and `SetThreadExecutionState` on Windows. None of that is
   a notification, and `flutter_local_notifications` offers none of it: it is
   [`media_core_native`](../media_core_native).
-- On Android, the **foreground-service notification** stays with
-  `media_core_native`'s own service. `startForeground()` must be called by the
-  process that owns the service, so handing it to the plugin's service would mean
-  either giving up the wake lock or running two services and showing two lines.
+- On Android, the **job notification** is `media_core_native`'s foreground
+  service's own, and `ForegroundJobs` deliberately draws nothing there: one
+  notification must be owned by one backend, and a foreground service may only be
+  started by the process that holds it. Where no such service exists — iOS,
+  macOS, Windows, Linux — the line this package posts is the only thing that says
+  a job is running, so it is posted as an ordinary notification. It never was the
+  thing keeping the work alive, and the plugin's `startForegroundService` path
+  (a second service, a second notification, a manifest entry every host had to
+  write) is gone.
 
 ## Who may depend on it
 
@@ -97,13 +104,33 @@ await MediaCoreNotify.postOutcome(
   policy: notifyOn,
 );
 
-// A running job takes part of the shared line:
-final job = await ForegroundJobs.start(
-  const BackgroundNotification(title: '正在录制', text: 'room-42 · 00:12'),
+// A running job is not announced here at all. It takes a lease from the runtime,
+// and the line is a view over the leases:
+final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
+BackgroundRuntimes.current = registry;
+await MediaCoreNotify.enable(); // turns on the line too — watch() is called for you
+
+final result = await registry.acquire(
+  const BackgroundRequest(
+    id: 'recording/room-42',
+    kind: BackgroundExecutionKind.recording,
+    title: '正在录制',
+    description: 'room-42 · 00:12',
+  ),
 );
-await job.update(notification.copyWith(text: 'room-42 · 01:30'));
-await job.release(); // the line falls with the last job, not the first
+
+if (result case BackgroundAcquireSuccess(:final lease)) {
+  // …the job updates its own lease, and the line follows it.
+  await lease.release(); // the line falls with the last lease, not the first
+}
+
+await ForegroundJobs.hide(); // silence the line without touching the jobs
 ```
+
+`enable()` may run before the registry exists — a host wires notifications in `main()`
+and the background backend appears at the first job — so the line waits for
+`BackgroundRuntimes.changes` rather than asking once. `MediaCoreNotify.disable()` hides
+the line along with turning the rest of the package off.
 
 ## Testing
 
@@ -114,16 +141,22 @@ dart ..\tool\validate_packages.dart
 ```
 
 `LocalNotificationClient` is why the suite needs no device: it records the
-events that *would* have been shown, so the foreground rules are tested as
-behaviour — one start for many jobs, the newest text plus a count, a repost at
-most once per second, exactly one stop, and a released job unable to resurrect
-the line.
+events that *would* have been shown, so the line's rules are tested as behaviour —
+one notification for many sessions, the loudest text plus a count, a repost at
+most once per second while the line is up, opening and closing unprompted, a
+platform whose service already shows the jobs drawing nothing here, and a released
+session unable to resurrect the line. The tests drive a real
+`BackgroundLeaseRegistry` rather than a hand-written session list, because a
+projection that reads its own copy would only prove it agrees with itself.
 
 ## Known limitations
 
 - **Not verified on a device.** No case here proves how a real notification
   head, sounds or groups on a given Android version; the tone mapping is asserted
   as far as the client sees it.
+- `ForegroundJobs` shows itself only where the platform has no job service of its
+  own. A host that wants a line on Android for work that holds no lease has to take
+  the lease; that is the intended direction, not a workaround.
 - The timer churn saved by `ForegroundJobs` (one repost per window instead of
   one per report) is observable in tests; the equivalent saving inside
   `FlutterLocalNotificationsClient` is not, because that file is the boundary.

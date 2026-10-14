@@ -46,7 +46,7 @@ import 'package:meta/meta.dart' show visibleForTesting;
 /// The host app still owns the platform plumbing a library cannot declare for
 /// it — the `audio_service` activity/service entries and, on Android 13+, the
 /// notification permission. See the package README.
-base class MediaSessionDriver implements KernelAudioDriver {
+base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSession {
   /// Creates the driver.
   MediaSessionDriver({
     this.config = const MediaSessionConfig(),
@@ -74,6 +74,14 @@ base class MediaSessionDriver implements KernelAudioDriver {
   MediaSessionHandler? _handler;
   PlayerHandle? _active;
 
+  /// The session that holds the platform's media surface, or null.
+  ///
+  /// One owner, checked on every write: the multiview switch and the music module
+  /// both hand this driver a player, and a session that ended late used to be able
+  /// to rewrite or clear whatever the new one had just published. Ownership is now
+  /// named, so a stale writer is ignored instead of winning.
+  String? _surfaceOwner;
+
   /// Queue transports a host may install (a music player with a queue).
   ///
   /// Mutable rather than constructor arguments: the driver is created once at
@@ -97,6 +105,14 @@ base class MediaSessionDriver implements KernelAudioDriver {
 
   bool _initialized = false;
   bool _disposed = false;
+
+  /// Whether the platform handshake ran and got nothing back.
+  ///
+  /// The difference between "not yet" and "not here" for every later activation: a
+  /// driver whose `AudioService.init` threw has no surface at all, and saying so is
+  /// the only way a host learns the platform is missing the feature instead of
+  /// chasing a startup order.
+  bool _noSurface = false;
   bool _ducked = false;
   bool _resumeOnInterruptionEnd = false;
   double _volumeBeforeDuck = 1;
@@ -144,50 +160,63 @@ base class MediaSessionDriver implements KernelAudioDriver {
       return;
     }
 
-    _handler = await asvc.AudioService.init(
-      builder: () => MediaSessionHandler(
-        onPlay: () async {
-          await _active?.play();
-        },
-        onPause: () async {
-          await _active?.pause();
-        },
-        onSeek: (position) async {
-          await _active?.seek(position);
-        },
-        onStop: () async {
-          await _active?.stop();
-        },
-        onNext: skipToNextHandler == null
-            ? null
-            : () async {
-                await skipToNextHandler!.call();
-              },
-        onPrevious: skipToPreviousHandler == null
-            ? null
-            : () async {
-                await skipToPreviousHandler!.call();
-              },
-        onSkipToQueueItem: skipToQueueItemHandler == null
-            ? null
-            : (index) async {
-                await skipToQueueItemHandler!.call(index);
-              },
-        onSetSpeed: setSpeedHandler == null
-            ? null
-            : (rate) async {
-                await setSpeedHandler!.call(rate);
-              },
-        controlsBuilder: _buildControls,
-        stopOnTaskRemoved: config.androidStopOnRemoveTask,
-      ),
-      config: asvc.AudioServiceConfig(
-        androidNotificationChannelId: config.androidNotificationChannelId,
-        androidNotificationChannelName: config.androidNotificationChannelName,
-        androidNotificationOngoing: config.androidNotificationOngoing,
-        androidStopForegroundOnPause: !config.androidNotificationOngoing,
-      ),
-    );
+    MediaSessionHandler started;
+
+    try {
+      started = await asvc.AudioService.init(
+        builder: () => MediaSessionHandler(
+          onPlay: () async {
+            await _active?.play();
+          },
+          onPause: () async {
+            await _active?.pause();
+          },
+          onSeek: (position) async {
+            await _active?.seek(position);
+          },
+          onStop: () async {
+            await _active?.stop();
+          },
+          onNext: skipToNextHandler == null
+              ? null
+              : () async {
+                  await skipToNextHandler!.call();
+                },
+          onPrevious: skipToPreviousHandler == null
+              ? null
+              : () async {
+                  await skipToPreviousHandler!.call();
+                },
+          onSkipToQueueItem: skipToQueueItemHandler == null
+              ? null
+              : (index) async {
+                  await skipToQueueItemHandler!.call(index);
+                },
+          onSetSpeed: setSpeedHandler == null
+              ? null
+              : (rate) async {
+                  await setSpeedHandler!.call(rate);
+                },
+          controlsBuilder: _buildControls,
+          stopOnTaskRemoved: config.androidStopOnRemoveTask,
+        ),
+        config: asvc.AudioServiceConfig(
+          androidNotificationChannelId: config.androidNotificationChannelId,
+          androidNotificationChannelName: config.androidNotificationChannelName,
+          androidNotificationOngoing: config.androidNotificationOngoing,
+          androidStopForegroundOnPause: !config.androidNotificationOngoing,
+        ),
+      );
+    } on Object {
+      // Remembered, then rethrown: `enable` still fails the way its own doc says it
+      // does, but a host that caught that and kept using the driver gets an honest
+      // answer from `activate` — there is no surface here, rather than "not yet,
+      // keep waiting".
+      _noSurface = true;
+      rethrow;
+    }
+
+    _handler = started;
 
     if (!_supportsAudioSession) {
       return;
@@ -228,8 +257,11 @@ base class MediaSessionDriver implements KernelAudioDriver {
     await _noisySub?.cancel();
     _noisySub = null;
 
-    _handler?.publishIdle();
-    _handler?.clearMediaItem();
+    // The surface goes away rather than being parked: a driver that is gone has
+    // nothing left to publish, and an idle-but-still-listed media item is a
+    // control bar for a session that no longer exists.
+    await _handler?.releaseSurface();
+    _surfaceOwner = null;
 
     _active = null;
     _handler = null;
@@ -280,6 +312,7 @@ base class MediaSessionDriver implements KernelAudioDriver {
     }
 
     if (handle == null) {
+      _surfaceOwner = null;
       handler
         ..publishIdle()
         ..clearMediaItem();
@@ -287,6 +320,10 @@ base class MediaSessionDriver implements KernelAudioDriver {
       return;
     }
 
+    // The kernel's active player owns the surface under its own id, so an
+    // explicit `activate` for another session and this path cannot both claim
+    // they are showing the platform's control bar.
+    _surfaceOwner = _sessionIdFor(handle);
     handler.publishMediaItem(_itemFor(handle));
     _publishCurrent(handle);
 
@@ -299,6 +336,91 @@ base class MediaSessionDriver implements KernelAudioDriver {
         }
       },
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // MediaBackgroundSession
+  // ---------------------------------------------------------------------------
+
+  @override
+  String? get activeSessionId => _surfaceOwner;
+
+  @override
+  Future<MediaSessionActivation> activate({required String sessionId, required String title}) async {
+    final handler = _handler;
+
+    if (_disposed) {
+      // The surface was released and this driver will never take it again: a call
+      // that outlived its driver, which is the opposite mistake from one that came
+      // too early. Saying so is the point — a host that assumed the activation had
+      // worked would report background playback the device is not providing.
+      return const MediaSessionActivation.refused(MediaSessionRefusal.disposed);
+    }
+
+    if (handler == null) {
+      return MediaSessionActivation.refused(
+        _noSurface ? MediaSessionRefusal.surfaceUnavailable : MediaSessionRefusal.notInitialized,
+      );
+    }
+
+    final previous = _surfaceOwner;
+
+    _surfaceOwner = sessionId;
+
+    final active = _active;
+
+    if (active == null) {
+      // Nothing is bound to play: the surface shows what this session is, and says
+      // plainly that it is at rest. An activation is not a play.
+      handler
+        ..publishMediaItem(MediaSessionItem(id: sessionId, title: title))
+        ..publishState(
+          const MediaSessionState(
+            playing: false,
+            position: Duration.zero,
+            duration: Duration.zero,
+            speed: 1,
+            phase: MediaSurfacePhase.idle,
+          ),
+          controls: _buildControls(false),
+        );
+
+      return MediaSessionActivation.held(previousOwnerSessionId: previous);
+    }
+
+    handler.publishMediaItem(_itemFor(active, title: title));
+    _publishCurrent(active);
+
+    return MediaSessionActivation.held(previousOwnerSessionId: previous);
+  }
+
+  @override
+  Future<void> updateMetadata({required String sessionId, required String title}) async {
+    final handler = _handler;
+
+    if (handler == null || !_owns(sessionId)) {
+      // A stale session's late callback: the control bar belongs to whoever holds
+      // it now, and rewriting it would be the multiview bug this guard exists for.
+      return;
+    }
+
+    final active = _active;
+
+    handler.publishMediaItem(
+      active == null ? MediaSessionItem(id: sessionId, title: title) : _itemFor(active, title: title),
+    );
+  }
+
+  @override
+  Future<void> deactivate(String sessionId) async {
+    final handler = _handler;
+
+    if (handler == null || !_owns(sessionId)) {
+      return;
+    }
+
+    _surfaceOwner = null;
+    await handler.releaseSurface();
   }
 
   /// Publishes again, for a host that changed something the surfaces show.
@@ -434,6 +556,33 @@ base class MediaSessionDriver implements KernelAudioDriver {
   /// What the surfaces were last told, so a position-only tick can be skipped.
   MediaSessionState? _published;
 
+  /// What the transport is doing, in the platform's words.
+  ///
+  /// Ordered so that the condition the viewer is waiting under wins: a stream that
+  /// stalled mid-play is `buffering` and not `ready`, and a playhead at the end is
+  /// `completed` rather than a paused file. The control bar is how a viewer decides
+  /// whether to wait or to leave, and one phase for all of them spent that decision
+  /// on a guess.
+  static MediaSurfacePhase _phaseOf(PlayerTransportState playback) {
+    if (playback.isIdle || playback.isStopped) {
+      return MediaSurfacePhase.idle;
+    }
+
+    if (playback.isLoading) {
+      return MediaSurfacePhase.loading;
+    }
+
+    if (playback.isBuffering) {
+      return MediaSurfacePhase.buffering;
+    }
+
+    if (!playback.isPlaying && playback.hasDuration && playback.position >= playback.duration) {
+      return MediaSurfacePhase.completed;
+    }
+
+    return MediaSurfacePhase.ready;
+  }
+
   /// How far the notification's position may lag the player.
   ///
   /// A lock screen redraws this bar about once a second no matter what the app
@@ -450,13 +599,15 @@ base class MediaSessionDriver implements KernelAudioDriver {
       position: playback.position,
       duration: playback.duration,
       speed: playback.rate,
+      phase: _phaseOf(playback),
     );
 
     final previous = _published;
     if (previous != null &&
         next.playing == previous.playing &&
         next.duration == previous.duration &&
-        next.speed == previous.speed) {
+        next.speed == previous.speed &&
+        next.phase == previous.phase) {
       final drift = next.position - previous.position;
       // Only small forward drift is skippable. A jump - a seek back, a new song
       // whose zero position follows the old one - must reach the surfaces now:
@@ -470,19 +621,40 @@ base class MediaSessionDriver implements KernelAudioDriver {
     _handler?.publishState(next, controls: _buildControls(next.playing));
   }
 
+  /// Whether [sessionId] is what the surfaces are showing.
+  bool _owns(String sessionId) => _surfaceOwner == sessionId;
+
+  /// The id a player handle holds the surface under.
+  ///
+  /// Derived from the handle rather than passed in, so the kernel's own activation
+  /// path and a host's explicit `activate` cannot end up with two different names
+  /// for one session.
+  static String _sessionIdFor(PlayerHandle handle) => 'player/${handle.id.value}';
+
+  /// The name a viewer would recognise for [source].
+  static String _titleOf(PlayerSource? source, Uri? uri) {
+    if (source != null && source.hasTitle) {
+      return source.title!;
+    }
+
+    if (uri == null) {
+      return 'Media';
+    }
+
+    return uri.pathSegments.isEmpty ? uri.toString() : uri.pathSegments.last;
+  }
+
   /// Describes a handle as a media item.
   ///
-  /// Title order: the source's own title, then its file name, then the URI —
-  /// a notification that says "Media" is worse than one that says
-  /// "movie.mp4". Artwork comes from the source metadata, then from
-  /// [artUriResolver]; a video source usually only has the second.
-  MediaSessionItem _itemFor(PlayerHandle handle) {
+  /// Title order: [title] when the session named itself, then the source's own
+  /// title, then its file name, then the URI — a notification that says "Media" is
+  /// worse than one that says "movie.mp4". Artwork comes from the source metadata,
+  /// then from [artUriResolver]; a video source usually only has the second.
+  MediaSessionItem _itemFor(PlayerHandle handle, {String? title}) {
     final source = handle.source;
     final uri = source?.uri;
 
-    final title = source?.hasTitle == true
-        ? source!.title!
-        : (uri == null ? 'Media' : (uri.pathSegments.isEmpty ? uri.toString() : uri.pathSegments.last));
+    final name = title ?? _titleOf(source, uri);
 
     final metadata = source?.metadataValue('artUri');
 
@@ -492,7 +664,7 @@ base class MediaSessionDriver implements KernelAudioDriver {
 
     return MediaSessionItem(
       id: source?.id.value ?? handle.id.value,
-      title: title,
+      title: name,
       duration: duration == Duration.zero ? null : duration,
       artUri: artUri,
     );

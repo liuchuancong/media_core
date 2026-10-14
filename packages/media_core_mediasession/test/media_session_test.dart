@@ -137,6 +137,7 @@ void main() {
             position: Duration(seconds: 4),
             duration: Duration(minutes: 1),
             speed: 1,
+            phase: MediaSurfacePhase.ready,
           ),
           controls: const <MediaControl>[MediaControl.play],
         );
@@ -144,10 +145,40 @@ void main() {
 
       final state = h.playbackState.value;
       expect(state.playing, isTrue);
+      expect(state.processingState, AudioProcessingState.ready);
       expect(state.updatePosition, const Duration(seconds: 4));
       expect(state.bufferedPosition, const Duration(minutes: 1));
       expect(state.speed, 1.0);
       expect(state.controls, contains(MediaControl.play));
+    });
+
+    test('each phase reaches the platform as itself', () async {
+      // The handler used to publish `ready` for every state, so a stalled stream
+      // and a stopped one both read as "available, just not playing" — and the
+      // control bar is where a viewer decides whether to keep waiting.
+      const phases = <MediaSurfacePhase, AudioProcessingState>{
+        MediaSurfacePhase.idle: AudioProcessingState.idle,
+        MediaSurfacePhase.loading: AudioProcessingState.loading,
+        MediaSurfacePhase.buffering: AudioProcessingState.buffering,
+        MediaSurfacePhase.ready: AudioProcessingState.ready,
+        MediaSurfacePhase.completed: AudioProcessingState.completed,
+      };
+
+      phases.forEach((phase, expected) async {
+        final h = handler()
+          ..publishState(
+            MediaSessionState(
+              playing: phase == MediaSurfacePhase.ready,
+              position: Duration.zero,
+              duration: const Duration(minutes: 1),
+              speed: 1,
+              phase: phase,
+            ),
+          );
+        await pumpEventQueue();
+
+        expect(h.playbackState.value.processingState, expected, reason: phase.name);
+      });
     });
 
     test('publishIdle parks the surface without removing it', () async {

@@ -3,7 +3,25 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart'
-    show MediaJobKind, MediaJobOutcome, MediaJobReporter, MediaJobReporting, TaskId, TaskPriority;
+    show
+        BackgroundAcquireFailure,
+        BackgroundAcquireRejected,
+        BackgroundAcquireResult,
+        BackgroundAcquireSuccess,
+        BackgroundCapability,
+        BackgroundDuplicatePolicy,
+        BackgroundExecutionKind,
+        BackgroundLease,
+        BackgroundRequest,
+        BackgroundRuntime,
+        BackgroundRuntimes,
+        BackgroundSessionStatus,
+        MediaJobKind,
+        MediaJobOutcome,
+        MediaJobReporter,
+        MediaJobReporting,
+        TaskId,
+        TaskPriority;
 import 'package:media_core_download/media_core_download.dart';
 
 /// Bytes a fake remote serves.
@@ -95,6 +113,154 @@ final class _FakeTransport implements DownloadTransport {
   Future<void> dispose() async {}
 }
 
+/// A background runtime that grants what it is asked for, and remembers.
+///
+/// The manager's promise is "a session while a transfer runs, given back on every
+/// end", and that is a lifecycle claim — it can only be checked by a runtime that
+/// counts what it was handed and when.
+final class _FakeRuntime implements BackgroundRuntime {
+  /// Refuses every request with this reason instead of granting one.
+  BackgroundAcquireFailure? refuseWith;
+
+  final List<BackgroundRequest> requests = <BackgroundRequest>[];
+
+  /// Every lease the runtime handed out, in order. A retry that gets the *same*
+  /// object back kept one session; a retry that got a new one started a second.
+  final List<_FakeLease> granted = <_FakeLease>[];
+
+  final Map<String, _FakeLease> _held = <String, _FakeLease>{};
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  @override
+  Future<BackgroundAcquireResult> acquire(BackgroundRequest request) async {
+    requests.add(request);
+
+    final refusal = refuseWith;
+
+    if (refusal != null) {
+      return BackgroundAcquireRejected(reason: refusal, message: 'the fake was told to refuse');
+    }
+
+    final existing = _held[request.id];
+
+    if (existing != null) {
+      // The registry's `update` policy in one line: the same session, rewritten.
+      existing.request = request;
+      granted.add(existing);
+      _notify();
+
+      return BackgroundAcquireSuccess(lease: existing, grantedCapabilities: existing.grantedCapabilities);
+    }
+
+    final lease = _FakeLease(request, _release)..changes = _notify;
+    _held[request.id] = lease;
+    granted.add(lease);
+    _notify();
+
+    return BackgroundAcquireSuccess(
+      lease: lease,
+      grantedCapabilities: const <BackgroundCapability>{BackgroundCapability.foregroundExecution},
+    );
+  }
+
+  void _release(String id) {
+    _held.remove(id);
+    _notify();
+  }
+
+  void _notify() {
+    if (!_changes.isClosed) {
+      _changes.add(null);
+    }
+  }
+
+  /// The session for the task — held or already given back.
+  ///
+  /// Looked up in the whole history rather than in what is still held, because
+  /// "was it released?" is the question a test asks after the release.
+  _FakeLease? leaseFor(String taskId) {
+    for (final lease in granted.reversed) {
+      if (lease.id == 'download/$taskId') {
+        return lease;
+      }
+    }
+
+    return null;
+  }
+
+  @override
+  List<BackgroundRequest> get activeRequests => _held.values.map((lease) => lease.request).toList(growable: false);
+
+  @override
+  Set<BackgroundCapability> get activeCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
+
+  @override
+  int get activeSessionCount => _held.length;
+
+  @override
+  BackgroundLease? peek(String id) => _held[id];
+
+  @override
+  Set<BackgroundCapability> get platformCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
+
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  Future<void> dispose() => _changes.close();
+}
+
+final class _FakeLease implements BackgroundLease {
+  _FakeLease(this.request, this._giveBack);
+
+  /// Called whenever the runtime's aggregate moved, so the fake can wake a
+  /// projector the way the registry would.
+  void Function()? changes;
+
+  @override
+  BackgroundRequest request;
+
+  final List<BackgroundRequest> updates = <BackgroundRequest>[];
+
+  final void Function(String id) _giveBack;
+
+  bool released = false;
+
+  @override
+  String get id => request.id;
+
+  @override
+  BackgroundSessionStatus get status => released ? BackgroundSessionStatus.stopped : BackgroundSessionStatus.running;
+
+  @override
+  Set<BackgroundCapability> get grantedCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
+
+  @override
+  Stream<BackgroundSessionStatus> get statusChanges => const Stream<BackgroundSessionStatus>.empty();
+
+  @override
+  Future<void> update(BackgroundRequest request) async {
+    this.request = request;
+    updates.add(request);
+    changes?.call();
+  }
+
+  @override
+  Future<void> release() async {
+    if (released) {
+      return;
+    }
+
+    released = true;
+    _giveBack(id);
+  }
+}
+
 /// The reporter the tests install to see what a finished download says.
 final class _CapturingReporter implements MediaJobReporter {
   final List<MediaJobOutcome> seen = <MediaJobOutcome>[];
@@ -143,8 +309,13 @@ void _seed(_MemorySink sink, String path, Uint8List bytes) {
   sink.files[path] = BytesBuilder()..add(bytes);
 }
 
-DownloadTask _task(String id, {TaskPriority priority = TaskPriority.normal}) =>
-    DownloadTask(id: TaskId(id), url: 'https://example.com/$id', filePath: '/downloads/$id.ts', priority: priority);
+DownloadTask _task(String id, {TaskPriority priority = TaskPriority.normal, String? title}) => DownloadTask(
+  id: TaskId(id),
+  url: 'https://example.com/$id',
+  filePath: '/downloads/$id.ts',
+  priority: priority,
+  title: title,
+);
 
 void main() {
   group('DownloadResumePlanner', () {
@@ -536,6 +707,285 @@ void main() {
         await waitForTerminal('a');
 
         expect(manager.task('a')!.status, DownloadStatus.completed);
+      });
+    });
+
+    group('background execution', () {
+      late _FakeRuntime runtime;
+
+      setUp(() {
+        runtime = _FakeRuntime();
+      });
+
+      tearDown(() => runtime.dispose());
+
+      /// A manager wired to the fake runtime, with [tasks] already queued.
+      ///
+      /// The tasks go in here rather than at the call site: a queue with nothing
+      /// in it is not what any of these tests is about.
+      DownloadManager build({
+        required DownloadConfig config,
+        List<DownloadTask> tasks = const <DownloadTask>[],
+        DownloadTransport? transport,
+        DateTime Function()? clock,
+      }) {
+        final manager = DownloadManager(
+          transport: transport ?? _FakeTransport(_payload(1000)),
+          files: _MemorySink(),
+          config: config,
+          backgroundRuntime: runtime,
+          clock: clock,
+        );
+        addTearDown(manager.dispose);
+        tasks.forEach(manager.add);
+
+        return manager;
+      }
+
+      /// The same config every case except the off-by-default one uses.
+      DownloadConfig keepAlive({Duration? retryDelay, int? maxAttempts, int? maxConcurrent, String? title}) {
+        return DownloadConfig.defaults.copyWith(
+          keepAlive: true,
+          keepAliveTitle: title,
+          retryDelay: retryDelay,
+          maxAttempts: maxAttempts,
+          maxConcurrent: maxConcurrent,
+        );
+      }
+
+      Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+
+      Future<void> waitForTerminal(DownloadManager manager, String id) async {
+        for (var attempt = 0; attempt < 400 && !(manager.task(id)?.isTerminal ?? false); attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+      }
+
+      test('a queue that did not ask for it never speaks to the runtime', () async {
+        final manager = build(config: DownloadConfig.defaults, tasks: [_task('plain')]);
+        await settle();
+
+        expect(manager.task('plain')!.status, DownloadStatus.completed);
+        expect(runtime.requests, isEmpty, reason: 'keepAlive is a product decision, not a default');
+      });
+
+      test('a kept-alive transfer asks for one session, before the bytes', () async {
+        final slow = _SlowTransport(_payload(4000));
+        final manager = build(
+          config: keepAlive(),
+          transport: slow,
+          tasks: [_task('room-1', title: '第一话')],
+        );
+
+        await settle();
+
+        expect(runtime.requests, hasLength(1));
+
+        final request = runtime.requests.single;
+        expect(request.id, 'download/room-1');
+        expect(request.kind, BackgroundExecutionKind.download);
+        expect(request.title, 'Downloading');
+        expect(request.requiresCpuWakeLock, isTrue, reason: 'a socket stops with the CPU that serves it');
+        expect(
+          request.duplicatePolicy,
+          BackgroundDuplicatePolicy.update,
+          reason: 'a retry or a resume is the same download, not a second line',
+        );
+
+        await manager.pause('room-1');
+        expect(runtime.leaseFor('room-1')!.released, isTrue, reason: 'a paused transfer holds nothing');
+
+        await manager.resume('room-1');
+        await settle();
+
+        expect(runtime.requests, hasLength(2), reason: 'the resume asks again for what the pause gave back');
+        expect(runtime.activeSessionCount, 1);
+      });
+
+      test('a custom title is the one the line carries', () async {
+        build(
+          config: keepAlive(title: '正在缓存'),
+          tasks: [_task('a')],
+        );
+        await settle();
+
+        expect(runtime.requests.single.title, '正在缓存');
+      });
+
+      test('the line moves with the bytes, and only once a second', () async {
+        // A clock the test turns: chunk reports arrive every 200 ms by design, and
+        // a notification reposted five times a second is a flicker, not progress.
+        var now = DateTime.fromMillisecondsSinceEpoch(0);
+        final first = _FakeTransport(_payload(1000))..chunks = [200, 200, 200, 200, 200];
+        final frozen = build(
+          config: keepAlive(),
+          transport: first,
+          clock: () => now,
+          tasks: [_task('a', title: 'ep01.ts')],
+        );
+        await settle();
+
+        expect(frozen.task('a')!.status, DownloadStatus.completed);
+        expect(runtime.leaseFor('a')!.updates, isEmpty, reason: 'every chunk landed inside one second of the clock');
+
+        now = DateTime.fromMillisecondsSinceEpoch(1500);
+        final second = _FakeTransport(_payload(2000))..chunks = [250, 250, 250, 250, 250, 250, 250, 250];
+        build(
+          config: keepAlive(),
+          transport: second,
+          clock: () => now,
+          tasks: [_task('b', title: 'ep02.ts')],
+        );
+        await settle();
+
+        final lease = runtime.leaseFor('b')!;
+        expect(lease.updates, hasLength(1), reason: 'one window, however many chunks arrived inside it');
+        expect(lease.request.description, contains('ep02.ts'));
+        expect(lease.request.description, contains('%'), reason: 'a known length is shown as a percentage');
+        // The figure is whatever had landed when the window opened, not the last
+        // byte of the file: the tail of the chunks arrive inside the same second
+        // and the line goes away with the transfer, so a stale percentage is
+        // never left showing after the file is there.
+        expect(lease.request.progress!.total, 2000);
+        expect(lease.request.progress!.current, greaterThan(0));
+        expect(lease.request.progress!.fraction, lessThan(1.0), reason: 'the throttled tick is behind, and says so');
+      });
+
+      test('a server that gave no length shows no bar', () async {
+        final noLength = _FakeTransport(_payload(600))..acceptsRanges = false;
+        build(config: keepAlive(), transport: noLength, tasks: [_task('a')]);
+        await settle();
+
+        final progress = runtime.requests.single.progress;
+        expect(progress, isNotNull);
+        expect(progress!.isIndeterminate, isTrue, reason: 'a guess at a total is a lie about the file');
+      });
+
+      test('a completed download gives its session back', () async {
+        final manager = build(config: keepAlive(), tasks: [_task('finished')]);
+        await settle();
+
+        expect(manager.task('finished')!.status, DownloadStatus.completed);
+        expect(runtime.leaseFor('finished')!.released, isTrue);
+        expect(runtime.activeSessionCount, 0);
+      });
+
+      test('a cancelled download gives its session back', () async {
+        final slow = _SlowTransport(_payload(4000));
+        final manager = build(config: keepAlive(), transport: slow, tasks: [_task('gone')]);
+        await settle();
+
+        final lease = runtime.leaseFor('gone');
+        expect(lease, isNotNull, reason: 'the transfer should be in flight');
+
+        await manager.cancel('gone');
+
+        expect(lease!.released, isTrue);
+        expect(runtime.activeSessionCount, 0);
+      });
+
+      test('a removed download gives its session back', () async {
+        final slow = _SlowTransport(_payload(4000));
+        final manager = build(config: keepAlive(), transport: slow, tasks: [_task('removed')]);
+        await settle();
+
+        final lease = runtime.leaseFor('removed')!;
+        await manager.remove('removed');
+
+        expect(lease.released, isTrue);
+        expect(runtime.activeSessionCount, 0);
+      });
+
+      test('a retry keeps the one session; a spent budget gives it back', () async {
+        final transport = _FakeTransport(_payload(1000))..failures = 1;
+        final manager = build(
+          config: keepAlive(retryDelay: Duration.zero, maxAttempts: 2),
+          transport: transport,
+          tasks: [_task('a')],
+        );
+        await waitForTerminal(manager, 'a');
+
+        expect(manager.task('a')!.status, DownloadStatus.completed);
+        expect(runtime.requests, hasLength(2), reason: 'the retry asked again, as every attempt does');
+        expect(runtime.granted.first, same(runtime.granted.last), reason: 'and was given the same session back');
+        expect(runtime.leaseFor('a')!.released, isTrue, reason: 'given back once, at the end');
+      });
+
+      test('a queue that runs out of attempts gives the session back', () async {
+        final transport = _FakeTransport(_payload(1000))..failures = 5;
+        final manager = build(
+          config: keepAlive(retryDelay: Duration.zero, maxAttempts: 2),
+          transport: transport,
+          tasks: [_task('a')],
+        );
+        await waitForTerminal(manager, 'a');
+
+        expect(manager.task('a')!.status, DownloadStatus.failed);
+        expect(runtime.leaseFor('a')!.released, isTrue);
+      });
+
+      test('two downloads hold two sessions and ending one leaves the other', () async {
+        final slow = _SlowTransport(_payload(4000));
+        final manager = build(config: keepAlive(maxConcurrent: 2), transport: slow, tasks: [_task('a'), _task('b')]);
+        await settle();
+
+        final first = runtime.leaseFor('a');
+        final second = runtime.leaseFor('b');
+        expect(first, isNotNull);
+        expect(second, isNotNull, reason: 'two transfers running at once are two sessions');
+
+        await manager.cancel('a');
+
+        expect(first!.released, isTrue);
+        expect(second!.released, isFalse, reason: 'a second download is not the first news');
+        expect(runtime.activeSessionCount, 1);
+      });
+
+      test('a platform that refuses still downloads', () async {
+        runtime.refuseWith = BackgroundAcquireFailure.foregroundStartRejected;
+        final manager = build(config: keepAlive(), tasks: [_task('a')]);
+        await settle();
+
+        expect(
+          manager.task('a')!.status,
+          DownloadStatus.completed,
+          reason: 'a refused protection is not a failed file',
+        );
+        expect(runtime.activeSessionCount, 0);
+      });
+
+      test('no runtime installed is the same as no protection asked for', () async {
+        BackgroundRuntimes.reset();
+        final manager = DownloadManager(
+          transport: _FakeTransport(_payload(1000)),
+          files: _MemorySink(),
+          config: DownloadConfig.defaults.copyWith(keepAlive: true),
+        );
+        addTearDown(manager.dispose);
+
+        manager.add(_task('a'));
+        await settle();
+
+        expect(manager.task('a')!.status, DownloadStatus.completed);
+      });
+
+      test('disposing the manager gives every session back', () async {
+        final slow = _SlowTransport(_payload(4000));
+        final held = DownloadManager(
+          transport: slow,
+          files: _MemorySink(),
+          config: DownloadConfig.defaults.copyWith(keepAlive: true),
+          backgroundRuntime: runtime,
+        )..add(_task('a'));
+        await settle();
+
+        final lease = runtime.leaseFor('a');
+        expect(lease, isNotNull, reason: 'the transfer should be in flight');
+
+        await held.dispose();
+
+        expect(lease!.released, isTrue);
+        expect(runtime.activeSessionCount, 0);
       });
     });
   });

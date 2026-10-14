@@ -1,7 +1,6 @@
 package com.mediacore.nativeprobe;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -22,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel;
  * | Dart → host | {@code acquire} | {notification, wakeLock} | session id, or null when the platform refused |
  * | Dart → host | {@code update} | {id, notification} | – |
  * | Dart → host | {@code release} | {id} | – |
+ * | Dart → host | {@code notificationsPermitted} | – | whether the user may see notifications at all |
  *
  * <p>{@code notification} is the map `BackgroundExecution.encodeNotification`
  * builds: title, text, kind, icon and an optional progress map that says which
@@ -31,64 +31,42 @@ import io.flutter.plugin.common.MethodChannel;
  * <p>No {@code isSupported} call: the platform name is known in Dart, and a
  * round trip to answer "am I Android" would only be a way to disagree with it.
  *
- * <p><strong>The notification permission is asked for here.</strong> From API 33
- * a foreground service posts its notification only with
- * {@code POST_NOTIFICATIONS}, and the plugin declares it in its manifest; asking
- * is the step that was missing, and without it the service runs, the wake lock
- * holds, and the user sees nothing at all. The question is asked while an
- * activity is attached and the {@code acquire} answer waits for it, so Dart does
- * not have to know the platform asked. A refusal is not an error: the session is
- * still started, because the wake lock is what keeps the job alive — only the
- * notification stays hidden.
+ * <p><strong>This class never asks for a permission.</strong> From API 33 a
+ * foreground service shows its notification only with {@code POST_NOTIFICATIONS},
+ * and asking is the app's decision — when it has a screen for the question, not
+ * whatever job happened to need protection first. An earlier version requested
+ * the permission here, from inside {@code acquire}, and that meant a download
+ * resumed in the background could put a system dialog in front of the user and
+ * hold the acquire answer until they decided. The plugin still declares
+ * {@code POST_NOTIFICATIONS}; the host asks through
+ * {@code MediaCoreNotify.requestPermission()}, which is the one entry point for
+ * the question, and {@link #notificationsPermitted} is how it checks the answer
+ * without asking.
  *
- * <p>A refused acquire is answered with null rather than an error for the same
- * reason: the caller runs the job unprotected, which is better than failing a
- * recording because the platform would not take the service.
+ * <p>A missing permission is not a failure either: the service runs and the wake
+ * lock holds with the notification hidden, which is the user's choice about being
+ * told, not about the work. A refused <em>service</em> is answered with null
+ * rather than an error for the same reason — the caller runs the job unprotected,
+ * which is better than failing a recording because the platform would not take it.
  */
 final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandler {
 
   /** Channel name; kept in sync with the Dart side. */
   static final String CHANNEL_NAME = "media_core_native/background";
 
-  /** Request code for the notification dialog. Ours alone: nothing else asks. */
-  private static final int REQUEST_NOTIFICATIONS = 0x4D31;
-
   private static final String PERMISSION_NOTIFICATIONS = Manifest.permission.POST_NOTIFICATIONS;
 
   private final Context context;
 
-  /** The activity to ask from, while one is attached. */
-  private Activity activity;
-
-  /** The acquire waiting for the user to answer the dialog, if one is. */
-  private MethodChannel.Result pendingResult;
-  private BackgroundExecutionService.Description pendingDescription;
-  private boolean pendingWakeLock;
-
   BackgroundExecutionDelegate(Context context) {
     this.context = context;
-  }
-
-  /**
-   * Follows the activity this plugin is attached to.
-   *
-   * A missing activity is not a failure: it only means the permission cannot be
-   * asked for right now, so an acquire that was waiting on the dialog is
-   * answered by starting the session anyway.
-   */
-  void setActivity(Activity activity) {
-    this.activity = activity;
-
-    if (activity == null) {
-      finishPending();
-    }
   }
 
   @Override
   public void onMethodCall(MethodCall call, MethodChannel.Result result) {
     switch (call.method) {
       case "acquire":
-        acquire(call, result);
+        result.success(start(descriptionOf(call), Boolean.TRUE.equals(call.argument("wakeLock"))));
         break;
 
       case "update":
@@ -107,39 +85,13 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
         result.success(null);
         break;
 
+      case "notificationsPermitted":
+        result.success(notificationsPermitted());
+        break;
+
       default:
         result.notImplemented();
     }
-  }
-
-  /** Answers {@link #REQUEST_NOTIFICATIONS}; returns whether it was ours. */
-  boolean onPermissionResult(int requestCode) {
-    if (requestCode != REQUEST_NOTIFICATIONS) {
-      return false;
-    }
-
-    finishPending();
-
-    return true;
-  }
-
-  private void acquire(MethodCall call, MethodChannel.Result result) {
-    final BackgroundExecutionService.Description description = descriptionOf(call);
-    final boolean wakeLock = Boolean.TRUE.equals(call.argument("wakeLock"));
-
-    if (needsNotificationPermission()) {
-      pendingResult = result;
-      pendingDescription = description;
-      pendingWakeLock = wakeLock;
-
-      activity.requestPermissions(new String[] {PERMISSION_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
-
-      // Answered from onPermissionResult, or from setActivity(null) if the
-      // activity goes away while the dialog is open.
-      return;
-    }
-
-    result.success(start(description, wakeLock));
   }
 
   /** Replaces what a running session's notification says. */
@@ -153,20 +105,16 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
     BackgroundExecutionService.update(id, descriptionOf(call));
   }
 
-  /** Starts the session the pending acquire asked for, and answers it. */
-  private void finishPending() {
-    final MethodChannel.Result result = pendingResult;
-
-    if (result == null) {
-      return;
-    }
-
-    pendingResult = null;
-
-    result.success(start(pendingDescription, pendingWakeLock));
-
-    pendingDescription = null;
-    pendingWakeLock = false;
+  /**
+   * Whether a notification posted here can reach the user.
+   *
+   * A check, not a question: this never shows a dialog, because when the user is
+   * asked is the app's decision. Below API 33 the permission does not exist, so
+   * the answer is what the platform has always been — permitted.
+   */
+  private boolean notificationsPermitted() {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+        || context.checkSelfPermission(PERMISSION_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
   }
 
   private Integer start(BackgroundExecutionService.Description description, boolean wakeLock) {
@@ -225,20 +173,5 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
 
   private static int intValue(Object value) {
     return value instanceof Integer ? (Integer) value : 0;
-  }
-
-  /**
-   * Whether the dialog has to be shown before the service starts.
-   *
-   * Only from API 33, only with an activity to ask from, and only when no
-   * acquire is already waiting on the dialog — a second job asking while the
-   * user is deciding starts immediately rather than queueing behind a question
-   * that is already on screen.
-   */
-  private boolean needsNotificationPermission() {
-    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-        && activity != null
-        && pendingResult == null
-        && context.checkSelfPermission(PERMISSION_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
   }
 }

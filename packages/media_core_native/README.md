@@ -15,6 +15,38 @@
 
 录制或下载是"用户让它做，然后就不看了"的活。没有这层保护，屏幕一关，进程几秒内就被冻结或杀掉，FFmpeg 退出码说不了任何原因。
 
+### 走统一契约（新代码用这条）
+
+`media_core` 的 `background` 模块定义了任务申请后台能力的契约，这个包提供它的平台后端：任务只声明"我是谁、我在做什么、要不要 CPU 醒着"，服务、唤醒锁、通知都归运行时决定。
+
+```dart
+final result = await NativeBackgroundRuntime.shared.acquire(
+  const BackgroundRequest(
+    id: 'recording/主播8891',
+    kind: BackgroundExecutionKind.recording,
+    title: '正在录制',
+    description: '00:12:34 · 312 MB',
+    progress: BackgroundJobProgress.indeterminate(),
+  ),
+);
+
+if (result case BackgroundAcquireSuccess(:final lease)) {
+  try {
+    await startTheJob();
+  } finally {
+    await lease.release();
+  }
+} else {
+  // (result as BackgroundAcquireRejected).reason：平台不支持 / 服务被拒 / 权限没有 / 请求本身不合法
+}
+```
+
+`NativeBackgroundRuntime.shared` 是全进程共用的那一个登记表（第一次用到时创建；宿主自己装过 `BackgroundRuntimes.current` 就用宿主的）。它把请求翻译成下面这套通道调用，Java 侧的多任务聚合与唤醒锁引用计数**原样保留**——重复计数的问题在登记层解决，而不是在服务层再记一遍。
+
+录制与 `media_core_download`（`keepAlive`）都走这条路。媒体**播放**不走：它有自己的服务与主人（`media_core_mediasession` 的 `audio_service`），也不是 `BackgroundExecutionKind` 的一员。
+
+### 直接用通道
+
 ```dart
 final session = await BackgroundExecution.acquire(
   notification: BackgroundNotification(

@@ -1,12 +1,45 @@
 import 'package:audio_service/audio_service.dart';
 
+/// Where the transport is, in the words the platform understands.
+///
+/// The handler used to publish [AudioProcessingState.ready] for everything, so a
+/// notification described a stalled stream as available and a stopped one as
+/// ready-and-not-playing. The platform draws a spinner, an error or nothing at
+/// all from this, and a viewer deciding whether to wait or to leave decides on
+/// the control bar — so the phase is said out loud rather than assumed.
+enum MediaSurfacePhase {
+  /// Nothing is loaded: the surface has no session to describe.
+  idle,
+
+  /// The resource is being fetched before it can play.
+  loading,
+
+  /// The engine is short of data in the middle of playback.
+  buffering,
+
+  /// Enough media is available to play from here.
+  ready,
+
+  /// The playhead reached the end of the media.
+  completed,
+}
+
 /// Snapshot of playback state pushed into the system media surface.
 final class MediaSessionState {
   /// Creates the snapshot.
-  const MediaSessionState({required this.playing, required this.position, required this.duration, required this.speed});
+  const MediaSessionState({
+    required this.playing,
+    required this.position,
+    required this.duration,
+    required this.speed,
+    required this.phase,
+  });
 
   /// Whether playback is active.
   final bool playing;
+
+  /// What the transport is doing, beyond playing or not.
+  final MediaSurfacePhase phase;
 
   /// Current playback position.
   final Duration position;
@@ -145,7 +178,13 @@ final class MediaSessionHandler extends BaseAudioHandler {
     playbackState.add(
       PlaybackState(
         controls: controls ?? const <MediaControl>[],
-        processingState: AudioProcessingState.ready,
+        processingState: switch (state.phase) {
+          MediaSurfacePhase.idle => AudioProcessingState.idle,
+          MediaSurfacePhase.loading => AudioProcessingState.loading,
+          MediaSurfacePhase.buffering => AudioProcessingState.buffering,
+          MediaSurfacePhase.ready => AudioProcessingState.ready,
+          MediaSurfacePhase.completed => AudioProcessingState.completed,
+        },
         playing: state.playing,
         updatePosition: state.position,
         bufferedPosition: state.duration,
@@ -157,6 +196,27 @@ final class MediaSessionHandler extends BaseAudioHandler {
   /// Pushes idle state into the media surface.
   void publishIdle() {
     playbackState.add(PlaybackState());
+  }
+
+  /// Gives the platform's media surface back, without touching the player.
+  ///
+  /// The notification and the system session go away (`idle` is what removes
+  /// them), and the transport is left exactly where it was: a host detaching a
+  /// surface is not a viewer pressing stop.
+  Future<void> releaseSurface() async {
+    clearMediaItem();
+    await stopFromHost();
+  }
+
+  /// [BaseAudioHandler.stop] — the platform's "this session is over" — without
+  /// the transport command that the notification's stop button means.
+  ///
+  /// Named because our own `stop()` override *is* the viewer's button: calling
+  /// `super.stop()` from a release path would otherwise read as pausing the
+  /// player to whoever was watching the code.
+  Future<void> stopFromHost() async {
+    publishIdle();
+    await super.stop();
   }
 
   /// Pushes [item] as the current media item.

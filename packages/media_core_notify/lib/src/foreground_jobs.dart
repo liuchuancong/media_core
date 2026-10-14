@@ -1,198 +1,209 @@
-/// One notification for several running jobs, decided in Dart.
+/// One notification for several running jobs, drawn from what the runtime holds.
 ///
-/// `media_core_native` used to do this in its Android service: a recording and a
-/// download share one foreground notification, the newest one's text shows, the
-/// rest are counted, and ending a session reposts without re-alerting. Moving the
-/// rule here means the same shape on every platform, and — the reason it matters —
-/// a version of it that can be tested without a device.
+/// The sessions live in `media_core`'s background runtime — every job acquired a
+/// lease there, and the registry already knows their ids, words and priority — so
+/// this class keeps no list of its own. It composes the line from
+/// the runtime's `activeRequests` and reposts it when the registry says the
+/// aggregate changed. Keeping the list in one place is the point: a second
+/// bookkeeping of "what is running" is how a job ended up with two notifications
+/// that disagreed.
 ///
-/// The line is reposted at most once per `postGap`. A download updates its byte
+/// On a platform whose job service already shows a persistent notification for
+/// the sessions it holds — Android, where `media_core_native`'s foreground service
+/// owns that line — this class composes and exposes the text and draws nothing.
+/// Where no such service exists (iOS, macOS, Windows, Linux) it posts the line as
+/// an ordinary notification: a recording on a Mac says so, and the process
+/// protection was never this notification's job.
+///
+/// The line is reposted at most once per `ForegroundJobs.postGap`. A download updates its byte
 /// count several times a second; a notification is not a live readout, and a
 /// shelf that re-animates on every byte report is worse than one that says
 /// "62%" a moment late.
 library;
 
 import 'dart:async';
-import 'dart:collection';
 
-import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind, BackgroundNotification;
+import 'package:media_core/media_core.dart'
+    show BackgroundCapability, BackgroundExecutionKind, BackgroundRequest, BackgroundRuntime, BackgroundRuntimes;
+import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 
 import 'package:media_core_notify/src/media_core_notify.dart';
-import 'package:media_core_notify/src/notification_client.dart' show kForegroundNotificationId;
+import 'package:media_core_notify/src/notification_client.dart' show kRunningLineNotificationId;
 import 'package:media_core_notify/src/notify_event.dart';
 
-/// A job that is being shown in the running-jobs line.
-final class ForegroundJobHandle {
-  ForegroundJobHandle._(this.id, this.kind, this._title);
-
-  /// This session's identity within the group.
-  final int id;
-
-  /// What the job is, which decides the small icon.
-  final BackgroundJobKind kind;
-
-  final String _title;
-
-  bool _released = false;
-
-  /// Whether [release] has run.
-  bool get released => _released;
-
-  /// Replaces what this session contributes to the line.
-  ///
-  /// A no-op after [release], so a late tick from a job that already ended
-  /// cannot resurrect the line.
-  Future<void> update(BackgroundNotification notification) async {
-    if (_released) {
-      return;
-    }
-
-    await ForegroundJobs._describe(id, notification);
-  }
-
-  /// Ends this session. The line stays while another session is running and goes
-  /// with the last one.
-  Future<void> release() async {
-    if (_released) {
-      return;
-    }
-
-    _released = true;
-
-    await ForegroundJobs._drop(id);
-  }
-
-  @override
-  String toString() => 'ForegroundJobHandle($id, ${kind.name}, "$_title"${_released ? ', released' : ''})';
-}
-
-/// The running-jobs group.
+/// The running-jobs line.
 abstract final class ForegroundJobs {
   /// How often the line may be reposted.
   static const Duration postGap = Duration(seconds: 1);
 
-  static final LinkedHashMap<int, BackgroundNotification> _sessions = LinkedHashMap<int, BackgroundNotification>();
-  static final List<int> _unused = <int>[];
-
-  static int _nextId = 1;
+  static BackgroundRuntime? _runtime;
+  static StreamSubscription<void>? _watch;
+  static StreamSubscription<BackgroundRuntime?>? _waiting;
   static Timer? _gap;
   static bool _dirty = false;
   static bool _showingLine = false;
 
-  /// Sessions currently contributing to the line, oldest first.
-  static int get runningCount => _sessions.length;
+  /// The sessions contributing to the line, loudest first.
+  static List<BackgroundRequest> get sessions => _runtime?.activeRequests ?? const <BackgroundRequest>[];
 
-  /// Whether the platform has been told to show a line at all.
+  /// Number of jobs the line is standing for.
+  static int get runningCount => sessions.length;
+
+  /// Whether the line has been posted and not yet cleared.
   static bool get isShowingLine => _showingLine;
 
-  /// The text the group would show right now, newest session first.
-  ///
-  /// Exposed because it is the whole rule of this class, and a test should read
-  /// the rule rather than a screenshot of it.
-  static String? get lineBody {
-    final newest = _newest;
+  /// The title the line would show right now, or null with nothing running.
+  static String? get lineTitle {
+    final first = _first;
 
-    if (newest == null) {
+    return first?.title;
+  }
+
+  /// The body the line would show right now: the loudest job's own words, plus a
+  /// count of what else is running.
+  ///
+  /// Exposed because composing this is the whole rule of the class, and a test —
+  /// or a host drawing its own shelf — should read the rule, not a screenshot.
+  static String? get lineBody {
+    final first = _first;
+
+    if (first == null) {
       return null;
     }
 
-    return _compose(newest);
+    return _compose(first, sessions.length - 1);
   }
 
-  /// Shows the line for [notification] and returns the handle that ends it.
+  /// Whether this platform needs a Dart-drawn line at all.
   ///
-  /// The first session starts the platform's foreground affordance (Android's
-  /// foreground service); the ones after it only update the text, so a second job
-  /// never takes a second notification — or another service — from the first.
-  static Future<ForegroundJobHandle> start(BackgroundNotification notification) async {
-    final id = _unused.isNotEmpty ? _unused.removeLast() : _nextId++;
-    final kind = notification.kind;
-    final handle = ForegroundJobHandle._(id, kind, notification.title);
+  /// A backend that advertises [BackgroundCapability.persistentNotification] is a
+  /// backend whose sessions already arrive on the user's shade through the service
+  /// that holds them; drawing a second line here would be the duplicate the
+  /// aggregate exists to avoid.
+  static bool get drawsLine {
+    final runtime = _runtime;
 
-    _sessions[id] = notification;
-
-    if (_sessions.length == 1) {
-      _showingLine = true;
-      _dirty = false;
-      _gap?.cancel();
-      _gap = null;
-
-      await _startLine(handle, notification);
-    } else {
-      _repaint();
+    if (runtime == null) {
+      return false;
     }
 
-    return handle;
+    return !runtime.platformCapabilities.contains(BackgroundCapability.persistentNotification);
   }
 
-  /// Ends every session and the line, whatever is still running.
+  /// Draws the line for [runtime] — or for the installed runtime — including
+  /// whatever is already running.
   ///
-  /// For teardown, not for a job's own exit: a host shutting a page down must not
-  /// leave a foreground notification pointing at work that has stopped.
-  static Future<void> stopAll() async {
-    _gap?.cancel();
-    _gap = null;
-    _dirty = false;
-    _sessions.clear();
-    _unused.clear();
-    _showingLine = false;
+  /// With nothing installed yet it does not give up: it waits for the slot and
+  /// attaches the first runtime that arrives. A host enables notifications in
+  /// `main()` and the background backend appears at the first job, so a `watch()`
+  /// that answered "no runtime, then" and stopped would leave the line silently
+  /// never coming — the switch wired to nothing, which is the bug this class exists
+  /// to remove rather than repeat. Idempotent.
+  static void watch({BackgroundRuntime? runtime}) {
+    final chosen = runtime ?? BackgroundRuntimes.current;
 
-    await MediaCoreNotify.client?.stopForeground();
+    if (chosen == null) {
+      _waiting ??= BackgroundRuntimes.changes.listen((next) {
+        if (next != null) {
+          watch(runtime: next);
+        }
+      });
+
+      return;
+    }
+
+    unawaited(_waiting?.cancel());
+    _waiting = null;
+
+    if (identical(_runtime, chosen)) {
+      _repaint();
+
+      return;
+    }
+
+    _detach();
+    _runtime = chosen;
+    _watch = chosen.changes.listen((_) => _repaint());
+    _repaint();
   }
 
-  /// Forgets the group's state without touching the platform. Test-only.
+  /// Whether the line is armed: attached to a runtime, or waiting for one.
+  static bool get isWatching => _runtime != null || _waiting != null;
+
+  /// Takes the line down and stops watching, including while waiting for a runtime.
+  ///
+  /// For teardown and for a host that silences job notifications: the sessions
+  /// themselves are untouched, so a running recording keeps its protection.
+  static Future<void> hide() async {
+    final wasShowing = _showingLine;
+
+    unawaited(_waiting?.cancel());
+    _waiting = null;
+    _detach();
+
+    if (wasShowing) {
+      await _clear();
+    }
+  }
+
+  /// Forgets the line's state without touching the platform. Test-only.
   static void resetForTest() {
     _gap?.cancel();
     _gap = null;
     _dirty = false;
     _showingLine = false;
-    _sessions.clear();
-    _unused.clear();
-    _nextId = 1;
+    _watch = null;
+    _waiting = null;
+    _runtime = null;
   }
 
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
 
-  static BackgroundNotification? get _newest => _sessions.isEmpty ? null : _sessions.values.last;
+  static BackgroundRequest? get _first => sessions.isEmpty ? null : sessions.first;
 
-  static Future<void> _describe(int id, BackgroundNotification notification) async {
-    if (!_sessions.containsKey(id)) {
-      return;
-    }
+  /// Stops watching, and lets the throttled repost die with it.
+  static void _detach() {
+    _gap?.cancel();
+    _gap = null;
+    _dirty = false;
+    _showingLine = false;
 
-    _sessions[id] = notification;
-
-    _repaint();
+    unawaited(_watch?.cancel());
+    _watch = null;
   }
 
-  static Future<void> _drop(int id) async {
-    _sessions.remove(id);
-    _unused.add(id);
-
-    if (_sessions.isEmpty) {
-      _gap?.cancel();
-      _gap = null;
-      _dirty = false;
-      _showingLine = false;
-
-      await MediaCoreNotify.client?.stopForeground();
-
-      return;
-    }
-
-    // The newest session changed, so the line has to be redrawn even when the
-    // gap is still running: the repost is what carries the new text.
-    _repaint();
-  }
-
-  /// Posts the aggregated line, at most once per [postGap].
+  /// Repaints the line: at once when it is not up yet, and at most once per
+  /// [postGap] while it is.
   ///
   /// A repaint request that arrives inside an open window marks it dirty and the
   /// deadline re-posts the newest content — one timer per window, whatever number
   /// of byte reports came in between.
   static void _repaint() {
+    if (!drawsLine) {
+      // The platform's own service is the one that says what is running. There is
+      // nothing to repost, and a dirty flag would only make the next window fire
+      // an empty flush.
+      return;
+    }
+
+    if (sessions.isEmpty) {
+      // Nothing to show: the window closes with the line rather than staying open
+      // over an empty shade, because the job that starts next should be visible
+      // the moment it does.
+      _gap?.cancel();
+      _gap = null;
+      _dirty = false;
+
+      if (_showingLine) {
+        _showingLine = false;
+        unawaited(_clear());
+      }
+
+      return;
+    }
+
     if (_gap != null) {
       _dirty = true;
 
@@ -200,6 +211,9 @@ abstract final class ForegroundJobs {
     }
 
     _dirty = false;
+    // Claimed here rather than inside the flush: a repost in flight is a line that
+    // is up, and the next release has to compare against that.
+    _showingLine = true;
 
     unawaited(_flush());
 
@@ -217,62 +231,48 @@ abstract final class ForegroundJobs {
   }
 
   static Future<void> _flush() async {
-    final newest = _newest;
-
-    if (newest == null || !MediaCoreNotify.enabled) {
-      return;
-    }
-
     final client = MediaCoreNotify.client;
+    final first = _first;
 
-    if (client == null) {
+    if (client == null || first == null) {
       return;
     }
 
     try {
-      await client.updateForeground(_eventFor(newest, _titleOf(newest)));
+      await client.showRunningLine(_eventFor(first, sessions.length - 1));
     } on Exception {
       // A refused repost must not strand the group's timer state.
     }
   }
 
-  static Future<void> _startLine(ForegroundJobHandle handle, BackgroundNotification notification) async {
-    final client = MediaCoreNotify.client;
-
-    if (client == null) {
-      return;
-    }
-
+  static Future<void> _clear() async {
     try {
-      await client.startForeground(_eventFor(notification, _titleOf(notification)));
+      await MediaCoreNotify.client?.clearRunningLine();
     } on Exception {
-      // No notification server: the job keeps running, and on Android the
-      // service simply was not started, which `BackgroundExecution` still covers.
+      // Nothing to do about a notification that could not be taken away.
     }
-
-    // The first window opens with the line, so a burst of updates right after
-    // start does not repost twice within a few milliseconds.
-    _gap = Timer(postGap, _onDeadline);
-    _dirty = false;
   }
 
-  static NotifyEvent _eventFor(BackgroundNotification notification, String title) {
+  static NotifyEvent _eventFor(BackgroundRequest request, int others) {
     return NotifyEvent(
-      title: title,
-      body: _compose(notification),
+      title: request.title,
+      body: _compose(request, others),
       tone: NotifyTone.progress,
       channel: MediaCoreNotify.setup.jobsChannel,
-      kind: notification.kind,
-      id: kForegroundNotificationId,
+      kind: _kindOf(request.kind),
+      id: kRunningLineNotificationId,
     );
   }
 
-  static String _titleOf(BackgroundNotification notification) => notification.title;
+  static BackgroundJobKind _kindOf(BackgroundExecutionKind kind) => switch (kind) {
+    BackgroundExecutionKind.recording => BackgroundJobKind.record,
+    BackgroundExecutionKind.download => BackgroundJobKind.download,
+    BackgroundExecutionKind.generic => BackgroundJobKind.task,
+  };
 
-  /// Newest text, plus a count of what else is running.
-  static String? _compose(BackgroundNotification newest) {
-    final others = _sessions.length - 1;
-    final text = newest.text;
+  /// The loudest job's own words, plus a count of what else is running.
+  static String? _compose(BackgroundRequest newest, int others) {
+    final text = newest.description;
 
     if (others <= 0) {
       return (text == null || text.isEmpty) ? null : text;

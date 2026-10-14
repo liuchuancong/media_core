@@ -22,7 +22,6 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  NotifySetup _setup = const NotifySetup();
   int _nextId = kFirstPostedNotificationId;
 
   AndroidFlutterLocalNotificationsPlugin? get _android =>
@@ -30,8 +29,6 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
 
   @override
   Future<bool> configure(NotifySetup setup) async {
-    _setup = setup;
-
     final initialization = InitializationSettings(
       android: AndroidInitializationSettings(setup.androidSmallIcon),
       // Permission questions are asked explicitly through [requestPermission];
@@ -137,58 +134,22 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
   Future<void> dismiss(int id) => _plugin.cancel(id: id);
 
   @override
-  Future<void> startForeground(NotifyEvent event) async {
-    final ongoing = event.copyWith(id: kForegroundNotificationId, tone: NotifyTone.progress);
-    final android = _android;
+  Future<void> showRunningLine(NotifyEvent event) async {
+    // One id, replaced in place: the line is one notification about several
+    // jobs, and a second show() must not stack a second one under it.
+    final ongoing = event.copyWith(id: kRunningLineNotificationId, tone: NotifyTone.progress);
 
-    if (android == null) {
-      // No foreground service exists off Android. The line is still worth
-      // showing (a recording on macOS says so), and the process protection is
-      // `media_core_native`'s job, not this client's.
-      await _plugin.show(
-        id: kForegroundNotificationId,
-        title: ongoing.title,
-        body: ongoing.body,
-        payload: ongoing.payload,
-        notificationDetails: _detailsFor(ongoing, ongoing: true),
-      );
-
-      return;
-    }
-
-    await android.startForegroundService(
-      id: kForegroundNotificationId,
+    await _plugin.show(
+      id: kRunningLineNotificationId,
       title: ongoing.title,
       body: ongoing.body,
       payload: ongoing.payload,
-      notificationDetails: _androidDetails(ongoing, ongoing: true),
-      // A service that outlives a crash would show a line for work nobody is
-      // doing, so the system is allowed to drop it.
-      startType: AndroidServiceStartType.startNotSticky,
-      foregroundServiceTypes: _foregroundTypes(_setup.foregroundServiceTypes),
+      notificationDetails: _detailsFor(ongoing, ongoing: true),
     );
   }
 
   @override
-  Future<void> updateForeground(NotifyEvent event) => _plugin.show(
-    id: kForegroundNotificationId,
-    title: event.title,
-    body: event.body,
-    payload: event.payload,
-    notificationDetails: _detailsFor(
-      event.copyWith(id: kForegroundNotificationId, tone: NotifyTone.progress),
-      ongoing: true,
-    ),
-  );
-
-  @override
-  Future<void> stopForeground() async {
-    await _android?.stopForegroundService();
-
-    // The notification goes with the service, but a posted line on another
-    // platform has no service to end and must be cleared by hand.
-    await _plugin.cancel(id: kForegroundNotificationId);
-  }
+  Future<void> clearRunningLine() => _plugin.cancel(id: kRunningLineNotificationId);
 
   // ---------------------------------------------------------------------------
   // Tone mapping
@@ -264,22 +225,4 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
     BackgroundJobKind.task => '@drawable/ic_stat_media_core_task',
     null => null,
   };
-
-  Set<AndroidServiceForegroundType>? _foregroundTypes(Set<String> names) {
-    if (names.isEmpty) {
-      return null;
-    }
-
-    return {
-      for (final name in names)
-        switch (name) {
-          'dataSync' => AndroidServiceForegroundType.foregroundServiceTypeDataSync,
-          'mediaPlayback' => AndroidServiceForegroundType.foregroundServiceTypeMediaPlayback,
-          'location' => AndroidServiceForegroundType.foregroundServiceTypeLocation,
-          'camera' => AndroidServiceForegroundType.foregroundServiceTypeCamera,
-          'microphone' => AndroidServiceForegroundType.foregroundServiceTypeMicrophone,
-          _ => AndroidServiceForegroundType.foregroundServiceTypeDataSync,
-        },
-    };
-  }
 }

@@ -130,12 +130,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     FfmpegExecutor? executor,
     this.config = FfmpegRecordConfig.defaults,
     this.outputDirectory,
-    BackgroundExecutionStarter? keepAliveStarter,
+    BackgroundRuntime? backgroundRuntime,
     FfmpegProbe? probe,
     UrlRefresher? urlRefresher,
     DiskSpaceProbe? diskSpace,
   }) : _executor = executor,
-       _keepAliveStarter = keepAliveStarter ?? BackgroundExecution.acquire,
+       _backgroundRuntime = backgroundRuntime,
        _probe = probe,
        _urlRefresher = urlRefresher,
        _diskSpace = diskSpace;
@@ -154,17 +154,23 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// does not name one. Changeable, because a host decides it after the backend
   /// exists - the storage path is usually not known when the player is built.
   String? outputDirectory;
-  final BackgroundExecutionStarter _keepAliveStarter;
+
+  /// The runtime this recording asks the platform for protection from.
+  ///
+  /// Resolved lazily and once per backend: a host that installs its own runtime
+  /// after building the backend still gets it, and a backend that never records
+  /// never touches the platform channel.
+  BackgroundRuntime? _backgroundRuntime;
   final FfmpegProbe? _probe;
   final UrlRefresher? _urlRefresher;
   final DiskSpaceProbe? _diskSpace;
 
   /// The session holding this recording's process alive, if any.
-  BackgroundExecutionLease? _keepAlive;
+  BackgroundLease? _keepAlive;
 
-  /// What the notification says, without the moving parts: the title, icon and
-  /// kind the host chose, kept so an update can replace only the second line.
-  BackgroundNotification? _keepAliveNotification;
+  /// What the runtime was asked for, without the moving parts: the title, icon
+  /// and kind the host chose, kept so an update can replace only the second line.
+  BackgroundRequest? _keepAliveRequest;
 
   /// Media time of the last notification update, so FFmpeg's twice-a-second
   /// statistics do not become twice-a-second notification replacements.
@@ -658,27 +664,40 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       return;
     }
 
-    final notification = BackgroundNotification(
+    final request = BackgroundRequest(
+      id: 'recording/$prefix',
+      kind: BackgroundExecutionKind.recording,
       title: config.keepAliveTitle ?? 'Recording',
-      text: prefix,
-      kind: BackgroundJobKind.record,
+      description: prefix,
       icon: config.keepAliveIcon,
       // A live recording has no total, so the honest shape is a spinner; the
       // numbers the user can act on go in the text, one update per second.
-      progress: const BackgroundProgress.indeterminate(),
+      progress: const BackgroundJobProgress.indeterminate(),
+      // Two backends naming the same prefix are the same work seen twice: the
+      // second one watches the first one's session instead of starting a
+      // parallel service, and giving up the watch leaves the recording alive.
+      duplicatePolicy: BackgroundDuplicatePolicy.share,
     );
 
-    final session = await _keepAliveStarter(notification: notification, wakeLock: true);
+    final result = await _runtime().acquire(request);
 
-    _keepAlive = session;
-    _keepAliveNotification = session == null ? null : notification;
+    if (result case BackgroundAcquireSuccess(:final BackgroundLease lease)) {
+      _keepAlive = lease;
+      _keepAliveRequest = request;
+      _log.info('background execution held', fields: <String, Object?>{'session': lease.id});
 
-    if (session == null) {
-      _log.debug('no background execution on this platform; the recording is unprotected');
-    } else {
-      _log.info('background execution held', fields: <String, Object?>{'session': session.id});
+      return;
     }
+
+    _keepAlive = null;
+    _keepAliveRequest = null;
+    _log.debug(
+      'no background execution for this recording; it is unprotected',
+      fields: <String, Object?>{'reason': (result as BackgroundAcquireRejected).reason.name},
+    );
   }
+
+  BackgroundRuntime _runtime() => _backgroundRuntime ??= NativeBackgroundRuntime.shared;
 
   /// Keeps the notification's second line moving: what is being written, how
   /// long it has been running, how much has landed.
@@ -687,9 +706,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// FFmpeg reports on and the one a user compares the number against.
   void _updateKeepAlive() {
     final session = _keepAlive;
-    final notification = _keepAliveNotification;
+    final request = _keepAliveRequest;
 
-    if (session == null || notification == null) {
+    if (session == null || request == null) {
       return;
     }
 
@@ -714,7 +733,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       if (_formatBytes(_lastBytes) case final String bytes) bytes,
     ];
 
-    unawaited(session.update(notification.copyWith(text: parts.join(' · '))));
+    unawaited(session.update(request.copyWith(description: parts.join(' · '))));
   }
 
   /// `00:12:34` — fixed width, so the line does not jump as it counts.
@@ -749,7 +768,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     final session = _keepAlive;
 
     _keepAlive = null;
-    _keepAliveNotification = null;
+    _keepAliveRequest = null;
 
     await session?.release();
   }
@@ -1222,11 +1241,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   }
 }
 
-/// Starts a background-execution session for a recording.
-///
-/// A function rather than a direct call so a host — or a test, which has no
-/// platform to hold a wake lock — can supply its own: the point of the seam is
-/// that the backend's lifecycle (acquire on start, release on *every* end) is
-/// what matters, and that is worth observing without a device.
-typedef BackgroundExecutionStarter =
-    Future<BackgroundExecutionLease?> Function({required BackgroundNotification notification, bool wakeLock});
+// The background-execution seam is `BackgroundRuntime` in `media_core`: the
+// backend asks for a lease on start and releases it on *every* end, and a test
+// or a host supplies its own runtime instead of a platform that has to hold a
+// wake lock.

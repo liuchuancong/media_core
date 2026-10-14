@@ -68,7 +68,7 @@ final class MyAdapter extends PlayerAdapterBase implements PlayerVideo {
 
 ## 模块构成
 
-`lib/` 下 45 个目录，44 个经 `lib/media_core.dart` 导出（`testing` 里的 fake 刻意不导出）。
+`lib/` 下 46 个目录，45 个经 `lib/media_core.dart` 导出（`testing` 里的 fake 刻意不导出）。
 
 | 组 | 目录 | 提供什么 |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ final class MyAdapter extends PlayerAdapterBase implements PlayerVideo {
 | 会话与串行化 | `session` `identity` `playback` `operation` `task` `state_machine` `concurrency` `reconciler` | `PlayerSession` + `GenerationId`（迟到的事件据此作废）、`PlaybackController` 与命令队列、`OperationTracker` / `TaskManager`、`PlayerReconciler`（期望态→实际态） |
 | 恢复与降级 | `recovery` `fallback` `error` `result` | 唯一决策点 `RecoveryLadder`（`sameBackendReopen` → `nextLine` → `nextBackend` → 放弃）、`ErrorClassifier` / `PlayerErrorCode`、`Result` / `AsyncResult` |
 | 池化与调度 | `pool` `preload` `slot` `coordinator` `visibility` | `PlayerPool`、`PlaybackPoolOrchestrator`（+ `PoolPlayerHost` / `PoolPlayerHandle` 接缝）、`PreloadManager`、`GlobalPlayerCoordinator`（player / playback / page / audio / resource / preload / lifecycle / presentation 八路）、`VisibilityController` |
-| 能力与设备 | `adapter` `platform` `policy` `resource` `planning` `source` | 适配器契约与注册表/选择器、`PlatformProvider`（设备事实）、集中式 `PlayerPolicy`、`ResourceManager`（解码/带宽/温度→压力）、`SourceService`（解析 / 探测 / 校验链） |
+| 能力与设备 | `adapter` `platform` `policy` `resource` `planning` `source` `background` | 适配器契约与注册表/选择器、`PlatformProvider`（设备事实）、集中式 `PlayerPolicy`、`ResourceManager`（解码/带宽/温度→压力）、`SourceService`（解析 / 探测 / 校验链）、后台执行契约（`BackgroundRequest` / `BackgroundLease` / `BackgroundAcquireResult`）与 `BackgroundLeaseRegistry`（会话登记、重复策略、能力引用、状态机，外加给投影层用的 `changes` 与 `platformCapabilities`） |
 | 数据面与呈现 | `renderer` `screenshot` `recording` `casting` `composition` `quality` `geometry` `presentation` `audio` | `MediaPlayerView`、双路截图（引擎抓帧 / 渲染面抓取 + `ScreenshotWriter`）、录制与投屏**契约**、时间线组合（`MediaTimeline` / `TimelineComposer`）、清晰度切换、视频几何与旋转、全屏/PiP/浮窗状态机、焦点与会话抽象 |
 | 支撑设施 | `cache` `network` `diagnostics` `event` `bug` `reactive` `util` | `CacheManager`（内存 + `DiskCache`、LRU/FIFO 驱逐）、`NetworkManager` 与 `HttpHeaderSanitizer`、`DiagnosticsManager` / `PerformanceMonitor`、`PlayerEventBus`、`bug` 的故障注入、rxdart 之上的流工具 |
 
@@ -100,13 +100,15 @@ final class MyAdapter extends PlayerAdapterBase implements PlayerVideo {
 - `NetworkMonitor` 是接口 + `BaseNetworkMonitor` 骨架，仓库里唯一的实现是 `testing/fake_network.dart`；真实连通性要宿主或平台包注入，否则 `NetworkManager` 只是没有来源的缓存。
 - `ThermalManager` 只做 `ThermalState` → `ResourcePressure` 的换算，温度值需要宿主调 `update()` 喂进来。
 - `audio` 模块是 `AudioFocus` / `AudioSession` / `AudioRoute` 抽象，平台实现归 `media_core_native`（仍在推进）。
+- `background` 模块只有契约与登记：它不开服务、不取锁、不发通知。Android 的执行后端在 `media_core_native`（`NativeBackgroundBackend`），
+  媒体播放的 `MediaBackgroundSession` 则由 `media_core_mediasession` 实现——目前那里还是 `audio_service` 的直接封装，尚未接上这份契约。
 - 本包不提供 FLV 重写与回环中继：那部分在 `media_core_ingest`（`LoopbackIngestRelay` / `FfmpegIngestRelay` + `resolveIngestPlan`）。
 - `lib/media_core.dart` 与 `lib/*/library.dart` 是生成的（`GENERATED MODULE LIBRARY` 头），新增模块时手工补一条导出。
 
 ## 测试
 
 ```bash
-flutter test   # packages/media_core/test：41 个模块目录、约 290 个用例（代际作废、命令串行化、恢复梯级、池与预载、事件、规划与几何）
+flutter test   # packages/media_core/test：42 个模块目录、约 350 个用例（代际作废、命令串行化、恢复梯级、池与预载、事件、规划与几何、后台会话登记与释放）
 ```
 
 ## 相关文档

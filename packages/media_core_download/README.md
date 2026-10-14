@@ -58,6 +58,27 @@ await manager.clearCompleted();
 3. 匹配 → truncate 回验证起点、重写验证字节、从断点继续 append。
 4. 不匹配 → truncate(0)，从头下载。
 
+## 后台执行
+
+默认**不**申请：`DownloadConfig.keepAlive` 关着，队列的行为和本包有后台能力之前完全一样 ——
+一条通知是代价，不是福利，用户盯着下的小文件不需要它。
+
+打开以后，每个**正在传输**的任务持有一条作业会话（`download/<任务 id>`、`BackgroundExecutionKind.download`），
+在第一个字节落盘**之前**取，在每一条结束路径上还给运行时：完成、预算用完、暂停、取消、移除、`dispose()`。
+暂停要交回，恢复时重新申请 —— 暂停中的传输不占任何保护。重试**不**重新排一条：同一个文件的第二次尝试
+用 `BackgroundDuplicatePolicy.update` 刷新已有那条，所以通知行不会把一份文件数两遍。
+
+- `title` 是宿主的词（`keepAliveTitle`，默认 "Downloading"）。
+- 正文是本包算的：`文件名 · 45% · 1.2 MB/s`。服务器没说长度时不写百分比，只写已经落盘的字节。
+  进度条同理 —— 长度已知才是 `BackgroundJobProgress.determinate`，否则 `indeterminate`。
+- 通知最多每秒重写一次（任务进度本身每 200 ms 发布一次；通知不是实时读数）。
+- 排序跟着队列的 `TaskPriority`，所以用户排在前面的文件也是通知行里排在前面那个。
+
+运行时契约在 `media_core` 的 `background` 模块，本包只调契约、不依赖 `media_core_native`：宿主装上后端
+（`NativeBackgroundRuntime.shared`，或往 `BackgroundRuntimes.current` 里放自己的）就有真实的前台服务与唤醒锁，
+没装就拿到 `unsupportedPlatform`，下载照常跑完。测试与宿主可传 `DownloadManager(backgroundRuntime: ...)`
+换掉整个运行时。
+
 ## 平台支持
 
 | 平台 | 状态 |
@@ -68,5 +89,6 @@ await manager.clearCompleted();
 ## 相关文档
 
 - [media_core](../media_core) —— `TaskManager`、`PlayerTask`、`RetryUtils`
-- [media_core_recording_ffmpeg](../media_core_recording_ffmpeg) —— 直播录制（共享 `media_core_native` 后台执行能力）
+- [media_core_recording_ffmpeg](../media_core_recording_ffmpeg) —— 直播录制（同一个后台执行契约的另一路作业）
+- [media_core_notify](../media_core_notify) —— 作业结束的事件通知；作业进行中那条线由 `ForegroundJobs` 从本包与录制持有的会话里聚合
 - [项目总览](../../README.md)

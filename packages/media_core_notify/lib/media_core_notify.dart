@@ -63,10 +63,10 @@
 library;
 
 export 'package:media_core_notify/src/flutter_local_notifications_client.dart' show FlutterLocalNotificationsClient;
-export 'package:media_core_notify/src/foreground_jobs.dart' show ForegroundJobHandle, ForegroundJobs;
+export 'package:media_core_notify/src/foreground_jobs.dart' show ForegroundJobs;
 export 'package:media_core_notify/src/job_reporting.dart' show JobNotifications;
 export 'package:media_core_notify/src/media_core_notify.dart' show MediaCoreNotify, NotifyOn;
 export 'package:media_core_notify/src/notification_client.dart'
-    show LocalNotificationClient, NotifySetup, kFirstPostedNotificationId, kForegroundNotificationId;
+    show LocalNotificationClient, NotifySetup, kFirstPostedNotificationId, kRunningLineNotificationId;
 export 'package:media_core_notify/src/notify_event.dart'
     show NotifyChannel, NotifyEvent, NotifyTap, NotifyTone, kNotifyChannelJobs, kNotifyChannelResults;

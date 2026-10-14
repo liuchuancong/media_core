@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:media_core/playback/playback_command.dart';
 import 'package:media_core/playback/player_transport_state.dart';
 
 /// Immutable playback snapshot.
@@ -30,6 +31,7 @@ final class PlaybackSnapshot extends Equatable {
     required this.rate,
     required this.initialized,
     required this.updatedAt,
+    this.buffering = false,
   });
 
   /// Creates snapshot from state.
@@ -42,11 +44,16 @@ final class PlaybackSnapshot extends Equatable {
       rate: state.rate,
       initialized: state.initialized,
       updatedAt: state.updatedAt,
+      buffering: state.buffering,
     );
   }
 
   /// Current command.
-  final Object command;
+  ///
+  /// Typed, not `Object`: the predicates below used to read the command's *name*,
+  /// and every command in this family is called `PlaybackCommand…` — so asking
+  /// "does the name contain Play" answered yes for idle, pause and stop as well.
+  final PlaybackCommand command;
 
   /// Current position.
   final Duration position;
@@ -66,25 +73,27 @@ final class PlaybackSnapshot extends Equatable {
   /// Last update timestamp.
   final DateTime? updatedAt;
 
+  /// Whether the engine was short of data when this was read.
+  final bool buffering;
+
   /// Whether playing.
-  bool get isPlaying {
-    return command.runtimeType.toString().contains('Play');
-  }
+  bool get isPlaying => command.isPlaying;
 
   /// Whether paused.
-  bool get isPaused {
-    return command.runtimeType.toString().contains('Pause');
-  }
+  bool get isPaused => command.isPaused;
 
   /// Whether stopped.
-  bool get isStopped {
-    return command.runtimeType.toString().contains('Stop');
-  }
+  bool get isStopped => command.isStopped;
+
+  /// Whether the transport is at rest, before any command.
+  bool get isIdle => command.isIdle;
 
   /// Whether buffering.
-  bool get isBuffering {
-    return command.runtimeType.toString().contains('Buffering');
-  }
+  ///
+  /// A condition, not a command: `PlaybackCommand.buffering(value: false)` updates
+  /// the transport's flag and leaves the play/pause command alone, so a buffered
+  /// stretch is only ever read back from the state it was taken with.
+  bool get isBuffering => buffering;
 
   /// Progress 0-1.
   double get progress {
@@ -135,12 +144,14 @@ final class PlaybackSnapshot extends Equatable {
 
       'updatedAt': updatedAt?.toIso8601String(),
 
+      'buffering': buffering,
+
       'command': command.runtimeType.toString(),
     };
   }
 
   @override
-  List<Object?> get props => [command, position, duration, volume, rate, initialized, updatedAt];
+  List<Object?> get props => [command, position, duration, volume, rate, initialized, updatedAt, buffering];
 
   @override
   String toString() {

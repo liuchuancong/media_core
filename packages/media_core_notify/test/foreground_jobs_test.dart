@@ -2,17 +2,117 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core_native/media_core_native.dart'
-    show BackgroundJobKind, BackgroundNotification, BackgroundProgress;
+import 'package:media_core/media_core.dart'
+    show
+        BackgroundAcquireSuccess,
+        BackgroundBackendGranted,
+        BackgroundBackendLease,
+        BackgroundBackendOutcome,
+        BackgroundCapability,
+        BackgroundExecutionBackend,
+        BackgroundExecutionKind,
+        BackgroundJobProgress,
+        BackgroundLease,
+        BackgroundLeaseRegistry,
+        BackgroundRequest,
+        BackgroundRuntimes,
+        BackgroundSessionStatus;
+import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/media_core_notify.dart';
 
-/// The client this suite needs: the foreground calls and how many of each.
-final class _ForegroundClient implements LocalNotificationClient {
-  final List<NotifyEvent> started = <NotifyEvent>[];
-  final List<NotifyEvent> updated = <NotifyEvent>[];
+/// The platform underneath the registry: it grants what the test tells it to and
+/// remembers the session it started.
+///
+/// A projection over a hand-written session list would prove the projection
+/// agrees with itself. Drawing from the real registry is the only way to show it
+/// agrees with the thing the jobs actually hold.
+final class _PlatformBackend implements BackgroundExecutionBackend {
+  /// Whether this platform's job service draws its own notification — Android —
+  /// or whether the Dart line is the only one the user would ever see.
+  bool persistent = false;
+
+  final List<BackgroundRequest> opened = <BackgroundRequest>[];
+  final List<_PlatformLease> leases = <_PlatformLease>[];
+
+  @override
+  Set<BackgroundCapability> get supportedCapabilities => persistent
+      ? const <BackgroundCapability>{
+          BackgroundCapability.foregroundExecution,
+          BackgroundCapability.persistentNotification,
+        }
+      : const <BackgroundCapability>{BackgroundCapability.foregroundExecution, BackgroundCapability.cpuWakeLock};
+
+  @override
+  Future<BackgroundBackendOutcome> open(BackgroundRequest request) async {
+    opened.add(request);
+
+    final lease = _PlatformLease(request);
+    leases.add(lease);
+
+    return BackgroundBackendGranted(lease);
+  }
+
+  _PlatformLease? leaseFor(String id) {
+    for (final lease in leases.reversed) {
+      if (lease.request.id == id) {
+        return lease;
+      }
+    }
+
+    return null;
+  }
+}
+
+final class _PlatformLease implements BackgroundBackendLease {
+  _PlatformLease(this.request);
+
+  BackgroundRequest request;
+
+  final StreamController<BackgroundSessionStatus> _status = StreamController<BackgroundSessionStatus>.broadcast();
+  final List<BackgroundRequest> updates = <BackgroundRequest>[];
+
+  bool released = false;
+
+  @override
+  Stream<BackgroundSessionStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> update(BackgroundRequest request) async {
+    this.request = request;
+    updates.add(request);
+  }
+
+  @override
+  Future<void> release() async {
+    released = true;
+    await _status.close();
+  }
+}
+
+BackgroundRequest _job(
+  String id, {
+  String title = '正在下载',
+  String? description,
+  BackgroundExecutionKind kind = BackgroundExecutionKind.download,
+  int priority = 0,
+}) {
+  return BackgroundRequest(
+    id: id,
+    kind: kind,
+    title: title,
+    description: description,
+    requiresCpuWakeLock: false,
+    progress: const BackgroundJobProgress.determinate(current: 1, total: 4),
+    priority: priority,
+  );
+}
+
+/// The client this suite needs: what the line was told to show.
+final class _LineClient implements LocalNotificationClient {
+  final List<NotifyEvent> shown = <NotifyEvent>[];
   final List<String> calls = <String>[];
 
-  int get stopCount => calls.where((call) => call == 'stopForeground').length;
+  int get clearCount => calls.where((call) => call == 'clearRunningLine').length;
 
   @override
   Future<bool> configure(NotifySetup setup) async => true;
@@ -30,32 +130,14 @@ final class _ForegroundClient implements LocalNotificationClient {
   Future<void> dismiss(int id) async {}
 
   @override
-  Future<void> startForeground(NotifyEvent event) async {
-    calls.add('startForeground');
+  Future<void> showRunningLine(NotifyEvent event) async {
+    calls.add('showRunningLine');
 
-    started.add(event);
+    shown.add(event);
   }
 
   @override
-  Future<void> updateForeground(NotifyEvent event) async {
-    calls.add('updateForeground');
-
-    updated.add(event);
-  }
-
-  @override
-  Future<void> stopForeground() async {
-    calls.add('stopForeground');
-  }
-}
-
-BackgroundNotification _job(String title, String text, {BackgroundJobKind kind = BackgroundJobKind.download}) {
-  return BackgroundNotification(
-    title: title,
-    text: text,
-    kind: kind,
-    progress: const BackgroundProgress.determinate(current: 1, total: 4),
-  );
+  Future<void> clearRunningLine() async => calls.add('clearRunningLine');
 }
 
 /// Runs [future] to its value inside the fake zone.
@@ -91,71 +173,143 @@ void _settle(FakeAsync async, Future<void> future) {
   expect(settled, isTrue, reason: 'This step should need no timer, only the microtasks flushed above.');
 }
 
+/// Advances the fake clock, then drains what the deadline started.
+///
+/// `elapse` only fires the window's callback; the repost itself is a future on the
+/// client, so a test that reads `shown` straight after `elapse` sees the old line.
+void tick(FakeAsync async, Duration gap) {
+  async
+    ..elapse(gap)
+    ..flushMicrotasks();
+}
+
 void main() {
-  late _ForegroundClient client;
+  late _LineClient client;
+  late _PlatformBackend backend;
+  late BackgroundLeaseRegistry registry;
 
-  setUp(() async {
-    client = _ForegroundClient();
+  setUp(() {
+    client = _LineClient();
     ForegroundJobs.resetForTest();
-    await MediaCoreNotify.enable(client: client);
+    BackgroundRuntimes.reset();
   });
 
-  tearDown(() {
-    MediaCoreNotify.disable();
+  tearDown(() async {
+    await ForegroundJobs.hide();
+    await MediaCoreNotify.disable();
+    BackgroundRuntimes.reset();
     ForegroundJobs.resetForTest();
   });
+
+  /// Builds the runtime and arms the line inside the fake zone.
+  ///
+  /// A listener belongs to the zone that created it: construct the registry in
+  /// `setUp`, outside `fakeAsync`, and every `changes` event — and the repost
+  /// window the projector opens from it — runs against the real clock, which
+  /// `async.elapse` cannot advance. The line then opens once and never updates,
+  /// which reads like a projector bug and is a harness one.
+  void arm(FakeAsync async, {bool persistent = false}) {
+    backend = _PlatformBackend()..persistent = persistent;
+    registry = BackgroundLeaseRegistry(backend: backend);
+    BackgroundRuntimes.current = registry;
+
+    _resolve(async, MediaCoreNotify.enable(client: client));
+  }
+
+  Future<BackgroundLease> hold(BackgroundRequest request) async {
+    final result = await registry.acquire(request);
+
+    expect(result, isA<BackgroundAcquireSuccess>(), reason: '$request should have been granted: $result');
+
+    return (result as BackgroundAcquireSuccess).lease;
+  }
 
   group('several jobs, one line', () {
-    test('the first job starts the line, and says nothing about the others', () {
+    test('the first session opens the line and says nothing about the others', () {
       fakeAsync((async) {
-        _resolve(async, ForegroundJobs.start(_job('正在下载', 'room-42 · 25%')));
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
+        async.flushMicrotasks();
 
-        expect(client.started, hasLength(1));
-        expect(client.updated, isEmpty, reason: 'a line that just opened has nothing to repaint');
-        expect(client.started.single.tone, NotifyTone.progress);
-        expect(client.started.single.channel.id, kNotifyChannelJobs.id);
-        expect(client.started.single.body, 'room-42 · 25%');
+        expect(client.shown, hasLength(1));
+        expect(client.shown.single.tone, NotifyTone.progress);
+        expect(client.shown.single.channel.id, kNotifyChannelJobs.id);
+        expect(client.shown.single.title, '正在下载');
+        expect(client.shown.single.body, 'room-42 · 25%');
+        expect(client.shown.single.kind, BackgroundJobKind.download);
+        expect(client.shown.single.id, kRunningLineNotificationId);
         expect(ForegroundJobs.isShowingLine, isTrue);
       });
     });
 
-    test('a second job joins the line instead of taking another service', () {
+    test('a second session joins the line instead of taking another notification', () {
       fakeAsync((async) {
-        _resolve(async, ForegroundJobs.start(_job('正在下载', 'room-42 · 25%')));
-        _resolve(async, ForegroundJobs.start(_job('正在录制', 'room-7 · 00:12', kind: BackgroundJobKind.record)));
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
+        _resolve(
+          async,
+          hold(
+            _job(
+              'recording/b',
+              title: '正在录制',
+              description: 'room-7 · 00:12',
+              kind: BackgroundExecutionKind.recording,
+              priority: 10,
+            ),
+          ),
+        );
+        tick(async, const Duration(milliseconds: 1100));
 
-        expect(client.started, hasLength(1), reason: 'two foreground services would cancel each other');
+        expect(client.shown, hasLength(2), reason: 'one line, opened and then repainted — never a second service');
+        expect(client.shown.map((event) => event.id).toSet(), {
+          kRunningLineNotificationId,
+        }, reason: 'several jobs, one notification id');
         expect(ForegroundJobs.runningCount, 2);
         expect(ForegroundJobs.lineBody, 'room-7 · 00:12  (还有 1 个任务)');
       });
     });
 
-    test('the newest job is what the line says', () {
+    test('the job the host put first is what the line names first', () {
       fakeAsync((async) {
-        _resolve(async, ForegroundJobs.start(_job('正在下载', 'room-42 · 25%')));
-        final recording = _resolve(async, ForegroundJobs.start(_job('正在录制', 'room-7 · 00:12')));
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: 'a · 25%')));
+        _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', priority: 10)));
+        tick(async, const Duration(milliseconds: 1100));
 
-        async.elapse(const Duration(milliseconds: 1200));
-
-        expect(client.updated.last.body, 'room-7 · 00:12  (还有 1 个任务)');
-
-        _settle(async, recording.release());
-        async.elapse(const Duration(milliseconds: 1200));
-
-        expect(client.updated.last.body, 'room-42 · 25%', reason: 'the line falls back to what is left');
-        expect(client.stopCount, 0, reason: 'one job ended, the other still needs the protection');
+        expect(ForegroundJobs.lineTitle, '正在录制');
+        expect(ForegroundJobs.lineBody, 'b · 00:12  (还有 1 个任务)');
       });
     });
 
-    test('releasing the last job ends the line once', () {
+    test('the line falls back to what is left when the loudest job ends', () {
       fakeAsync((async) {
-        final a = _resolve(async, ForegroundJobs.start(_job('A', 'a')));
-        final b = _resolve(async, ForegroundJobs.start(_job('B', 'b')));
+        arm(async);
+        final loud = _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', priority: 10)));
+        _resolve(async, hold(_job('download/a', description: 'a · 25%')));
+        tick(async, const Duration(milliseconds: 1100));
+
+        expect(client.shown.last.body, contains('b · 00:12'));
+
+        _settle(async, loud.release());
+        tick(async, const Duration(milliseconds: 1100));
+
+        expect(client.shown.last.body, 'a · 25%', reason: 'the line says what is running, not what ran');
+        expect(client.clearCount, 0, reason: 'one job ended; the other still needs the line');
+      });
+    });
+
+    test('the last session released clears the line once', () {
+      fakeAsync((async) {
+        arm(async);
+        final a = _resolve(async, hold(_job('download/a', description: 'a')));
+        final b = _resolve(async, hold(_job('download/b', description: 'b')));
+        tick(async, const Duration(milliseconds: 1100));
 
         _settle(async, a.release());
         _settle(async, b.release());
+        async.flushMicrotasks();
 
-        expect(client.stopCount, 1);
+        expect(client.clearCount, 1);
         expect(ForegroundJobs.isShowingLine, isFalse);
         expect(ForegroundJobs.runningCount, 0);
         expect(ForegroundJobs.lineBody, isNull);
@@ -163,81 +317,145 @@ void main() {
     });
   });
 
+  group('a platform whose service already shows the jobs', () {
+    test('the line is composed but not drawn', () {
+      fakeAsync((async) {
+        arm(async, persistent: true);
+        _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
+        _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'room-7 · 00:12', priority: 10)));
+        tick(async, const Duration(seconds: 5));
+
+        expect(client.shown, isEmpty, reason: 'two persistent notifications for one job is the bug, not the feature');
+        expect(ForegroundJobs.drawsLine, isFalse);
+        expect(
+          ForegroundJobs.lineBody,
+          'room-7 · 00:12  (还有 1 个任务)',
+          reason: 'the aggregate is still the answer to the question',
+        );
+      });
+    });
+  });
+
   group('the line is reposted on a clock, not on byte reports', () {
     test('six updates inside one window become one repost', () {
       fakeAsync((async) {
-        final handle = _resolve(async, ForegroundJobs.start(_job('正在下载', '0%')));
+        arm(async);
+        final lease = _resolve(async, hold(_job('download/a', description: '0%')));
+        async.flushMicrotasks();
 
         // A download manager reports several times a second; a notification that
         // re-animates on every one is worse than a slightly stale one.
         for (var percent = 10; percent <= 60; percent += 10) {
-          _settle(async, handle.update(_job('正在下载', '$percent%')));
+          _settle(async, lease.update(lease.request.copyWith(description: '$percent%')));
         }
 
-        async.elapse(const Duration(milliseconds: 500));
+        tick(async, const Duration(milliseconds: 500));
 
-        expect(client.updated, isEmpty, reason: 'the window opened by start has not expired yet');
+        expect(
+          client.shown.where((event) => event.id == kRunningLineNotificationId).length,
+          1,
+          reason: 'the window opened by the first paint has not expired',
+        );
 
-        async.elapse(const Duration(milliseconds: 700));
+        tick(async, const Duration(milliseconds: 700));
 
-        expect(client.updated, hasLength(1));
-        expect(client.updated.single.body, '60%', reason: 'the newest content survives, the intermediates do not');
+        expect(client.shown.last.body, '60%', reason: 'the newest content survives, the intermediates do not');
       });
     });
 
     test('a quiet stretch posts nothing further', () {
       fakeAsync((async) {
-        _resolve(async, ForegroundJobs.start(_job('正在下载', '30%')));
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: '30%')));
 
-        async.elapse(const Duration(seconds: 5));
+        tick(async, const Duration(seconds: 5));
 
-        expect(client.updated, isEmpty);
-        expect(client.started, hasLength(1));
+        expect(client.shown, hasLength(1));
       });
     });
 
-    test('an update after release cannot resurrect the line', () {
+    test('an update from a released session cannot resurrect the line', () {
       fakeAsync((async) {
-        final handle = _resolve(async, ForegroundJobs.start(_job('正在下载', '30%')));
+        arm(async);
+        final lease = _resolve(async, hold(_job('download/a', description: '30%')));
+        async.flushMicrotasks();
 
-        _settle(async, handle.release());
-        _settle(async, handle.update(_job('正在下载', '90%')));
+        _settle(async, lease.release());
+        _settle(async, lease.update(lease.request.copyWith(description: '90%')));
 
-        async.elapse(const Duration(seconds: 3));
+        tick(async, const Duration(seconds: 3));
 
-        expect(client.updated, isEmpty);
-        expect(client.stopCount, 1);
-        expect(ForegroundJobs.isShowingLine, isFalse);
-      });
-    });
-
-    test('stopAll leaves no line behind', () {
-      fakeAsync((async) {
-        _resolve(async, ForegroundJobs.start(_job('A', 'a')));
-        _resolve(async, ForegroundJobs.start(_job('B', 'b')));
-
-        _settle(async, ForegroundJobs.stopAll());
-
-        expect(client.stopCount, 1);
-        expect(ForegroundJobs.runningCount, 0);
+        expect(client.shown, hasLength(1), reason: 'the line that opened; nothing after the release');
+        expect(client.clearCount, 1);
         expect(ForegroundJobs.isShowingLine, isFalse);
       });
     });
   });
 
-  test('with no platform installed, starting a line is a silent no-op', () {
-    fakeAsync((async) {
-      MediaCoreNotify.disable();
-      ForegroundJobs.resetForTest();
+  group('attaching and detaching', () {
+    test('a runtime that appears later still gets the line', () {
+      // The ordering this class exists for: a host enables notifications in
+      // `main()`, and the background backend shows up at the first job. A projector
+      // that answered "no runtime, then" would leave the line never coming, which is
+      // the switch-wired-to-nothing bug in a new costume.
+      fakeAsync((async) {
+        _resolve(async, MediaCoreNotify.enable(client: client));
+        ForegroundJobs.watch();
 
-      final handle = _resolve(async, ForegroundJobs.start(_job('正在下载', '30%')));
+        expect(ForegroundJobs.isWatching, isTrue);
+        expect(client.shown, isEmpty, reason: 'nothing is running, so nothing is drawn');
 
-      expect(handle.released, isFalse, reason: 'the job still holds a handle it can release');
+        final later = BackgroundLeaseRegistry(backend: _PlatformBackend());
+        BackgroundRuntimes.current = later;
+        async.flushMicrotasks();
 
-      _settle(async, handle.release());
+        _resolve(
+          async,
+          later.acquire(_job('download/a', description: 'room-42 · 25%')).then((result) {
+            expect(result, isA<BackgroundAcquireSuccess>());
+          }),
+        );
+        async.flushMicrotasks();
 
-      expect(client.started, isEmpty);
-      expect(client.stopCount, 0);
+        expect(client.shown, hasLength(1), reason: 'the runtime that arrived late is the one being watched');
+        expect(ForegroundJobs.sessions.map((request) => request.id), ['download/a']);
+      });
+    });
+
+    test('watch() twice does not stack two watchers', () {
+      fakeAsync((async) {
+        arm(async);
+        ForegroundJobs.watch();
+        ForegroundJobs.watch();
+
+        _resolve(async, hold(_job('download/a', description: 'a')));
+        async.flushMicrotasks();
+
+        expect(client.shown, hasLength(1), reason: 'one change, one repost — not one repost per watcher');
+      });
+    });
+
+    test('hiding the line leaves the jobs themselves alone', () {
+      fakeAsync((async) {
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: 'a')));
+        async.flushMicrotasks();
+
+        _settle(async, ForegroundJobs.hide());
+
+        expect(client.clearCount, 1);
+        expect(backend.leaseFor('download/a')!.released, isFalse, reason: 'a silenced line is not a stopped download');
+        expect(registry.activeSessionCount, 1);
+      });
+    });
+
+    test('a line that was never drawn is not cleared twice', () {
+      fakeAsync((async) {
+        arm(async);
+        _settle(async, ForegroundJobs.hide());
+
+        expect(client.clearCount, 0, reason: 'nothing was on the shade to take away');
+      });
     });
   });
 }

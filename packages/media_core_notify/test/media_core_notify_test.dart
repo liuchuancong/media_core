@@ -1,9 +1,53 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/media_core.dart' show MediaJobKind, MediaJobOutcome, MediaJobReporter, MediaJobReporting;
-import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind, BackgroundNotification;
+import 'package:media_core/media_core.dart'
+    show
+        BackgroundBackendGranted,
+        BackgroundBackendLease,
+        BackgroundBackendOutcome,
+        BackgroundCapability,
+        BackgroundExecutionBackend,
+        BackgroundExecutionKind,
+        BackgroundLeaseRegistry,
+        BackgroundRequest,
+        BackgroundSessionStatus,
+        MediaJobKind,
+        MediaJobOutcome,
+        MediaJobReporter,
+        MediaJobReporting;
+import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/media_core_notify.dart';
 
-/// A reporter a host wrote itself, to show `disable` leaves what it did not install.
+/// A backend that always grants, so the line has something real to draw.
+final class _GrantedBackend implements BackgroundExecutionBackend {
+  @override
+  Set<BackgroundCapability> get supportedCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
+
+  @override
+  Future<BackgroundBackendOutcome> open(BackgroundRequest request) async =>
+      BackgroundBackendGranted(_GrantedLease(request));
+}
+
+final class _GrantedLease implements BackgroundBackendLease {
+  _GrantedLease(this.request);
+
+  BackgroundRequest request;
+
+  final StreamController<BackgroundSessionStatus> _status = StreamController<BackgroundSessionStatus>.broadcast();
+
+  @override
+  Stream<BackgroundSessionStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> update(BackgroundRequest request) async => this.request = request;
+
+  @override
+  Future<void> release() => _status.close();
+}
+
 final class _HostReporter implements MediaJobReporter {
   final List<MediaJobOutcome> seen = <MediaJobOutcome>[];
 
@@ -18,8 +62,7 @@ final class _HostReporter implements MediaJobReporter {
 final class _RecordingClient implements LocalNotificationClient {
   final List<NotifyEvent> posted = <NotifyEvent>[];
   final List<int> dismissed = <int>[];
-  final List<NotifyEvent> foregroundStarted = <NotifyEvent>[];
-  final List<NotifyEvent> foregroundUpdated = <NotifyEvent>[];
+  final List<NotifyEvent> linesShown = <NotifyEvent>[];
   final List<String> calls = <String>[];
 
   NotifySetup? configuredWith;
@@ -27,8 +70,8 @@ final class _RecordingClient implements LocalNotificationClient {
   bool permissionResult = true;
   Object? throwOn;
 
-  bool get foregroundStopped => calls.contains('stopForeground');
-  int get stopCount => calls.where((call) => call == 'stopForeground').length;
+  bool get lineCleared => calls.contains('clearRunningLine');
+  int get clearCount => calls.where((call) => call == 'clearRunningLine').length;
 
   void _maybeThrow(String what) {
     if (throwOn == what) {
@@ -74,23 +117,17 @@ final class _RecordingClient implements LocalNotificationClient {
   }
 
   @override
-  Future<void> startForeground(NotifyEvent event) async {
-    calls.add('startForeground');
-    _maybeThrow('startForeground');
+  Future<void> showRunningLine(NotifyEvent event) async {
+    calls.add('showRunningLine');
+    _maybeThrow('showRunningLine');
 
-    foregroundStarted.add(event);
+    linesShown.add(event);
   }
 
   @override
-  Future<void> updateForeground(NotifyEvent event) async {
-    calls.add('updateForeground');
-
-    foregroundUpdated.add(event);
-  }
-
-  @override
-  Future<void> stopForeground() async {
-    calls.add('stopForeground');
+  Future<void> clearRunningLine() async {
+    calls.add('clearRunningLine');
+    _maybeThrow('clearRunningLine');
   }
 }
 
@@ -109,8 +146,8 @@ void main() {
     MediaJobReporting.reset();
   });
 
-  tearDown(() {
-    MediaCoreNotify.disable();
+  tearDown(() async {
+    await MediaCoreNotify.disable();
     ForegroundJobs.resetForTest();
     MediaJobReporting.reset();
   });
@@ -258,7 +295,7 @@ void main() {
 
       expect(MediaJobReporting.reporter, isA<JobNotifications>());
 
-      MediaCoreNotify.disable();
+      await MediaCoreNotify.disable();
 
       expect(MediaJobReporting.reporter, isNull, reason: 'a host that tore down must not keep posting');
     });
@@ -268,7 +305,7 @@ void main() {
 
       final own = _HostReporter();
       MediaJobReporting.reporter = own;
-      MediaCoreNotify.disable();
+      await MediaCoreNotify.disable();
 
       expect(MediaJobReporting.reporter, same(own), reason: "disable removes its own reporter, not the host's");
     });
@@ -316,6 +353,9 @@ void main() {
     });
 
     test('a host that muted job results still gets the running line', () async {
+      // Muting the *outcome* notifications is not a way to lose the line: one is
+      // news about a finished job and the other is the proof a running one is
+      // still alive.
       await MediaCoreNotify.enable(client: client, jobOutcomes: NotifyOn.nothing);
 
       MediaJobReporting.reporter!.report(
@@ -325,11 +365,29 @@ void main() {
 
       expect(client.posted, isEmpty);
 
-      final started = await ForegroundJobs.start(
-        const BackgroundNotification(title: '正在下载', text: 'room-42', kind: BackgroundJobKind.download),
+      final registry = BackgroundLeaseRegistry(backend: _GrantedBackend());
+      addTearDown(registry.dispose);
+
+      ForegroundJobs.watch(runtime: registry);
+      await registry.acquire(
+        const BackgroundRequest(
+          id: 'download/room-42',
+          kind: BackgroundExecutionKind.download,
+          title: '正在下载',
+          description: 'room-42 · 25%',
+          // This fake platform keeps the process running but cannot promise the
+          // CPU stays awake, and a job that demanded the latter would be refused
+          // rather than granted with a hole in it.
+          requiresCpuWakeLock: false,
+        ),
       );
-      expect(started, isNotNull);
-      expect(client.foregroundStarted, hasLength(1));
+      await pumpEventQueue();
+
+      expect(client.linesShown, hasLength(1));
+      expect(client.linesShown.single.title, '正在下载');
+      expect(client.linesShown.single.body, 'room-42 · 25%');
+
+      await ForegroundJobs.hide();
     });
   });
 }

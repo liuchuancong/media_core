@@ -1,5 +1,6 @@
 ## Unreleased
 
+- The music binding publishes the phase it actually means. `MediaSessionState` now carries one (loading / buffering / ready / idle) instead of the handler's assumed `ready`, so a queue fetching the next track's data shows a spinner and an empty queue shows no session at all.
 - Turning the binding off now takes the media surface with it. `detach()` used to clear the queue transports and stop mirroring while leaving `MediaSessionDriver.active` pointing at the player and the last published state saying `ready + playing` — which on Android is precisely what keeps the media foreground service alive. That is why "关闭后台播放" looked like a switch wired to nothing. `detach` now releases the surface it published (`setActive(null)`, which parks the session and clears the item), and only when the surface is still the one it took: a video player that the kernel activated in the meantime is left alone.
 - Re-attaching restores the queue transports. `detach` is not teardown for the binding object, and the second attach used to leave the notification without next/previous.
 - Background policy is the kernel's, not the binding's: `PlayerKernel` observes the app and pauses what is playing, and a music host passes `AudioPlaybackController(playerConfig: PlayerConfig(pauseWhenBackgrounded: false))` for the narration-keeps-playing case. One mechanism, one owner.

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
-import 'package:media_core_native/media_core_native.dart' show BackgroundExecutionLease, BackgroundNotification;
 import 'package:media_core_recording_ffmpeg/media_core_recording_ffmpeg.dart';
 import 'package:media_core_recording_ffmpeg/src/output_path.dart';
 
@@ -98,20 +97,115 @@ final class _FakeProbe implements FfmpegProbe {
 }
 
 /// A held session that records what the notification line said.
-final class _FakeLease implements BackgroundExecutionLease {
+final class _FakeLease implements BackgroundLease {
+  _FakeLease(this.request);
+
+  @override
+  BackgroundRequest request;
+
   final List<String?> texts = <String?>[];
+  final List<BackgroundRequest> updates = <BackgroundRequest>[];
+  final StreamController<BackgroundSessionStatus> _status = StreamController<BackgroundSessionStatus>.broadcast();
+
+  bool released = false;
 
   @override
-  int get id => 7;
+  String get id => request.id;
 
   @override
-  bool get isActive => true;
+  BackgroundSessionStatus get status => released ? BackgroundSessionStatus.stopped : BackgroundSessionStatus.running;
 
   @override
-  Future<void> update(BackgroundNotification notification) async => texts.add(notification.text);
+  Set<BackgroundCapability> get grantedCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
 
   @override
-  Future<void> release() async {}
+  Stream<BackgroundSessionStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> update(BackgroundRequest request) async {
+    this.request = request;
+    updates.add(request);
+    texts.add(request.description);
+  }
+
+  @override
+  Future<void> release() async {
+    released = true;
+    await _status.close();
+  }
+}
+
+/// A runtime that grants whatever it is asked for.
+///
+/// The backend's own promise is "acquire on start, release on every end", and a
+/// test without a platform still has to be able to watch that.
+final class _FakeRuntime implements BackgroundRuntime {
+  _FakeRuntime(this.lease);
+
+  final _FakeLease lease;
+
+  final List<BackgroundRequest> requests = <BackgroundRequest>[];
+
+  @override
+  Future<BackgroundAcquireResult> acquire(BackgroundRequest request) async {
+    requests.add(request);
+    lease.request = request;
+
+    return BackgroundAcquireSuccess(
+      lease: lease,
+      grantedCapabilities: const <BackgroundCapability>{BackgroundCapability.foregroundExecution},
+    );
+  }
+
+  @override
+  List<BackgroundRequest> get activeRequests => List<BackgroundRequest>.unmodifiable(requests);
+
+  @override
+  Set<BackgroundCapability> get activeCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
+
+  @override
+  int get activeSessionCount => requests.length;
+
+  @override
+  Set<BackgroundCapability> get platformCapabilities => const <BackgroundCapability>{
+    BackgroundCapability.foregroundExecution,
+  };
+
+  @override
+  Stream<void> get changes => const Stream<void>.empty();
+
+  @override
+  BackgroundLease? peek(String id) => lease.id == id ? lease : null;
+}
+
+/// A runtime that refuses, the way a platform without a background service does.
+final class _RefusingRuntime implements BackgroundRuntime {
+  const _RefusingRuntime();
+  @override
+  Set<BackgroundCapability> get platformCapabilities => const <BackgroundCapability>{};
+
+  @override
+  Stream<void> get changes => const Stream<void>.empty();
+
+  @override
+  Future<BackgroundAcquireResult> acquire(BackgroundRequest request) async =>
+      const BackgroundAcquireRejected(reason: BackgroundAcquireFailure.unsupportedPlatform, message: 'no backend here');
+
+  @override
+  List<BackgroundRequest> get activeRequests => const <BackgroundRequest>[];
+
+  @override
+  Set<BackgroundCapability> get activeCapabilities => const <BackgroundCapability>{};
+
+  @override
+  int get activeSessionCount => 0;
+
+  @override
+  BackgroundLease? peek(String id) => null;
 }
 
 /// A temporary directory that is removed when the test ends.
@@ -633,12 +727,14 @@ void main() {
     });
 
     test('a source that restarts its timeline does not freeze the notification', () async {
-      final lease = _FakeLease();
+      final lease = _FakeLease(
+        const BackgroundRequest(id: 'recording/room', kind: BackgroundExecutionKind.recording, title: 'Recording'),
+      );
       final protected = FfmpegRecordingBackend(
         executor: executor,
         config: const FfmpegRecordConfig(filePrefix: 'room'),
         outputDirectory: directory.path,
-        keepAliveStarter: ({required notification, wakeLock = false}) async => lease,
+        backgroundRuntime: _FakeRuntime(lease),
         probe: _FakeProbe(),
       );
       addTearDown(protected.dispose);
@@ -663,6 +759,139 @@ void main() {
         reason: 'a restarted timeline must re-open the update window, not wait it out',
       );
       expect(lease.texts.last, contains('00:00:04'));
+    });
+
+    test('every update still names the file it is writing', () async {
+      // The moving line is built out of the request the backend *started with*.
+      // Rebuilding it out of the last one instead would compound the previous
+      // line into the next: `room · 00:00:05 · 1 KB · 00:00:06 · 2 KB · …`, and
+      // a shared notification that says "+N" would be describing one job's history.
+      final lease = _FakeLease(
+        const BackgroundRequest(id: 'recording/room', kind: BackgroundExecutionKind.recording, title: 'Recording'),
+      );
+      final runtime = _FakeRuntime(lease);
+      final protected = FfmpegRecordingBackend(
+        executor: executor,
+        config: const FfmpegRecordConfig(filePrefix: 'room', keepAliveTitle: '正在录制', keepAliveIcon: 'ic_mine'),
+        outputDirectory: directory.path,
+        backgroundRuntime: runtime,
+        probe: _FakeProbe(),
+      );
+      addTearDown(protected.dispose);
+
+      await protected.initialize();
+      await protected.start(_source(), const RecordingConfig());
+      executor.lastStatistics!(const FfmpegStatistics(timeMs: 5000, sizeBytes: 1024));
+      executor.lastStatistics!(const FfmpegStatistics(timeMs: 12000, sizeBytes: 2048));
+
+      expect(lease.updates, isNotEmpty);
+
+      for (final update in lease.updates) {
+        expect(update.description, startsWith('room · '), reason: update.description);
+        expect(update.description, isNot(contains('· room ·')), reason: 'the prefix is named once per line');
+        expect(update.title, '正在录制', reason: 'the host picked the title; a progress tick is not a retitle');
+        expect(update.icon, 'ic_mine');
+        expect(update.id, 'recording/room', reason: 'an update that changes the id is a different session');
+        expect(update.kind, BackgroundExecutionKind.recording);
+      }
+
+      expect(
+        runtime.requests.single.title,
+        '正在录制',
+        reason: 'the title the host chose is what the session was taken with',
+      );
+    });
+
+    test('stopping gives the session back', () async {
+      final lease = _FakeLease(
+        const BackgroundRequest(id: 'recording/room', kind: BackgroundExecutionKind.recording, title: 'Recording'),
+      );
+      final runtime = _FakeRuntime(lease);
+      final protected = FfmpegRecordingBackend(
+        executor: executor,
+        config: const FfmpegRecordConfig(filePrefix: 'room'),
+        outputDirectory: directory.path,
+        backgroundRuntime: runtime,
+        probe: _FakeProbe(),
+      );
+      addTearDown(protected.dispose);
+
+      await protected.initialize();
+      await protected.start(_source(), const RecordingConfig());
+      expect(runtime.requests, hasLength(1), reason: 'the lease is taken before the process exists');
+      expect(runtime.requests.single.kind, BackgroundExecutionKind.recording);
+      expect(
+        runtime.requests.single.requiresCpuWakeLock,
+        isTrue,
+        reason: 'a recording that dies with the screen is not a recording',
+      );
+
+      executor.lastStatistics!(const FfmpegStatistics(timeMs: 9000, sizeBytes: 2048));
+      await protected.stop();
+
+      expect(lease.released, isTrue);
+    });
+
+    test('cancelling gives the session back too', () async {
+      final lease = _FakeLease(
+        const BackgroundRequest(id: 'recording/room', kind: BackgroundExecutionKind.recording, title: 'Recording'),
+      );
+      final protected = FfmpegRecordingBackend(
+        executor: executor,
+        config: const FfmpegRecordConfig(filePrefix: 'room'),
+        outputDirectory: directory.path,
+        backgroundRuntime: _FakeRuntime(lease),
+      );
+      addTearDown(protected.dispose);
+
+      await protected.initialize();
+      await protected.start(_source(), const RecordingConfig());
+      await protected.cancel();
+
+      expect(lease.released, isTrue, reason: 'a notification must not outlive the job it described');
+    });
+
+    test('a platform that refuses still records', () async {
+      final protected = FfmpegRecordingBackend(
+        executor: executor,
+        config: const FfmpegRecordConfig(filePrefix: 'room'),
+        outputDirectory: directory.path,
+        backgroundRuntime: const _RefusingRuntime(),
+      );
+      addTearDown(protected.dispose);
+
+      await protected.initialize();
+      await protected.start(_source(), const RecordingConfig());
+
+      expect(
+        protected.state.status,
+        RecordingStatus.recording,
+        reason: 'a refused protection is a fact about the platform, not a reason to fail the user',
+      );
+
+      executor.lastStatistics!(const FfmpegStatistics(timeMs: 9000, sizeBytes: 2048));
+      final result = await protected.stop();
+      expect(result.success, isTrue);
+    });
+
+    test('keepAlive off asks the runtime for nothing', () async {
+      final lease = _FakeLease(
+        const BackgroundRequest(id: 'recording/room', kind: BackgroundExecutionKind.recording, title: 'Recording'),
+      );
+      final runtime = _FakeRuntime(lease);
+      final bare = FfmpegRecordingBackend(
+        executor: executor,
+        config: const FfmpegRecordConfig(filePrefix: 'room', keepAlive: false),
+        outputDirectory: directory.path,
+        backgroundRuntime: runtime,
+      );
+      addTearDown(bare.dispose);
+
+      await bare.initialize();
+      await bare.start(_source(), const RecordingConfig());
+
+      expect(runtime.requests, isEmpty);
+      expect(lease.released, isFalse);
     });
 
     test('a user stop is a successful recording', () async {

@@ -1,3 +1,7 @@
+## Unreleased
+
+- `NativeBackgroundBackend` implements the core's `BackgroundExecutionBackend` over the existing channel: it turns a `BackgroundRequest` into the words and glyph the plugin already reads, and its refusal into a reason, so recording — and next the download — go through one runtime instead of each starting what they like. `BackgroundExecution.acquireDetailed` is `acquire` with the reason kept (`unsupportedPlatform`, `serviceRefused`, `pluginMissing`, `noPlatformBinding`), because `acquire`'s null answered four different questions with one word and a runtime that has to tell the user what to do about it needs to know which one it was; `acquire` itself is unchanged. `NativeBackgroundRuntime.shared` is the one registry every job in the process shares, created on first use and replaced by whatever a host installed first.
+
 ## 0.2.0
 
 - New background execution capability (`BackgroundJobKind`, `BackgroundExecutionStarter`): one entry point for foreground service, notification, wake lock and keep-awake, shared by audio and recording.

@@ -9,6 +9,8 @@ final class DownloadConfig {
     this.maxRedirects = 2,
     this.forceResume = false,
     this.verifyTailBytes = 10,
+    this.keepAlive = false,
+    this.keepAliveTitle,
     this.userAgent =
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
         'Chrome/120.0.0.0 Safari/537.36',
@@ -58,6 +60,22 @@ final class DownloadConfig {
   /// User agent sent with every request.
   final String userAgent;
 
+  /// Whether a running transfer asks the platform to keep the process alive.
+  ///
+  /// Off by default, and that is a product decision rather than a technical one:
+  /// a download the viewer is watching needs no foreground service, and asking for
+  /// one costs a notification they did not ask for. A host that lets a queue run
+  /// after the app goes to the background turns this on — without it Android
+  /// suspends the process a few seconds later and the transfer stops with a
+  /// socket error that says nothing about why.
+  final bool keepAlive;
+
+  /// Title of the line a kept-alive transfer shows. Null says "Downloading".
+  ///
+  /// The per-file words are the manager's (name, percentage, speed); this is the
+  /// one line the host owns.
+  final String? keepAliveTitle;
+
   /// A copy with the given tunables replaced; omitted ones keep their current value.
   DownloadConfig copyWith({
     int? maxConcurrent,
@@ -68,6 +86,8 @@ final class DownloadConfig {
     bool? forceResume,
     int? verifyTailBytes,
     String? userAgent,
+    bool? keepAlive,
+    String? keepAliveTitle,
   }) {
     return DownloadConfig(
       maxConcurrent: maxConcurrent ?? this.maxConcurrent,
@@ -78,6 +98,8 @@ final class DownloadConfig {
       forceResume: forceResume ?? this.forceResume,
       verifyTailBytes: verifyTailBytes ?? this.verifyTailBytes,
       userAgent: userAgent ?? this.userAgent,
+      keepAlive: keepAlive ?? this.keepAlive,
+      keepAliveTitle: keepAliveTitle ?? this.keepAliveTitle,
     );
   }
 }

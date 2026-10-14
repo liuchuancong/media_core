@@ -177,7 +177,20 @@ final class MusicBackgroundBinding {
     // are installed, so installing/removing skip support never needs a second
     // list kept in sync here.
     handler.publishState(
-      MediaSessionState(playing: state.playing, position: state.position, duration: state.duration, speed: state.rate),
+      MediaSessionState(
+        playing: state.playing,
+        position: state.position,
+        duration: state.duration,
+        speed: state.rate,
+        // The music module's own flags, not an assumed `ready`: a queue that is
+        // fetching the next track's data is a spinner, and the first frame of a
+        // track that has not loaded is not a session at rest.
+        phase: switch ((state.loading, state.buffering, state.playing)) {
+          (true, _, _) => MediaSurfacePhase.loading,
+          (_, true, _) => MediaSurfacePhase.buffering,
+          _ => state.track == null ? MediaSurfacePhase.idle : MediaSurfacePhase.ready,
+        },
+      ),
     );
   }
 

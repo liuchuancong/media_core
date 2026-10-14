@@ -18,6 +18,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # The foreground service the job sessions run on (Android).
+  flutter_foreground_task: ^11.0.3
+
   # The vocabulary the probe answers in: PlatformCapabilities,
   # PlatformDeviceProfile, PlatformCodecCapabilities.
   media_core:

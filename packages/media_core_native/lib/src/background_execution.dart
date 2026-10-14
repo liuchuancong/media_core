@@ -128,6 +128,27 @@ final class BackgroundProgress {
   String toString() => isIndeterminate ? 'BackgroundProgress.indeterminate()' : 'BackgroundProgress($current/$total)';
 }
 
+/// Why the channel produced no session.
+enum BackgroundExecutionRefusal {
+  /// This platform has no implementation to ask.
+  unsupportedPlatform,
+
+  /// The platform answered, and the answer was no: the service would not start.
+  serviceRefused,
+
+  /// The plugin is not linked into this app.
+  pluginMissing,
+
+  /// Nothing to talk to: a pure-Dart test, a CLI, an isolate.
+  noPlatformBinding,
+}
+
+/// What [BackgroundExecution.acquireDetailed] answered.
+///
+/// Exactly one side is set: a session when the platform holds the job, a refusal
+/// when it does not.
+typedef BackgroundExecutionAttempt = ({BackgroundExecutionSession? session, BackgroundExecutionRefusal? refusal});
+
 /// Keeps a long-running job alive while the app is not in the foreground.
 ///
 /// Recording a stream, or downloading a large one, is work the user asked for
@@ -228,8 +249,22 @@ final class BackgroundExecution {
     required BackgroundNotification notification,
     bool wakeLock = true,
   }) async {
+    return (await acquireDetailed(notification: notification, wakeLock: wakeLock)).session;
+  }
+
+  /// [acquire], with the reason kept.
+  ///
+  /// `acquire` answers "do I hold it?" and its null answers every question at
+  /// once: no implementation here, the system refused the service, a host that
+  /// forgot to link the plugin, a test with no platform binding. A runtime that
+  /// has to tell the user which of those happened — or decide whether to retry —
+  /// asks this instead.
+  static Future<BackgroundExecutionAttempt> acquireDetailed({
+    required BackgroundNotification notification,
+    bool wakeLock = true,
+  }) async {
     if (!isSupported) {
-      return null;
+      return (session: null, refusal: BackgroundExecutionRefusal.unsupportedPlatform);
     }
 
     try {
@@ -239,16 +274,16 @@ final class BackgroundExecution {
       });
 
       if (id == null) {
-        return null;
+        return (session: null, refusal: BackgroundExecutionRefusal.serviceRefused);
       }
 
-      return BackgroundExecutionSession._(id);
+      return (session: BackgroundExecutionSession._(id), refusal: null);
     } on PlatformException {
       // The native side refused: no service, no declaration, a platform that
       // declares support and then does not deliver it. The job still runs.
-      return null;
+      return (session: null, refusal: BackgroundExecutionRefusal.serviceRefused);
     } on MissingPluginException {
-      return null;
+      return (session: null, refusal: BackgroundExecutionRefusal.pluginMissing);
     }
     // FlutterError is reached only when there is no platform binding (a
     // pure-Dart test, a CLI, an isolate); it is caught deliberately so the job
@@ -257,7 +292,7 @@ final class BackgroundExecution {
     on FlutterError {
       // Reached without a platform binding: a pure-Dart test, a CLI, an
       // isolate. There is no notification to post and nothing to report.
-      return null;
+      return (session: null, refusal: BackgroundExecutionRefusal.noPlatformBinding);
     }
   }
 

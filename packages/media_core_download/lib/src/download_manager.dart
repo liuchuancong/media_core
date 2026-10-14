@@ -79,12 +79,14 @@ final class DownloadManager {
     DownloadConfig config = DownloadConfig.defaults,
     DownloadResumePlanner? resumePlanner,
     TaskManager? queue,
+    BackgroundRuntime? backgroundRuntime,
     DateTime Function()? clock,
   }) : _transport = transport ?? HttpDownloadTransport(config: config),
        _files = files ?? const IoDownloadFileSink(),
        _config = config,
        _resumePlanner = resumePlanner ?? DownloadResumePlanner(config: config),
        _queue = queue ?? TaskManager(maxConcurrentTasks: config.maxConcurrent),
+       _backgroundRuntime = backgroundRuntime,
        _clock = clock ?? DateTime.now;
 
   /// This instance's key in the shared account: a module can have several
@@ -100,6 +102,11 @@ final class DownloadManager {
   /// Core task queue: concurrency, priority ordering and cancellation.
   final TaskManager _queue;
 
+  /// The runtime a transfer asks the platform for protection from. Resolved
+  /// lazily: a host installs its runtime after building a manager as often as
+  /// before it, and a manager that never keeps anything alive never asks.
+  final BackgroundRuntime? _backgroundRuntime;
+
   final DateTime Function() _clock;
 
   final Map<String, DownloadTask> _tasks = <String, DownloadTask>{};
@@ -111,6 +118,25 @@ final class DownloadManager {
   /// must not unregister the new one.
   final Map<TaskId, Object> _inFlight = <TaskId, Object>{};
   final Map<String, Timer> _retryTimers = <String, Timer>{};
+
+  /// Task id → the background session held for its transfer.
+  ///
+  /// One per task, not one per attempt: a retry is the same download, and a
+  /// session each time would put the same file on the line twice.
+  final Map<String, BackgroundLease> _leases = <String, BackgroundLease>{};
+
+  /// The request each held session carries, kept so a progress tick replaces only
+  /// the moving parts of the line.
+  final Map<String, BackgroundRequest> _leaseRequests = <String, BackgroundRequest>{};
+
+  /// When each session's line was last rewritten.
+  ///
+  /// The task list publishes every 200 ms; a notification is not a live readout,
+  /// and five replacements a second make the shade flicker over a number nobody
+  /// can read that fast.
+  final Map<String, DateTime> _leaseNotifiedAt = <String, DateTime>{};
+
+  static const Duration _leaseInterval = Duration(seconds: 1);
   final StreamController<DownloadTask> _taskController = StreamController<DownloadTask>.broadcast();
 
   bool _disposed = false;
@@ -193,6 +219,7 @@ final class DownloadManager {
     _queue.remove(TaskId(id));
     final task = _tasks.remove(id);
     _lastProgressAt.remove(id);
+    _leaseNotifiedAt.remove(id);
     if (task != null && deleteFile) {
       await _files.delete(task.filePath);
     }
@@ -234,6 +261,7 @@ final class DownloadManager {
   /// that moment is easy to hit when several downloads are waiting for a slot.
   Future<void> pause(String id) async {
     _ensureNotDisposed();
+    await _dropLease(id);
     final task = _tasks[id];
     if (task == null || task.isTerminal) {
       return;
@@ -266,6 +294,7 @@ final class DownloadManager {
   /// Abandons [id]; the partial file is kept.
   Future<void> cancel(String id) async {
     _ensureNotDisposed();
+    await _dropLease(id);
     final task = _tasks[id];
     if (task == null || task.isTerminal) {
       return;
@@ -347,6 +376,14 @@ final class DownloadManager {
     for (final id in _inFlight.keys.toList()) {
       await pause(id.value);
     }
+    // Anything still held goes with the manager: a session for a queue that no
+    // longer exists has no code left that could ever give it back.
+    for (final lease in _leases.values.toList()) {
+      await lease.release();
+    }
+    _leases.clear();
+    _leaseRequests.clear();
+    _leaseNotifiedAt.clear();
     for (final timer in _retryTimers.values) {
       timer.cancel();
     }
@@ -439,6 +476,7 @@ final class DownloadManager {
 
         final attempt = Object();
         _inFlight[task.id] = attempt;
+        await _holdLease(task);
         _log.debug(
           'transfer started',
           fields: <String, Object?>{'id': id, 'attempt': task.progress.attempt, 'priority': task.priority.name},
@@ -669,16 +707,126 @@ final class DownloadManager {
       speed = ((received - lastReceived) * 1000 / elapsed.inMilliseconds).round().clamp(0, 1 << 40);
       _lastTick = now;
     }
-    _emit(
-      current.copyWith(
-        progress: DownloadProgress(
-          receivedBytes: received,
-          totalBytes: remoteBytes ?? current.progress.totalBytes,
-          speedBytesPerSecond: speed,
-          attempt: current.progress.attempt,
-        ),
-      ),
+    final progress = DownloadProgress(
+      receivedBytes: received,
+      totalBytes: remoteBytes ?? current.progress.totalBytes,
+      speedBytesPerSecond: speed,
+      attempt: current.progress.attempt,
     );
+
+    _updateLease(current, progress);
+    _emit(current.copyWith(progress: progress));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background execution
+  // ---------------------------------------------------------------------------
+
+  BackgroundRuntime? _runtime() => _backgroundRuntime ?? BackgroundRuntimes.current;
+
+  /// Takes the session this transfer runs under.
+  ///
+  /// Before the first byte, because the protection has to cover the moment the
+  /// app leaves the foreground, and a lock taken after the socket was suspended is
+  /// a lock taken too late. A refusal — no runtime, an unsupported platform, a
+  /// service the system will not start — leaves the download running unprotected
+  /// with the reason in the log: the viewer asked for a file, not for a
+  /// notification.
+  Future<void> _holdLease(DownloadTask task) async {
+    if (!_config.keepAlive) {
+      return;
+    }
+
+    final runtime = _runtime();
+    final id = task.id.value;
+
+    if (runtime == null) {
+      _log.debug('keepAlive asked for, but no background runtime is installed', fields: <String, Object?>{'id': id});
+
+      return;
+    }
+
+    final progress = task.progress;
+    final request = BackgroundRequest(
+      id: 'download/$id',
+      kind: BackgroundExecutionKind.download,
+      title: _config.keepAliveTitle ?? 'Downloading',
+      description: _lineFor(task, progress),
+      progress: _progressFor(progress),
+      // The queue's own ordering, so the file the viewer put first is the one the
+      // line names first.
+      priority: task.priority.value,
+      // A resume, a retry and a re-`start` of the same task are the same download
+      // seen twice: the line is refreshed, not stacked.
+      duplicatePolicy: BackgroundDuplicatePolicy.update,
+    );
+
+    final result = await runtime.acquire(request);
+
+    if (result case BackgroundAcquireSuccess(:final lease)) {
+      // The line is not stamped here: the first progress tick is allowed to move
+      // it straight away, and a file that finished inside its own first second
+      // would otherwise have shown "0 B" the whole time it ran.
+      _leases[id] = lease;
+      _leaseRequests[id] = request;
+
+      return;
+    }
+
+    _log.debug(
+      'the platform will not keep this download alive',
+      fields: <String, Object?>{'id': id, 'reason': (result as BackgroundAcquireRejected).reason.name},
+    );
+  }
+
+  /// Moves the line for a task that is making progress.
+  void _updateLease(DownloadTask task, DownloadProgress progress) {
+    final lease = _leases[task.id.value];
+    final request = _leaseRequests[task.id.value];
+
+    if (lease == null || request == null) {
+      return;
+    }
+
+    final now = _clock();
+    final key = task.id.value;
+
+    if (now.difference(_leaseNotifiedAt[key] ?? DateTime.fromMillisecondsSinceEpoch(0)) < _leaseInterval) {
+      return;
+    }
+
+    _leaseNotifiedAt[key] = now;
+    unawaited(lease.update(request.copyWith(description: _lineFor(task, progress), progress: _progressFor(progress))));
+  }
+
+  Future<void> _dropLease(String id) async {
+    _leaseNotifiedAt.remove(id);
+    _leaseRequests.remove(id);
+
+    final lease = _leases.remove(id);
+
+    if (lease != null) {
+      await lease.release();
+    }
+  }
+
+  /// The line's second row: the file, how far it has got, how fast.
+  static String _lineFor(DownloadTask task, DownloadProgress progress) {
+    return <String>[
+      task.title ?? task.fileName,
+      if (progress.percent case final int percent) '$percent%' else MemoryEstimates.formatBytes(progress.receivedBytes),
+      if (progress.speedBytesPerSecond > 0) '${MemoryEstimates.formatBytes(progress.speedBytesPerSecond)}/s',
+    ].join(' · ');
+  }
+
+  static BackgroundJobProgress _progressFor(DownloadProgress progress) {
+    if (!progress.hasTotal) {
+      // A server that did not say the length has no percentage to show, and a bar
+      // built on a guess is a lie about how long the file is.
+      return const BackgroundJobProgress.indeterminate();
+    }
+
+    return BackgroundJobProgress.determinate(current: progress.receivedBytes, total: progress.totalBytes);
   }
 
   void _complete(String id) {
@@ -691,6 +839,7 @@ final class DownloadManager {
       // still unwinding. Completing it here would overwrite that decision.
       return;
     }
+    unawaited(_dropLease(id));
     _reportMemory();
     _log.info(
       'download completed',
@@ -735,6 +884,7 @@ final class DownloadManager {
         error is! _ResumeMismatch && RetryUtils.until(_config.maxAttempts)(error, StackTrace.current, attempt);
 
     if (!mayRetry) {
+      unawaited(_dropLease(id));
       _log.error(
         'download failed; no attempts left',
         error: error,

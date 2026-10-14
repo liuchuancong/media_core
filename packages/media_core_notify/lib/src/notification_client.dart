@@ -13,10 +13,10 @@ import 'package:media_core_notify/src/notify_event.dart';
 
 /// The notification id the running-jobs line owns.
 ///
-/// Fixed, because Android's foreground service is started against one id and
-/// updates have to land on that same one. Posted events draw their own ids from
+/// Fixed, because the line is one notification that gets replaced as the jobs
+/// under it change, not one per job. Posted events draw their own ids from
 /// [kFirstPostedNotificationId], so the two never collide.
-const int kForegroundNotificationId = 1;
+const int kRunningLineNotificationId = 1;
 
 /// Where ids for posted events start counting.
 const int kFirstPostedNotificationId = 1000;
@@ -27,7 +27,6 @@ final class NotifySetup {
   const NotifySetup({
     this.channels = const <NotifyChannel>[kNotifyChannelJobs, kNotifyChannelResults],
     this.androidSmallIcon = '@mipmap/ic_launcher',
-    this.foregroundServiceTypes = const <String>{'dataSync'},
     this.onTap,
   });
 
@@ -38,11 +37,6 @@ final class NotifySetup {
   /// The drawable the Android status-bar icon comes from, in the plugin's own
   /// notation (`@drawable/ic_stat_media_core_record` or `@mipmap/ic_launcher`).
   final String androidSmallIcon;
-
-  /// Which Android foreground-service types the running-jobs notification may
-  /// claim. `dataSync` covers recording and downloading; the host must declare
-  /// the matching `android:foregroundServiceType` on the plugin's service.
-  final Set<String> foregroundServiceTypes;
 
   /// Called when one of this app's notifications is opened.
   final void Function(NotifyTap tap)? onTap;
@@ -81,13 +75,16 @@ abstract interface class LocalNotificationClient {
   /// Removes the notification with [id], if one is showing.
   Future<void> dismiss(int id);
 
-  /// Starts the running-jobs line, with the platform's "this is protecting work"
-  /// affordances (Android foreground service, non-dismissible elsewhere).
-  Future<void> startForeground(NotifyEvent event);
+  /// Shows the running-jobs line, replacing the one already showing.
+  ///
+  /// This is a notification and nothing else: the line is non-dismissible while
+  /// jobs run, and it carries the count of what is working, but the *service*
+  /// behind the work is `media_core_native`'s and its own notification is drawn
+  /// there. A client that draws the line on Android too would give one job two
+  /// persistent notifications, which is the duplication this call used to be a
+  /// foreground service for.
+  Future<void> showRunningLine(NotifyEvent event);
 
-  /// Replaces the running-jobs line's text. Same identity as [startForeground].
-  Future<void> updateForeground(NotifyEvent event);
-
-  /// Ends the running-jobs line and, on Android, the service behind it.
-  Future<void> stopForeground();
+  /// Takes the running-jobs line away, with no jobs left to show.
+  Future<void> clearRunningLine();
 }

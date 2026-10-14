@@ -19,11 +19,8 @@ import java.util.List;
 import java.util.Map;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
-import io.flutter.embedding.engine.plugins.activity.ActivityAware;
-import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugin.common.PluginRegistry;
 
 /**
  * Android side of the capability probe.
@@ -53,8 +50,7 @@ import io.flutter.plugin.common.PluginRegistry;
  * <p>Nothing here is cached: the probe runs once per process from Dart and the
  * provider holds the answer.
  */
-public final class MediaCoreNativePlugin
-    implements FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
+public final class MediaCoreNativePlugin implements FlutterPlugin, MethodChannel.MethodCallHandler {
 
   /** Channel name; kept in sync with the Dart implementation. */
   private static final String CHANNEL_NAME = "media_core_native";
@@ -64,23 +60,8 @@ public final class MediaCoreNativePlugin
 
   private Context context;
 
-  /** Background execution, which needs the activity for the notification dialog. */
+  /** Background execution: the foreground service, its wake lock and its notification. */
   private BackgroundExecutionDelegate background;
-
-  /**
-   * Routes the notification permission answer back to the waiting acquire.
-   *
-   * The dialog belongs to the activity, so the answer arrives at the plugin that
-   * asked for the activity — not at the delegate that started the request.
-   */
-  private final PluginRegistry.RequestPermissionsResultListener permissionListener =
-      new PluginRegistry.RequestPermissionsResultListener() {
-        @Override
-        public boolean onRequestPermissionsResult(
-            int requestCode, String[] permissions, int[] grantResults) {
-          return background != null && background.onPermissionResult(requestCode);
-        }
-      };
 
   @Override
   public void onAttachedToEngine(FlutterPluginBinding binding) {
@@ -102,38 +83,6 @@ public final class MediaCoreNativePlugin
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
     context = null;
     background = null;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Activity (for the notification permission)
-  // ---------------------------------------------------------------------------
-
-  @Override
-  public void onAttachedToActivity(ActivityPluginBinding binding) {
-    binding.addRequestPermissionsResultListener(permissionListener);
-
-    if (background != null) {
-      background.setActivity(binding.getActivity());
-    }
-  }
-
-  @Override
-  public void onDetachedFromActivityForConfigChanges() {
-    if (background != null) {
-      background.setActivity(null);
-    }
-  }
-
-  @Override
-  public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
-    onAttachedToActivity(binding);
-  }
-
-  @Override
-  public void onDetachedFromActivity() {
-    if (background != null) {
-      background.setActivity(null);
-    }
   }
 
   @Override
