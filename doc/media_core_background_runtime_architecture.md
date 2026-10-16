@@ -644,6 +644,7 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 - 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、
   后台下载、录制与媒体播放同时跑（现在应当是**三条线**：录制、下载、媒体控制条，互不覆盖），以及
   §14.9 那三种上报在真机上的实际时序（`onTimeout` 之后 Dart 是否真的先收到事件再见到服务停止）。
+  具体步骤、命令与判定标准写在 `media_core_background_runtime_device_checklist.md`。
 - 进程被整体杀掉时没有任何一路事件能送出（Dart 也一起没了）；登记表在这条路上只能依赖下一次
   `acquire`/释放时的失败来纠正，这是平台的限制而不是这里的漏洞。
 - Linux 的后台执行仍未实现（logind `Inhibit`），`acquire` 在那边照实回答"没有能力"。
