@@ -267,12 +267,16 @@ Future<void> _waitUntilTerminal(FfmpegRecordingBackend backend) async {
   }
 }
 
-/// The reporter the tests install to see what a finished recording says.
+/// The reporter the tests install to see what a recording says about itself.
 final class _CapturingReporter implements MediaJobReporter {
   final List<MediaJobOutcome> seen = <MediaJobOutcome>[];
+  final List<MediaJobStart> starts = <MediaJobStart>[];
 
   @override
   void report(MediaJobOutcome outcome) => seen.add(outcome);
+
+  @override
+  void reportStart(MediaJobStart start) => starts.add(start);
 }
 
 void main() {
@@ -683,6 +687,35 @@ void main() {
         await backend.stop();
 
         expect(reporter.seen, hasLength(1), reason: 'one recording is one line, however it was ended');
+      });
+
+      test('a recording says it began once the process is running', () async {
+        await backend.initialize();
+        await backend.start(_source(), const RecordingConfig());
+
+        expect(reporter.starts, hasLength(1));
+        expect(reporter.starts.single.kind, MediaJobKind.recording);
+        expect(
+          reporter.starts.single.label,
+          'room',
+          reason: 'the beginning names the job by the prefix its files carry, as the verdict does',
+        );
+
+        executor.executions.single.finish(255);
+        await _waitUntilTerminal(backend);
+
+        expect(reporter.starts, hasLength(1), reason: 'a recording that ended did not begin again');
+      });
+
+      test('a second recording on the same backend is a second beginning', () async {
+        await backend.initialize();
+        await backend.start(_source(), const RecordingConfig());
+        executor.executions.single.finish(255);
+        await _waitUntilTerminal(backend);
+
+        await backend.start(_source(), const RecordingConfig());
+
+        expect(reporter.starts, hasLength(2), reason: 'the memory is per recording, not per backend');
       });
 
       test('nobody listening does not change what stop returns', () async {
@@ -1214,6 +1247,27 @@ void main() {
         expect(runner.executions.length, 2, reason: 'a dropped stream is the source failing, not the recording');
         expect(backend.state.status, RecordingStatus.recording);
         expect(backend.attempts, 2);
+      });
+
+      test('a re-opened stream is not a second beginning', () async {
+        final reporter = _CapturingReporter();
+        MediaJobReporting.reporter = reporter;
+        addTearDown(MediaJobReporting.reset);
+
+        final runner = _FakeExecutor()..onStart = _writeOutput;
+        final backend = live(runner);
+        await backend.initialize();
+        await backend.start(_source(), const RecordingConfig());
+
+        runner.executions.first.finish(255);
+        await _settle();
+
+        expect(runner.executions.length, 2);
+        expect(
+          reporter.starts,
+          hasLength(1),
+          reason: 'the stream dropped and was held again; the job the user started is the same one',
+        );
       });
 
       test('each attempt writes its own segments and its own journal', () async {

@@ -9,7 +9,8 @@ import 'package:media_core/media_core.dart'
         BackgroundServiceOwner,
         MediaJobKind,
         MediaJobOutcome,
-        MediaJobReporting;
+        MediaJobReporting,
+        MediaJobStart;
 import 'package:media_core_native/media_core_native.dart' show NativeBackgroundRuntime;
 import 'package:media_core_notify/media_core_notify.dart';
 
@@ -149,17 +150,21 @@ await lease.release();
     if (reporter == null) {
       buffer.writeln('MediaJobReporting.reporter == null：enable() 没装它，下载与录制的结果就没人收。');
     } else {
-      reporter.report(
-        const MediaJobOutcome(
-          kind: MediaJobKind.download,
-          label: 'vlog.ts',
-          success: true,
-          bytesWritten: 128 * 1024 * 1024,
-          elapsed: Duration(minutes: 3, seconds: 41),
-        ),
-      );
+      reporter
+        ..reportStart(const MediaJobStart(kind: MediaJobKind.download, label: 'vlog.ts'))
+        ..report(
+          const MediaJobOutcome(
+            kind: MediaJobKind.download,
+            label: 'vlog.ts',
+            success: true,
+            bytesWritten: 128 * 1024 * 1024,
+            elapsed: Duration(minutes: 3, seconds: 41),
+          ),
+        );
       buffer
-        ..writeln('已上报一条"下载完成"（media_core_results 渠道）')
+        ..writeln('已上报一条"开始下载"和一条"下载完成"（都在 media_core_results 渠道）')
+        ..writeln('开始贴不贴由宿主给的 policy 决定：默认的 results 把它静音，要听就用 startsAndResults。')
+        ..writeln('开始是 reporter 上另一个方法，不是一条 success 没填的记录——不然只读结论的宿主会把"刚开始"念成"已完成"。')
         ..writeln('录制结束、中断、失败也是同一条路：由作业包自己说结论，本包只负责把它翻成一行字。');
     }
 

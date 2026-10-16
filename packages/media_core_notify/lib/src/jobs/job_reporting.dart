@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:media_core/media_core.dart' show MediaJobKind, MediaJobOutcome, MediaJobReporter, MediaJobReporting;
+import 'package:media_core/media_core.dart'
+    show MediaJobKind, MediaJobOutcome, MediaJobReporter, MediaJobReporting, MediaJobStart;
 import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/src/client/notify_event.dart';
 import 'package:media_core_notify/src/media_core_notify.dart';
@@ -44,6 +45,27 @@ final class JobNotifications implements MediaJobReporter {
     unawaited(MediaCoreNotify.postOutcome(_eventFor(outcome), policy: policy));
   }
 
+  @override
+  void reportStart(MediaJobStart start) {
+    unawaited(MediaCoreNotify.postOutcome(_eventForStart(start), policy: policy, isStart: true));
+  }
+
+  /// A beginning is not news that deserves a noise: the job's own running line is
+  /// already on the shade wherever a service draws one, so this is the same fact
+  /// told to the platforms that have no line — quietly, and on the results channel
+  /// the user mutes to stop the chatter.
+  static NotifyEvent _eventForStart(MediaJobStart start) {
+    return NotifyEvent(
+      title: switch (start.kind) {
+        MediaJobKind.download => '开始下载',
+        MediaJobKind.recording => '开始录制',
+      },
+      body: start.label,
+      tone: NotifyTone.progress,
+      kind: _kindOf(start.kind),
+    );
+  }
+
   static NotifyEvent _eventFor(MediaJobOutcome outcome) {
     final error = outcome.error;
     final details = <String>[
@@ -57,12 +79,14 @@ final class JobNotifications implements MediaJobReporter {
       title: _title(outcome),
       body: details.join(' · '),
       tone: outcome.success ? NotifyTone.success : NotifyTone.failure,
-      kind: switch (outcome.kind) {
-        MediaJobKind.download => BackgroundJobKind.download,
-        MediaJobKind.recording => BackgroundJobKind.record,
-      },
+      kind: _kindOf(outcome.kind),
     );
   }
+
+  static BackgroundJobKind _kindOf(MediaJobKind kind) => switch (kind) {
+    MediaJobKind.download => BackgroundJobKind.download,
+    MediaJobKind.recording => BackgroundJobKind.record,
+  };
 
   static String _title(MediaJobOutcome outcome) => switch (outcome.kind) {
     MediaJobKind.download => outcome.success ? '下载完成' : '下载失败',

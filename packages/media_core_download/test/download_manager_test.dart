@@ -20,6 +20,7 @@ import 'package:media_core/media_core.dart'
         MediaJobOutcome,
         MediaJobReporter,
         MediaJobReporting,
+        MediaJobStart,
         TaskId,
         TaskPriority;
 import 'package:media_core_download/media_core_download.dart';
@@ -261,12 +262,16 @@ final class _FakeLease implements BackgroundLease {
   }
 }
 
-/// The reporter the tests install to see what a finished download says.
+/// The reporter the tests install to see what a download says about itself.
 final class _CapturingReporter implements MediaJobReporter {
   final List<MediaJobOutcome> seen = <MediaJobOutcome>[];
+  final List<MediaJobStart> starts = <MediaJobStart>[];
 
   @override
   void report(MediaJobOutcome outcome) => seen.add(outcome);
+
+  @override
+  void reportStart(MediaJobStart start) => starts.add(start);
 }
 
 final class _MemorySink implements DownloadFileSink {
@@ -647,7 +652,7 @@ void main() {
       expect(() => manager.add(_task('a')), throwsA(isA<StateError>()));
     });
 
-    group('reports how it ended to whoever installed a reporter', () {
+    group('reports what it did to whoever installed a reporter', () {
       late _CapturingReporter reporter;
 
       setUp(() {
@@ -656,6 +661,21 @@ void main() {
       });
 
       tearDown(MediaJobReporting.reset);
+
+      test('a transfer says it began, and says it once however often it retried', () async {
+        transport.failures = 1;
+        manager.add(_task('a'));
+        await waitForTerminal('a');
+
+        expect(reporter.starts, hasLength(1));
+        expect(reporter.starts.single.kind, MediaJobKind.download);
+        expect(reporter.starts.single.label, 'a.ts');
+        expect(
+          reporter.seen,
+          hasLength(1),
+          reason: 'the beginning and the verdict are two lines about the one job the user started',
+        );
+      });
 
       test('a finished file says what landed', () async {
         manager.add(_task('a'));

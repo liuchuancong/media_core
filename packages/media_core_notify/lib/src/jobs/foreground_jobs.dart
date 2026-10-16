@@ -160,6 +160,32 @@ abstract final class ForegroundJobs {
     await Future.wait(_detach());
   }
 
+  /// Says the line whose notification id is [id] is off the shade, though this
+  /// class did not take it down.
+  ///
+  /// [MediaCoreNotify.dismiss] calls it, and a host that clears a line through its
+  /// own notification pipeline should too: without it the projector still believes
+  /// the line is up, `isShowingLine` answers about a notification that is not there,
+  /// and the skip-when-unchanged rule then waits for a *text* change to notice.
+  /// Nothing is reposted from here — a line that was removed is left removed until
+  /// the feature's own state moves, which is what the user's gesture asked for.
+  static void lineWasRemoved(int id) {
+    for (final line in _lines.values) {
+      if (line.id != id) {
+        continue;
+      }
+
+      // The window closes with the line: opening one is never throttled, so when the
+      // feature's own text next moves the line goes up at once rather than at the end
+      // of a window that was measuring a notification nobody is looking at.
+      _closeGap(line);
+      line
+        ..showing = false
+        ..gap = null
+        ..dirty = false;
+    }
+  }
+
   /// Forgets the lines' state without touching the platform. Test-only.
   static void resetForTest() {
     _lines.values.forEach(_closeGap);
@@ -284,12 +310,7 @@ abstract final class ForegroundJobs {
     }
   }
 
-  static Future<void> _flush(
-    BackgroundServiceOwner owner,
-    _Line line,
-    String? title,
-    String? body,
-  ) async {
+  static Future<void> _flush(BackgroundServiceOwner owner, _Line line, String? title, String? body) async {
     final client = MediaCoreNotify.client;
     final first = _firstFor(owner);
 

@@ -118,6 +118,12 @@ final class DownloadManager {
   final Map<TaskId, Object> _inFlight = <TaskId, Object>{};
   final Map<String, Timer> _retryTimers = <String, Timer>{};
 
+  /// Task ids whose beginning the notification layer was already told about.
+  ///
+  /// One per task, not per attempt: a retry is the same download, and a second
+  /// line saying it started would describe a job the user began once as two.
+  final Set<String> _startsAnnounced = <String>{};
+
   /// Task id → the background session held for its transfer.
   ///
   /// One per task, not one per attempt: a retry is the same download, and a
@@ -219,6 +225,7 @@ final class DownloadManager {
     final task = _tasks.remove(id);
     _lastProgressAt.remove(id);
     _leaseNotifiedAt.remove(id);
+    _startsAnnounced.remove(id);
     if (task != null && deleteFile) {
       await _files.delete(task.filePath);
     }
@@ -324,6 +331,7 @@ final class DownloadManager {
       // The download view is keyed by the id value; the queue is keyed by the id.
       _tasks.remove(task.id.value);
       _lastProgressAt.remove(task.id.value);
+      _startsAnnounced.remove(task.id.value);
       _queue.remove(task.id);
     }
   }
@@ -481,6 +489,7 @@ final class DownloadManager {
           fields: <String, Object?>{'id': id, 'attempt': task.progress.attempt, 'priority': task.priority.name},
         );
         _emit(task.copyWith(status: DownloadStatus.running, clearError: true));
+        _reportStart(task);
         try {
           final finished = await _transfer(task);
 
@@ -846,6 +855,21 @@ final class DownloadManager {
     );
     _emit(task.copyWith(status: DownloadStatus.completed, clearError: true));
     _reportOutcome(task, success: true);
+  }
+
+  /// Tells the notification layer that this transfer began, at most once per task.
+  ///
+  /// A separate call from the verdict rather than a verdict-shaped record with a
+  /// phase: a reporter that reads `success` would announce a job that merely began
+  /// as one that finished, so a start carries nothing a reader can misread.
+  void _reportStart(DownloadTask task) {
+    if (!_startsAnnounced.add(task.id.value)) {
+      return;
+    }
+
+    MediaJobReporting.reporter?.reportStart(
+      MediaJobStart(kind: MediaJobKind.download, label: task.title ?? task.fileName),
+    );
   }
 
   /// Tells the notification layer how this job ended, if anybody installed one.

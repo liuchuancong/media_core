@@ -11,11 +11,13 @@ import 'package:media_core/media_core.dart'
         BackgroundExecutionKind,
         BackgroundLeaseRegistry,
         BackgroundRequest,
+        BackgroundServiceOwner,
         BackgroundSessionStatus,
         MediaJobKind,
         MediaJobOutcome,
         MediaJobReporter,
-        MediaJobReporting;
+        MediaJobReporting,
+        MediaJobStart;
 import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/media_core_notify.dart';
 
@@ -50,9 +52,13 @@ final class _GrantedLease implements BackgroundBackendLease {
 
 final class _HostReporter implements MediaJobReporter {
   final List<MediaJobOutcome> seen = <MediaJobOutcome>[];
+  final List<MediaJobStart> starts = <MediaJobStart>[];
 
   @override
   void report(MediaJobOutcome outcome) => seen.add(outcome);
+
+  @override
+  void reportStart(MediaJobStart start) => starts.add(start);
 }
 
 /// A client that records what would have been shown.
@@ -350,6 +356,104 @@ void main() {
       expect(client.posted.single.kind, BackgroundJobKind.record);
       expect(client.posted.single.body, contains('1:05'));
       expect(client.posted.single.body, contains('the stream ended'));
+    });
+
+    test('a beginning is silent for a host that only asked for results', () async {
+      await MediaCoreNotify.enable(client: client);
+
+      MediaJobReporting.reporter!.reportStart(const MediaJobStart(kind: MediaJobKind.download, label: 'room-42.mp4'));
+      await pumpEventQueue();
+
+      expect(client.posted, isEmpty, reason: 'NotifyOn.results is the default, and a start is not a result');
+    });
+
+    test('a host that asked to hear beginnings hears one, quietly', () async {
+      await MediaCoreNotify.enable(client: client, jobOutcomes: NotifyOn.startsAndResults);
+
+      MediaJobReporting.reporter!.reportStart(const MediaJobStart(kind: MediaJobKind.recording, label: '主播8891'));
+      await pumpEventQueue();
+
+      expect(client.posted.single.title, '开始录制');
+      expect(client.posted.single.body, '主播8891');
+      expect(
+        client.posted.single.tone,
+        NotifyTone.progress,
+        reason: 'a job that began is not news that deserves a noise — it is the same fact the running line tells',
+      );
+      expect(client.posted.single.kind, BackgroundJobKind.record);
+    });
+
+    test('a line the host dismissed is no longer believed to be up', () async {
+      await MediaCoreNotify.enable(client: client);
+
+      final registry = BackgroundLeaseRegistry(backend: _GrantedBackend());
+      addTearDown(registry.dispose);
+
+      ForegroundJobs.watch(runtime: registry);
+      await registry.acquire(
+        const BackgroundRequest(
+          id: 'recording/room-42',
+          kind: BackgroundExecutionKind.recording,
+          title: '正在录制',
+          requiresCpuWakeLock: false,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.recording), isTrue);
+
+      expect(await MediaCoreNotify.dismiss(kRecordingLineNotificationId), isTrue);
+
+      expect(
+        ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.recording),
+        isFalse,
+        reason: 'the shade has nothing, so the projector must not answer as though it did',
+      );
+      expect(
+        registry.activeSessionCount,
+        1,
+        reason: 'taking a line down is not giving up the protection the session holds',
+      );
+
+      // And the line comes back on its own when the feature's own text moves.
+      await registry.acquire(
+        const BackgroundRequest(
+          id: 'recording/room-43',
+          kind: BackgroundExecutionKind.recording,
+          title: '正在录制 另一间',
+          requiresCpuWakeLock: false,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.recording), isTrue);
+    });
+
+    test('a dismissal the platform refused leaves the line believed up', () async {
+      await MediaCoreNotify.enable(client: client);
+
+      final registry = BackgroundLeaseRegistry(backend: _GrantedBackend());
+      addTearDown(registry.dispose);
+
+      ForegroundJobs.watch(runtime: registry);
+      await registry.acquire(
+        const BackgroundRequest(
+          id: 'recording/room-42',
+          kind: BackgroundExecutionKind.recording,
+          title: '正在录制',
+          requiresCpuWakeLock: false,
+        ),
+      );
+      await pumpEventQueue();
+
+      client.throwOn = 'dismiss';
+
+      expect(await MediaCoreNotify.dismiss(kRecordingLineNotificationId), isFalse);
+      expect(
+        ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.recording),
+        isTrue,
+        reason: 'a line that could not be taken away is still on the shade',
+      );
     });
 
     test('a host that muted job results still gets the running line', () async {

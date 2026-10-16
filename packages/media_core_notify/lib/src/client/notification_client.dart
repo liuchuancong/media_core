@@ -125,12 +125,19 @@ abstract interface class LocalNotificationClient {
   /// Shows one feature's running line, replacing the line with the same
   /// [NotifyEvent.id].
   ///
-  /// This is a notification and nothing else: the line is non-dismissible while
-  /// that feature's jobs run, and it carries the count of what else of *its own*
-  /// kind is working, but the service behind the work is `media_core_native`'s and
-  /// its notification is drawn there. A client that draws the line on Android too
-  /// would give one job two persistent notifications, which is the duplication this
-  /// call used to be a foreground service for.
+  /// This is a notification and nothing else: it carries the count of what else of
+  /// *its own* kind is working, but the service behind the work is
+  /// `media_core_native`'s and its notification is drawn there. A client that drew
+  /// the line on Android too would give one job two persistent notifications, which
+  /// is the duplication this call used to be a foreground service for.
+  ///
+  /// Whether the user can swipe this line away is the platform's answer, not
+  /// ours — on iOS and Windows it can, on Android's own service line it cannot. A
+  /// line the user removed stays removed until that feature's own text moves: the
+  /// gesture is read as a wish not to be told again, and reposting on every progress
+  /// tick is the noise the repost window exists to keep down. A removal the *host*
+  /// performs is reported back through `ForegroundJobs.lineWasRemoved`, so nothing
+  /// here keeps believing a line is up that is not.
   ///
   /// The id is the line's identity: one per feature, so a recording's line and a
   /// download's line are two notifications that cannot overwrite each other.

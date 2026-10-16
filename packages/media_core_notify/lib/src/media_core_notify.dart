@@ -139,15 +139,28 @@ abstract final class MediaCoreNotify {
     return _run(() => client.post(event.copyWith(id: id)));
   }
 
-  /// Removes a notification by id.
-  static Future<bool> dismiss(int id) {
+  /// Removes a notification by id, and says whether the platform took it away.
+  ///
+  /// Dismissing one of the running-line ids also settles what `ForegroundJobs`
+  /// believes about that line, so `isShowingLine` answers about the shade rather
+  /// than about the last thing this package tried to post.
+  static Future<bool> dismiss(int id) async {
     final client = _client;
 
     if (client == null) {
-      return Future<bool>.value(false);
+      return false;
     }
 
-    return _run(() => client.dismiss(id));
+    final removed = await _run(() => client.dismiss(id));
+
+    // Only a removal the platform agreed to is forgotten here: a line that could
+    // not be taken away is still on the shade, and a projector that disbelieved it
+    // would let the next text change repost a line the user never dismissed.
+    if (removed) {
+      ForegroundJobs.lineWasRemoved(id);
+    }
+
+    return removed;
   }
 
   /// Posts [event] only if [policy] covers it, and says whether it did.

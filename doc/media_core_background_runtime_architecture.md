@@ -673,6 +673,30 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 所以按平台分流的代码在测试里默认走 Android 那支；而"没有 binding"这个环境只能由 `package:test`（不是 `flutter_test`）
 的文件造出来，`flutter_test` 会替每个测试初始化 binding。
 
+### 14.12 两个"契约写了没人走"的洞（2026-10-17）
+
+§14.11 自查之后有意留下的两条，这一轮关掉。它们都属于本仓反复出现的那一族：接口、枚举值或政策写全了，
+但**没有任何一条生产路径走到它**，于是它读起来像已实现。
+
+- **`NotifyOn.startsAndResults` 有了生产者。** 唯一调用点 `job_reporting.dart` 从来不传 `isStart`，这一档因此
+  与 `results` 完全一样。修的方式**不是**给 `MediaJobOutcome` 加一个 phase：所有 reporter 都读 `success`，
+  一条"刚开始"的 verdict 会被只关心结果的宿主念成"下载完成"——需要先看另一个字段才有意义的契约，
+  本身就是在邀请误读。所以 `MediaJobReporter` 多了 `reportStart(MediaJobStart)`，而 `MediaJobStart` 只有
+  kind 与 label，没有可被误当成结论的东西；代价是实现这个接口从 1 个方法变成 2 个（**Breaking**，
+  不关心开始的宿主写一个空方法体）。生产端：录制在**FFmpeg 进程真的存在之后**报（一次 `start()` 一次，
+  重开同一条流不算第二次开始，同一个 backend 再 `start()` 才是）；下载在转 running 时报，按 task 记账，
+  `remove`/`clearCompleted` 随任务清掉。notify 用 progress tone 把开始贴出来：安静、落在用户静音的 results 渠道，
+  因为在有系统服务的那一端，"在跑"这件事已经由那条线说了。
+- **外部 dismiss 与投影器的认定对齐了。** `isShowingLine`/`isShowingLineFor` 回答的是"最后一次尝试贴了什么"，
+  不是"shade 上现在有什么"。`MediaCoreNotify.dismiss(id)` 在平台**答应**之后调用新的
+  `ForegroundJobs.lineWasRemoved(id)`；平台拒绝时认定不动（贴不掉的那条线确实还在屏上）。被清掉的线同时
+  关掉自己的重贴窗口——开线从来不受节流，所以该功能文本下次真的变化时线**立刻**回来，而不是等一个
+  在量"没人看的通知"的一秒。真机手势（iOS/Windows 上这条线可划，Android 的那条由系统服务带、不可划）
+  仍然按"尊重到文本真的变化为止"处理，并且这个选择现在写进 `showRunningLine` 的契约，不再记作漏洞。
+- 测试：notify +4（默认政策静音开始、`startsAndResults` 安静贴出、dismiss 后认定翻转且保护仍在、
+  被拒时认定不动），recording +3（开始后一次、重开不算第二次、同一 backend 再开是第二次），
+  download +1（retry 不重复开始）。
+
 ### 14.7 还没做
 
 - 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、
@@ -682,12 +706,6 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 - 进程被整体杀掉时没有任何一路事件能送出（Dart 也一起没了）；登记表在这条路上只能依赖下一次
   `acquire`/释放时的失败来纠正，这是平台的限制而不是这里的漏洞。
 - Linux 的后台执行仍未实现（logind `Inhibit`），`acquire` 在那边照实回答"没有能力"。
-- `NotifyOn.startsAndResults` 仍没有生产者：唯一的调用点 `job_reporting.dart:44` 不把 `isStart` 传出去，
-  于是这一档目前与 `results` 一模一样。要么让 `MediaJobReporting` 在会话开始时也报一次，要么把这一档删掉——
-  留着是一个"我们通知了开始"的读法来源，正是 §9.3 不让成立的那种。
-- 用户从 shade 上手动划掉一条 running line 之后，投影器仍然认为它挂着（`_Line.showing` 只有自己写过才知道），
-  直到下一次文本真的变化才会重贴。要么给客户端一个"被外部划掉"的回调，要么让 `_flush` 在重绘前问一下
-  `notificationsEnabled`/实际存在性。当前不影响保护，只影响那条线的可见性。
 - `FlutterLocalNotificationsClient`（真插件的适配层）没有测试文件——包内所有断言都打在自建的假客户端上。
   它对 22.x 参数形状的正确性只能由真机清单那一步覆盖。
 - 录制里磁盘不足那条路（`_refuseIfNoRoom` 拒掉一次开始）不会走 `MediaJobReporting`：它连会话都没开始，

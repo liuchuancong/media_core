@@ -1,4 +1,4 @@
-/// What a finished background job says to the viewer.
+/// What a background job says to the viewer, at either end of its life.
 ///
 /// A download and a recording both end the same way for the user — one line that
 /// says whether there is something to open — and neither package knows anything
@@ -9,13 +9,36 @@
 /// system media surfaces.
 library;
 
-/// Which kind of background work ended.
+/// Which kind of background work this is.
 enum MediaJobKind {
   /// A file download.
   download,
 
   /// A recording.
   recording,
+}
+
+/// The fact that a job began, with nothing about how it will end.
+///
+/// A start is its own record rather than an [MediaJobOutcome] whose phase says
+/// `started`, because a reporter that reads an outcome's `success` would announce a
+/// job that has merely begun as one that finished — and a value class carrying four
+/// fields a reader must first be told to ignore is a contract that invites the wrong
+/// reading.
+final class MediaJobStart {
+  /// Says that the named job began.
+  const MediaJobStart({required this.kind, required this.label});
+
+  /// Which kind of job began.
+  final MediaJobKind kind;
+
+  /// What to call this job in the line the viewer reads. The same words as the
+  /// verdict's [MediaJobOutcome.label], so a start and a result are recognisably
+  /// about the same work.
+  final String label;
+
+  @override
+  String toString() => 'MediaJobStart(${kind.name}, $label)';
 }
 
 /// One finished job, in the words a job knows about itself.
@@ -66,11 +89,18 @@ final class MediaJobOutcome {
       '${error == null ? '' : ', $error'})';
 }
 
-/// The layer that turns outcomes into something the user can see.
+/// The layer that turns what a job does into something the user can see.
 ///
 /// Implementations must not throw and must not make the job wait: a notification
 /// is how the user finds out what happened, not the thing that happened.
 abstract interface class MediaJobReporter {
+  /// Hands [start] to whoever says a job began.
+  ///
+  /// Separate from [report] so that saying so is a choice: a reporter installed by
+  /// a host that only wants results keeps wanting only results, and nothing has to
+  /// be told to ignore a verdict field it should not have read.
+  void reportStart(MediaJobStart start);
+
   /// Hands [outcome] to whoever draws it.
   void report(MediaJobOutcome outcome);
 }

@@ -230,6 +230,13 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// unchanged was not written by this session.
   final Map<String, String> _journalBaseline = <String, String>{};
 
+  /// Whether this recording's beginning has been handed to `MediaJobReporting`.
+  ///
+  /// One start per `start()`, not per FFmpeg process: a stream that dropped and was
+  /// re-held is the same recording, and a second line about it is noise about a fact
+  /// the user already saw.
+  bool _startReported = false;
+
   /// Whether this recording's outcome has been handed to `MediaJobReporting`.
   ///
   /// A recording that ended on its own and was then stopped by a host reaches both
@@ -342,6 +349,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _journalPaths.clear();
     _journalBaseline.clear();
     _outcomeReported = false;
+    _startReported = false;
     _recordedMediaTime = Duration.zero;
     _consecutiveQuickFailures = 0;
     _lastCheck = null;
@@ -431,6 +439,29 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _exitWatcher = execution.exitCode.asStream().listen(_handleExit);
     _armStallWatchdog();
     _armJournalWatcher();
+
+    if (attempt == 0) {
+      // From here, not from before: a beginning reported while the process is still
+      // being built is a promise, and a promise that then fails to start is a line
+      // the user cannot explain.
+      _reportStart();
+    }
+  }
+
+  /// Tells the notification layer that this recording began.
+  ///
+  /// The label is the same prefix the verdict carries, so a start and a result read
+  /// as two lines about one job rather than two jobs.
+  void _reportStart() {
+    if (_startReported) {
+      return;
+    }
+
+    _startReported = true;
+
+    MediaJobReporting.reporter?.reportStart(
+      MediaJobStart(kind: MediaJobKind.recording, label: _basePrefix.isEmpty ? 'recording' : _basePrefix),
+    );
   }
 
   /// Writes the manifest that says what this recording is.
