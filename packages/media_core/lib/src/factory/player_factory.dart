@@ -1,0 +1,22 @@
+import 'package:media_core/src/core/player_identity.dart';
+import 'package:media_core/src/factory/player_factory_config.dart';
+
+/// Creates player instances.
+///
+/// PlayerFactory is the public creation entry
+/// of media_core.
+///
+/// Responsibilities:
+///
+/// - create PlayerIdentity
+/// - apply factory configuration
+///
+/// It does not:
+///
+/// - select backend
+/// - manage backend registry
+/// - control playback
+abstract interface class PlayerFactory {
+  /// Creates a player instance.
+  PlayerIdentity create({PlayerFactoryConfig? config});
+}

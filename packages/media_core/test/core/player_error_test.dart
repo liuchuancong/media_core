@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/core/player_error.dart';
-import 'package:media_core/error/player_error_category.dart';
-import 'package:media_core/error/player_error_code.dart';
-import 'package:media_core/identity/player_id.dart';
-import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/src/core/player_error.dart';
+import 'package:media_core/src/error/player_error_category.dart';
+import 'package:media_core/src/error/player_error_code.dart';
+import 'package:media_core/src/identity/player_id.dart';
+import 'package:media_core/src/identity/session_id.dart';
 
 void main() {
   group('PlayerError', () {

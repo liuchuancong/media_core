@@ -1,14 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/adapter/player_adapter_registry.dart';
-import 'package:media_core/event/player_event_bus.dart';
-import 'package:media_core/identity/source_id.dart';
-import 'package:media_core/kernel/kernel_options.dart';
-import 'package:media_core/kernel/player_handle.dart';
-import 'package:media_core/source/player_source.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/src/adapter/player_adapter_registry.dart';
+import 'package:media_core/src/event/player_event_bus.dart';
+import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/kernel/kernel_options.dart';
+import 'package:media_core/src/kernel/player_handle.dart';
+import 'package:media_core/src/source/player_source.dart';
+import 'package:media_core/src/testing/fake_player_adapter.dart';
+import 'package:media_core/src/testing/test_player_factory.dart';
 
 /// A handle over one fake engine.
 ///

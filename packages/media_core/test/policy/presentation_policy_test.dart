@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/policy/presentation_policy.dart';
+import 'package:media_core/src/policy/presentation_policy.dart';
 
 void main() {
   const base = PresentationPolicy();

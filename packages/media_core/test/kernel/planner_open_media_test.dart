@@ -1,19 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/adapter/composite_support.dart';
-import 'package:media_core/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/adapter/player_adapter_registry.dart';
-import 'package:media_core/event/player_event_bus.dart';
-import 'package:media_core/kernel/kernel_options.dart';
-import 'package:media_core/kernel/player_handle.dart';
-import 'package:media_core/kernel/player_kernel.dart';
-import 'package:media_core/planning/media_source_plan.dart';
-import 'package:media_core/planning/media_source_planner.dart';
-import 'package:media_core/source/media_source.dart';
-import 'package:media_core/source/media_source_bridge.dart';
-import 'package:media_core/source/media_track.dart';
-import 'package:media_core/source/media_track_type.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/src/adapter/composite_support.dart';
+import 'package:media_core/src/adapter/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/player_adapter_registry.dart';
+import 'package:media_core/src/event/player_event_bus.dart';
+import 'package:media_core/src/kernel/kernel_options.dart';
+import 'package:media_core/src/kernel/player_handle.dart';
+import 'package:media_core/src/kernel/player_kernel.dart';
+import 'package:media_core/src/planning/media_source_plan.dart';
+import 'package:media_core/src/planning/media_source_planner.dart';
+import 'package:media_core/src/source/media_source.dart';
+import 'package:media_core/src/source/media_source_bridge.dart';
+import 'package:media_core/src/source/media_track.dart';
+import 'package:media_core/src/source/media_track_type.dart';
+import 'package:media_core/src/testing/fake_player_adapter.dart';
+import 'package:media_core/src/testing/test_player_factory.dart';
 
 PlayerAdapterRegistration _reg(String id, {required PlayerAdapterCapabilities capabilities, int priority = 0}) =>
     PlayerAdapterRegistration(

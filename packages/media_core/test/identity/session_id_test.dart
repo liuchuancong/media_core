@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/src/identity/session_id.dart';
 
 void main() {
   group('SessionId', () {

@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/src/testing/fake_player_adapter.dart';
+import 'package:media_core/src/testing/test_player_factory.dart';
 
 /// The recovery retry delay: two `KernelOptions` fields documented a backoff that
 /// nothing read, so a sweep ran its rungs back to back and an engine that had just

@@ -1,17 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/adapter/player_adapter_registry.dart';
-import 'package:media_core/event/player_event_bus.dart';
-import 'package:media_core/kernel/kernel_options.dart';
-import 'package:media_core/kernel/player_handle.dart';
-import 'package:media_core/quality/quality_candidate.dart';
-import 'package:media_core/quality/quality_switch_controller.dart';
-import 'package:media_core/source/media_source.dart';
-import 'package:media_core/source/media_track.dart';
-import 'package:media_core/source/media_track_type.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/src/adapter/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/player_adapter_registry.dart';
+import 'package:media_core/src/event/player_event_bus.dart';
+import 'package:media_core/src/kernel/kernel_options.dart';
+import 'package:media_core/src/kernel/player_handle.dart';
+import 'package:media_core/src/quality/quality_candidate.dart';
+import 'package:media_core/src/quality/quality_switch_controller.dart';
+import 'package:media_core/src/source/media_source.dart';
+import 'package:media_core/src/source/media_track.dart';
+import 'package:media_core/src/source/media_track_type.dart';
+import 'package:media_core/src/testing/fake_player_adapter.dart';
+import 'package:media_core/src/testing/test_player_factory.dart';
 
 ProgressiveMediaSource _source(String url) => ProgressiveMediaSource(
   track: MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.video),

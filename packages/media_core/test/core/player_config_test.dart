@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/core/player_config.dart';
-import 'package:media_core/core/player_constants.dart';
+import 'package:media_core/src/core/player_config.dart';
+import 'package:media_core/src/core/player_constants.dart';
 
 void main() {
   group('PlayerConfig', () {

@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/quality/quality_candidate.dart';
-import 'package:media_core/source/media_source.dart';
-import 'package:media_core/source/media_track.dart';
-import 'package:media_core/source/media_track_type.dart';
+import 'package:media_core/src/quality/quality_candidate.dart';
+import 'package:media_core/src/source/media_source.dart';
+import 'package:media_core/src/source/media_track.dart';
+import 'package:media_core/src/source/media_track_type.dart';
 
 MediaTrack _track(String url, MediaTrackType kind, {int? bitrate}) {
   return MediaTrack(uri: Uri.parse(url), kind: kind, bitrate: bitrate);

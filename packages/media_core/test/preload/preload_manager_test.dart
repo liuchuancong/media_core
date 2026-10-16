@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/identity/source_id.dart';
-import 'package:media_core/preload/preload_manager.dart';
-import 'package:media_core/preload/preload_request.dart';
+import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/preload/preload_manager.dart';
+import 'package:media_core/src/preload/preload_request.dart';
 
 void main() {
   group('PreloadManager ledger', () {

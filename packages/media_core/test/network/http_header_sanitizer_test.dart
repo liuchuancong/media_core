@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/network/http_header_sanitizer.dart';
+import 'package:media_core/src/network/http_header_sanitizer.dart';
 
 void main() {
   group('HttpHeaderSanitizer.sanitize', () {

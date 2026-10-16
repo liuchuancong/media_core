@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/src/testing/fake_player_adapter.dart';
+import 'package:media_core/src/testing/test_player_factory.dart';
 
 /// A kernel that selects the fake backend for everything.
 PlayerKernel _kernel({bool pauseWhenBackgrounded = true}) {

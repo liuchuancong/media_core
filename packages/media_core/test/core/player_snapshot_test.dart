@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/core/player_core_state.dart';
-import 'package:media_core/core/player_snapshot.dart';
-import 'package:media_core/core/player_status.dart';
-import 'package:media_core/identity/player_id.dart';
-import 'package:media_core/identity/session_id.dart';
+import 'package:media_core/src/core/player_core_state.dart';
+import 'package:media_core/src/core/player_snapshot.dart';
+import 'package:media_core/src/core/player_status.dart';
+import 'package:media_core/src/identity/player_id.dart';
+import 'package:media_core/src/identity/session_id.dart';
 
 PlayerSnapshot snapshotFor(PlayerCoreState state) {
   return PlayerSnapshot(playerId: PlayerId('p1'), state: state);

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/casting/cast_controller.dart';
-import 'package:media_core/casting/cast_device.dart';
-import 'package:media_core/casting/cast_media.dart';
-import 'package:media_core/casting/cast_transport.dart';
-import 'package:media_core/casting/media_cast_backend.dart';
+import 'package:media_core/src/casting/cast_controller.dart';
+import 'package:media_core/src/casting/cast_device.dart';
+import 'package:media_core/src/casting/cast_media.dart';
+import 'package:media_core/src/casting/cast_transport.dart';
+import 'package:media_core/src/casting/media_cast_backend.dart';
 
 const _tv = CastDevice(id: 'uuid:tv-1', name: 'Living Room TV', backendId: 'fake');
 const _other = CastDevice(id: 'uuid:tv-2', name: 'Bedroom TV', backendId: 'fake');

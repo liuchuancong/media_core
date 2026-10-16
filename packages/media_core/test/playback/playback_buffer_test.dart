@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/playback/buffer_range.dart';
-import 'package:media_core/playback/playback_buffer.dart';
+import 'package:media_core/src/playback/buffer_range.dart';
+import 'package:media_core/src/playback/playback_buffer.dart';
 
 const _headTo10 = BufferRange(start: Duration.zero, end: Duration(seconds: 10));
 const _from15To20 = BufferRange(start: Duration(seconds: 15), end: Duration(seconds: 20));

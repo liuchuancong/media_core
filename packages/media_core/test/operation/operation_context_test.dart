@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/identity/generation_id.dart';
-import 'package:media_core/identity/operation_id.dart';
-import 'package:media_core/identity/player_id.dart';
-import 'package:media_core/identity/request_id.dart';
-import 'package:media_core/identity/session_id.dart';
-import 'package:media_core/identity/slot_id.dart';
-import 'package:media_core/identity/source_id.dart';
-import 'package:media_core/operation/operation_context.dart';
+import 'package:media_core/src/identity/generation_id.dart';
+import 'package:media_core/src/identity/operation_id.dart';
+import 'package:media_core/src/identity/player_id.dart';
+import 'package:media_core/src/identity/request_id.dart';
+import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/identity/slot_id.dart';
+import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/operation/operation_context.dart';
 
 void main() {
   final full = OperationContext(

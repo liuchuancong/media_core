@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/identity/player_id.dart';
+import 'package:media_core/src/identity/player_id.dart';
 
 void main() {
   group('PlayerId', () {

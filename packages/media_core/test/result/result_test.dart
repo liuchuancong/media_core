@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/error/player_error_code.dart';
-import 'package:media_core/result/result.dart';
-import 'package:media_core/result/result_error.dart';
+import 'package:media_core/src/error/player_error_code.dart';
+import 'package:media_core/src/result/result.dart';
+import 'package:media_core/src/result/result_error.dart';
 
 ResultError sampleError() => const ResultError(code: PlayerErrorCode.unknown, message: 'boom');
 
