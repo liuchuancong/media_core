@@ -14,9 +14,10 @@ import android.os.PowerManager;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
 
 /**
  * Base of the per-feature foreground services.
@@ -176,7 +177,14 @@ public abstract class JobForegroundService extends Service {
     /** Running sessions, oldest first. */
     final Map<Integer, Session> sessions = new LinkedHashMap<Integer, Session>();
 
-    final AtomicInteger nextLocalId = new AtomicInteger(1);
+    /**
+     * Local ids released before their {@code onStartCommand} arrived.
+     *
+     * A job that fails in its first moment releases a session the service has not
+     * registered yet, and without this memory the start lands afterwards, takes the
+     * wake lock and posts a notification with nobody left to release it.
+     */
+    final Set<Integer> releasedEarly = new HashSet<Integer>();
 
     /** The live instance of that feature, while it exists. */
     JobForegroundService instance;
@@ -300,12 +308,12 @@ public abstract class JobForegroundService extends Service {
   public static int start(Context context, String ownerKey, Description description, boolean wakeLock) {
     final Feature feature = featureForKey(ownerKey);
     final Register register = register(feature);
-    final int localId = register.nextLocalId.getAndIncrement();
+    final int localId = allocateLocalId(register);
 
-    if (localId > LOCAL_ID_MASK) {
-      // 65k sessions in one feature is a caller that stopped releasing them; the
-      // handle would collide with the next one, and a wrong release is worse than
-      // no protection at all.
+    if (localId < 0) {
+      // Every id in the space is a live session of this feature. Handing out one
+      // that is in use would let somebody else's release end this job's protection,
+      // so no answer beats a wrong one.
       return -1;
     }
 
@@ -355,7 +363,32 @@ public abstract class JobForegroundService extends Service {
 
     if (service != null) {
       service.releaseSession(localIdOf(handle));
+
+      return;
     }
+
+    // No live instance: either the sessions went with it, or its
+    // `onStartCommand` has not arrived yet — which is the case remembered here so
+    // the service takes nothing when it does.
+    register(featureOf(handle)).releasedEarly.add(localIdOf(handle));
+  }
+
+  /**
+   * The lowest local id this feature is not using.
+   *
+   * Reused rather than counted up: a long-lived app that records thousands of
+   * short sessions has a handful of them live at once, and a monotonic counter
+   * would refuse every start after the 65536th — over a process's life that is
+   * ordinary use, not a caller that leaked.
+   */
+  private static int allocateLocalId(Register register) {
+    for (int candidate = 1; candidate <= LOCAL_ID_MASK; candidate++) {
+      if (!register.sessions.containsKey(candidate) && !register.releasedEarly.contains(candidate)) {
+        return candidate;
+      }
+    }
+
+    return -1;
   }
 
   private static JobForegroundService serviceFor(int handle) {
@@ -421,6 +454,14 @@ public abstract class JobForegroundService extends Service {
     final int sessionId = intent == null ? -1 : intent.getIntExtra(EXTRA_SESSION_ID, -1);
 
     if (sessionId < 0) {
+      stopSelf(startId);
+
+      return START_NOT_STICKY;
+    }
+
+    if (register.releasedEarly.remove(sessionId)) {
+      // Released while its start was still in flight: the job is over, and taking
+      // the wake lock and posting the line now would leave them orphaned.
       stopSelf(startId);
 
       return START_NOT_STICKY;

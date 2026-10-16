@@ -16,7 +16,8 @@ import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_probe.dart';
 /// every closed segment, so a half-written last line is possible if the process
 /// was killed mid-update. A line that does not parse is counted, not fatal.
 final class FfmpegSegmentJournal {
-  FfmpegSegmentJournal._(this.entries, this.unreadableLines);
+  FfmpegSegmentJournal._(List<FfmpegJournalledSegment> segments, this.unreadableLines, {this.staleEntries = 0})
+    : entries = List<FfmpegJournalledSegment>.unmodifiable(segments);
 
   /// Builds a journal view by reading [file].
   ///
@@ -25,9 +26,17 @@ final class FfmpegSegmentJournal {
   /// `async` path. A missing file is an empty journal, not an error — a
   /// recording that never reached its first segment boundary has no list, and
   /// that case is judged by [FfmpegRecordingCheck] rather than by the reader.
-  factory FfmpegSegmentJournal.fromFile(File file) {
+  ///
+  /// [notBefore] is what makes the verdict belong to the session being judged.
+  /// A recording that names its own file prefix leaves the previous one's
+  /// journal and segments in the same directory, and FFmpeg — run with `-n` —
+  /// then writes nothing at all: reading that list back would report yesterday's
+  /// capture as today's success. A file that predates the session is not output
+  /// of the session, so it is counted as [staleEntries] and skipped.
+  factory FfmpegSegmentJournal.fromFile(File file, {DateTime? notBefore}) {
     final entries = <FfmpegJournalledSegment>[];
     var unreadable = 0;
+    var stale = 0;
 
     if (file.existsSync()) {
       final directory = outputDirectoryOf(file.path);
@@ -48,12 +57,27 @@ final class FfmpegSegmentJournal {
         }
 
         final path = joinOutputPath(directory, name);
+        final stat = FileStat.statSync(path);
 
-        entries.add(FfmpegJournalledSegment(index: entries.length, name: name, path: path, bytes: _sizeOf(path)));
+        if (stat.type == FileSystemEntityType.notFound) {
+          // Listed, not written: the segment a kill removed. Counted as present-nothing
+          // so the verdict can say how many of the list is missing.
+          entries.add(FfmpegJournalledSegment(index: entries.length, name: name, path: path, bytes: 0));
+
+          continue;
+        }
+
+        if (notBefore != null && stat.modified.isBefore(notBefore)) {
+          stale++;
+
+          continue;
+        }
+
+        entries.add(FfmpegJournalledSegment(index: entries.length, name: name, path: path, bytes: stat.size));
       }
     }
 
-    return FfmpegSegmentJournal._(List<FfmpegJournalledSegment>.unmodifiable(entries), unreadable);
+    return FfmpegSegmentJournal._(dedupeByPath(entries), unreadable, staleEntries: stale);
   }
 
   /// Reads several journals as one recording's list, oldest first.
@@ -63,14 +87,18 @@ final class FfmpegSegmentJournal {
   /// restart that overwrote the first one would lose the segments it described.
   /// The attempts in order are the recording, so that is what a verdict is
   /// judged against.
-  factory FfmpegSegmentJournal.fromFiles(Iterable<File> files) {
+  ///
+  /// [notBefore] applies to every file read: see [FfmpegSegmentJournal.fromFile].
+  factory FfmpegSegmentJournal.fromFiles(Iterable<File> files, {DateTime? notBefore}) {
     final combined = <FfmpegJournalledSegment>[];
     var unreadable = 0;
+    var stale = 0;
 
     for (final file in files) {
-      final journal = FfmpegSegmentJournal.fromFile(file);
+      final journal = FfmpegSegmentJournal.fromFile(file, notBefore: notBefore);
 
       unreadable += journal.unreadableLines;
+      stale += journal.staleEntries;
 
       for (final entry in journal.entries) {
         combined.add(
@@ -79,7 +107,7 @@ final class FfmpegSegmentJournal {
       }
     }
 
-    return FfmpegSegmentJournal._(List<FfmpegJournalledSegment>.unmodifiable(combined), unreadable);
+    return FfmpegSegmentJournal._(dedupeByPath(combined), unreadable, staleEntries: stale);
   }
 
   /// Segments in the order FFmpeg listed them, oldest first.
@@ -91,6 +119,13 @@ final class FfmpegSegmentJournal {
   /// the file was truncated by a kill, and the host should know its segment
   /// list may be incomplete.
   final int unreadableLines;
+
+  /// Segments the list names that were written **before this session started**.
+  ///
+  /// Counted, not silently dropped: "the room recorded nothing this time because
+  /// the files were already there" is a different story from "the input delivered
+  /// nothing", and only the first one has a previous recording to blame.
+  final int staleEntries;
 
   /// Total bytes across every segment that is still present on disk.
   ///
@@ -114,6 +149,25 @@ final class FfmpegSegmentJournal {
   /// is short" report has to account for.
   FfmpegJournalledSegment? get last => entries.isEmpty ? null : entries.last;
 
+  /// Keeps one entry per path, the last one listed, in the order they first appeared.
+  ///
+  /// FFmpeg rewrites the whole list on every closed segment, so a kill that lands
+  /// mid-rewrite can leave a name twice. Counting it twice inflates both the segment
+  /// count and the byte total a host is told the recording weighs, which is the one
+  /// number in this report nobody has any way to check.
+  static List<FfmpegJournalledSegment> dedupeByPath(Iterable<FfmpegJournalledSegment> segments) {
+    final byPath = <String, FfmpegJournalledSegment>{};
+
+    for (final segment in segments) {
+      byPath[segment.path] = segment;
+    }
+
+    return List<FfmpegJournalledSegment>.unmodifiable(<FfmpegJournalledSegment>[
+      for (final entry in byPath.values.indexed)
+        FfmpegJournalledSegment(index: entry.$1, name: entry.$2.name, path: entry.$2.path, bytes: entry.$2.bytes),
+    ]);
+  }
+
   /// `file,'name.ts'` (and the older `file,name.ts` shape) is the CSV entry
   /// format; anything else in the file is a comment or a partial write.
   static String? _segmentNameOf(String line) {
@@ -132,15 +186,6 @@ final class FfmpegSegmentJournal {
     final unquoted = name.startsWith("'") ? name.substring(1, name.length - 1) : name;
 
     return unquoted.isEmpty ? null : unquoted;
-  }
-
-  static int _sizeOf(String path) {
-    // `FileStat.statSync` reports a missing file as a stat of type notFound with
-    // a size of -1 rather than by throwing, so the type is what says whether the
-    // number means anything.
-    final stat = FileStat.statSync(path);
-
-    return stat.type == FileSystemEntityType.notFound ? 0 : stat.size;
   }
 }
 
@@ -225,12 +270,14 @@ final class FfmpegRecordingCheck {
     Duration claimedDuration = Duration.zero,
     FfmpegProbe? probe,
     int minimumSegmentBytes = FfmpegRecordingCheck.minimumSegmentBytes,
+    int foreignJournals = 0,
   }) async {
     if (journal.isEmpty) {
-      // The journal lists nothing. Either the stream died before the first
-      // boundary, or it never produced a frame. Both are "no recording", and
-      // saying which matters to whoever reads the log — the first is a short
-      // stream, the second is a bad URL.
+      // The journal lists nothing usable. Either the stream died before the first
+      // boundary, it never produced a frame, or the list on disk predates this
+      // recording — a fixed `filePrefix` means a second recording of the same room
+      // finds the first one's files already there and `-n` writes none. All three are
+      // "no recording", and which one it was is what a host reads the log for.
       return FfmpegRecordingCheck._(
         verdict: FfmpegRecordingVerdict.missing,
         segments: 0,
@@ -241,6 +288,12 @@ final class FfmpegRecordingCheck {
         journalLinesIgnored: journal.unreadableLines,
         reason: claimedDuration > Duration.zero
             ? 'FFmpeg processed ${claimedDuration.inSeconds}s of input but closed no segment'
+            : foreignJournals > 0
+            ? '$foreignJournals journal(s) on disk are byte-identical to what they held before this recording '
+                  'started, so this one wrote nothing'
+            : journal.staleEntries > 0
+            ? 'the journal names ${journal.staleEntries} segment(s) written before this recording started, and '
+                  'this one closed none'
             : 'FFmpeg produced no segment: the input delivered nothing',
       );
     }
@@ -248,16 +301,22 @@ final class FfmpegRecordingCheck {
     final missing = journal.entries.where((entry) => !entry.isPresent).length;
     final stubs = journal.entries.where((entry) => entry.isPresent && entry.bytes < minimumSegmentBytes).length;
 
-    if (missing == journal.length) {
+    if (missing + stubs == journal.length) {
+      // Nothing on the list is usable: every segment is either gone or a stub the
+      // muxer opened and abandoned. A recording of nothing written twice is still
+      // nothing, so this is `missing` rather than `suspicious`.
       return FfmpegRecordingCheck._(
         verdict: FfmpegRecordingVerdict.missing,
         segments: journal.length,
         bytesOnDisk: 0,
         missingSegments: missing,
-        stubSegments: 0,
+        stubSegments: stubs,
         unreadableSegments: 0,
         journalLinesIgnored: journal.unreadableLines,
-        reason: 'the journal lists ${journal.length} segment(s) and none of them is on disk',
+        reason: stubs == journal.length
+            ? 'the journal lists ${journal.length} segment(s) and every one of them is smaller than '
+                  '$minimumSegmentBytes B: opened and abandoned'
+            : 'the journal lists ${journal.length} segment(s) and none of them is on disk',
       );
     }
 

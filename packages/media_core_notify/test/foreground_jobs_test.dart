@@ -140,8 +140,19 @@ final class _LineClient implements LocalNotificationClient {
   Future<void> showRunningLine(NotifyEvent event) async {
     calls.add('showRunningLine');
 
+    final failure = _throwOnShow;
+
+    if (failure != null) {
+      throw failure;
+    }
+
     shown.add(event);
   }
+
+  /// Set to make the next repost fail, the way a platform refuses a channel that
+  /// is not ready yet.
+  Error? _throwOnShow;
+
 
   @override
   Future<void> clearRunningLine({required int id}) async {
@@ -546,6 +557,76 @@ void main() {
         _settle(async, ForegroundJobs.hide());
 
         expect(client.clearCount, 0, reason: 'nothing was on the shade to take away');
+      });
+    });
+  });
+
+  group('a line the platform refused', () {
+    test('it is tried again rather than remembered as already said', () {
+      fakeAsync((async) {
+        arm(async);
+        client._throwOnShow = StateError('the channel is not ready yet');
+        _resolve(async, hold(_job('download/a', description: 'a · 25%')));
+        async.flushMicrotasks();
+
+        expect(client.forId(kDownloadLineNotificationId), isEmpty);
+        expect(
+          ForegroundJobs.isShowingLine,
+          isFalse,
+          reason: 'a refused repost is not a line on the shade, whatever the projector meant to believe',
+        );
+
+        client._throwOnShow = null;
+        tick(async, const Duration(milliseconds: 1100));
+
+        expect(
+          client.forId(kDownloadLineNotificationId),
+          hasLength(1),
+          reason: 'the window that covered the failure has to retry, not report silence as success',
+        );
+        expect(ForegroundJobs.isShowingLine, isTrue);
+      });
+    });
+
+    test('a runtime replaced under the projector takes its old lines down', () {
+      fakeAsync((async) {
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: 'a')));
+        async.flushMicrotasks();
+
+        expect(ForegroundJobs.isShowingLine, isTrue);
+
+        // The host swaps the installed registry: the line up there belongs to the
+        // runtime being left, and the new one has no idea it exists.
+        BackgroundRuntimes.current = BackgroundLeaseRegistry(backend: _PlatformBackend());
+        async.flushMicrotasks();
+
+        expect(
+          client.cleared,
+          [kDownloadLineNotificationId],
+          reason: 'an orphaned ongoing notification is worse than no notification',
+        );
+        expect(ForegroundJobs.isShowingLine, isFalse);
+      });
+    });
+
+    test('the new runtime gets lines of its own', () {
+      fakeAsync((async) {
+        arm(async);
+        final replaced = BackgroundLeaseRegistry(backend: _PlatformBackend());
+        BackgroundRuntimes.current = replaced;
+        async.flushMicrotasks();
+
+        final request = _job('recording/b', title: '正在录制', description: 'b', kind: BackgroundExecutionKind.recording);
+        _resolve(async, replaced.acquire(request).then((_) {}));
+        _settle(async, replaced.acquire(request));
+        async.flushMicrotasks();
+
+        expect(
+          client.forId(kRecordingLineNotificationId),
+          hasLength(1),
+          reason: 'following the slot is what makes the second runtime projectable',
+        );
       });
     });
   });

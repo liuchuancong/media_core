@@ -220,6 +220,16 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// this list, and the final verdict is read over all of it.
   final List<String> _journalPaths = <String>[];
 
+  /// What each journal contained the moment before this session's process was
+  /// allowed to touch it, for the paths that already existed.
+  ///
+  /// The evidence that a list belongs to this recording: a fixed `filePrefix` means
+  /// a second recording of the same room points at the first one's journal, and
+  /// timestamps cannot separate them (a re-record a second later is a normal thing
+  /// to do, and coarse filesystems round mtimes anyway). A journal whose bytes are
+  /// unchanged was not written by this session.
+  final Map<String, String> _journalBaseline = <String, String>{};
+
   /// Whether this recording's outcome has been handed to `MediaJobReporting`.
   ///
   /// A recording that ended on its own and was then stopped by a host reaches both
@@ -330,6 +340,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _basePrefix = prefix;
     _startedAt = DateTime.now();
     _journalPaths.clear();
+    _journalBaseline.clear();
     _outcomeReported = false;
     _recordedMediaTime = Duration.zero;
     _consecutiveQuickFailures = 0;
@@ -378,6 +389,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     );
 
     _journalPaths.add(journalPath);
+    _snapshotJournalBaseline(journalPath);
     _writeManifest();
     _lastMediaTime = Duration.zero;
     _lastBytes = 0;
@@ -1166,7 +1178,46 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
   }
 
+  /// Remembers what [path] holds right now, before this attempt's process can
+  /// write it. A path that does not exist yet needs no memory: whatever appears
+  /// there was written by this session.
+  void _snapshotJournalBaseline(String path) {
+    final file = File(path);
+
+    if (!file.existsSync()) {
+      return;
+    }
+
+    try {
+      _journalBaseline[path] = file.readAsStringSync();
+    } on Object catch (error) {
+      // Unreadable now, so unverifiable later: treat it as this session's rather
+      // than refusing a recording over a file the session did not touch. The
+      // verdict then rests on the segment files themselves.
+      _log.warning(
+        'the existing segment journal could not be read for comparison',
+        fields: <String, Object?>{'journal': path, 'error': '$error'},
+      );
+    }
+  }
+
+  /// Whether the journal at [path] still holds exactly [before].
+  bool _unchangedSince(String path, String before) {
+    try {
+      return File(path).readAsStringSync() == before;
+    } on Object {
+      // Gone or unreadable: nothing to compare, and a vanished list is the
+      // missing-segment case the journal reader already reports.
+      return false;
+    }
+  }
+
   /// Reads the recording back from what it left on disk.
+  ///
+  /// Judged against [_startedAt]: a segment file older than this session is not
+  /// this session's output, which is the case a fixed `filePrefix` makes ordinary
+  /// (a second recording of the same room finds its own files already there, and
+  /// `-n` means it writes none).
   ///
   /// Null means *no judgement was made*: the check is switched off, or the
   /// journal could not be read. Both leave the caller to report on the exit code
@@ -1179,16 +1230,40 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       return null;
     }
 
+    // Two seconds of slack: filesystem mtimes are coarse (a FAT volume has whole
+    // seconds), and a segment written in the same second the start was recorded
+    // is this session's output, not the previous one's.
+    final notBefore = _startedAt?.subtract(const Duration(seconds: 2));
+
+    // A journal whose bytes are what they were before this session's process was
+    // started was not written by this session — the case a fixed `filePrefix` and
+    // `-n` produce: the second recording of a room points at the first one's list.
+    final mine = <String>[];
+    var foreign = 0;
+
+    for (final path in _journalPaths) {
+      final before = _journalBaseline[path];
+
+      if (before == null || !_unchangedSince(path, before)) {
+        mine.add(path);
+      } else {
+        foreign++;
+      }
+    }
+
     final FfmpegSegmentJournal journal;
 
     try {
-      journal = FfmpegSegmentJournal.fromFiles(_journalPaths.map(File.new));
+      journal = FfmpegSegmentJournal.fromFiles(mine.map(File.new), notBefore: notBefore);
     } on Object catch (error) {
       _log.error(
         'the segment journal could not be read',
         error: error,
         fields: <String, Object?>{'journals': _journalPaths.length},
       );
+      // No verdict from this attempt — and the previous attempt's must not be
+      // read as this one's, which is what `stop()` would otherwise report.
+      _lastCheck = null;
 
       return null;
     }
@@ -1197,6 +1272,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       journal: journal,
       claimedDuration: _recordedMediaTime,
       probe: config.verifyPlayability ? _probeOf() : null,
+      foreignJournals: foreign,
     );
 
     _lastCheck = check;

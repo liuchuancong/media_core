@@ -78,18 +78,18 @@ final class NotifySetup {
 
   /// The channel [owner]'s line is drawn on.
   ///
-  /// Falls back to the package default when a host trimmed it out of [channels]:
-  /// a line with no channel of its own is a line the user cannot silence, which is
-  /// worse than it sharing the catch-all one.
+  /// Falls back to the catch-all jobs channel when a host trimmed the feature's
+  /// own channel out of [channels]: a line posted to a channel nobody registered is
+  /// a line the user cannot silence, which is worse than it sharing the one channel
+  /// that does exist.
   NotifyChannel channelFor(BackgroundServiceOwner owner) {
     final wanted = switch (owner) {
       BackgroundServiceOwner.recording => kNotifyChannelRecording,
       BackgroundServiceOwner.download => kNotifyChannelDownload,
-      BackgroundServiceOwner.genericJob => kNotifyChannelJobs,
-      BackgroundServiceOwner.mediaSession => kNotifyChannelJobs,
+      BackgroundServiceOwner.genericJob || BackgroundServiceOwner.mediaSession => kNotifyChannelJobs,
     };
 
-    return channels.firstWhere((channel) => channel.id == wanted.id, orElse: () => wanted);
+    return channels.firstWhere((channel) => channel.id == wanted.id, orElse: () => kNotifyChannelJobs);
   }
 
   @override

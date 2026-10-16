@@ -173,9 +173,7 @@ class _NativeBackendLease implements BackgroundBackendLease {
   /// is the same isolation the per-feature services were split for.
   @override
   Stream<BackgroundSessionStatus> get statusChanges =>
-      BackgroundExecution.sessionStatuses
-          .where((report) => report.id == _session.id)
-          .map((report) => _statusFor(report.status));
+      BackgroundExecution.statusFor(_session.id).map((report) => _statusFor(report.status));
 
   static BackgroundSessionStatus _statusFor(BackgroundExecutionStatus status) => switch (status) {
     BackgroundExecutionStatus.degraded => BackgroundSessionStatus.degraded,

@@ -566,7 +566,28 @@ void main() {
       final result = await check(probe: _FakeProbe());
 
       expect(result.stubSegments, 2);
-      expect(result.verdict, FfmpegRecordingVerdict.suspicious);
+      expect(
+        result.verdict,
+        FfmpegRecordingVerdict.missing,
+        reason:
+            'a recording whose every segment was opened and abandoned recorded nothing; '
+            'calling that `suspicious` would report it as usable output with a hole in it',
+      );
+      expect(result.isUsable, isFalse);
+      expect(result.reason, contains('opened and abandoned'));
+    });
+
+    test('one stub among playable segments is a recording with a hole in it', () async {
+      final pattern = '${directory.path}${Platform.pathSeparator}room_%06d.ts';
+      _writeOutput(<String>['-segment_list', journal.path, pattern]);
+      // The first segment is then truncated to a stub: the shape a kill lands in.
+      File(pattern.replaceAll('%06d', '000000')).writeAsBytesSync(List<int>.filled(64, 0));
+
+      final result = await check(probe: _FakeProbe());
+
+      expect(result.stubSegments, 1);
+      expect(result.verdict, FfmpegRecordingVerdict.suspicious, reason: 'the other one is still a recording');
+      expect(result.isUsable, isTrue);
     });
 
     test('every segment missing is no recording even though the journal has names', () async {
@@ -907,6 +928,53 @@ void main() {
       expect(result.outputPath, backend.activeDirectory);
       expect(backend.lastCheck?.verdict, FfmpegRecordingVerdict.complete);
       expect(backend.state.status, RecordingStatus.completed);
+    });
+
+    test('the next recording of the same room does not inherit the last one verdict', () async {
+      // Both recordings share a fixed prefix — what a host gets by naming the source
+      // title or `config.filePrefix` — so real FFmpeg, run with `-n`, opens nothing and
+      // writes nothing on the second go. Everything on disk belongs to the first
+      // recording; a verdict read from those files is a verdict borrowed from them.
+      final directory = _tempDirectory().path;
+      const recordConfig = FfmpegRecordConfig(filePrefix: 'room-42');
+
+      final firstRunner = _FakeExecutor()..onStart = _writeOutput;
+      final first = FfmpegRecordingBackend(
+        executor: firstRunner,
+        config: recordConfig,
+        outputDirectory: directory,
+        probe: _FakeProbe(),
+      );
+      addTearDown(first.dispose);
+      await first.initialize();
+      await first.start(_source(), const RecordingConfig());
+      firstRunner.lastStatistics!(const FfmpegStatistics(timeMs: 9000, sizeBytes: 2048));
+
+      expect((await first.stop()).success, isTrue, reason: 'the first recording did produce its segments');
+
+      final secondRunner = _FakeExecutor();
+      final second = FfmpegRecordingBackend(
+        executor: secondRunner,
+        config: recordConfig,
+        outputDirectory: directory,
+        probe: _FakeProbe(),
+      );
+      addTearDown(second.dispose);
+      await second.initialize();
+      await second.start(_source(), const RecordingConfig());
+
+      final secondResult = await second.stop();
+
+      expect(
+        secondResult.success,
+        isFalse,
+        reason: 'nothing was written for this recording, so this is the empty-directory case the check exists to catch',
+      );
+      expect(
+        second.lastCheck?.verdict,
+        FfmpegRecordingVerdict.missing,
+        reason: 'the journal on disk predates the session and is not evidence about it',
+      );
     });
 
     test('the reported size is the files on disk, not the muxer counter', () async {

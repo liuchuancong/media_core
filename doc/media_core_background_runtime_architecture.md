@@ -639,6 +639,40 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 - 测试：`media_core_mediasession/test/media_session_surfaces_test.dart`（4 例：未启用答 `notEnabled`、接管与交还的
   完整链、陈旧写入穿过门面也被丢、未初始化仍答 `notInitialized`——两者是不同的等待方式）。
 
+### 14.11 三个新改包的自查（2026-10-17）
+
+录制、通知、native 三个包在前几轮里被改动最多，这一轮只审自己刚写的东西。找出来并修掉的（每条都先有一条会失败的测试）：
+
+- **native / 状态回流的头一条事件会丢**：服务在"被 start 的同一口气"里报 `degraded`，而 Dart 这时还没订阅——
+  广播流不等迟到者。订阅挪到 `acquire` 之前，并按 handle 记住最后一条**未终结**状态供 `statusChanges` 重放；
+  终结态不记（句柄会被下一个会话复用，把别人被收走的保护放进新会话是另一种谎）。`release` 时一并清掉。
+- **native / 没有 binding 时不该伸手要通道**：`EventChannel.receiveBroadcastStream` 在自己的 `onListen`（`async`）里
+  才解析 messenger，所以纯 Dart isolate / CLI / `runApp` 之前的调用，抛进来的是没人接得住的 future，宿主看到的
+  是一个 uncaught zone error——这条路 catch 不住，只能先问一句 `ServicesBinding.instance` 有没有。另一半是平台：
+  iOS/macOS/Windows 的 handler 只实现 `acquire`，向它们要 `listen` 会被 SDK 报成一条错误，于是状态通道只在 Android 订阅。
+- **native(Java) / handle 的 localId 是复用的，不是递增的**：单调计数器意味着一个进程跑满 65536 次短会话（正常用法，
+  不是泄漏）之后**永远**拒绝新的会话。改成取该功能当前最小的空闲 id，只在整片都被占时拒绝——错的句柄会让别人的
+  `release` 结束掉这个job 的保护，宁可不给。同一段的另一半竞态：`acquire` 之后立刻 `release` 时服务还没收到
+  `onStartCommand`，等它到达就没人再负责收回 wake lock 和那条线，于是记下"提前释放过的 id"，那种 start 直接自停。
+- **notify / 换 runtime 要把上一任的线摘掉**：以前只 cancel 订阅、清自己的状态，shade 上留下一条描述"无人持有的工作"
+  的通知——和"线比最后一-job 多活一秒"是同一句谎。`hide()` 现在 await 这些清除；`watch()` 在首次 attach 之后**继续**
+  跟着那个槽位（换掉已装 runtime 恰好是它写来承受、却没做的事）。
+- **notify / 平台答应之后才算"挂着"**：`showing/title/body` 以前在调用 client 之前就认领，于是一次被拒的重绘让投影器
+  以为有条通知存在，下一次重绘拿自己的文本跟"没人见过的东西"比对并跳过。现在只有 client 返回成功才认领，失败保持
+  dirty 到窗口末尾重试。重绘与摘除都从 `Exception` 放宽到任何抛出对象：这段跑在 runtime 的 change 事件里，逃出去的
+  `Error` 会取消订阅，代价是整个进程再也没有 job line。
+- **notify / `channelFor` 的兜底要落在存在的 channel 上**：兜底的用意就是宿主把这个功能自己的 channel 从 `channels`
+  里删了，返回同一个对象等于投到未注册的 channel 上——正是兜底要避免的那件事（用户无法静音的线）。
+- **recording / 三处假成功**（都是固定 `filePrefix` 那一型：第二次录制指向第一次的文件，`-n` 让它自己不写）：
+  字节与开录前完全一致的 journal 不再算作本会话输出（并把"有几份 journal 是别人的"写进 reason）；早于本会话的
+  segment 文件被跳过而不是计入（`notBefore`，留两秒给粗糙的 mtime）；两个 attempt 的 journal 都列同一个文件时
+  只数一次，`bytes` 不再是同一份文件的两倍。"列出的段全是 64 字节残桩"从 `suspicious` 改判 `missing`（里面什么都没有）。
+  journal 读不出来时 `_lastCheck` 会保留**上一次 attempt** 的判定，而 `stop()` 返回的就是它——现在这条路先清空。
+
+顺带记两个测试工具上的事实：`flutter test` 里 `defaultTargetPlatform` 是 **android**（不管宿主是什么系统），
+所以按平台分流的代码在测试里默认走 Android 那支；而"没有 binding"这个环境只能由 `package:test`（不是 `flutter_test`）
+的文件造出来，`flutter_test` 会替每个测试初始化 binding。
+
 ### 14.7 还没做
 
 - 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、
@@ -648,3 +682,16 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 - 进程被整体杀掉时没有任何一路事件能送出（Dart 也一起没了）；登记表在这条路上只能依赖下一次
   `acquire`/释放时的失败来纠正，这是平台的限制而不是这里的漏洞。
 - Linux 的后台执行仍未实现（logind `Inhibit`），`acquire` 在那边照实回答"没有能力"。
+- `NotifyOn.startsAndResults` 仍没有生产者：唯一的调用点 `job_reporting.dart:44` 不把 `isStart` 传出去，
+  于是这一档目前与 `results` 一模一样。要么让 `MediaJobReporting` 在会话开始时也报一次，要么把这一档删掉——
+  留着是一个"我们通知了开始"的读法来源，正是 §9.3 不让成立的那种。
+- 用户从 shade 上手动划掉一条 running line 之后，投影器仍然认为它挂着（`_Line.showing` 只有自己写过才知道），
+  直到下一次文本真的变化才会重贴。要么给客户端一个"被外部划掉"的回调，要么让 `_flush` 在重绘前问一下
+  `notificationsEnabled`/实际存在性。当前不影响保护，只影响那条线的可见性。
+- `FlutterLocalNotificationsClient`（真插件的适配层）没有测试文件——包内所有断言都打在自建的假客户端上。
+  它对 22.x 参数形状的正确性只能由真机清单那一步覆盖。
+- 录制里磁盘不足那条路（`_refuseIfNoRoom` 拒掉一次开始）不会走 `MediaJobReporting`：它连会话都没开始，
+  所以既不报结果也不报失败。要不要报是产品决定，不是这里的漏洞。
+- `live_recording_watcher.dart:473` 的 `_failureOf` 是死谓词：调用它的 `onCompleted` 分支要求
+  `state.status == completed`，而它自己却在"不是 completed 时返回 null"，因此永远返回 null。
+  留着不误导，但下一次动这段时应当顺手删掉。

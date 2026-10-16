@@ -100,7 +100,11 @@ void main() {
       expect(result, isA<BackgroundAcquireSuccess>(), reason: '$result');
       expect(calls.acquires, hasLength(1));
       expect(calls.acquires.single['wakeLock'], isTrue);
-      expect(calls.acquires.single['owner'], 'recording', reason: 'a recording session belongs to the recording service');
+      expect(
+        calls.acquires.single['owner'],
+        'recording',
+        reason: 'a recording session belongs to the recording service',
+      );
 
       final notification = calls.lastNotification;
       expect(notification['title'], '正在录制');
@@ -140,20 +144,23 @@ void main() {
       await registry.acquire(
         const BackgroundRequest(id: 'download/a.bin', kind: BackgroundExecutionKind.download, title: '正在下载'),
       );
-      await registry.acquire(const BackgroundRequest(id: 'misc-1', kind: BackgroundExecutionKind.generic, title: '别的工作'));
-
-      expect(
-        calls.acquires.map((call) => call['owner']),
-        ['recording', 'download', 'generic'],
-        reason: 'three kinds, three services: what ends one of them cannot end the others',
+      await registry.acquire(
+        const BackgroundRequest(id: 'misc-1', kind: BackgroundExecutionKind.generic, title: '别的工作'),
       );
+
+      expect(calls.acquires.map((call) => call['owner']), [
+        'recording',
+        'download',
+        'generic',
+      ], reason: 'three kinds, three services: what ends one of them cannot end the others');
     });
 
     test('playback is not a job this backend would route', () {
       expect(
         () => NativeBackgroundBackend.targetFor(BackgroundServiceOwner.mediaSession),
         throwsUnsupportedError,
-        reason: 'the media session owns its own service; parking playback on a job line would be a second owner of one surface',
+        reason:
+            'the media session owns its own service; parking playback on a job line would be a second owner of one surface',
       );
     });
 
@@ -256,18 +263,17 @@ void main() {
     /// `BackgroundExecution.debugPublishReport`: the alternative is a mocked
     /// `EventChannel`, whose fan-out across simultaneous subscriptions is not
     /// behaviour a test should lean on.
-    void report(int id, String status) => BackgroundExecution.debugPublishReport(<String, Object?>{
-      'id': id,
-      'status': status,
-    });
+    void report(int id, String status) =>
+        BackgroundExecution.debugPublishReport(<String, Object?>{'id': id, 'status': status});
 
     test('a protection the platform took back reaches the lease it belongs to', () async {
       final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
       final recording = (await registry.acquire(_recording())) as BackgroundAcquireSuccess;
       final download =
           (await registry.acquire(
-            const BackgroundRequest(id: 'download/a', kind: BackgroundExecutionKind.download, title: '正在下载'),
-          )) as BackgroundAcquireSuccess;
+                const BackgroundRequest(id: 'download/a', kind: BackgroundExecutionKind.download, title: '正在下载'),
+              ))
+              as BackgroundAcquireSuccess;
 
       final seen = <BackgroundSessionStatus>[];
       final subscription = recording.lease.statusChanges.listen(seen.add);
@@ -277,22 +283,18 @@ void main() {
       report(1, 'aNameThisVersionDoesNotKnow');
       await Future<void>.delayed(Duration.zero);
 
-      expect(
-        seen,
-        [BackgroundSessionStatus.protectionLost],
-        reason: 'an unknown name is dropped, not guessed at: the plugin may be newer than this Dart side',
-      );
+      expect(seen, [
+        BackgroundSessionStatus.protectionLost,
+      ], reason: 'an unknown name is dropped, not guessed at: the plugin may be newer than this Dart side');
       expect(recording.lease.status, BackgroundSessionStatus.protectionLost);
       expect(
         registry.requestsFor(BackgroundServiceOwner.recording),
         isEmpty,
         reason: 'nothing is held any more, so the registry stops counting it and that line goes down',
       );
-      expect(
-        registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.id),
-        ['download/a'],
-        reason: 'the download runs in another service and heard nothing about it',
-      );
+      expect(registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.id), [
+        'download/a',
+      ], reason: 'the download runs in another service and heard nothing about it');
       expect(
         download.lease.status,
         BackgroundSessionStatus.running,
@@ -317,11 +319,9 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(seen, isEmpty, reason: 'a handle addresses one session, not the process');
-      expect(
-        registry.requestsFor(BackgroundServiceOwner.recording).map((request) => request.id),
-        ['recording/room-42'],
-        reason: 'what the platform took back is the download service, and this lease keeps its own protection',
-      );
+      expect(registry.requestsFor(BackgroundServiceOwner.recording).map((request) => request.id), [
+        'recording/room-42',
+      ], reason: 'what the platform took back is the download service, and this lease keeps its own protection');
       expect(
         registry.requestsFor(BackgroundServiceOwner.download),
         isEmpty,
@@ -329,6 +329,28 @@ void main() {
       );
 
       await subscription.cancel();
+    });
+
+    test('a status reported before anyone listened still reaches the lease', () async {
+      // The race is the ordinary one: the service reports the state it started in
+      // while Dart is still holding the `acquire` reply, before the registry has
+      // subscribed to the lease it just got.
+      BackgroundExecution.debugPublishReport(<String, Object?>{'id': 1, 'status': 'degraded'});
+
+      final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
+      final recording = (await registry.acquire(_recording())) as BackgroundAcquireSuccess;
+
+      final seen = <BackgroundSessionStatus>[];
+      final subscription = recording.lease.statusChanges.listen(seen.add);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, [
+        BackgroundSessionStatus.degraded,
+      ], reason: 'the broadcast stream keeps nothing for a late listener; the handle-keyed memory is what does');
+      expect(registry.activeSessionCount, 1, reason: 'a hidden notification is still a running session');
+
+      await subscription.cancel();
+      await recording.lease.release();
     });
 
     test('a hidden notification degrades the session rather than ending it', () async {

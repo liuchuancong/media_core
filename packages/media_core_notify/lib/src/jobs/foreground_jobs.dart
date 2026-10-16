@@ -116,22 +116,21 @@ abstract final class ForegroundJobs {
   /// `main()` and the background backend appears at the first job, so a `watch()`
   /// that answered "no runtime, then" and stopped would leave the lines silently
   /// never coming — the switch wired to nothing, which is the bug this class exists
-  /// to remove rather than repeat. Idempotent.
+  /// to remove rather than repeat. The slot is followed after that first attach too:
+  /// replacing the installed runtime is the same mistake seen from the other side,
+  /// leaving a projector watching a runtime no job uses any more. Idempotent.
   static void watch({BackgroundRuntime? runtime}) {
     final chosen = runtime ?? BackgroundRuntimes.current;
 
-    if (chosen == null) {
-      _waiting ??= BackgroundRuntimes.changes.listen((next) {
-        if (next != null) {
-          watch(runtime: next);
-        }
-      });
+    _waiting ??= BackgroundRuntimes.changes.listen((next) {
+      if (next != null && !identical(next, _runtime)) {
+        watch(runtime: next);
+      }
+    });
 
+    if (chosen == null) {
       return;
     }
-
-    unawaited(_waiting?.cancel());
-    _waiting = null;
 
     if (identical(_runtime, chosen)) {
       _repaint();
@@ -139,7 +138,8 @@ abstract final class ForegroundJobs {
       return;
     }
 
-    _detach();
+    _detach().forEach(unawaited);
+
     _runtime = chosen;
     _watch = chosen.changes.listen((_) => _repaint());
     _repaint();
@@ -154,15 +154,10 @@ abstract final class ForegroundJobs {
   /// For teardown and for a host that silences job notifications: the sessions
   /// themselves are untouched, so a running recording keeps its protection.
   static Future<void> hide() async {
-    final showing = _lines.values.where((line) => line.showing).map((line) => line.id).toList();
-
     unawaited(_waiting?.cancel());
     _waiting = null;
-    _detach();
 
-    for (final id in showing) {
-      await _clear(id);
-    }
+    await Future.wait(_detach());
   }
 
   /// Forgets the lines' state without touching the platform. Test-only.
@@ -184,13 +179,30 @@ abstract final class ForegroundJobs {
     return requests.isEmpty ? null : requests.first;
   }
 
-  /// Stops watching, and lets every throttled repost die with it.
-  static void _detach() {
-    _lines.values.forEach(_closeGap);
+  /// Stops watching, takes down whatever was on the shade, and returns the clears
+  /// so a caller that wants to await them can.
+  ///
+  /// The take-down is the point: these lines belong to the runtime being left, and
+  /// the next runtime has no idea they exist. Forget them without clearing them and
+  /// an ongoing-looking notification stays forever describing work nobody holds —
+  /// which is the same lie as a line that outlives its last job by a second.
+  static List<Future<void>> _detach() {
+    final pending = <Future<void>>[];
+
+    for (final line in _lines.values) {
+      line.gap?.cancel();
+
+      if (line.showing) {
+        pending.add(_clear(line.id));
+      }
+    }
+
     _lines.clear();
 
     unawaited(_watch?.cancel());
     _watch = null;
+
+    return pending;
   }
 
   static void _closeGap(_Line line) => line.gap?.cancel();
@@ -249,15 +261,11 @@ abstract final class ForegroundJobs {
       return;
     }
 
-    line
-      ..dirty = false
-      ..title = title
-      ..body = body
-      // Claimed here rather than inside the flush: a repost in flight is a line that
-      // is up, and the next release has to compare against that.
-      ..showing = true;
-
-    unawaited(_flush(owner, line));
+    line.dirty = false;
+    // Not claimed before the platform answers. A repost the plugin refused leaves
+    // nothing on the shade, and a line that believed it was up would compare its
+    // own text against what nobody ever saw and never try again.
+    unawaited(_flush(owner, line, title, body));
 
     line.gap = Timer(postGap, () => _onDeadline(owner, line));
   }
@@ -276,11 +284,16 @@ abstract final class ForegroundJobs {
     }
   }
 
-  static Future<void> _flush(BackgroundServiceOwner owner, _Line line) async {
+  static Future<void> _flush(
+    BackgroundServiceOwner owner,
+    _Line line,
+    String? title,
+    String? body,
+  ) async {
     final client = MediaCoreNotify.client;
     final first = _firstFor(owner);
 
-    if (client == null || first == null) {
+    if (client == null || first == null || title == null) {
       return;
     }
 
@@ -297,15 +310,37 @@ abstract final class ForegroundJobs {
 
     try {
       await client.showRunningLine(event);
-    } on Exception {
-      // A refused repost must not strand the line's timer state.
     }
+    // Broad on purpose: this runs inside the runtime's change event, and an error
+    // escaping here would cancel the subscription and take every feature's line
+    // down with it. One failed repost is a retry; a dead projector is silent
+    // notifications for the rest of the process.
+    on Object catch (_) {
+      // Nothing is on the shade, so the line is not shown — and it stays dirty, so
+      // the end of this repost window tries again rather than the projector
+      // settling for a notification that was never drawn.
+      line
+        ..showing = false
+        ..dirty = true;
+
+      return;
+    }
+
+    line
+      ..showing = true
+      ..title = title
+      ..body = body;
   }
 
   static Future<void> _clear(int id) async {
     try {
       await MediaCoreNotify.client?.clearRunningLine(id: id);
-    } on Exception {
+    }
+    // Same reason as the repost: a line that could not be taken down must not end
+    // the projector, and the retry-on-next-change behaviour of a *shown* line does
+    // not apply here — an id still on the shade is cleared again by the next
+    // repaint that finds its feature empty.
+    on Object catch (_) {
       // Nothing to do about a notification that could not be taken away.
     }
   }

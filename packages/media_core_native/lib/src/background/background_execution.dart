@@ -350,6 +350,11 @@ final class BackgroundExecution {
       return (session: null, refusal: BackgroundExecutionRefusal.unsupportedPlatform);
     }
 
+    // Before the ask, not after: the service can report the state it started in
+    // (no notification permission) in the same breath it is started, and a channel
+    // nobody has opened yet keeps nothing.
+    _watchPlatform();
+
     try {
       final id = await _channel.invokeMethod<int>('acquire', <String, Object?>{
         'notification': encodeNotification(notification),
@@ -407,8 +412,28 @@ final class BackgroundExecution {
     return _statuses.stream;
   }
 
+  /// The reports about one session, including one that arrived before anybody was
+  /// listening.
+  ///
+  /// The gap is small and real: the platform can report `degraded` for a session in
+  /// the moment between `acquire` answering and the registry subscribing to the
+  /// lease it was just given, and a broadcast stream keeps nothing for a listener
+  /// that arrives late. Keeping the last status per handle and replaying it is what
+  /// makes "the notification is invisible to the user" reach the host instead of
+  /// vanishing at the moment it was most actionable.
+  static Stream<BackgroundSessionReport> statusFor(int id) async* {
+    final pending = _latestStatus[id];
+
+    if (pending != null) {
+      yield (id: id, status: pending);
+    }
+
+    yield* sessionStatuses.where((report) => report.id == id);
+  }
+
   static final StreamController<BackgroundSessionReport> _statuses =
       StreamController<BackgroundSessionReport>.broadcast();
+  static final Map<int, BackgroundExecutionStatus> _latestStatus = <int, BackgroundExecutionStatus>{};
   // Never cancelled on purpose: this is the process's one view of the platform's
   // status channel, and tearing it down would silently blind every lease that still
   // holds a session.
@@ -417,7 +442,7 @@ final class BackgroundExecution {
 
   /// Subscribes once, and stays quiet about a platform that has nothing to say.
   static void _watchPlatform() {
-    if (_platformWatch != null) {
+    if (_platformWatch != null || !_hasStatusChannel) {
       return;
     }
 
@@ -430,12 +455,56 @@ final class BackgroundExecution {
     );
   }
 
+  /// Whether this platform can report at all.
+  ///
+  /// Only Android runs a service that can be stopped under a session — the
+  /// allowance cap, the system kill, the missing notification permission — and
+  /// only its plugin registers the channel. Asking the others would send a
+  /// `listen` their handler does not implement, and the SDK turns that into a
+  /// reported error every time a job starts on a desktop.
+  static bool get _hasStatusChannel =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _hasServicesBinding;
+
+  /// Whether there is a binding at all to talk to the platform through.
+  ///
+  /// Checked rather than caught. `receiveBroadcastStream` resolves its messenger
+  /// inside an `async` `onListen` callback, so asking it without a binding — a
+  /// pure-Dart isolate, a CLI, a test that never initialised one — throws into a
+  /// detached future no caller can catch, and the host sees an uncaught zone
+  /// error for a platform it never claimed to have.
+  static bool get _hasServicesBinding {
+    try {
+      ServicesBinding.instance;
+
+      return true;
+    }
+    // FlutterError is the shape of "no binding", and it is caught deliberately so
+    // the status view stays empty instead of crashing the caller.
+    // ignore: avoid_catching_errors
+    on FlutterError {
+      return false;
+    }
+  }
+
   static void _report(Object? event) {
     final report = _parseReport(event);
 
-    if (report != null) {
-      _statuses.add(report);
+    if (report == null) {
+      return;
     }
+
+    // Only a status the session can still be in is kept for the lease that has not
+    // started listening yet (see [statusFor]). A terminal one is not: that session
+    // is over, and the platform hands its handle back out to the next one — replaying
+    // `protectionLost` into a fresh session would report a protection the device took
+    // back for somebody else's job.
+    if (report.status == BackgroundExecutionStatus.degraded) {
+      _latestStatus[report.id] = report.status;
+    } else {
+      _latestStatus.remove(report.id);
+    }
+
+    _statuses.add(report);
   }
 
   /// Reads one wire event, dropping a status name this version does not know.
@@ -570,6 +639,7 @@ final class BackgroundExecutionSession implements BackgroundExecutionLease {
     }
 
     _released = true;
+    BackgroundExecution._latestStatus.remove(id);
 
     try {
       await BackgroundExecution._channel.invokeMethod<void>('release', <String, Object?>{'id': id});

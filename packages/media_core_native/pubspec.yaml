@@ -30,6 +30,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # `background_execution_without_binding_test.dart` runs without a binding, which
+  # `flutter_test` cannot offer: it initialises one.
+  test: ^1.26.2
+
 flutter:
   plugin:
     platforms:
