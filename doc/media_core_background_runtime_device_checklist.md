@@ -13,15 +13,16 @@
 | 设备矩阵 | Android 13（API 33）、Android 14（API 34，服务类型强校验）、Android 15（API 35，`dataSync` 额度）、Android TV 一台、iOS 一台、Windows / macOS / Linux 各一 |
 | 装包 | `cd example && flutter run --debug`（或 `flutter build apk --debug && adb install -r build/app/outputs/flutter-apk/app-debug.apk`） |
 
-**已知前置缺口（会挡住第 10 节）**：`example` 目前不依赖 `media_core_notify`，所以桌面平台的"每功能一条线"
-与"作业结果通知"在演示应用里没有任何调用点——不是功能坏了，是没人装。要么先接（另一次改动），要么第 10 节
-改用一个临时 `MediaCoreNotify.enable()` 的分支包来验。
+**已接线（原先是缺口）**：`example` 现在依赖 `media_core_notify`，`main()` 里 `MediaCoreNotify.enable()` 与
+媒体面同批装好（同样 try/catch，装不上只是没通知，不影响启动），并有 `notify` demo 把两条投影和作业结果
+打印出来。所以第 10 节在桌面三平台是真跑得起来的，不再需要先改代码。
 
 另外：本插件 Java 侧**不打日志**。所以下面的证据一律来自 `dumpsys` 与 demo 的输出文本；若某步判不下来，
 先补一条 debug 级日志再看，不要靠猜（这是可选改动，不在本清单内）。
 
 用到的 demo（应用内按名字找）：`background-execution`（两条作业会话 + 进度）、
-`media-session-ownership`（媒体面所有权）、`recording`、`download`、页面 `player` / `music`。
+`notify`（每功能一条线的投影与作业结果）、`media-session-ownership`（媒体面所有权）、`recording`、
+`download`、页面 `player` / `music`。
 
 ---
 
@@ -159,16 +160,17 @@ adb shell dumpsys deviceidle unforce
   Dart 侧的每条功能线（第 10 节）就是 iOS 上用户唯一看得见的东西。
 - `degraded`/`protectionLost` 在 iOS 上没有生产者，验不到就记"不适用"。
 
-## 10. 桌面三平台（需要 notify 已接线，见第 0 节）
+## 10. 桌面三平台（`notify` demo 已经把两条投影打印出来）
 
 | 平台 | 期望 |
 | --- | --- |
 | Windows | 无 FGS；`ForegroundJobs` 画每功能一条线（`media_core_recording` / `media_core_download` / `media_core_jobs`）；SMTC 显示播放；作业结果通知走 `media_core_results` |
-| macOS | 同上；通知落在"录制进行中/下载进行中"各自的渠道；睡眠断言在 `pmset -g assertions` 里可见 |
-| Linux | 后台执行**未实现**：`acquire` 如实回答 `unsupportedPlatform`，任务照跑；Dart 侧线仍应画出（`platformCapabilities` 为空 ⇒ `drawsLine` 为真） |
+| macOS | 同上；通知落在"录制进行中/下载进行中"各自的渠道；睡眠断言在 `pmset -g assertions` 里可见（`beginActivity(.idleSystemSleepDisabled)`） |
+| Linux | 后台执行**未实现**：`acquire` 如实回答 `unsupportedPlatform`，任务照跑；此时 `notify` demo 会在第 1 步就停下（没有会话就没有可投影的线），这属于如实回答而不是线画错 |
 
-关键断言：停掉下载只收走下载那条线（`clearRunningLine(id: 3)`），录制那条（`id: 2`）文本不变；
-两个功能的并发计数只数自己那一个（"还有 N 个任务"）。
+在 Windows / macOS 上跑 `notify` demo，它按步骤打印每个功能当前的线与持有会话数：先两条都在，释放下载之后
+**只有下载那条消失、录制那条文本一字不变**（`clearRunningLine(id: 3)` 只收 id 3；id 2 不动），
+"还有 N 个任务"只数同一功能。桌面系统自带的通知中心里也应看到两条独立通知，渠道不同、可分别静音。
 
 ## 11. Android TV / 遥控器
 
@@ -189,5 +191,5 @@ adb shell dumpsys deviceidle unforce
 - 第 6 节的 `stopped`：真机上没有可控触发点，单测覆盖即可，记 N-A。
 - iOS 上录制超过转场窗口被冻结：平台限制，文档 §5 已写；要长录必须宿主声明 `audio` 后台模式。
 - 进程被整体杀掉时收不到任何状态事件（Dart 一起没了）：平台限制，不是漏洞。
-- Linux 上 `acquire` 返回 `unsupportedPlatform`：未实现如实回答，比伪装成功好。
-- `example` 未装 `media_core_notify` 导致的"看不到桌面线"：接线问题，第 0 节已标。
+- Linux 上 `acquire` 返回 `unsupportedPlatform`：未实现如实回答，比伪装成功好；因此 `notify` demo 在 Linux
+  只会打印"没有会话可投影"，看不到线是**正确**结果，不是投影坏了。

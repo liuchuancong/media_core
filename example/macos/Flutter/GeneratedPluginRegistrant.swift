@@ -8,6 +8,7 @@ import Foundation
 import audio_service
 import audio_session
 import ffmpeg_kit_extended_flutter
+import flutter_local_notifications
 import media_core_audio
 import media_core_native
 import media_kit_video
@@ -21,6 +22,7 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   AudioServicePlugin.register(with: registry.registrar(forPlugin: "AudioServicePlugin"))
   AudioSessionPlugin.register(with: registry.registrar(forPlugin: "AudioSessionPlugin"))
   FfmpegKitExtendedFlutterPlugin.register(with: registry.registrar(forPlugin: "FfmpegKitExtendedFlutterPlugin"))
+  FlutterLocalNotificationsPlugin.register(with: registry.registrar(forPlugin: "FlutterLocalNotificationsPlugin"))
   MediaCoreAudioPlugin.register(with: registry.registrar(forPlugin: "MediaCoreAudioPlugin"))
   MediaCoreNativePlugin.register(with: registry.registrar(forPlugin: "MediaCoreNativePlugin"))
   MediaKitVideoPlugin.register(with: registry.registrar(forPlugin: "MediaKitVideoPlugin"))

@@ -6,6 +6,7 @@ import 'package:media_core/media_core.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core_media_kit/media_core_media_kit.dart';
 import 'package:media_core_mediasession/media_core_mediasession.dart';
+import 'package:media_core_notify/media_core_notify.dart';
 
 /// media_core example: a runnable tour of the framework.
 ///
@@ -46,6 +47,25 @@ Future<void> main() async {
     MediaCoreLog.warning(
       LogCategory.player,
       'media session surfaces unavailable',
+      fields: <String, Object?>{'error': '$error'},
+    );
+  }
+
+  // Notifications, once for the whole app: this installs the reporter the download
+  // and recording packages hand their outcomes to, and arms one running line per
+  // feature on the platforms whose system has no foreground service of its own
+  // (Android is not one of those — its per-feature services own that line).
+  //
+  // It never asks for the notification permission: `MediaCoreNotify.requestPermission()`
+  // is the one entry point for that question, and a startup that popped a dialog
+  // would be the app answering a question it did not decide to ask.
+  try {
+    await MediaCoreNotify.enable();
+    MediaCoreLog.info(LogCategory.player, 'notifications enabled');
+  } on Object catch (error) {
+    MediaCoreLog.warning(
+      LogCategory.player,
+      'notifications unavailable',
       fields: <String, Object?>{'error': '$error'},
     );
   }

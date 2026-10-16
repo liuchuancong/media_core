@@ -78,6 +78,12 @@ dependencies:
   media_core_native:
     path: ../packages/media_core_native
 
+  # User-facing notifications: the per-feature running lines on the platforms
+  # whose system has no foreground service of its own, and the job results.
+  # Without this the example installs no reporter, so those are simply never drawn.
+  media_core_notify:
+    path: ../packages/media_core_notify
+
   media_core_presentation:
     path: ../packages/media_core_presentation
   media_core_recording_ffmpeg:
