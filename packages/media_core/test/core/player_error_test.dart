@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/core/player_error.dart';
+import 'package:media_core/src/core/capability/player_error.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
 import 'package:media_core/src/identity/player_id.dart';

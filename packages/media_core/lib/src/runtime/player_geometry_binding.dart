@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:media_core/src/adapter/player_adapter.dart';
-import 'package:media_core/src/adapter/player_adapter_event.dart';
-import 'package:media_core/src/geometry/geometry_controller.dart';
-import 'package:media_core/src/geometry/video_size.dart';
+import 'package:media_core/src/adapter/contract/player_adapter.dart';
+import 'package:media_core/src/adapter/state/player_adapter_event.dart';
+import 'package:media_core/src/geometry/control/geometry_controller.dart';
+import 'package:media_core/src/geometry/value/video_size.dart';
 
 /// Binds player adapter events to the geometry controller.
 ///

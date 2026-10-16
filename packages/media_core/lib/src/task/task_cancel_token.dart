@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:media_core/src/task/player_task.dart' show PlayerTask;
+import 'package:media_core/src/task/definition/player_task.dart' show PlayerTask;
 
 /// Cancellation token used to cooperatively cancel a [PlayerTask].
 ///

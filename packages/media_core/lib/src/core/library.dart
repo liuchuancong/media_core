@@ -16,18 +16,18 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/core/media_capabilities.dart';
-export 'package:media_core/src/core/player_capabilities.dart';
-export 'package:media_core/src/core/player_config.dart';
-export 'package:media_core/src/core/player_constants.dart';
-export 'package:media_core/src/core/player_core_state.dart';
-export 'package:media_core/src/core/player_error.dart';
-export 'package:media_core/src/core/player_identity.dart';
-export 'package:media_core/src/core/player_info.dart';
-export 'package:media_core/src/core/player_lifecycle_state.dart';
-export 'package:media_core/src/core/player_media_type.dart';
-export 'package:media_core/src/core/player_metrics.dart';
-export 'package:media_core/src/core/player_options.dart';
-export 'package:media_core/src/core/player_playback_state.dart';
-export 'package:media_core/src/core/player_snapshot.dart';
-export 'package:media_core/src/core/player_status.dart';
+export 'package:media_core/src/core/capability/media_capabilities.dart';
+export 'package:media_core/src/core/capability/player_capabilities.dart';
+export 'package:media_core/src/core/capability/player_error.dart';
+export 'package:media_core/src/core/capability/player_media_type.dart';
+export 'package:media_core/src/core/config/player_config.dart';
+export 'package:media_core/src/core/config/player_constants.dart';
+export 'package:media_core/src/core/config/player_options.dart';
+export 'package:media_core/src/core/model/player_identity.dart';
+export 'package:media_core/src/core/model/player_info.dart';
+export 'package:media_core/src/core/model/player_metrics.dart';
+export 'package:media_core/src/core/model/player_snapshot.dart';
+export 'package:media_core/src/core/state/player_core_state.dart';
+export 'package:media_core/src/core/state/player_lifecycle_state.dart';
+export 'package:media_core/src/core/state/player_playback_state.dart';
+export 'package:media_core/src/core/state/player_status.dart';

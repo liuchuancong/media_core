@@ -1,4 +1,4 @@
-import 'package:media_core/src/core/player_identity.dart';
+import 'package:media_core/src/core/model/player_identity.dart';
 import 'package:media_core/src/factory/player_factory_config.dart';
 
 /// Creates player instances.

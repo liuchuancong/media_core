@@ -12,22 +12,22 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/policy/playback/fallback_policy.dart';
+export 'package:media_core/src/policy/playback/playback_policy.dart';
+export 'package:media_core/src/policy/playback/preload_policy.dart';
+export 'package:media_core/src/policy/playback/recovery_policy.dart';
+export 'package:media_core/src/policy/playback/visibility_policy.dart';
+export 'package:media_core/src/policy/resource/cache_policy.dart';
+export 'package:media_core/src/policy/resource/concurrency_policy.dart';
+export 'package:media_core/src/policy/resource/memory_policy.dart';
+export 'package:media_core/src/policy/resource/resource_policy.dart';
+export 'package:media_core/src/policy/resource/thermal_policy.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/policy/audio_policy.dart';
-export 'package:media_core/src/policy/cache_policy.dart';
-export 'package:media_core/src/policy/concurrency_policy.dart';
-export 'package:media_core/src/policy/fallback_policy.dart';
-export 'package:media_core/src/policy/lifecycle_policy.dart';
-export 'package:media_core/src/policy/memory_policy.dart';
-export 'package:media_core/src/policy/playback_policy.dart';
-export 'package:media_core/src/policy/player_policy.dart';
-export 'package:media_core/src/policy/policy_context.dart';
-export 'package:media_core/src/policy/preload_policy.dart';
-export 'package:media_core/src/policy/presentation_policy.dart';
-export 'package:media_core/src/policy/recovery_policy.dart';
-export 'package:media_core/src/policy/resource_policy.dart';
-export 'package:media_core/src/policy/thermal_policy.dart';
-export 'package:media_core/src/policy/visibility_policy.dart';
+export 'package:media_core/src/policy/session/audio_policy.dart';
+export 'package:media_core/src/policy/session/lifecycle_policy.dart';
+export 'package:media_core/src/policy/session/player_policy.dart';
+export 'package:media_core/src/policy/session/policy_context.dart';
+export 'package:media_core/src/policy/session/presentation_policy.dart';

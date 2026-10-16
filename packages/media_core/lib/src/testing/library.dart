@@ -12,20 +12,20 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/testing/factory/test_player_factory.dart';
+export 'package:media_core/src/testing/factory/test_session_factory.dart';
+export 'package:media_core/src/testing/factory/test_source_factory.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/testing/fake_clock.dart';
-export 'package:media_core/src/testing/fake_lifecycle.dart';
-export 'package:media_core/src/testing/fake_network.dart';
-export 'package:media_core/src/testing/fake_platform.dart';
-export 'package:media_core/src/testing/fake_player.dart';
-export 'package:media_core/src/testing/fake_player_adapter.dart';
-export 'package:media_core/src/testing/fake_timer.dart';
-export 'package:media_core/src/testing/fake_visibility.dart';
+export 'package:media_core/src/testing/fake/fake_clock.dart';
+export 'package:media_core/src/testing/fake/fake_lifecycle.dart';
+export 'package:media_core/src/testing/fake/fake_network.dart';
+export 'package:media_core/src/testing/fake/fake_platform.dart';
+export 'package:media_core/src/testing/fake/fake_player.dart';
+export 'package:media_core/src/testing/fake/fake_player_adapter.dart';
+export 'package:media_core/src/testing/fake/fake_timer.dart';
+export 'package:media_core/src/testing/fake/fake_visibility.dart';
 export 'package:media_core/src/testing/test_assertions.dart';
-export 'package:media_core/src/testing/test_player_factory.dart';
 export 'package:media_core/src/testing/test_scenarios.dart';
-export 'package:media_core/src/testing/test_session_factory.dart';
-export 'package:media_core/src/testing/test_source_factory.dart';

@@ -1,14 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/adapter/composite_support.dart';
-import 'package:media_core/src/adapter/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/select/composite_support.dart';
 import 'package:media_core/src/planning/default_media_source_planner.dart';
 import 'package:media_core/src/planning/media_source_plan.dart';
 import 'package:media_core/src/planning/media_source_planner.dart' show MediaSourcePlanner;
-import 'package:media_core/src/source/media_source.dart';
-import 'package:media_core/src/source/media_source_bridge.dart';
-import 'package:media_core/src/source/media_track.dart';
-import 'package:media_core/src/source/media_track_type.dart';
-import 'package:media_core/src/source/source_headers.dart';
+import 'package:media_core/src/source/descriptor/source_headers.dart';
+import 'package:media_core/src/source/model/media_source.dart';
+import 'package:media_core/src/source/model/media_track.dart';
+import 'package:media_core/src/source/model/media_track_type.dart';
+import 'package:media_core/src/source/service/media_source_bridge.dart';
 
 MediaTrack _video(String url, {int bitrate = 1_000_000}) => MediaTrack(
   uri: Uri.parse(url),

@@ -1,5 +1,5 @@
-import 'package:media_core/src/adapter/composite_support.dart';
-import 'package:media_core/src/source/media_source.dart';
+import 'package:media_core/src/adapter/select/composite_support.dart';
+import 'package:media_core/src/source/model/media_source.dart';
 import 'package:meta/meta.dart';
 
 /// A decision about how to play a [MediaSource] on a given backend.

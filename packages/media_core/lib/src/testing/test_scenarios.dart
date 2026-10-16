@@ -1,8 +1,8 @@
-import 'package:media_core/src/adapter/player_adapter.dart';
-import 'package:media_core/src/adapter/player_adapter_event.dart';
-import 'package:media_core/src/source/player_source.dart';
-import 'package:media_core/src/testing/fake_player_adapter.dart';
-import 'package:media_core/src/testing/test_source_factory.dart';
+import 'package:media_core/src/adapter/contract/player_adapter.dart';
+import 'package:media_core/src/adapter/state/player_adapter_event.dart';
+import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/testing/factory/test_source_factory.dart';
+import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 
 /// Reusable playback scenarios executed against a [PlayerAdapter].
 ///

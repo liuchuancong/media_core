@@ -4,7 +4,7 @@
 /// types without dragging the whole manager along.
 library;
 
-import 'package:media_core/src/task/player_task.dart';
+import 'package:media_core/src/task/definition/player_task.dart';
 
 /// Represents a failure raised while executing a task.
 ///

@@ -16,15 +16,15 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/task/player_task.dart';
+export 'package:media_core/src/task/definition/player_task.dart';
+export 'package:media_core/src/task/definition/task_context.dart';
+export 'package:media_core/src/task/definition/task_state.dart';
+export 'package:media_core/src/task/descriptor/task_id.dart';
+export 'package:media_core/src/task/descriptor/task_json_converters.dart';
+export 'package:media_core/src/task/descriptor/task_priority.dart';
+export 'package:media_core/src/task/descriptor/task_type.dart';
+export 'package:media_core/src/task/manager/task_manager.dart';
+export 'package:media_core/src/task/manager/task_queue.dart';
+export 'package:media_core/src/task/manager/task_scheduler.dart';
 export 'package:media_core/src/task/task_cancel_token.dart';
-export 'package:media_core/src/task/task_context.dart';
 export 'package:media_core/src/task/task_errors.dart';
-export 'package:media_core/src/task/task_id.dart';
-export 'package:media_core/src/task/task_json_converters.dart';
-export 'package:media_core/src/task/task_manager.dart';
-export 'package:media_core/src/task/task_priority.dart';
-export 'package:media_core/src/task/task_queue.dart';
-export 'package:media_core/src/task/task_scheduler.dart';
-export 'package:media_core/src/task/task_state.dart';
-export 'package:media_core/src/task/task_type.dart';

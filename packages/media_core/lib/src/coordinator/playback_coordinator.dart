@@ -1,7 +1,7 @@
 import 'package:media_core/src/identity/player_id.dart';
-import 'package:media_core/src/playback/playback_command.dart';
-import 'package:media_core/src/playback/playback_controller.dart';
-import 'package:media_core/src/playback/playback_request.dart';
+import 'package:media_core/src/playback/transport/playback_command.dart';
+import 'package:media_core/src/playback/transport/playback_controller.dart';
+import 'package:media_core/src/playback/transport/playback_request.dart';
 
 /// Coordinates playback operations.
 ///

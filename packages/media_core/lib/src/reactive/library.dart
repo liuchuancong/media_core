@@ -12,32 +12,32 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/reactive/lifecycle/stream_cancellation.dart';
+export 'package:media_core/src/reactive/lifecycle/stream_controller.dart';
+export 'package:media_core/src/reactive/lifecycle/stream_disposable.dart';
+export 'package:media_core/src/reactive/lifecycle/stream_lifecycle.dart';
+export 'package:media_core/src/reactive/operators/combine.dart';
+export 'package:media_core/src/reactive/operators/debounce.dart';
+export 'package:media_core/src/reactive/operators/distinct.dart';
+export 'package:media_core/src/reactive/operators/stream_debouncer.dart';
+export 'package:media_core/src/reactive/operators/stream_extensions.dart';
+export 'package:media_core/src/reactive/operators/stream_transform.dart';
+export 'package:media_core/src/reactive/operators/throttle.dart';
+export 'package:media_core/src/reactive/outcome/stream_event.dart';
+export 'package:media_core/src/reactive/outcome/stream_result.dart';
+export 'package:media_core/src/reactive/outcome/stream_retry.dart';
+export 'package:media_core/src/reactive/outcome/stream_safe.dart';
+export 'package:media_core/src/reactive/outcome/stream_state.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/reactive/behavior.dart';
-export 'package:media_core/src/reactive/combine.dart';
-export 'package:media_core/src/reactive/debounce.dart';
-export 'package:media_core/src/reactive/distinct.dart';
-export 'package:media_core/src/reactive/reactive.dart';
-export 'package:media_core/src/reactive/stream_cache.dart';
-export 'package:media_core/src/reactive/stream_cancellation.dart';
-export 'package:media_core/src/reactive/stream_controller.dart';
-export 'package:media_core/src/reactive/stream_debouncer.dart';
-export 'package:media_core/src/reactive/stream_disposable.dart';
-export 'package:media_core/src/reactive/stream_event.dart';
-export 'package:media_core/src/reactive/stream_extensions.dart';
-export 'package:media_core/src/reactive/stream_gate.dart';
-export 'package:media_core/src/reactive/stream_lifecycle.dart';
-export 'package:media_core/src/reactive/stream_mutex.dart';
-export 'package:media_core/src/reactive/stream_queue.dart';
-export 'package:media_core/src/reactive/stream_result.dart';
-export 'package:media_core/src/reactive/stream_retry.dart';
-export 'package:media_core/src/reactive/stream_safe.dart';
-export 'package:media_core/src/reactive/stream_scheduler.dart';
-export 'package:media_core/src/reactive/stream_state.dart';
-export 'package:media_core/src/reactive/stream_subject.dart';
-export 'package:media_core/src/reactive/stream_transform.dart';
-export 'package:media_core/src/reactive/subject.dart';
-export 'package:media_core/src/reactive/throttle.dart';
+export 'package:media_core/src/reactive/subject/behavior.dart';
+export 'package:media_core/src/reactive/subject/reactive.dart';
+export 'package:media_core/src/reactive/subject/stream_subject.dart';
+export 'package:media_core/src/reactive/subject/subject.dart';
+export 'package:media_core/src/reactive/sync/stream_cache.dart';
+export 'package:media_core/src/reactive/sync/stream_gate.dart';
+export 'package:media_core/src/reactive/sync/stream_mutex.dart';
+export 'package:media_core/src/reactive/sync/stream_queue.dart';
+export 'package:media_core/src/reactive/sync/stream_scheduler.dart';

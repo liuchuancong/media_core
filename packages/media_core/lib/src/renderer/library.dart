@@ -12,18 +12,18 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/renderer/model/renderer_capabilities.dart';
+export 'package:media_core/src/renderer/model/renderer_config.dart';
+export 'package:media_core/src/renderer/model/renderer_state.dart';
+export 'package:media_core/src/renderer/surface/player_renderer.dart';
+export 'package:media_core/src/renderer/surface/player_surface.dart';
+export 'package:media_core/src/renderer/surface/portable_player.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/renderer/media_player_view.dart';
-export 'package:media_core/src/renderer/player_overlay.dart';
-export 'package:media_core/src/renderer/player_renderer.dart';
-export 'package:media_core/src/renderer/player_surface.dart';
-export 'package:media_core/src/renderer/player_view.dart';
-export 'package:media_core/src/renderer/portable_player.dart';
-export 'package:media_core/src/renderer/renderer_capabilities.dart';
-export 'package:media_core/src/renderer/renderer_config.dart';
-export 'package:media_core/src/renderer/renderer_controller.dart';
-export 'package:media_core/src/renderer/renderer_state.dart';
-export 'package:media_core/src/renderer/video_zoom_controller.dart';
+export 'package:media_core/src/renderer/view/media_player_view.dart';
+export 'package:media_core/src/renderer/view/player_overlay.dart';
+export 'package:media_core/src/renderer/view/player_view.dart';
+export 'package:media_core/src/renderer/view/renderer_controller.dart';
+export 'package:media_core/src/renderer/view/video_zoom_controller.dart';

@@ -1,6 +1,6 @@
 import 'package:media_core/src/identity/player_id.dart';
-import 'package:media_core/src/resource/resource_manager.dart';
-import 'package:media_core/src/resource/resource_pressure.dart';
+import 'package:media_core/src/resource/manager/resource_manager.dart';
+import 'package:media_core/src/resource/state/resource_pressure.dart';
 
 /// Coordinates player resources.
 ///

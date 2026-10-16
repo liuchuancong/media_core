@@ -12,31 +12,31 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/presentation/control/presentation_controller.dart';
+export 'package:media_core/src/presentation/control/presentation_dispatcher.dart';
+export 'package:media_core/src/presentation/control/presentation_manager.dart';
+export 'package:media_core/src/presentation/control/presentation_reducer.dart';
+export 'package:media_core/src/presentation/control/presentation_service.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/presentation/device_profile.dart';
-export 'package:media_core/src/presentation/floating_controller.dart';
-export 'package:media_core/src/presentation/floating_state.dart';
-export 'package:media_core/src/presentation/fullscreen_controller.dart';
-export 'package:media_core/src/presentation/fullscreen_fit_strategy.dart';
-export 'package:media_core/src/presentation/fullscreen_state.dart';
-export 'package:media_core/src/presentation/pip_controller.dart';
-export 'package:media_core/src/presentation/pip_state.dart';
+export 'package:media_core/src/presentation/descriptor/device_profile.dart';
+export 'package:media_core/src/presentation/descriptor/presentation_capabilities.dart';
+export 'package:media_core/src/presentation/descriptor/presentation_mode.dart';
+export 'package:media_core/src/presentation/descriptor/presentation_request.dart';
+export 'package:media_core/src/presentation/driver/presentation_adapter.dart';
+export 'package:media_core/src/presentation/driver/presentation_adapter_base.dart';
+export 'package:media_core/src/presentation/driver/presentation_driver_chain.dart';
+export 'package:media_core/src/presentation/floating/floating_controller.dart';
+export 'package:media_core/src/presentation/floating/floating_state.dart';
+export 'package:media_core/src/presentation/fullscreen/fullscreen_controller.dart';
+export 'package:media_core/src/presentation/fullscreen/fullscreen_fit_strategy.dart';
+export 'package:media_core/src/presentation/fullscreen/fullscreen_state.dart';
+export 'package:media_core/src/presentation/pip/pip_controller.dart';
+export 'package:media_core/src/presentation/pip/pip_state.dart';
 export 'package:media_core/src/presentation/presentation.dart';
-export 'package:media_core/src/presentation/presentation_adapter.dart';
-export 'package:media_core/src/presentation/presentation_adapter_base.dart';
-export 'package:media_core/src/presentation/presentation_capabilities.dart';
-export 'package:media_core/src/presentation/presentation_controller.dart';
-export 'package:media_core/src/presentation/presentation_dispatcher.dart';
-export 'package:media_core/src/presentation/presentation_driver_chain.dart';
-export 'package:media_core/src/presentation/presentation_event.dart';
-export 'package:media_core/src/presentation/presentation_lifecycle.dart';
-export 'package:media_core/src/presentation/presentation_manager.dart';
-export 'package:media_core/src/presentation/presentation_mode.dart';
-export 'package:media_core/src/presentation/presentation_reducer.dart';
-export 'package:media_core/src/presentation/presentation_request.dart';
-export 'package:media_core/src/presentation/presentation_service.dart';
-export 'package:media_core/src/presentation/presentation_snapshot.dart';
-export 'package:media_core/src/presentation/presentation_state.dart';
+export 'package:media_core/src/presentation/state/presentation_event.dart';
+export 'package:media_core/src/presentation/state/presentation_lifecycle.dart';
+export 'package:media_core/src/presentation/state/presentation_snapshot.dart';
+export 'package:media_core/src/presentation/state/presentation_state.dart';

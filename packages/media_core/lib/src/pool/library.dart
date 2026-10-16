@@ -12,17 +12,17 @@
 /// removing or renaming files in this module.
 library;
 
-export 'package:media_core/src/pool/playback_pool_orchestrator.dart';
+export 'package:media_core/src/pool/alloc/player_pool_allocator.dart';
+export 'package:media_core/src/pool/alloc/player_pool_recycler.dart';
+export 'package:media_core/src/pool/alloc/pool_player_host.dart';
+export 'package:media_core/src/pool/control/playback_pool_orchestrator.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/pool/player_pool.dart';
-export 'package:media_core/src/pool/player_pool_allocator.dart';
-export 'package:media_core/src/pool/player_pool_config.dart';
-export 'package:media_core/src/pool/player_pool_manager.dart';
-export 'package:media_core/src/pool/player_pool_metrics.dart';
-export 'package:media_core/src/pool/player_pool_recycler.dart';
-export 'package:media_core/src/pool/player_pool_snapshot.dart';
-export 'package:media_core/src/pool/player_pool_state.dart';
-export 'package:media_core/src/pool/pool_player_host.dart';
+export 'package:media_core/src/pool/control/player_pool.dart';
+export 'package:media_core/src/pool/control/player_pool_manager.dart';
+export 'package:media_core/src/pool/model/player_pool_config.dart';
+export 'package:media_core/src/pool/model/player_pool_metrics.dart';
+export 'package:media_core/src/pool/model/player_pool_snapshot.dart';
+export 'package:media_core/src/pool/model/player_pool_state.dart';

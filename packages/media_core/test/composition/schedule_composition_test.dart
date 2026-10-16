@@ -1,12 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:media_core/src/composition/composed_schedule.dart';
-import 'package:media_core/src/composition/media_break.dart';
-import 'package:media_core/src/composition/playback_schedule.dart';
-import 'package:media_core/src/composition/schedule_clip.dart';
-import 'package:media_core/src/composition/schedule_navigator.dart';
-import 'package:media_core/src/composition/timeline_composer.dart';
-import 'package:media_core/src/source/media_source.dart';
+import 'package:media_core/src/composition/schedule/composed_schedule.dart';
+import 'package:media_core/src/composition/schedule/playback_schedule.dart';
+import 'package:media_core/src/composition/schedule/schedule_clip.dart';
+import 'package:media_core/src/composition/schedule/schedule_navigator.dart';
+import 'package:media_core/src/composition/timeline/media_break.dart';
+import 'package:media_core/src/composition/timeline/timeline_composer.dart';
+import 'package:media_core/src/source/model/media_source.dart';
 
 MediaSource _source(String url) => ProgressiveMediaSource.url(Uri.parse(url));
 

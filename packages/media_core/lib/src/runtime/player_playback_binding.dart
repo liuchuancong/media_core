@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:media_core/src/adapter/player_adapter.dart';
-import 'package:media_core/src/adapter/player_adapter_event.dart';
-import 'package:media_core/src/playback/playback_command.dart';
-import 'package:media_core/src/playback/playback_controller.dart';
+import 'package:media_core/src/adapter/contract/player_adapter.dart';
+import 'package:media_core/src/adapter/state/player_adapter_event.dart';
+import 'package:media_core/src/playback/transport/playback_command.dart';
+import 'package:media_core/src/playback/transport/playback_controller.dart';
 import 'package:media_core/src/runtime/player_runtime.dart' show PlayerRuntime;
 
 /// Bridges [PlayerAdapter] playback events into a [PlaybackController].

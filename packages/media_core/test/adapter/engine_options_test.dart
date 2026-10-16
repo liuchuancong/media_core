@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/adapter/engine_option.dart';
-import 'package:media_core/src/adapter/player_adapter_registry.dart';
+import 'package:media_core/src/adapter/select/engine_option.dart';
+import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/event/player_event_bus.dart';
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/kernel_options.dart';
-import 'package:media_core/src/kernel/player_handle.dart';
-import 'package:media_core/src/source/player_source.dart';
-import 'package:media_core/src/testing/fake_player_adapter.dart';
-import 'package:media_core/src/testing/test_player_factory.dart';
+import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/testing/factory/test_player_factory.dart';
+import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 
 PlayerSource _source(String id) => PlayerSource(id: SourceId(id), uri: Uri.parse('https://example.com/$id.flv'));
 

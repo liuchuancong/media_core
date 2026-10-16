@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:media_core/src/playback/buffer_range.dart';
-import 'package:media_core/src/playback/playback_command.dart';
-import 'package:media_core/src/playback/player_transport_state.dart';
+import 'package:media_core/src/playback/transport/playback_command.dart';
+import 'package:media_core/src/playback/transport/player_transport_state.dart';
+import 'package:media_core/src/playback/value/buffer_range.dart';
 
 void main() {
   group('PlayerTransportState buffered ranges', () {

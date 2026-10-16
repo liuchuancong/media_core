@@ -16,13 +16,13 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/session/player_session.dart';
-export 'package:media_core/src/session/session_context.dart';
-export 'package:media_core/src/session/session_controller.dart';
-export 'package:media_core/src/session/session_event.dart';
-export 'package:media_core/src/session/session_generation.dart';
-export 'package:media_core/src/session/session_lifecycle.dart';
-export 'package:media_core/src/session/session_manager.dart';
-export 'package:media_core/src/session/session_operation.dart';
-export 'package:media_core/src/session/session_snapshot.dart';
-export 'package:media_core/src/session/session_state.dart';
+export 'package:media_core/src/session/control/player_session.dart';
+export 'package:media_core/src/session/control/session_controller.dart';
+export 'package:media_core/src/session/control/session_lifecycle.dart';
+export 'package:media_core/src/session/control/session_manager.dart';
+export 'package:media_core/src/session/model/session_context.dart';
+export 'package:media_core/src/session/model/session_event.dart';
+export 'package:media_core/src/session/model/session_generation.dart';
+export 'package:media_core/src/session/model/session_operation.dart';
+export 'package:media_core/src/session/model/session_snapshot.dart';
+export 'package:media_core/src/session/model/session_state.dart';

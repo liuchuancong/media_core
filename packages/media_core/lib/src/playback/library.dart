@@ -12,22 +12,22 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/playback/thumbnail/thumbnail_slice.dart';
+export 'package:media_core/src/playback/thumbnail/thumbnail_track.dart';
+export 'package:media_core/src/playback/transport/playback_command.dart';
+export 'package:media_core/src/playback/transport/playback_command_type.dart';
+export 'package:media_core/src/playback/transport/playback_controller.dart';
+export 'package:media_core/src/playback/transport/playback_request.dart';
+export 'package:media_core/src/playback/transport/playback_snapshot.dart';
+export 'package:media_core/src/playback/transport/player_transport_state.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/playback/buffer_range.dart';
-export 'package:media_core/src/playback/playback_buffer.dart';
-export 'package:media_core/src/playback/playback_command.dart';
-export 'package:media_core/src/playback/playback_command_type.dart';
-export 'package:media_core/src/playback/playback_controller.dart';
-export 'package:media_core/src/playback/playback_duration.dart';
-export 'package:media_core/src/playback/playback_options.dart';
-export 'package:media_core/src/playback/playback_position.dart';
-export 'package:media_core/src/playback/playback_rate.dart';
-export 'package:media_core/src/playback/playback_request.dart';
-export 'package:media_core/src/playback/playback_snapshot.dart';
-export 'package:media_core/src/playback/playback_volume.dart';
-export 'package:media_core/src/playback/player_transport_state.dart';
-export 'package:media_core/src/playback/thumbnail_slice.dart';
-export 'package:media_core/src/playback/thumbnail_track.dart';
+export 'package:media_core/src/playback/value/buffer_range.dart';
+export 'package:media_core/src/playback/value/playback_buffer.dart';
+export 'package:media_core/src/playback/value/playback_duration.dart';
+export 'package:media_core/src/playback/value/playback_options.dart';
+export 'package:media_core/src/playback/value/playback_position.dart';
+export 'package:media_core/src/playback/value/playback_rate.dart';
+export 'package:media_core/src/playback/value/playback_volume.dart';

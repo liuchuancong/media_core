@@ -1,16 +1,16 @@
 import 'dart:async';
 
-import 'package:media_core/src/adapter/player_adapter.dart';
-import 'package:media_core/src/geometry/geometry_controller.dart';
-import 'package:media_core/src/playback/playback_command.dart';
-import 'package:media_core/src/playback/playback_controller.dart';
-import 'package:media_core/src/playback/player_transport_state.dart';
+import 'package:media_core/src/adapter/contract/player_adapter.dart';
+import 'package:media_core/src/geometry/control/geometry_controller.dart';
+import 'package:media_core/src/playback/transport/playback_command.dart';
+import 'package:media_core/src/playback/transport/playback_controller.dart';
+import 'package:media_core/src/playback/transport/player_transport_state.dart';
 import 'package:media_core/src/runtime/player_geometry_binding.dart';
 import 'package:media_core/src/runtime/player_playback_binding.dart';
 import 'package:media_core/src/screenshot/screenshot_config.dart';
 import 'package:media_core/src/screenshot/screenshot_manager.dart';
-import 'package:media_core/src/session/player_session.dart';
-import 'package:media_core/src/session/session_controller.dart';
+import 'package:media_core/src/session/control/player_session.dart';
+import 'package:media_core/src/session/control/session_controller.dart';
 import 'package:media_core_logging/media_core_logging.dart';
 
 /// Runtime container for one logical player.

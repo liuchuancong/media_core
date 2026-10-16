@@ -1,6 +1,6 @@
-import 'package:media_core/src/core/player_core_state.dart';
-import 'package:media_core/src/core/player_playback_state.dart';
-import 'package:media_core/src/core/player_status.dart';
+import 'package:media_core/src/core/state/player_core_state.dart';
+import 'package:media_core/src/core/state/player_playback_state.dart';
+import 'package:media_core/src/core/state/player_status.dart';
 import 'package:media_core/src/reconciler/reconcile_action.dart';
 import 'package:media_core/src/reconciler/reconcile_context.dart';
 import 'package:media_core/src/reconciler/reconcile_plan.dart';

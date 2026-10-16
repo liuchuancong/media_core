@@ -12,32 +12,32 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/source/descriptor/source_descriptor.dart';
+export 'package:media_core/src/source/descriptor/source_headers.dart';
+export 'package:media_core/src/source/descriptor/source_identity.dart';
+export 'package:media_core/src/source/descriptor/source_location.dart';
+export 'package:media_core/src/source/descriptor/source_metadata.dart';
+export 'package:media_core/src/source/inspect/source_inspect_context.dart';
+export 'package:media_core/src/source/inspect/source_inspector.dart';
+export 'package:media_core/src/source/inspect/source_inspector_chain.dart';
+export 'package:media_core/src/source/inspect/source_validator.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/source/media_source.dart';
-export 'package:media_core/src/source/media_source_bridge.dart';
-export 'package:media_core/src/source/media_track.dart';
-export 'package:media_core/src/source/media_track_type.dart';
-export 'package:media_core/src/source/player_source.dart';
-export 'package:media_core/src/source/source_descriptor.dart';
-export 'package:media_core/src/source/source_format.dart';
-export 'package:media_core/src/source/source_headers.dart';
-export 'package:media_core/src/source/source_identity.dart';
-export 'package:media_core/src/source/source_inspect_context.dart';
-export 'package:media_core/src/source/source_inspector.dart';
-export 'package:media_core/src/source/source_inspector_chain.dart';
-export 'package:media_core/src/source/source_location.dart';
-export 'package:media_core/src/source/source_media_type.dart';
-export 'package:media_core/src/source/source_metadata.dart';
-export 'package:media_core/src/source/source_protocol.dart';
-export 'package:media_core/src/source/source_registry.dart';
-export 'package:media_core/src/source/source_request.dart';
-export 'package:media_core/src/source/source_resolve_context.dart';
-export 'package:media_core/src/source/source_resolved.dart';
-export 'package:media_core/src/source/source_resolver.dart';
-export 'package:media_core/src/source/source_resolver_chain.dart';
-export 'package:media_core/src/source/source_service.dart';
-export 'package:media_core/src/source/source_type.dart';
-export 'package:media_core/src/source/source_validator.dart';
+export 'package:media_core/src/source/model/media_source.dart';
+export 'package:media_core/src/source/model/media_track.dart';
+export 'package:media_core/src/source/model/media_track_type.dart';
+export 'package:media_core/src/source/model/player_source.dart';
+export 'package:media_core/src/source/resolve/source_request.dart';
+export 'package:media_core/src/source/resolve/source_resolve_context.dart';
+export 'package:media_core/src/source/resolve/source_resolved.dart';
+export 'package:media_core/src/source/resolve/source_resolver.dart';
+export 'package:media_core/src/source/resolve/source_resolver_chain.dart';
+export 'package:media_core/src/source/service/media_source_bridge.dart';
+export 'package:media_core/src/source/service/source_registry.dart';
+export 'package:media_core/src/source/service/source_service.dart';
+export 'package:media_core/src/source/types/source_format.dart';
+export 'package:media_core/src/source/types/source_media_type.dart';
+export 'package:media_core/src/source/types/source_protocol.dart';
+export 'package:media_core/src/source/types/source_type.dart';

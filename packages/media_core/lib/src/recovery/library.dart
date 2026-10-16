@@ -22,23 +22,23 @@
 /// removing or renaming files in this module.
 library;
 
-// Diagnostics. Not part of the decision path.
-export 'package:media_core/src/recovery/recovery_action.dart';
-// What the ladder decides with.
-export 'package:media_core/src/recovery/recovery_candidate_provider.dart';
-export 'package:media_core/src/recovery/recovery_context.dart';
-export 'package:media_core/src/recovery/recovery_failure.dart';
+export 'package:media_core/src/recovery/ladder/recovery_context.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
 // The ladder: one decision point per failure.
-export 'package:media_core/src/recovery/recovery_ladder.dart';
-export 'package:media_core/src/recovery/recovery_ladder_event.dart';
-export 'package:media_core/src/recovery/recovery_reason.dart';
-export 'package:media_core/src/recovery/recovery_session.dart';
-export 'package:media_core/src/recovery/recovery_snapshot.dart';
-export 'package:media_core/src/recovery/recovery_state.dart';
-export 'package:media_core/src/recovery/recovery_step.dart';
+export 'package:media_core/src/recovery/ladder/recovery_ladder.dart';
+export 'package:media_core/src/recovery/ladder/recovery_ladder_event.dart';
+export 'package:media_core/src/recovery/ladder/recovery_session.dart';
+// Diagnostics. Not part of the decision path.
+export 'package:media_core/src/recovery/plan/recovery_action.dart';
+// What the ladder decides with.
+export 'package:media_core/src/recovery/plan/recovery_candidate_provider.dart';
+export 'package:media_core/src/recovery/plan/recovery_step.dart';
 // What the ladder drives.
-export 'package:media_core/src/recovery/recovery_target.dart';
+export 'package:media_core/src/recovery/plan/recovery_target.dart';
+export 'package:media_core/src/recovery/state/recovery_failure.dart';
+export 'package:media_core/src/recovery/state/recovery_reason.dart';
+export 'package:media_core/src/recovery/state/recovery_snapshot.dart';
+export 'package:media_core/src/recovery/state/recovery_state.dart';

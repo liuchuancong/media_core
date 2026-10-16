@@ -18,14 +18,14 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/composition/composed_schedule.dart';
-export 'package:media_core/src/composition/media_break.dart';
-export 'package:media_core/src/composition/media_cue.dart';
-export 'package:media_core/src/composition/media_segment.dart';
-export 'package:media_core/src/composition/media_timeline.dart';
-export 'package:media_core/src/composition/playback_schedule.dart';
-export 'package:media_core/src/composition/schedule_clip.dart';
-export 'package:media_core/src/composition/schedule_navigator.dart';
-export 'package:media_core/src/composition/scheduled_playback.dart';
-export 'package:media_core/src/composition/timeline_composer.dart';
-export 'package:media_core/src/composition/timeline_track.dart';
+export 'package:media_core/src/composition/schedule/composed_schedule.dart';
+export 'package:media_core/src/composition/schedule/playback_schedule.dart';
+export 'package:media_core/src/composition/schedule/schedule_clip.dart';
+export 'package:media_core/src/composition/schedule/schedule_navigator.dart';
+export 'package:media_core/src/composition/schedule/scheduled_playback.dart';
+export 'package:media_core/src/composition/timeline/media_break.dart';
+export 'package:media_core/src/composition/timeline/media_cue.dart';
+export 'package:media_core/src/composition/timeline/media_segment.dart';
+export 'package:media_core/src/composition/timeline/media_timeline.dart';
+export 'package:media_core/src/composition/timeline/timeline_composer.dart';
+export 'package:media_core/src/composition/timeline/timeline_track.dart';

@@ -1,4 +1,4 @@
-import 'package:media_core/src/task/task_state.dart' show TaskState;
+import 'package:media_core/src/task/definition/task_state.dart' show TaskState;
 import 'package:meta/meta.dart';
 
 /// Describes the lifecycle state of an operation.

@@ -1,18 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:media_core/src/adapter/composite_support.dart';
-import 'package:media_core/src/adapter/player_adapter.dart';
-import 'package:media_core/src/adapter/player_adapter_capabilities.dart';
-import 'package:media_core/src/adapter/player_adapter_factory.dart';
-import 'package:media_core/src/adapter/player_adapter_registry.dart';
-import 'package:media_core/src/adapter/player_adapter_selector.dart';
+import 'package:media_core/src/adapter/contract/player_adapter.dart';
+import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/select/composite_support.dart';
+import 'package:media_core/src/adapter/select/player_adapter_factory.dart';
+import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
+import 'package:media_core/src/adapter/select/player_adapter_selector.dart';
 import 'package:media_core/src/identity/source_id.dart';
-import 'package:media_core/src/source/media_source.dart';
-import 'package:media_core/src/source/media_track.dart';
-import 'package:media_core/src/source/media_track_type.dart';
-import 'package:media_core/src/source/player_source.dart';
-import 'package:media_core/src/source/source_format.dart';
-import 'package:media_core/src/source/source_protocol.dart';
+import 'package:media_core/src/source/model/media_source.dart';
+import 'package:media_core/src/source/model/media_track.dart';
+import 'package:media_core/src/source/model/media_track_type.dart';
+import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/source/types/source_format.dart';
+import 'package:media_core/src/source/types/source_protocol.dart';
 
 const _httpProtocols = <String>{'http', 'https', 'hls', 'dash'};
 const _mp4Formats = <String>{'mp4', 'm4s', 'mpd', 'm3u8'};

@@ -1,5 +1,5 @@
-import 'package:media_core/src/core/player_config.dart' show PlayerConfig;
-import 'package:media_core/src/core/player_constants.dart';
+import 'package:media_core/src/core/config/player_config.dart' show PlayerConfig;
+import 'package:media_core/src/core/config/player_constants.dart';
 
 /// Global options for the player kernel.
 ///

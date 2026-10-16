@@ -12,19 +12,19 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/platform/capability/platform_capabilities.dart';
+export 'package:media_core/src/platform/capability/platform_codec_capabilities.dart';
+export 'package:media_core/src/platform/capability/platform_device_profile.dart';
+export 'package:media_core/src/platform/capability/platform_info.dart';
+export 'package:media_core/src/platform/capability/platform_type.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/platform/platform_audio.dart';
-export 'package:media_core/src/platform/platform_capabilities.dart';
-export 'package:media_core/src/platform/platform_codec_capabilities.dart';
-export 'package:media_core/src/platform/platform_device_profile.dart';
-export 'package:media_core/src/platform/platform_info.dart';
-export 'package:media_core/src/platform/platform_lifecycle.dart';
-export 'package:media_core/src/platform/platform_network.dart';
-export 'package:media_core/src/platform/platform_pip.dart';
-export 'package:media_core/src/platform/platform_provider.dart';
-export 'package:media_core/src/platform/platform_renderer.dart';
-export 'package:media_core/src/platform/platform_surface.dart';
-export 'package:media_core/src/platform/platform_type.dart';
+export 'package:media_core/src/platform/service/platform_audio.dart';
+export 'package:media_core/src/platform/service/platform_lifecycle.dart';
+export 'package:media_core/src/platform/service/platform_network.dart';
+export 'package:media_core/src/platform/service/platform_pip.dart';
+export 'package:media_core/src/platform/service/platform_provider.dart';
+export 'package:media_core/src/platform/surface/platform_renderer.dart';
+export 'package:media_core/src/platform/surface/platform_surface.dart';

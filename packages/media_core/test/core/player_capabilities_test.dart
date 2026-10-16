@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/core/player_capabilities.dart';
+import 'package:media_core/src/core/capability/player_capabilities.dart';
 
 void main() {
   group('PlayerCapabilities', () {

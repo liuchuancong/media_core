@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'package:media_core/src/core/player_identity.dart';
+import 'package:media_core/src/core/model/player_identity.dart';
 import 'package:media_core/src/identity/player_id.dart';
-import 'package:media_core/src/session/player_session.dart';
+import 'package:media_core/src/session/control/player_session.dart';
 
 /// Coordinates player level operations.
 ///

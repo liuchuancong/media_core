@@ -12,17 +12,17 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/network/model/network_condition.dart';
+export 'package:media_core/src/network/model/network_quality.dart';
+export 'package:media_core/src/network/model/network_state.dart';
+export 'package:media_core/src/network/model/network_type.dart';
+export 'package:media_core/src/network/monitor/network_manager.dart';
+export 'package:media_core/src/network/monitor/network_metrics.dart';
+export 'package:media_core/src/network/monitor/network_monitor.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/network/http_header_sanitizer.dart';
-export 'package:media_core/src/network/network_condition.dart';
-export 'package:media_core/src/network/network_manager.dart';
-export 'package:media_core/src/network/network_metrics.dart';
-export 'package:media_core/src/network/network_monitor.dart';
-export 'package:media_core/src/network/network_quality.dart';
-export 'package:media_core/src/network/network_request.dart';
-export 'package:media_core/src/network/network_response.dart';
-export 'package:media_core/src/network/network_state.dart';
-export 'package:media_core/src/network/network_type.dart';
+export 'package:media_core/src/network/transport/http_header_sanitizer.dart';
+export 'package:media_core/src/network/transport/network_request.dart';
+export 'package:media_core/src/network/transport/network_response.dart';

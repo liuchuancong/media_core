@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/core/player_core_state.dart';
-import 'package:media_core/src/core/player_snapshot.dart';
-import 'package:media_core/src/core/player_status.dart';
+import 'package:media_core/src/core/model/player_snapshot.dart';
+import 'package:media_core/src/core/state/player_core_state.dart';
+import 'package:media_core/src/core/state/player_status.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 

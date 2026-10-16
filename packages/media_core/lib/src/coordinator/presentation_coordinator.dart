@@ -1,6 +1,6 @@
 import 'package:media_core/src/identity/player_id.dart';
-import 'package:media_core/src/presentation/presentation_controller.dart';
-import 'package:media_core/src/presentation/presentation_request.dart';
+import 'package:media_core/src/presentation/control/presentation_controller.dart';
+import 'package:media_core/src/presentation/descriptor/presentation_request.dart';
 
 /// Coordinates presentation controllers between players.
 ///

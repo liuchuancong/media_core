@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/fallback/quality_fallback.dart' show QualityFallback;
-import 'package:media_core/src/kernel/player_handle.dart';
+import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/player_kernel.dart' show PlayerKernel;
 import 'package:media_core/src/quality/quality_candidate.dart';
 

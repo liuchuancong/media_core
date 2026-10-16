@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
-import 'package:media_core/src/source/media_source.dart';
-import 'package:media_core/src/source/media_track.dart';
+import 'package:media_core/src/source/model/media_source.dart';
+import 'package:media_core/src/source/model/media_track.dart';
 
 /// One selectable playback quality.
 ///

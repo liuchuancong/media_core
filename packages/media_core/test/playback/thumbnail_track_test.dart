@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/src/playback/thumbnail_slice.dart';
-import 'package:media_core/src/playback/thumbnail_track.dart';
+import 'package:media_core/src/playback/thumbnail/thumbnail_slice.dart';
+import 'package:media_core/src/playback/thumbnail/thumbnail_track.dart';
 
 const _spriteVtt = '''
 WEBVTT

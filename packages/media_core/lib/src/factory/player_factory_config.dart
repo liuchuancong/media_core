@@ -1,4 +1,4 @@
-import 'package:media_core/src/policy/player_policy.dart';
+import 'package:media_core/src/policy/session/player_policy.dart';
 
 /// Configuration used when creating a player.
 ///

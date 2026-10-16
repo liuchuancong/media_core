@@ -12,27 +12,27 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/util/async/dispose_utils.dart';
+export 'package:media_core/src/util/async/future_utils.dart';
+export 'package:media_core/src/util/async/retry_utils.dart';
+export 'package:media_core/src/util/async/stream_utils.dart';
+export 'package:media_core/src/util/collection/enum_utils.dart';
+export 'package:media_core/src/util/collection/list_utils.dart';
+export 'package:media_core/src/util/collection/map_utils.dart';
+export 'package:media_core/src/util/collection/math_utils.dart';
+export 'package:media_core/src/util/id_generator.dart';
+export 'package:media_core/src/util/platform/debug_utils.dart';
+export 'package:media_core/src/util/platform/platform_utils.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/util/cookie_utils.dart';
-export 'package:media_core/src/util/debug_utils.dart';
-export 'package:media_core/src/util/dispose_utils.dart';
-export 'package:media_core/src/util/duration_utils.dart';
-export 'package:media_core/src/util/enum_utils.dart';
-export 'package:media_core/src/util/future_utils.dart';
-export 'package:media_core/src/util/header_utils.dart';
-export 'package:media_core/src/util/id_generator.dart';
-export 'package:media_core/src/util/list_utils.dart';
-export 'package:media_core/src/util/map_utils.dart';
-export 'package:media_core/src/util/math_utils.dart';
-export 'package:media_core/src/util/media_format_constants.dart';
-export 'package:media_core/src/util/mime_utils.dart';
-export 'package:media_core/src/util/platform_utils.dart';
-export 'package:media_core/src/util/retry_utils.dart';
-export 'package:media_core/src/util/stream_utils.dart';
-export 'package:media_core/src/util/string_utils.dart';
-export 'package:media_core/src/util/time_utils.dart';
-export 'package:media_core/src/util/uri_utils.dart';
+export 'package:media_core/src/util/text/cookie_utils.dart';
+export 'package:media_core/src/util/text/header_utils.dart';
+export 'package:media_core/src/util/text/media_format_constants.dart';
+export 'package:media_core/src/util/text/mime_utils.dart';
+export 'package:media_core/src/util/text/string_utils.dart';
+export 'package:media_core/src/util/text/uri_utils.dart';
+export 'package:media_core/src/util/time/duration_utils.dart';
+export 'package:media_core/src/util/time/time_utils.dart';
 export 'package:media_core/src/util/validation_utils.dart';

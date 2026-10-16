@@ -12,24 +12,23 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/resource/manager/bandwidth_manager.dart';
+export 'package:media_core/src/resource/manager/decoder_manager.dart';
+export 'package:media_core/src/resource/manager/resource_manager.dart';
+export 'package:media_core/src/resource/manager/thermal_manager.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/resource/bandwidth_budget.dart';
-export 'package:media_core/src/resource/bandwidth_manager.dart';
-export 'package:media_core/src/resource/decoder_budget.dart';
-export 'package:media_core/src/resource/decoder_manager.dart';
-export 'package:media_core/src/resource/memory_pressure_bridge.dart';
-export 'package:media_core/src/resource/resource_manager.dart';
-export 'package:media_core/src/resource/resource_metrics.dart';
-export 'package:media_core/src/resource/resource_pressure.dart';
-export 'package:media_core/src/resource/resource_priority.dart';
-export 'package:media_core/src/resource/resource_snapshot.dart';
-export 'package:media_core/src/resource/resource_state.dart';
-export 'package:media_core/src/resource/thermal_manager.dart';
-export 'package:media_core/src/resource/thermal_state.dart';
-
+export 'package:media_core/src/resource/model/bandwidth_budget.dart';
+export 'package:media_core/src/resource/model/decoder_budget.dart';
+export 'package:media_core/src/resource/model/resource_metrics.dart';
+export 'package:media_core/src/resource/model/resource_priority.dart';
+export 'package:media_core/src/resource/state/memory_pressure_bridge.dart';
+export 'package:media_core/src/resource/state/resource_pressure.dart';
+export 'package:media_core/src/resource/state/resource_snapshot.dart';
+export 'package:media_core/src/resource/state/resource_state.dart';
+export 'package:media_core/src/resource/state/thermal_state.dart';
 // Memory accounting lives in its own package and is re-exported here so the
 // resource layer keeps one import surface.
 export 'package:media_core_memory/media_core_memory.dart';

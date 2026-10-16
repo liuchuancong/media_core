@@ -12,19 +12,19 @@
 /// removing or renaming files in this module.
 library;
 
+export 'package:media_core/src/geometry/control/geometry_controller.dart';
+export 'package:media_core/src/geometry/control/geometry_session.dart';
+export 'package:media_core/src/geometry/state/geometry_event.dart';
+export 'package:media_core/src/geometry/state/geometry_snapshot.dart';
+export 'package:media_core/src/geometry/state/geometry_state.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/geometry/aspect_ratio.dart';
-export 'package:media_core/src/geometry/display_size.dart';
-export 'package:media_core/src/geometry/geometry_controller.dart';
-export 'package:media_core/src/geometry/geometry_event.dart';
-export 'package:media_core/src/geometry/geometry_session.dart';
-export 'package:media_core/src/geometry/geometry_snapshot.dart';
-export 'package:media_core/src/geometry/geometry_state.dart';
-export 'package:media_core/src/geometry/pixel_ratio.dart';
-export 'package:media_core/src/geometry/video_geometry.dart';
-export 'package:media_core/src/geometry/video_orientation.dart';
-export 'package:media_core/src/geometry/video_rotation.dart';
-export 'package:media_core/src/geometry/video_size.dart';
+export 'package:media_core/src/geometry/value/aspect_ratio.dart';
+export 'package:media_core/src/geometry/value/display_size.dart';
+export 'package:media_core/src/geometry/value/pixel_ratio.dart';
+export 'package:media_core/src/geometry/value/video_geometry.dart';
+export 'package:media_core/src/geometry/value/video_orientation.dart';
+export 'package:media_core/src/geometry/value/video_rotation.dart';
+export 'package:media_core/src/geometry/value/video_size.dart';
