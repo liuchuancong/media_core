@@ -15,11 +15,11 @@ typedef UrlRefresher = Future<String?> Function(RecordingSource source);
 
 /// Reports how many bytes are free where [directory] lives.
 ///
-/// Null means the platform could not say. This is a callback rather than a
-/// helper because there is no portable way to ask in Dart — the plugins that do
-/// it are per-platform and this package is not going to depend on one for an
-/// optional check — and because a missing answer is not a reason to refuse a
-/// recording the user asked for.
+/// Null means the platform could not say, and an unknown is not a refusal: a
+/// missing answer must never stop a recording the user asked for. This is a
+/// callback so a host can name its own answer (a mounted volume, a quota it
+/// knows about); with none given, the backend asks the platform's tool through
+/// `FfmpegDiskSpace.probe`.
 typedef DiskSpaceProbe = Future<int?> Function(String directory);
 
 /// The volume a recording writes to has no room left.

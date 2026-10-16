@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:example/demos/fakes/fake_ffmpeg.dart';
 import 'package:example/demos/module_demo.dart';
 import 'package:media_core/media_core.dart' show RecordingConfig, RecordingSource;
@@ -81,8 +83,40 @@ print('${result.success} ${backend.lastCheck}');  // judged by the files, not th
 
     _argumentsSection(buffer);
     await _lifecycleSection(buffer);
+    await _diskSection(buffer);
 
     return buffer.toString();
+  }
+
+  /// What the platform answers about free space, which is what the watermark asks.
+  ///
+  /// The check only runs when the host hands the backend a probe — asking means a
+  /// `df` / `powershell` call on the path that starts a recording, so it is a host
+  /// decision. This is that one line, and the answer it gives here is the answer a
+  /// `FfmpegRecordConfig.diskWatermarkBytes` would be compared against.
+  Future<void> _diskSection(StringBuffer buffer) async {
+    final directory = Directory.systemTemp.createTempSync('media_core_recording_disk').path;
+    final free = await FfmpegDiskSpace.probe(directory);
+
+    buffer
+      ..writeln()
+      ..writeln('free space on the volume this demo would write to:');
+
+    if (free == null) {
+      buffer.writeln(
+        '  this platform could not answer (no tool, a sandbox that refused, a path with no '
+        'volume to ask about) — and an unknown is never read as "no room", so a recording '
+        'here still starts.',
+      );
+    } else {
+      buffer
+        ..writeln('  ${free ~/ (1024 * 1024)} MB free, default watermark ${FfmpegRecordConfig.defaults.diskWatermarkBytes ~/ (1024 * 1024)} MB')
+        ..writeln(
+          '  wired with one argument: FfmpegRecordingBackend(diskSpace: FfmpegDiskSpace.probe) — '
+          'below the watermark the start is refused before the first segment, which is a better '
+          'report than an FFmpeg exit code after the last one.',
+        );
+    }
   }
 
   /// The argument list, which is what an FFmpeg failure is usually about.

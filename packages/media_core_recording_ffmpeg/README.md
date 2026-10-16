@@ -87,8 +87,11 @@ final result = await backend.stop();     // 用户主动停止是"成功录制"
 - **停顿**：`stallTimeout` 内没有任何**推进**（媒体时间与字节都停在原值）就由后端结束进程，交给上面的重开。
   FFmpeg 自己的 `-rw_timeout` 只管"读不回来"，管不了"HLS 清单一直在刷新但没有新片"。看门狗数的是定时器的
   次数而不是墙钟，因此在测试的假时钟里同样能触发。
-- **磁盘**：给了 `diskSpace` 探针时，低于 `diskWatermarkBytes` 就不开头（并在重开前再问一次）；没给就跳过 ——
-  Dart 没有可移植的问法，依赖那些插件不值当，而写满之后的失败 FFmpeg 自己会报。
+- **磁盘**：给了 `diskSpace` 探针时，低于 `diskWatermarkBytes` 就不开头（并在重开前再问一次）。本包提供
+  `FfmpegDiskSpace.probe`——问的是平台自己的工具（POSIX `df -kP`，Windows 走 PowerShell 的
+  `System.IO.DriveInfo`），但**默认不调**：那是在"开始录制"这条路上起一个子进程，和 `executor` 一样属于宿主
+  该注入的东西，一行 `diskSpace: FfmpegDiskSpace.probe` 就开（`example` 的录制 demo 会打印本机答案）。
+  问不出来（没有工具、沙箱拒绝、UNC 路径）一律当作"不知道"，不知道不等于没空间；真写满了 FFmpeg 自己会报。
 
 ## 看着房间，而不是猜时间
 

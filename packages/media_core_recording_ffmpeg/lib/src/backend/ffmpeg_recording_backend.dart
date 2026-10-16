@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:media_core/media_core.dart';
 import 'package:media_core_native/media_core_native.dart';
+import 'package:media_core_recording_ffmpeg/src/backend/disk_space.dart';
 import 'package:media_core_recording_ffmpeg/src/config/ffmpeg_record_config.dart';
 import 'package:media_core_recording_ffmpeg/src/config/output_path.dart';
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_executor.dart';
@@ -122,9 +123,10 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// non-refreshing restart of an expired URL is a backoff loop that always
   /// fails.
   ///
-  /// [diskSpace] reports bytes free in the output directory. Null skips the
-  /// check (see [FfmpegRecordConfig.diskWatermarkBytes] for why there is no
-  /// default).
+  /// [diskSpace] reports bytes free in the output directory. Null asks nothing —
+  /// pass [FfmpegDiskSpace.probe] to have the platform asked, which is a shell call
+  /// on the start path and so is the host's decision rather than this class's.
+  /// Either way an answer of null is not a refusal.
   FfmpegRecordingBackend({
     FfmpegExecutor? executor,
     this.config = FfmpegRecordConfig.defaults,
@@ -463,8 +465,15 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
   /// Throws when the output volume is below the watermark.
   ///
-  /// A probe that cannot answer is not a refusal: the recording is the thing the
-  /// user asked for, and FFmpeg's own write failure is still a report.
+  /// With no probe named there is no question asked, and that is deliberate: asking
+  /// means running `df` or `powershell`, which is a platform call on the path that
+  /// starts a recording — the same kind of call [FfmpegExecutor] exists to keep out
+  /// of this class. A host that wants the check passes [FfmpegDiskSpace.probe] (one
+  /// argument, and `example` does it); what it does not want is a start that waits
+  /// on a shell it never asked for.
+  ///
+  /// A probe that cannot answer is not a refusal either way: the recording is the
+  /// thing the user asked for, and FFmpeg's own write failure is still a report.
   Future<void> _refuseIfNoRoom(String directory) async {
     final probe = _diskSpace;
 

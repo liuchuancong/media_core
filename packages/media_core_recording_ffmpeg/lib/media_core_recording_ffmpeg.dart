@@ -26,6 +26,7 @@ library;
 import 'package:media_core_recording_ffmpeg/src/backend/ffmpeg_recording_backend.dart' show FfmpegRecordingBackend;
 import 'package:media_core_recording_ffmpeg/src/backend/live_recording_watcher.dart' show FfmpegLiveRecordingWatcher;
 
+export 'package:media_core_recording_ffmpeg/src/backend/disk_space.dart';
 export 'package:media_core_recording_ffmpeg/src/backend/ffmpeg_recording_backend.dart';
 export 'package:media_core_recording_ffmpeg/src/backend/live_recording_watcher.dart';
 export 'package:media_core_recording_ffmpeg/src/config/ffmpeg_record_config.dart';

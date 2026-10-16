@@ -218,12 +218,17 @@ final class FfmpegRecordConfig {
 
   /// Free space a recording directory must have before work starts there.
   ///
-  /// Only consulted when the backend was given a `diskSpace` probe — Dart has no
-  /// portable way to ask, and the plugins that do it are per-platform. A full
-  /// disk still fails honestly without one (FFmpeg's write error ends the
-  /// process, and restarting onto the same full disk stops at [restartLimit]),
-  /// but "there was no room" said before the first segment is a better report
-  /// than "an FFmpeg exit code" after the last one.
+  /// Only consulted when the backend was given a `diskSpace` probe, because asking
+  /// means running a platform tool (`df -kP`, or PowerShell's `DriveInfo`) on the
+  /// path that starts a recording — the same reason the backend's `executor` is
+  /// injected rather than constructed. `FfmpegDiskSpace.probe` is that one-line
+  /// answer for a host that wants the check; `example` passes it. A probe that cannot
+  /// answer is read as unknown, never as "no room".
+  ///
+  /// A full disk still fails honestly with no probe at all (FFmpeg's write error ends
+  /// the process, and restarting onto the same full disk stops at [restartLimit]),
+  /// but "there was no room" said before the first segment is a better report than
+  /// "an FFmpeg exit code" after the last one. Set this to `0` to skip the question.
   final int diskWatermarkBytes;
 
   /// The same configuration with the given fields replaced.
