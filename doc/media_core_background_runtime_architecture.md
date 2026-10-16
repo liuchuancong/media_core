@@ -697,6 +697,37 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
   被拒时认定不动），recording +3（开始后一次、重开不算第二次、同一 backend 再开是第二次），
   download +1（retry 不重复开始）。
 
+### 14.13 通知适配层自己的测试（2026-10-17）
+
+`FlutterLocalNotificationsClient` 今天**没有一条测试**：包内所有断言都打在自建的假客户端上，
+所以"本包要求什么"有人守着，"插件被告知了什么"没人守。补上这半边之后立刻撞出一个真问题：
+
+- **桌面端原来装不上。** `configure` 只给了插件 Android/iOS/macOS 三份 settings，而 FLN 对一个
+  "没有 settings 的平台"的回答是**抛 `ArgumentError`**；`MediaCoreNotify.enable` 只吞 `Exception`，
+  于是**在 Linux 与 Windows 上 enable() 会抛**——而那正是本包唯一画 job line 的两个平台
+  （Android 的线是每个功能自己的前台服务画的）。example 里那句 try/catch 把这件事盖住了。
+  现在 `configure` 只问它说得出 settings 的平台，其余照实回答 `false`；`kNotifyCapablePlatforms`
+  把"插件到底有哪些平台实现"写成一处事实。
+- **Windows 的 toast 要宿主自报身份**（user-model id + 稳定的 activation guid）。库里编一个出来的
+  话，所有桌面应用的通知都会被归到"先猜对的那个"名下，所以没有身份时是干净的 `false`，
+  不是抛也不是假装成功。Linux 只需要一个点击动作标签，插件没给默认，于是本包给了通用的一份，
+  宿主可通过新的 `NotifySetup(desktop: DesktopNotifySettings(...))` 改写。
+- **tone 表这才真正到了桌面**：progress 线在 Linux 上是 low urgency + 静音 + resident，在 Windows
+  toast 上是 silent + long；以前这两边都按插件默认投，"数字一动就响一次"恰好是重贴窗口要压掉的那类噪声，
+  而它恰好发生在没有系统服务、由 Dart 画线的平台上。
+- §14.12 里"真机手势只能靠契约"的那半，这一轮发现 **Android 其实能报回来**（details 上的
+  `dismissIsolate`），于是接上了：划掉一条线不再被当成"打开了"送进宿主的 `onTap`，而是走
+  `ForegroundJobs.lineWasRemoved`——以前的处理把所有 response 都当 opening，用户刚划掉的成果
+  会被引导去打开。Darwin 要 category 带 `customDismissAction` 才报，本包没注册 category，
+  所以那边仍是契约里的"尊重到文本真的变化为止"。
+- 为了能在没有设备的情况下断言这两半，客户端加了两个 `@visibleForTesting` 静态口子
+  （`initializationFor` / `detailsFor`）：Linux 与 Windows 的插件类在构造函数里就加载原生库，
+  **在别的平台上根本实例化不了**，这是它们此前没被测过的唯一原因。
+- 测试：`test/flutter_local_notifications_client_test.dart` 20 例（渠道注册按各自 tone 的 importance、
+  per-feature 的 line id、tone→importance/priority/silent/onlyAlertOnce/autoCancel、icon 与 groupKey、
+  Android/iOS/macOS/桌面四种权限问法、fuchsia 答 false、Linux/Windows 的 settings 与 details、
+  划掉不被当成点击）。notify 包内 39 → 59。
+
 ### 14.7 还没做
 
 - 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、
@@ -706,8 +737,8 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 - 进程被整体杀掉时没有任何一路事件能送出（Dart 也一起没了）；登记表在这条路上只能依赖下一次
   `acquire`/释放时的失败来纠正，这是平台的限制而不是这里的漏洞。
 - Linux 的后台执行仍未实现（logind `Inhibit`），`acquire` 在那边照实回答"没有能力"。
-- `FlutterLocalNotificationsClient`（真插件的适配层）没有测试文件——包内所有断言都打在自建的假客户端上。
-  它对 22.x 参数形状的正确性只能由真机清单那一步覆盖。
+- 真机仍未覆盖的部分（§14.13 之后剩下的）：Linux 通知服务器与本包 `LinuxNotificationDetails` 的**实际渲染**、
+  Windows toast 在**宿主给出身份之后**是否真出现（这两条是平台行为，不是参数形状，参数形状已有测试）。
 - 录制里磁盘不足那条路（`_refuseIfNoRoom` 拒掉一次开始）不会走 `MediaJobReporting`：它连会话都没开始，
   所以既不报结果也不报失败。要不要报是产品决定，不是这里的漏洞。
 - `live_recording_watcher.dart:473` 的 `_failureOf` 是死谓词：调用它的 `onCompleted` 分支要求

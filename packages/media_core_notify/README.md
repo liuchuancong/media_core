@@ -83,6 +83,27 @@ also want the plugin's own foreground service (you probably do not — see
 *Does not own* above), that is the `AndroidManifest.xml` step in the
 `flutter_local_notifications` README.
 
+`enable()` answers whether the platform took notifications at all, and it is worth
+logging that answer: Linux is initialised with a generic click-action label, while
+**a Windows toast needs your app's own identity** — a user-model id and a stable
+activation guid — which a library that invented them would use to attribute every
+desktop app's notifications to whoever guessed first:
+
+```dart
+await MediaCoreNotify.enable(
+  setup: const NotifySetup(
+    desktop: DesktopNotifySettings(
+      appName: 'My App',
+      windowsAppUserModelId: 'com.example.myapp',
+      windowsGuid: '…a guid you keep…',
+    ),
+  ),
+);
+```
+
+Without it, `enable()` returns `false` on Windows and nothing is drawn — the job
+runs either way.
+
 ## Public entry point
 
 `package:media_core_notify/media_core_notify.dart` — `MediaCoreNotify`,
@@ -135,7 +156,7 @@ the line along with turning the rest of the package off.
 ## Testing
 
 ```powershell
-flutter test          # 21 cases, no platform required
+flutter test          # 59 cases across three files, no platform required
 flutter analyze
 dart ..\tool\validate_packages.dart
 ```
@@ -149,17 +170,32 @@ session unable to resurrect the line. The tests drive a real
 `BackgroundLeaseRegistry` rather than a hand-written session list, because a
 projection that reads its own copy would only prove it agrees with itself.
 
+`flutter_local_notifications_client_test.dart` is the other half: it registers fakes
+in `FlutterLocalNotificationsPlatform` and asserts what the plugin is *told* — the
+per-feature ids a line is posted under, the tone table, the channels registered with
+their own importance, the permission question each platform has, and which platforms
+are asked at all. The Linux and Windows plugin classes cannot be part of that (they
+load native code in their constructors), so the client exposes `initializationFor`
+and `detailsFor` for the two halves that decide a desktop's behaviour.
+
 ## Known limitations
 
-- **Not verified on a device.** No case here proves how a real notification
-  head, sounds or groups on a given Android version; the tone mapping is asserted
-  as far as the client sees it.
+- **Not verified on a device.** What is pinned is the words this package says to the
+  plugin; how a real notification heads, sounds or groups on a given Android, a
+  Linux notification server or a Windows toast is still a device question — and on
+  Windows it is also an identity question, since nothing is drawn until the host
+  names itself in `NotifySetup(desktop:)`.
 - `ForegroundJobs` shows itself only where the platform has no job service of its
   own. A host that wants a line on Android for work that holds no lease has to take
   the lease; that is the intended direction, not a workaround.
 - The timer churn saved by `ForegroundJobs` (one repost per window instead of
   one per report) is observable in tests; the equivalent saving inside
   `FlutterLocalNotificationsClient` is not, because that file is the boundary.
+- A line the user swipes away is reported back only on Android, and only for the
+  line (a posted result that was swiped is not state anyone tracks). iOS and macOS
+  need the notification's category to carry `customDismissAction`, which this
+  package does not register; there a swiped line stays away until that feature's own
+  text changes, which is what `showRunningLine`'s contract says.
 - No notification actions (buttons). A stop button needs a callback path into a
   running isolate, which is a feature of its own.
 - Channel *names* are English-with-Chinese strings chosen here; a host that ships

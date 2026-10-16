@@ -59,9 +59,21 @@ Future<void> main() async {
   // It never asks for the notification permission: `MediaCoreNotify.requestPermission()`
   // is the one entry point for that question, and a startup that popped a dialog
   // would be the app answering a question it did not decide to ask.
+  // The return value is the platform's answer, not this call's success: Windows
+  // toasts need an app identity that only the app can name
+  // (`NotifySetup(desktop: DesktopNotifySettings(...))`), and a desktop that was
+  // never given one says so here instead of throwing at first job.
   try {
-    await MediaCoreNotify.enable();
-    MediaCoreLog.info(LogCategory.player, 'notifications enabled');
+    final enabled = await MediaCoreNotify.enable();
+    if (enabled) {
+      MediaCoreLog.info(LogCategory.player, 'notifications enabled');
+    } else {
+      MediaCoreLog.warning(
+        LogCategory.player,
+        'notifications are off on this platform',
+        fields: <String, Object?>{'hint': 'a Windows host must name NotifySetup(desktop:)'},
+      );
+    }
   } on Object catch (error) {
     MediaCoreLog.warning(
       LogCategory.player,

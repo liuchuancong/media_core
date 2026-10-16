@@ -164,7 +164,7 @@ adb shell dumpsys deviceidle unforce
 
 | 平台 | 期望 |
 | --- | --- |
-| Windows | 无 FGS；`ForegroundJobs` 画每功能一条线（`media_core_recording` / `media_core_download` / `media_core_jobs`）；SMTC 显示播放；作业结果通知走 `media_core_results` |
+| Windows | 无 FGS；`ForegroundJobs` 画每功能一条线（`media_core_recording` / `media_core_download` / `media_core_jobs`）；SMTC 显示播放；作业结果通知走 `media_core_results`。**前提**：toast 要有宿主自报的身份（`NotifySetup(desktop: DesktopNotifySettings(appName, windowsAppUserModelId, windowsGuid))`），没给身份时 `enable()` 如实回答 `false`，这条线上什么都没有——先确认 example 的启动日志是 "notifications enabled" 而不是 "notifications are off on this platform" |
 | macOS | 同上；通知落在"录制进行中/下载进行中"各自的渠道；睡眠断言在 `pmset -g assertions` 里可见（`beginActivity(.idleSystemSleepDisabled)`） |
 | Linux | 后台执行**未实现**：`acquire` 如实回答 `unsupportedPlatform`，任务照跑；此时 `notify` demo 会在第 1 步就停下（没有会话就没有可投影的线），这属于如实回答而不是线画错 |
 

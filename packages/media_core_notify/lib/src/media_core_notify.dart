@@ -63,6 +63,9 @@ abstract final class MediaCoreNotify {
   ///
   /// A `false` return is not a failure to act on: it means the platform has no
   /// notification pipeline here, and every other call keeps working as a no-op.
+  /// One of those is a thing the host can fix rather than a platform fact: a
+  /// Windows toast has to be attributed to an app identity, and a host that never
+  /// named one in `NotifySetup(desktop:)` gets this answer instead of a guess.
   static Future<bool> enable({
     LocalNotificationClient? client,
     NotifySetup setup = const NotifySetup(),

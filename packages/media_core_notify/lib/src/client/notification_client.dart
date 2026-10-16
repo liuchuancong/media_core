@@ -7,6 +7,8 @@
 /// touches the plugin directly.
 library;
 
+import 'package:flutter/foundation.dart' show TargetPlatform;
+
 import 'package:media_core/media_core.dart' show BackgroundServiceOwner;
 import 'package:media_core_notify/media_core_notify.dart' show FlutterLocalNotificationsClient, MediaCoreNotify;
 
@@ -51,6 +53,22 @@ int runningLineIdFor(BackgroundServiceOwner owner) => switch (owner) {
   ),
 };
 
+/// Which platforms `flutter_local_notifications` has an answer for at all.
+///
+/// The list is the plugin's own, minus web: `kIsWeb` is checked by the client
+/// before this is consulted. `Android`, `iOS` and `macOS` are always configured;
+/// the two desktop entries are, because that is where the package's running line
+/// and job results actually have to be drawn. A platform outside this list has no
+/// mechanism behind it, and [LocalNotificationClient.configure] says so rather
+/// than letting the plugin answer the question with an exception.
+const Set<TargetPlatform> kNotifyCapablePlatforms = <TargetPlatform>{
+  TargetPlatform.android,
+  TargetPlatform.iOS,
+  TargetPlatform.macOS,
+  TargetPlatform.linux,
+  TargetPlatform.windows,
+};
+
 /// How a client should be set up.
 final class NotifySetup {
   /// Creates a setup description.
@@ -63,6 +81,7 @@ final class NotifySetup {
     ],
     this.androidSmallIcon = '@mipmap/ic_launcher',
     this.onTap,
+    this.desktop,
   });
 
   /// Channels to register. A platform without channels (Windows, Linux, iOS)
@@ -75,6 +94,16 @@ final class NotifySetup {
 
   /// Called when one of this app's notifications is opened.
   final void Function(NotifyTap tap)? onTap;
+
+  /// What a Linux or Windows host wants the desktop mechanism initialised with.
+  ///
+  /// Null means this host did not say, and the client then does not ask those
+  /// platforms to initialise at all — see [LocalNotificationClient.configure].
+  /// The plugin has no default to fall back on: Windows identifies a notification
+  /// by the app's own user-model id and a stable activation guid, and a library
+  /// that invented them would attribute every desktop app's notifications to
+  /// whoever guessed first.
+  final DesktopNotifySettings? desktop;
 
   /// The channel [owner]'s line is drawn on.
   ///
@@ -145,4 +174,38 @@ abstract interface class LocalNotificationClient {
 
   /// Takes the running line with [id] away, with no jobs of that feature left.
   Future<void> clearRunningLine({required int id});
+}
+
+/// The desktop half of a [NotifySetup]: what a Linux or Windows host is called.
+///
+/// One record for both platforms because a host declares its identity once and
+/// means it on either; the fields each platform needs are different, and both
+/// need words the library cannot invent.
+final class DesktopNotifySettings {
+  /// Creates a desktop identity description.
+  const DesktopNotifySettings({
+    required this.appName,
+    this.linuxActionName,
+    this.windowsAppUserModelId,
+    this.windowsGuid,
+  });
+
+  /// The name the notification is attributed to.
+  final String appName;
+
+  /// Linux: the label of the action a click on a notification takes. Null uses
+  /// [appName], which is what the desktop guidelines suggest when an app has one
+  /// obvious thing to open.
+  final String? linuxActionName;
+
+  /// Windows: the app's user-model id (`Company.Product.SubProduct.Version`).
+  ///
+  /// A toast delivered without one is attributed to the wrong app — or to none —
+  /// which is why this is a host's words and not ours.
+  final String? windowsAppUserModelId;
+
+  /// Windows: the stable guid of the activation callback.
+  ///
+  /// It must not change between runs, because the system routes a click by it.
+  final String? windowsGuid;
 }

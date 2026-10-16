@@ -153,7 +153,6 @@ final class _LineClient implements LocalNotificationClient {
   /// is not ready yet.
   Error? _throwOnShow;
 
-
   @override
   Future<void> clearRunningLine({required int id}) async {
     calls.add('clearRunningLine');
@@ -267,16 +266,7 @@ void main() {
       fakeAsync((async) {
         arm(async);
         _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
-        _resolve(
-          async,
-          hold(
-            _job(
-              'download/b',
-              description: 'room-7 · 00:12',
-              priority: 10,
-            ),
-          ),
-        );
+        _resolve(async, hold(_job('download/b', description: 'room-7 · 00:12', priority: 10)));
         tick(async, const Duration(milliseconds: 1100));
 
         expect(
@@ -296,14 +286,16 @@ void main() {
       fakeAsync((async) {
         arm(async);
         _resolve(async, hold(_job('download/a', description: 'a · 25%')));
-        _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', kind: BackgroundExecutionKind.recording)));
+        _resolve(
+          async,
+          hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', kind: BackgroundExecutionKind.recording)),
+        );
         tick(async, const Duration(milliseconds: 1100));
 
-        expect(
-          client.shown.map((event) => event.id).toSet(),
-          {kDownloadLineNotificationId, kRecordingLineNotificationId},
-          reason: 'two features, two lines: neither one buries the other in a "+1"',
-        );
+        expect(client.shown.map((event) => event.id).toSet(), {
+          kDownloadLineNotificationId,
+          kRecordingLineNotificationId,
+        }, reason: 'two features, two lines: neither one buries the other in a "+1"');
         expect(
           client.forId(kRecordingLineNotificationId).single.channel.id,
           kNotifyChannelRecording.id,
@@ -320,7 +312,10 @@ void main() {
         arm(async);
         _resolve(async, hold(_job('download/a', description: 'a · 25%')));
         _resolve(async, hold(_job('download/b', description: 'b · 00:12', priority: 10)));
-        _resolve(async, hold(_job('recording/c', title: '正在录制', description: 'c', kind: BackgroundExecutionKind.recording)));
+        _resolve(
+          async,
+          hold(_job('recording/c', title: '正在录制', description: 'c', kind: BackgroundExecutionKind.recording)),
+        );
         tick(async, const Duration(milliseconds: 1100));
 
         expect(ForegroundJobs.titleFor(BackgroundServiceOwner.download), '正在下载');
@@ -359,18 +354,19 @@ void main() {
         arm(async);
         final a = _resolve(async, hold(_job('download/a', description: 'a')));
         final b = _resolve(async, hold(_job('download/b', description: 'b')));
-        final c = _resolve(async, hold(_job('recording/c', title: '正在录制', description: 'c', kind: BackgroundExecutionKind.recording)));
+        final c = _resolve(
+          async,
+          hold(_job('recording/c', title: '正在录制', description: 'c', kind: BackgroundExecutionKind.recording)),
+        );
         tick(async, const Duration(milliseconds: 1100));
 
         _settle(async, a.release());
         _settle(async, b.release());
         async.flushMicrotasks();
 
-        expect(
-          client.cleared,
-          [kDownloadLineNotificationId],
-          reason: 'the download line went down; the recording line was never touched',
-        );
+        expect(client.cleared, [
+          kDownloadLineNotificationId,
+        ], reason: 'the download line went down; the recording line was never touched');
         expect(ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.download), isFalse);
         expect(ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.recording), isTrue);
         expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.recording), 'c');
@@ -388,7 +384,10 @@ void main() {
     test('another feature changing does not repost this feature line', () {
       fakeAsync((async) {
         arm(async);
-        _resolve(async, hold(_job('recording/a', title: '正在录制', description: '00:01', kind: BackgroundExecutionKind.recording)));
+        _resolve(
+          async,
+          hold(_job('recording/a', title: '正在录制', description: '00:01', kind: BackgroundExecutionKind.recording)),
+        );
         async.flushMicrotasks();
 
         expect(client.forId(kRecordingLineNotificationId), hasLength(1));
@@ -601,11 +600,9 @@ void main() {
         BackgroundRuntimes.current = BackgroundLeaseRegistry(backend: _PlatformBackend());
         async.flushMicrotasks();
 
-        expect(
-          client.cleared,
-          [kDownloadLineNotificationId],
-          reason: 'an orphaned ongoing notification is worse than no notification',
-        );
+        expect(client.cleared, [
+          kDownloadLineNotificationId,
+        ], reason: 'an orphaned ongoing notification is worse than no notification');
         expect(ForegroundJobs.isShowingLine, isFalse);
       });
     });
