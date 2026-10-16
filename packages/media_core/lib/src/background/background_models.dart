@@ -117,6 +117,16 @@ enum BackgroundSessionStatus {
 
   /// Ended without the job completing.
   failed,
+
+  /// The platform took the protection away while the job kept running.
+  ///
+  /// A foreground service whose allowance ran out, or one the system killed: the
+  /// recording is still recording, so this is not [failed]; and nobody released it,
+  /// so this is not [stopped]. The distinction is the whole point of the word — a
+  /// host that learns `stopped` about a live job concludes its own release worked,
+  /// while the truth is that the job is now running unprotected and should be
+  /// wrapped up or re-acquired. Nothing is held for the session any more.
+  protectionLost,
 }
 
 /// Why a request was not granted.

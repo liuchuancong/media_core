@@ -515,6 +515,7 @@ class _Session {
     switch (status) {
       case BackgroundSessionStatus.failed:
       case BackgroundSessionStatus.stopped:
+      case BackgroundSessionStatus.protectionLost:
         registry._forget(this);
         this.status = status;
 

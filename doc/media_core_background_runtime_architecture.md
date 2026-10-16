@@ -597,10 +597,34 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 同功能内部按优先级排队）；`media_core_native/test/background_runtime_test.dart` 24 例（owner 路由、播放不该来这里）；
 `media_core_notify` 原来那组"多任务一行"改写成"同功能一行、跨功能两行、别的功能变了不重贴我这条"。
 
+### 14.9 会话状态回流（2026-10-16）
+
+阶段 5 中"事件化"那一条先做了，因为它决定登记表说的话还算不算数：服务被系统停掉之后，Dart 这边的
+`BackgroundLeaseRegistry` 依旧认为自己在为那条会话持有豁免与唤醒锁，投影也照旧画着那一行。
+
+- 新 `EventChannel` `media_core_native/background_status`，事件是 `{id, status}`，`id` 就是 `acquire`
+  交给 Dart 的那个句柄（高 16 位是功能、低 16 位是序号）。Java 侧 `BackgroundStatusPublisher` 按引擎
+  持 sink 列表；Dart 侧**整个进程只订阅一次**平台通道，再按句柄分发给各条 lease，所以两条 lease 不会
+  各自起一条平台订阅。
+- 三种上报：
+  - `onTimeout` → 该功能名下所有会话 `protectionLost`，并且只停自己那个服务；
+  - 服务销毁而登记表里还有会话 → 逐条 `stopped`（正常释放路径走到这里时表已空，不会重复报）；
+  - 会话启动时 `POST_NOTIFICATIONS` 缺失 → 该条 `degraded`：豁免和唤醒锁都在，只是用户看不见那条线。
+- 契约新增 `BackgroundSessionStatus.protectionLost`——保护被平台收走、任务还在跑。它不是 `stopped`
+  （没人 release 过），也不是 `failed`（录制仍在录）。登记表把它当终止态：不再为它计数，`changes` 通知
+  投影，于是被系统停掉服务的那个功能那一行随之消失，而别的功能一条不动。
+- 未知状态名一律丢弃：插件可能比读它的 Dart 新。把不认识的名字猜成 `stopped`，等于让一个还在跑的任务
+  在纸面上失去保护。
+- 测试用 `BackgroundExecution.debugPublishReport` 从 wire 形状进（解析和投递一起验），覆盖句柄寻址、
+  未知名丢弃、`degraded` 不结束会话。**没有**用 mock 的 `EventChannel`：`setMockStreamHandler` 在多个
+  并发订阅下的广播行为不是测试该依赖的东西（一路事件会被送到所有 sink，另一路监听又收不到），
+  与其和它较劲，不如把投递做成包内单一广播源——那也更接近真实形态。
+
 ### 14.7 还没做
 
 - 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、
-  后台下载、录制与媒体播放同时跑（现在应当是**三条线**：录制、下载、媒体控制条，互不覆盖）。
-- 超时与服务被系统杀掉上报成 `degraded` / `failed`：`BackgroundBackendLease.statusChanges` 仍是空流，
-  Java 侧先把事件送进 Dart（服务拆分后，一个事件只影响一个功能，语义比从前干净）。
+  后台下载、录制与媒体播放同时跑（现在应当是**三条线**：录制、下载、媒体控制条，互不覆盖），以及
+  §14.9 那三种上报在真机上的实际时序（`onTimeout` 之后 Dart 是否真的先收到事件再见到服务停止）。
+- 进程被整体杀掉时没有任何一路事件能送出（Dart 也一起没了）；登记表在这条路上只能依赖下一次
+  `acquire`/释放时的失败来纠正，这是平台的限制而不是这里的漏洞。
 - Linux 的后台执行仍未实现（logind `Inhibit`），`acquire` 在那边照实回答"没有能力"。

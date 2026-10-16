@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
@@ -63,6 +64,9 @@ public final class MediaCoreNativePlugin implements FlutterPlugin, MethodChannel
   /** Background execution: the foreground service, its wake lock and its notification. */
   private BackgroundExecutionDelegate background;
 
+  /** The other direction: what the platform did to a session it was holding. */
+  private EventChannel backgroundStatus;
+
   @Override
   public void onAttachedToEngine(FlutterPluginBinding binding) {
     context = binding.getApplicationContext();
@@ -77,12 +81,25 @@ public final class MediaCoreNativePlugin implements FlutterPlugin, MethodChannel
     MethodChannel backgroundChannel =
         new MethodChannel(binding.getBinaryMessenger(), BackgroundExecutionDelegate.CHANNEL_NAME);
     backgroundChannel.setMethodCallHandler(background);
+
+    // And the way back: a service the system stopped, or a notification the user
+    // cannot see, is a fact only this side has. Without it the Dart registry keeps
+    // counting protection that has already been taken away.
+    backgroundStatus = new EventChannel(binding.getBinaryMessenger(), BackgroundStatusPublisher.CHANNEL_NAME);
+    backgroundStatus.setStreamHandler(BackgroundStatusPublisher.handler());
   }
 
   @Override
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
     context = null;
     background = null;
+
+    if (backgroundStatus != null) {
+      backgroundStatus.setStreamHandler(null);
+      backgroundStatus = null;
+    }
+
+    BackgroundStatusPublisher.clear();
   }
 
   @Override

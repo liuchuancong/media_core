@@ -21,6 +21,7 @@ import 'package:media_core_native/src/background/background_execution.dart'
         BackgroundExecution,
         BackgroundExecutionLease,
         BackgroundExecutionRefusal,
+        BackgroundExecutionStatus,
         BackgroundJobKind,
         BackgroundNotification,
         BackgroundProgress,
@@ -165,15 +166,22 @@ class _NativeBackendLease implements BackgroundBackendLease {
 
   final BackgroundExecutionLease _session;
 
-  /// Nothing to report yet.
+  /// The platform's own reports about this session, and nothing else's.
   ///
-  /// The Android service knows about its foreground-service allowance running out
-  /// and about being killed, and the day it forwards that, this stream is where it
-  /// arrives — which is exactly what [BackgroundSessionStatus.degraded] and
-  /// [BackgroundSessionStatus.failed] exist for. Since the services split per
-  /// feature, such an event ends one feature's sessions only.
+  /// Filtering by the handle `acquire` issued is the whole of it: a timeout that
+  /// ended the recording service must not be read as news about a download, which
+  /// is the same isolation the per-feature services were split for.
   @override
-  Stream<BackgroundSessionStatus> get statusChanges => const Stream<BackgroundSessionStatus>.empty();
+  Stream<BackgroundSessionStatus> get statusChanges =>
+      BackgroundExecution.sessionStatuses
+          .where((report) => report.id == _session.id)
+          .map((report) => _statusFor(report.status));
+
+  static BackgroundSessionStatus _statusFor(BackgroundExecutionStatus status) => switch (status) {
+    BackgroundExecutionStatus.degraded => BackgroundSessionStatus.degraded,
+    BackgroundExecutionStatus.stopped => BackgroundSessionStatus.stopped,
+    BackgroundExecutionStatus.protectionLost => BackgroundSessionStatus.protectionLost,
+  };
 
   @override
   Future<void> update(BackgroundRequest request) => _session.update(NativeBackgroundBackend.notificationFor(request));

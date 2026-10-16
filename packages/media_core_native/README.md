@@ -96,6 +96,18 @@ Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DA
 
 Android 15 给 `dataSync` 前台服务设了**每天 6 小时**的额度，所以下载和普通任务留在 `dataSync`；直播录制没有可用期限，它声明 `specialUse`（清单里带 `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` 的理由说明，上架时同样的话还要在商店里再写一遍）。额度用完系统会停掉**那个**服务并在 `onTimeout` 里干净收尾，不会让进程因为不响应被杀，也不会连带摘掉别的功能的保护。
 
+### 状态回流（`media_core_native/background_status`）
+
+保活是平台持有的，所以"它被收走了"这件事只有平台知道。服务通过一条 EventChannel 把 `{id, status}` 送回 Dart，`id` 就是 `acquire` 给你的那个句柄：
+
+| 上报 | 什么时候 | 含义 |
+| --- | --- | --- |
+| `protectionLost` | `onTimeout`（额度用完） | 豁免和唤醒锁没了，**任务还在跑**。不是 `stopped`（没人 release 过），也不是失败 |
+| `stopped` | 服务被销毁而登记表里还留着会话 | 这条会话不再持有任何东西 |
+| `degraded` | 会话启动时缺 `POST_NOTIFICATIONS` | 锁与豁免都在，只是那条通知用户看不见 |
+
+Dart 侧整个进程只订阅一次通道，再按句柄分发给各条 lease，所以一条下载的消息不会被读成录制的消息。认不出的状态名一律丢弃，而不是猜成 `stopped`：插件可能比读它的 Dart 新，猜错就等于让一个还在跑的任务在纸面上失去保护。进程被整体杀掉时没有任何一路事件能送出（Dart 也一起没了），这是平台的限制，不是这里的漏洞。
+
 ## 能力探针
 
 主包知道**后端**支持什么，只有平台知道**设备**能做什么：这台机器是把 HEVC 交给硬解单元还是交给四个慢核、还剩多少内存留给解码管线、系统有没有画中画。探针只问一次，把答案交给核心：

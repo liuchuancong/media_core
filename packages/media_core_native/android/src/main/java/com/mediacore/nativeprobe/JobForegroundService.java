@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -436,6 +437,13 @@ public abstract class JobForegroundService extends Service {
       acquireWakeLock();
     }
 
+    if (!notificationsVisible()) {
+      // The session is real and its lock is held; only the user cannot see it. That
+      // is "running, with something given up", which is what `degraded` means here —
+      // not a failure, and not a reason to fail a recording over a picture.
+      publish(sessionId, BackgroundStatusPublisher.STATUS_DEGRADED);
+    }
+
     // Not sticky: resuming a recording after the process was killed would write
     // a second stream into the same directory without the user asking.
     return START_NOT_STICKY;
@@ -446,6 +454,15 @@ public abstract class JobForegroundService extends Service {
     releaseWakeLock();
 
     final Register register = myRegister();
+
+    // Sessions left behind when the platform ended the service: Dart is still
+    // holding a lease for each of them, and a lease that is never told stops
+    // counting is how a job ends up reporting protection it no longer has. The
+    // normal path is empty here — the last release stopped the service after
+    // removing its own session.
+    for (Integer sessionId : new ArrayList<Integer>(register.sessions.keySet())) {
+      publish(sessionId, BackgroundStatusPublisher.STATUS_STOPPED);
+    }
 
     register.sessions.clear();
 
@@ -474,12 +491,51 @@ public abstract class JobForegroundService extends Service {
    */
   @Override
   public void onTimeout(int startId, int foregroundServiceType) {
+    final Register register = myRegister();
+
+    // The jobs themselves are still running in this process; what ended is the
+    // exemption and the lock. `protectionLost` says exactly that, and it is not
+    // `stopped`, which would tell the caller its own release worked.
+    for (Integer sessionId : new ArrayList<Integer>(register.sessions.keySet())) {
+      publish(sessionId, BackgroundStatusPublisher.STATUS_PROTECTION_LOST);
+    }
+
+    // Cleared before stopping: the onDestroy pass must not report these twice.
+    register.sessions.clear();
+
     stopForegroundAndSelf();
   }
 
   // ---------------------------------------------------------------------------
   // Sessions
   // ---------------------------------------------------------------------------
+
+  /** The handle Dart holds for {@code sessionId} of this feature. */
+  private int handleOf(int sessionId) {
+    return (feature().code << HANDLE_SHIFT) | sessionId;
+  }
+
+  /** Tells Dart what happened to one of this feature's sessions. */
+  private void publish(int sessionId, String status) {
+    BackgroundStatusPublisher.publish(handleOf(sessionId), status);
+  }
+
+  /**
+   * Whether a notification posted by this service can reach the user.
+   *
+   * Below API 33 the permission does not exist, so the answer is what the platform
+   * has always been. A missing permission hides the line and nothing else: the
+   * service runs and the wake lock holds, which is why this is a report rather than
+   * a refusal.
+   */
+  private boolean notificationsVisible() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+      return true;
+    }
+
+    return checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+        == android.content.pm.PackageManager.PERMISSION_GRANTED;
+  }
 
   private void updateSession(int sessionId, Description description) {
     final Register register = myRegister();

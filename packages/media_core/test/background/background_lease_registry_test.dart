@@ -449,6 +449,35 @@ void main() {
       expect(registry.holds(BackgroundCapability.cpuWakeLock), isFalse);
     });
 
+    test('a protection the platform took back is neither a release nor a failure', () async {
+      final backend = _FakeBackend();
+      final registry = BackgroundLeaseRegistry(backend: backend);
+      final lost = (await _grant(registry, _request('rec-1'))).lease;
+      final kept = (await _grant(registry, _request('dl-1', kind: BackgroundExecutionKind.download))).lease;
+      final counts = <int>[];
+      final subscription = registry.changes.listen((_) => counts.add(registry.activeSessionCount));
+
+      backend.leaseFor('rec-1')!.say(BackgroundSessionStatus.protectionLost);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        lost.status,
+        BackgroundSessionStatus.protectionLost,
+        reason: 'the recording is still recording; what ended is the protection',
+      );
+      expect(kept.status, BackgroundSessionStatus.running);
+      expect(registry.activeSessionCount, 1);
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.recording),
+        isEmpty,
+        reason: 'nothing is held for it, so no line may keep claiming it',
+      );
+      expect(registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.id), ['dl-1']);
+      expect(counts, isNotEmpty, reason: 'the projectors are told, which is how the line goes down');
+
+      await subscription.cancel();
+    });
+
     test('a session the platform tears down after its release is not a new fact', () async {
       final backend = _FakeBackend();
       final registry = BackgroundLeaseRegistry(backend: backend);

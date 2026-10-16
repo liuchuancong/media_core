@@ -249,6 +249,110 @@ void main() {
       expect(calls.acquires, isEmpty);
     });
   });
+
+  group('what the platform reports back about a session', () {
+    /// Reports enter through the wire form the Android services emit, so the
+    /// parsing is tested together with the delivery. The seam is
+    /// `BackgroundExecution.debugPublishReport`: the alternative is a mocked
+    /// `EventChannel`, whose fan-out across simultaneous subscriptions is not
+    /// behaviour a test should lean on.
+    void report(int id, String status) => BackgroundExecution.debugPublishReport(<String, Object?>{
+      'id': id,
+      'status': status,
+    });
+
+    test('a protection the platform took back reaches the lease it belongs to', () async {
+      final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
+      final recording = (await registry.acquire(_recording())) as BackgroundAcquireSuccess;
+      final download =
+          (await registry.acquire(
+            const BackgroundRequest(id: 'download/a', kind: BackgroundExecutionKind.download, title: '正在下载'),
+          )) as BackgroundAcquireSuccess;
+
+      final seen = <BackgroundSessionStatus>[];
+      final subscription = recording.lease.statusChanges.listen(seen.add);
+      await Future<void>.delayed(Duration.zero);
+
+      report(1, 'protectionLost');
+      report(1, 'aNameThisVersionDoesNotKnow');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        seen,
+        [BackgroundSessionStatus.protectionLost],
+        reason: 'an unknown name is dropped, not guessed at: the plugin may be newer than this Dart side',
+      );
+      expect(recording.lease.status, BackgroundSessionStatus.protectionLost);
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.recording),
+        isEmpty,
+        reason: 'nothing is held any more, so the registry stops counting it and that line goes down',
+      );
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.id),
+        ['download/a'],
+        reason: 'the download runs in another service and heard nothing about it',
+      );
+      expect(
+        download.lease.status,
+        BackgroundSessionStatus.running,
+        reason: 'a session the report was not addressed to keeps its own status',
+      );
+
+      await subscription.cancel();
+    });
+
+    test('a report addressed to another session is not news here', () async {
+      final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
+      final recording = (await registry.acquire(_recording())) as BackgroundAcquireSuccess;
+      await registry.acquire(
+        const BackgroundRequest(id: 'download/a', kind: BackgroundExecutionKind.download, title: '正在下载'),
+      );
+
+      final seen = <BackgroundSessionStatus>[];
+      final subscription = recording.lease.statusChanges.listen(seen.add);
+      await Future<void>.delayed(Duration.zero);
+
+      report(2, 'protectionLost');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, isEmpty, reason: 'a handle addresses one session, not the process');
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.recording).map((request) => request.id),
+        ['recording/room-42'],
+        reason: 'what the platform took back is the download service, and this lease keeps its own protection',
+      );
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.download),
+        isEmpty,
+        reason: 'and the session the report was about does stop counting',
+      );
+
+      await subscription.cancel();
+    });
+
+    test('a hidden notification degrades the session rather than ending it', () async {
+      final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
+      final recording = (await registry.acquire(_recording())) as BackgroundAcquireSuccess;
+
+      final seen = <BackgroundSessionStatus>[];
+      final subscription = recording.lease.statusChanges.listen(seen.add);
+      await Future<void>.delayed(Duration.zero);
+
+      report(1, 'degraded');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, [BackgroundSessionStatus.degraded]);
+      expect(
+        registry.activeSessionCount,
+        1,
+        reason: 'the service runs and the lock holds; only the line in the shade is missing',
+      );
+      expect(registry.requestsFor(BackgroundServiceOwner.recording), hasLength(1));
+
+      await subscription.cancel();
+    });
+  });
 }
 
 class _NoopBackend implements BackgroundExecutionBackend {

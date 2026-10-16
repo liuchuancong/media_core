@@ -1,10 +1,47 @@
-import 'package:flutter/foundation.dart' show FlutterError, TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'dart:async';
+
+import 'package:flutter/foundation.dart'
+    show FlutterError, TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 /// Channel a background-execution session is requested on.
 ///
 /// Kept in sync with the Android/iOS/macOS plugins and the Windows C++ plugin.
 const String kBackgroundExecutionChannel = 'media_core_native/background';
+
+/// Channel the platform reports a held session's status back on.
+///
+/// The way back exists because the two ends can disagree: only the platform knows
+/// that it stopped a foreground service when the allowance ran out, or that the
+/// notification it holds is invisible because the user never granted
+/// `POST_NOTIFICATIONS`. Without it, a Dart-side lease keeps counting protection
+/// that has already been taken away.
+const String kBackgroundStatusChannel = 'media_core_native/background_status';
+
+/// What the platform said about a session it holds.
+///
+/// The package's own words, deliberately not `media_core`'s `BackgroundSessionStatus`:
+/// this channel is usable from a host that links no core package, and the adapter in
+/// `native_background_backend.dart` is where the two vocabularies meet.
+enum BackgroundExecutionStatus {
+  /// Running, but one of the promises was given up (the line is not visible).
+  degraded,
+
+  /// Nothing is held for the session any more.
+  stopped,
+
+  /// The platform took the protection back while the job kept running.
+  ///
+  /// Not `stopped` — nobody released it — and not a failure: the recording is
+  /// still recording, it is just no longer exempt from being frozen.
+  protectionLost,
+}
+
+/// One status report about one session.
+///
+/// The `id` is the same handle `acquire` returned, so a listener can tell whether the
+/// report concerns its own session without asking a second question.
+typedef BackgroundSessionReport = ({int id, BackgroundExecutionStatus status});
 
 /// What a session is doing, for the notification that shows it.
 ///
@@ -345,6 +382,93 @@ final class BackgroundExecution {
       return (session: null, refusal: BackgroundExecutionRefusal.noPlatformBinding);
     }
   }
+
+  static const EventChannel _statusChannel = EventChannel(kBackgroundStatusChannel);
+
+  /// What the platform reports about sessions it holds.
+  ///
+  /// Broadcast, and empty wherever nothing reports: a platform with no status
+  /// channel (Linux), a test with no binding, or a service that simply never ran
+  /// out of allowance.
+  ///
+  /// One subscription to the platform whatever the number of listeners here, which
+  /// is what the Android side assumes (its sink list is per engine, not per lease)
+  /// and what makes addressing by handle matter: every lease sees every report and
+  /// keeps only its own.
+  ///
+  /// This is the path that turns `BackgroundBackendLease.statusChanges` from a
+  /// placeholder into an answer: a foreground service the system stopped leaves the
+  /// Dart registry believing it still holds the exemption and the wake lock, and a
+  /// lease that never learns stops counting is how a recording reports itself
+  /// protected for the rest of its life.
+  static Stream<BackgroundSessionReport> get sessionStatuses {
+    _watchPlatform();
+
+    return _statuses.stream;
+  }
+
+  static final StreamController<BackgroundSessionReport> _statuses =
+      StreamController<BackgroundSessionReport>.broadcast();
+  // Never cancelled on purpose: this is the process's one view of the platform's
+  // status channel, and tearing it down would silently blind every lease that still
+  // holds a session.
+  // ignore: cancel_subscriptions
+  static StreamSubscription<Object?>? _platformWatch;
+
+  /// Subscribes once, and stays quiet about a platform that has nothing to say.
+  static void _watchPlatform() {
+    if (_platformWatch != null) {
+      return;
+    }
+
+    _platformWatch = _statusChannel.receiveBroadcastStream().listen(
+      _report,
+      // No binding is not an event: a platform that cannot answer this has taken
+      // nothing back, which is what the empty stream already says.
+      onError: (Object _) {},
+      cancelOnError: false,
+    );
+  }
+
+  static void _report(Object? event) {
+    final report = _parseReport(event);
+
+    if (report != null) {
+      _statuses.add(report);
+    }
+  }
+
+  /// Reads one wire event, dropping a status name this version does not know.
+  ///
+  /// The plugin can be newer than the Dart side talking to it, and guessing that an
+  /// unknown name means `stopped` would end a live job's protection on paper.
+  static BackgroundSessionReport? _parseReport(Object? event) {
+    if (event is! Map) {
+      return null;
+    }
+
+    final status = switch (event['status']) {
+      'degraded' => BackgroundExecutionStatus.degraded,
+      'stopped' => BackgroundExecutionStatus.stopped,
+      'protectionLost' => BackgroundExecutionStatus.protectionLost,
+      _ => null,
+    };
+    final id = event['id'];
+
+    if (status == null || id is! int) {
+      return null;
+    }
+
+    return (id: id, status: status);
+  }
+
+  /// Feeds a report as if the platform had sent it. For tests only.
+  ///
+  /// The seam exists because the alternative is a mocked `EventChannel`, whose
+  /// fan-out across several simultaneous subscriptions is not the behaviour a test
+  /// should lean on. Wire form on purpose: parsing is half of what is being tested.
+  @visibleForTesting
+  static void debugPublishReport(Map<String, Object?> wire) => _report(wire);
 
   /// Wire form of a notification, shared by `acquire` and `update`.
   ///
