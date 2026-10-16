@@ -5,6 +5,7 @@ import 'package:example/demos/console/fault_demo.dart';
 import 'package:example/demos/console/list_playback_demo.dart';
 import 'package:example/demos/console/logging_demo.dart';
 import 'package:example/demos/console/lyric_demo.dart';
+import 'package:example/demos/console/media_session_ownership_demo.dart';
 import 'package:example/demos/console/memory_demo.dart';
 import 'package:example/demos/console/platform_demo.dart';
 import 'package:example/demos/console/pool_demo.dart';
@@ -129,6 +130,7 @@ final List<ModuleDemo> moduleDemos = <ModuleDemo>[
   const DownloadDemo(),
   const RecordingDemo(),
   const BackgroundExecutionDemo(),
+  const MediaSessionOwnershipDemo(),
   // Domain demos that predate the split.
   const LyricDemo(),
   const QueueDemo(),

@@ -620,6 +620,25 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
   并发订阅下的广播行为不是测试该依赖的东西（一路事件会被送到所有 sink，另一路监听又收不到），
   与其和它较劲，不如把投递做成包内单一广播源——那也更接近真实形态。
 
+### 14.10 宿主接管媒体面的门（2026-10-16）
+
+阶段 3 把所有权规则写全了，但那条"宿主自己接走面"的路在仓内**一个调用点都没有**：内核走 `setActive(handle)`，
+音乐模块也走它，`MediaBackgroundSession.activate(sessionId:, title:)` 只在测试里被叫过。规则本身有单测守着，
+可是没人真从这道门进去过，就没人知道它好不好用。
+
+- `MediaSessionSurfaces`（`media_core_mediasession`）是给宿主的门：`activate` / `updateMetadata` / `deactivate` /
+  `activeSessionId`，背后还是那一个进程级驱动（两个驱动抢一条通知是 §14.5 就消掉的事），需要更底层的
+  `setActive(handle)` 时从 `MediaSessionSurfaces.driver` 走。
+- 新增 `MediaSessionRefusal.notEnabled`：进程没启用媒体面时，过去只能表达成 `MediaSessionBootstrap.current == null`，
+  而一个可以被忽略的 null 正是"我们请求过了"被读成"观众看得见"的地方——§9.3 就是为了不让这个读法成立，
+  所以这个情形值得有自己的答案。四种拒绝各对应一个动作：`notEnabled` 先去 enable、`notInitialized` 等握手、
+  `surfaceUnavailable` 这平台根本没有、`disposed` 还在调用已丢弃的驱动。
+- `example` 里加了一个 console demo（`media-session-ownership`），一次跑完：接管→上一任被点名→上一任迟到地
+  收走（无效）→上一任迟到地改写（无效）→主人自己交还→再交还原主。demo 也会在未启用/平台无面时如实停下，
+  而不是假装接管成功。
+- 测试：`media_core_mediasession/test/media_session_surfaces_test.dart`（4 例：未启用答 `notEnabled`、接管与交还的
+  完整链、陈旧写入穿过门面也被丢、未初始化仍答 `notInitialized`——两者是不同的等待方式）。
+
 ### 14.7 还没做
 
 - 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、

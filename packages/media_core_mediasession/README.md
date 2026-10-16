@@ -69,7 +69,11 @@ final handle = await kernel.create(source: source, config: const PlayerConfig(au
 | --- | --- | --- |
 | 内核的活动播放器（`kernel.attachAudio` 那条路） | `setActive(handle)` → 会话 id 是 `player/<handle id>` | 只能拿，不能盖 |
 | 音乐模块的 `MusicBackgroundBinding` | 同上（它通过 `setActive`） | 只释放自己拿到的那条 |
-| 宿主自己（多画面、直播墙、任何"这一路现在归我显示"的判断） | `await driver.activate(sessionId: 'cell-2', title: '房间2')` | 拿到时会告诉它上一任是谁 |
+| 宿主自己（多画面、直播墙、任何"这一路现在归我显示"的判断） | `await MediaSessionSurfaces.activate(sessionId: 'cell-2', title: '房间2')` | 拿到时会告诉它上一任是谁 |
+
+`MediaSessionSurfaces` 是宿主的门（`activate` / `updateMetadata` / `deactivate` / `activeSessionId`），不用先拿到 driver 实例；`MediaSessionSurfaces.driver` 就是 `MediaSessionBootstrap.current`，需要 `setActive(handle)` 之类更底层的东西时从那里走。它存在的理由很小但很实在：`MediaSessionBootstrap.current` 是 null 的时候，宿主很容易把"没启用媒体面"读成"接管成功了"，而这条门会明确回答 `notEnabled`。
+
+四种拒绝各有各的动作：`notEnabled`（先 `MediaSessionBootstrap.enable()`）、`notInitialized`（握手还在跑，等一下）、`surfaceUnavailable`（这平台根本没有媒体面，别等）、`disposed`（还在调用一个已经扔掉的驱动）。
 
 之后：`updateMetadata` 与 `deactivate` **只对当前主人有效**。这就是多画面切换里那个真出过的 bug——旧播放器停止时的迟到回调会把刚接手那一格的标题与控件一起清掉；现在它被忽略，因为会话 id 不匹配。
 

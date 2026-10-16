@@ -40,10 +40,10 @@ class BackgroundExecutionDemo extends ModuleDemo {
     'BackgroundNotification 描述通知：title / text / kind（决定内置图标）/ icon（宿主自己的 drawable 名）/ progress',
     'BackgroundProgress 有"已知总量"和"未知总量"两种形状，直播录制没有总量，就不该画一根假装有意义的进度条',
     'session.update(description.copyWith(...)) 是长任务刷新的方式：录制每秒推一次已录时长与字节数',
-    '两个任务共享一条通知：最新启动的那个拥有它（正文标 +1），先释放一个不会拆掉另一个的保护',
-    'Android 13+ 的通知权限由这个包自己在有 Activity 时弹出；拒绝也照跑 —— 唤醒锁还在，只是看不到通知',
+    '一个功能一个前台服务：录制、下载、未命名任务各有自己的通知、唤醒锁与超时，最后一个会话释放只收走自己那一条',
+    'Android 13+ 的通知权限由应用自己申请（media_core_notify 的 requestPermission 是唯一入口）；拒绝也照跑 —— 唤醒锁还在，只是看不到通知',
     'iOS 拿到的是"转场窗口"（约 30 秒），不是无限时间；长时间录制要应用自己声明 audio 后台模式',
-    '按钮 / 通知渠道名不在可配范围：前者要一条回调进 Dart 的通道，后者是整库一个，好让用户一次静音掉所有后台任务',
+    '按钮不在可配范围（要一条回调进 Dart 的通道）；通知渠道按功能一个，用户能只静音下载而留着录制',
   ];
 
   @override

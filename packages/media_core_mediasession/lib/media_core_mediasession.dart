@@ -58,3 +58,4 @@ export 'package:media_core_mediasession/src/media_session_bootstrap.dart';
 export 'package:media_core_mediasession/src/media_session_config.dart';
 export 'package:media_core_mediasession/src/media_session_driver.dart';
 export 'package:media_core_mediasession/src/media_session_handler.dart';
+export 'package:media_core_mediasession/src/media_session_surfaces.dart';

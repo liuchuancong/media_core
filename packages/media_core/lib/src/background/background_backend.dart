@@ -124,6 +124,15 @@ enum MediaSessionRefusal {
   /// something is still calling a driver it already threw away, not a call that came
   /// too early.
   disposed,
+
+  /// This process never enabled the media surfaces: there is no driver to ask.
+  ///
+  /// `MediaSessionBootstrap.enable()` was not called, or `disable()` already ran.
+  /// It belongs in this enum rather than in a `null` return, because the host that
+  /// reads a null as "nothing happened" is the host that then reports background
+  /// playback the device is not providing at all — the exact failure §9.3 of the
+  /// architecture note set out to make impossible.
+  notEnabled,
 }
 
 /// What answering a media activation actually got the host.
