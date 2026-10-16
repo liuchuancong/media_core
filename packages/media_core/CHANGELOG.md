@@ -1,5 +1,9 @@
 ## Unreleased
 
+- Test seam: `FakePlayerAdapterBehavior.announcesPlaying` (default `true`). `false` is the state-latched engine — it updates its own state and stays silent about it, the way mpv does after an open — which is the engine shape a playback owner needs a test for when it follows both the events and the state. The fake could only be the announcing kind, so "the edge never came" was not expressible.
+- **Bug fix**: `FakePlayerAdapterBehavior.failingOn(...)` no longer drops `screenshotBytes` while it rebuilds the behavior. A copy that forgets a field quietly turns a capture-capable fake into one that cannot capture, so a test that failed on `open` also lost the engine-capture route it had not meant to stop exercising; `announcesPlaying` is carried too, for the same reason.
+
+
 - **Breaking**: a reporter is now told about beginnings as well as endings. `MediaJobReporter` gained `reportStart(MediaJobStart)`, and `MediaJobStart` carries a kind and a label and nothing else. The alternative — a `phase` on `MediaJobOutcome` — is the wrong shape: every reporter reads `success`, so a start that arrived as a verdict would be announced as 下载完成 for a file that had only just begun, and a contract whose fields are only meaningful after you have checked another field invites exactly that reading. Implementing the interface is two methods now; saying nothing about a start is a one-line empty body, which is the whole of what a results-only host wants.
 
 - `MediaSessionRefusal.notEnabled`: a fourth answer, for the case where this process never enabled the media surfaces at all. It used to be expressible only as `MediaSessionBootstrap.current == null`, and a null that a host can ignore is how "we asked for the control bar" gets read as "the viewer can see it" — §9.3 of the architecture note exists to make that reading impossible, so the situation deserves a reason of its own rather than an absent object.

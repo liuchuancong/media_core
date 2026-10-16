@@ -165,7 +165,10 @@ final class FakePlayerAdapter implements PlayerAdapter {
     behavior.maybeFail('play');
     await _gate('play');
     _mirror = _mirror.copyWith(playing: true, paused: false);
-    _emit(const PlayerAdapterEvent.playing());
+
+    if (behavior.announcesPlaying) {
+      _emit(const PlayerAdapterEvent.playing());
+    }
   }
 
   @override
@@ -536,6 +539,7 @@ final class FakePlayerAdapterBehavior {
     this.openWidth,
     this.openHeight,
     this.applyInitialConfig = true,
+    this.announcesPlaying = true,
     this.failureError,
     this.screenshotBytes,
   });
@@ -603,6 +607,16 @@ final class FakePlayerAdapterBehavior {
   /// Whether [FakePlayerAdapter.initialize] applies context config volume/rate.
   final bool applyInitialConfig;
 
+  /// Whether [FakePlayerAdapter.play] announces the change it made.
+  ///
+  /// `true` (the default) is an engine that emits a `playing` event on every
+  /// start. `false` is a state-latched one — mpv among them, as this repo's own
+  /// live module says — which updates its own state and stays silent about it, so
+  /// a caller that only follows the event never learns. That difference is the
+  /// whole distinction between a watchdog that sees a stream playing and one that
+  /// reopens a healthy stream because it heard nothing.
+  final bool announcesPlaying;
+
   /// Error object thrown on failing methods.
   final Object? failureError;
 
@@ -636,6 +650,12 @@ final class FakePlayerAdapterBehavior {
       openWidth: openWidth,
       openHeight: openHeight,
       applyInitialConfig: applyInitialConfig,
+      // Carried rather than dropped: a copy that forgets a field turns a
+      // capture-capable fake into one that cannot capture, and a
+      // playing-announcing one into a latched engine, without anyone writing
+      // that sentence down.
+      announcesPlaying: announcesPlaying,
+      screenshotBytes: screenshotBytes,
       failureError: error ?? failureError,
     );
   }

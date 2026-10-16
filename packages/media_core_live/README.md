@@ -8,6 +8,8 @@
 
 - **扫描（sweep）**：先换线；线用尽才换引擎，换引擎后从"用户正在看的那一条"重新开始。引擎切换是 **staged** 的 —— 新引擎在旁边 open、play、验证通过之后才 commit，旧引擎在此之前一直放着。挂载的画面因此只在新引擎已经解出一帧时才换，黑屏不是一整段首帧时间。
 - **验证才是判据**：`open` 不抛异常不等于播起来了。成功的门槛是播放位置出现过**任意一次正向推进**（有些直播源 demuxer 时钟从 0 附近起，画面在放而位置只爬几十毫秒），窗口就是 `LiveWatchdogs.sourceReadyTimeout` —— 一个问题只给一个期限，不再另设更严的私有常量。
+- **引擎的真值只采纳一次，两个读者共用**：`handle.adapter.state` 不会漂移（适配器每发一个事件就自己更新它），而镜像状态与看门狗都靠事件喂；状态锁存型引擎（mpv：open 之后自己 pause/restart，`playing` 只说一次）在换线或恢复重开之后就再也没有第二条边。以前心跳只校正镜像、不告诉看门狗，两边于是各答各的"在放吗"：一条位置正在推进的流被 source-ready 判成没播起来（多烧一次一次性线路），而唯一所有引擎都支持的 position 探测器因为"没在播"根本不 arm。现在 commit 时与每次心跳都走同一个采纳入口，只升级、不降级（降级属于用户命令路径）。
+- **签名不进日志**：日志与最终 `PlayerFailure` 里的地址只写 `host+path`。一次性签名线路的 query 就是平台发下来的凭据，而 sweep 会为每一条试过的一线各写一行 —— 录制侧的 manifest 早就按同一条规则守着。`LiveSourceRequest.title` 也终于有了读者：扫空时的那一行说的是哪个房间。
 - **看门狗是纯探测器**：它不持有句柄、不调 `play()`、不 await 后端操作。`LiveStallKind` 说明观察到哪种停顿（无播放态、无视频帧、缓冲不退、位置停止前进），需要立刻执行的恢复命令以 `LiveWatchdogRecoveryAction` 交回播放所有者 —— 也就是 `LivePlaybackController` 自己；`positionStallTimeout` 是最后一道兜底，因为每个引擎都上报位置，而帧心跳只有部分引擎有。
 - **单槽任务队列**：`play` / `switchLine` / `retry` / `pause` / `resume` / `close` / 恢复，全都是 `TaskManager(maxConcurrentTasks: 1)` 上的任务。于是"两次切换互相踩"这类经典竞态在结构上不存在：用户动作会直接把排在队里的恢复挤掉，重复的 `play()` 在第二个进来时把第一个从队列里取消。
 - **一次性 URL 的两个插入口**：`onEngineFallbackSources`（换引擎之前）与 `onRecoverySources`（恢复重开之前）。返回新线路就从头扫，返回空列表就沿用现有线路；resolver 抛异常时保留线路并如实报停顿，不会卡在等平台上。

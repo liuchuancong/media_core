@@ -149,7 +149,7 @@ extension _LivePlaybackPipeline on LivePlaybackController {
       MediaCoreLog.warning(
         LogCategory.recovery,
         'watchdog stall: ${kind.name}',
-        fields: <String, Object?>{'line': _currentSource?.uri.toString(), 'backend': backendId},
+        fields: <String, Object?>{'line': _lineAddress(_currentSource), 'backend': backendId},
       );
 
       // A stall is a failure like any other: reopen the playing line
@@ -200,23 +200,55 @@ extension _LivePlaybackPipeline on LivePlaybackController {
   /// Re-aligns the mirrored playback state with the adapter's own semantic
   /// state on every position heartbeat.
   ///
-  /// The adapter's [PlayerAdapter.state] cannot drift: the adapter updates it
-  /// itself for every event it emits. The mirror, however, is fed through
-  /// subscriptions that an engine attached mid-playback joins late, so
-  /// playback edges (Playing, Buffering(false)) can be missed. Position
-  /// events arrive several times a second regardless, which makes them a
-  /// free heartbeat: any mirror that says "not playing" while the engine is
-  /// playing is corrected within a second. Only upgrades are applied —
-  /// downgrades to paused belong to the user-command paths.
+  /// Position events arrive several times a second regardless of what the
+  /// engine announced, which makes them a free heartbeat: a mirror that says
+  /// "not playing" while the engine is playing is corrected within a second.
   void _reconcileMirroredPlayback() {
     final handle = _handle;
+
     if (handle == null || handle.disposed) {
       return;
     }
 
-    final truth = handle.adapter.state.playback;
-    if (truth == PlayerPlaybackState.playing && state.playback != PlayerPlaybackState.playing) {
+    _adoptPlaybackTruth(handle);
+  }
+
+  /// Adopts the engine's own answer to "is it playing?" for **both** readers of
+  /// that answer in this controller: the mirrored state callers render, and the
+  /// watchdogs' belief about what they are watching.
+  ///
+  /// The adapter's [PlayerAdapter.state] cannot drift — it is updated by the
+  /// adapter itself for every event it emits — while the mirror and the
+  /// watchdogs are fed through edges that an engine attached mid-playback, or
+  /// re-opened on the same engine, joins late or never sends again: a
+  /// state-latched engine (mpv, which pauses and restarts itself right after an
+  /// open) announces `playing` once. Adopting it from the engine's state is what
+  /// keeps the two from answering that question on their own. Leaving the
+  /// watchdogs out used to cost both directions at once: a stream that was
+  /// plainly playing took a source-ready stall 18 seconds later and a reopen
+  /// that burned a single-use signed line, while the position-stall watchdog —
+  /// the only detector every engine supports, and the one that matters when a
+  /// stream really does freeze — refused to arm because playback was "not
+  /// running".
+  ///
+  /// Only upgrades are applied: a downgrade to paused belongs to the
+  /// user-command paths, and [_attach] deliberately seeds the watchdogs from the
+  /// declared intent rather than from this mirror, because an engine that paused
+  /// itself mid-open reads as paused here while playback is what was asked for.
+  void _adoptPlaybackTruth(PlayerHandle handle) {
+    if (handle.adapter.state.playback != PlayerPlaybackState.playing) {
+      return;
+    }
+
+    if (state.playback != PlayerPlaybackState.playing) {
       _setState(_liveState(PlayerPlaybackState.playing));
+    }
+
+    // `_playbackRequested` is checked because a user pause leaves this
+    // subscription alive: a late heartbeat must not resume what the caller just
+    // paused, and the watchdogs read this as an engine-observed playing edge.
+    if (_playbackRequested && !watchdogs.isPlaying) {
+      watchdogs.onPlayingChanged(playing: true, fromUserIntent: false);
     }
   }
 
@@ -283,7 +315,7 @@ extension _LivePlaybackPipeline on LivePlaybackController {
         MediaCoreLog.warning(
           LogCategory.error,
           'adapter error: $message',
-          fields: <String, Object?>{'backend': backendId, 'line': _currentSource?.uri.toString()},
+          fields: <String, Object?>{'backend': backendId, 'line': _lineAddress(_currentSource)},
         );
 
         // The queue is the serialization authority. A task already

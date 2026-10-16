@@ -776,6 +776,13 @@ final class LiveWatchdogs {
     _cancelBufferingStall();
     _cancelVideoFrameStall();
 
+    // The position deadline belongs to this list too. It was added after the other
+    // four, and leaving it out meant a disposed bundle kept a timer alive for up to
+    // one full `positionStallTimeout` — no stall reaches the owner (the generation
+    // guard says so), but a controller created and thrown away per room accumulates
+    // timers nobody owns.
+    _cancelPositionStall();
+
     onStall = null;
     onRecoveryRequested = null;
     _capabilities = null;

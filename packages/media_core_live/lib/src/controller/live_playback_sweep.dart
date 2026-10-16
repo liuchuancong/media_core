@@ -76,7 +76,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
       } on Object catch (error) {
         MediaCoreLog.warning(
           LogCategory.recovery,
-          'candidate failed: ${source.uri} on $engine'
+          'candidate failed: ${_lineAddress(source)} on $engine'
           '${first && startAtCurrent ? ' (reopen of the playing line)' : ''}',
           error: error,
           fields: <String, Object?>{'sourceIndex': _sourceIndex, 'engineIndex': _engineIndex},
@@ -204,7 +204,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
       MediaCoreLog.info(
         LogCategory.recovery,
         'recovery sources refreshed by the caller',
-        fields: <String, Object?>{'lines': _sources.length, 'first': _sources.first.uri.toString()},
+        fields: <String, Object?>{'lines': _sources.length, 'first': _lineAddress(_sources.first)},
       );
     } on Object catch (error) {
       MediaCoreLog.warning(
@@ -275,9 +275,25 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     _currentSource = source;
 
-    watchdogs.armSourceReady();
+    _setVerifiedState(handle);
+  }
 
+  /// Reports a candidate that verification just accepted.
+  ///
+  /// `buffering` is only the floor: verification proved the position moved, so the
+  /// engine's own state is the answer wherever it has one. Writing `buffering`
+  /// unconditionally used to sit on top of that truth — on an engine switch
+  /// [_attach] seeds it a moment earlier and this line overwrote it — which left
+  /// every consumer that trusts the mirror showing a spinner over a stream that had
+  /// already started, until the next position heartbeat corrected it.
+  void _setVerifiedState(PlayerHandle handle) {
     _setState(_liveState(PlayerPlaybackState.buffering));
+    _adoptPlaybackTruth(handle);
+
+    // The deadline stays for the one case verification cannot rule out: an engine
+    // that produced a single position advance and then went silent altogether. When
+    // the truth adopted above already says playing, it answers itself.
+    watchdogs.armSourceReady();
   }
 
   /// Builds the replacement player for [engine], proves it plays, then
@@ -292,7 +308,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
   }) async {
     MediaCoreLog.info(
       LogCategory.fallback,
-      'attaching engine $engine for ${source.uri}',
+      'attaching engine $engine for ${_lineAddress(source)}',
       fields: <String, Object?>{'line': _sourceIndex, 'staged': previous != null},
     );
 
@@ -411,9 +427,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     _currentSource = source;
 
-    watchdogs.armSourceReady();
-
-    _setState(_liveState(PlayerPlaybackState.buffering));
+    _setVerifiedState(staged);
   }
 
   /// Waits until [handle] shows any sign of real playback.
@@ -459,7 +473,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
       final adapterError = _sweepAdapterError;
 
       if (adapterError != null) {
-        throw StateError('${source.uri} on ${handle.backendId} failed while verifying: $adapterError');
+        throw StateError('${_lineAddress(source)} on ${handle.backendId} failed while verifying: $adapterError');
       }
 
       final position = handle.playbackStream.value.position;
@@ -482,7 +496,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
     }
 
     throw StateError(
-      '${source.uri} on ${handle.backendId} opened but never played '
+      '${_lineAddress(source)} on ${handle.backendId} opened but never played '
       '(position frozen at ${last.inMilliseconds}ms for '
       '${window.inSeconds}s).',
     );
@@ -490,15 +504,23 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
   /// Terminal: every allowed candidate failed. Exactly one failure per
   /// sweep — the caller decides what happens next.
+  ///
+  /// The message names the request's title when it has one, and never a signed
+  /// address's query: which room died is the question a caller with several open
+  /// has to answer from this line, and the URL that answers it best is the one that
+  /// carries a credential.
   Future<void> _reportExhausted(PlayerSource source, String engine) async {
+    final room = _request?.title;
+
     MediaCoreLog.error(
       LogCategory.recovery,
       'live sweep exhausted — reporting to the caller',
       fields: <String, Object?>{
+        'title': ?room,
         'sources': _sources.length,
         'enginesTried': _engineFallbackAllowed ? _engineIndex + 1 : 1,
         'lastEngine': engine,
-        'lastLine': source.uri.toString(),
+        'lastLine': _lineAddress(source),
       },
     );
 
@@ -509,11 +531,25 @@ extension _LivePlaybackSweep on LivePlaybackController {
         PlayerFailure(
           code: PlayerErrorCode.noPlayableStream,
           message:
+              '${room == null ? '' : '$room: '}'
               'Live playback failed after trying ${_sources.length} source(s)'
               '${_engineFallbackAllowed ? ' across ${_engineIndex + 1} engine(s)' : ''}. '
-              'Last attempt: ${source.uri} on $engine.',
+              'Last attempt: ${_lineAddress(source)} on $engine.',
         ),
       );
     }
   }
+}
+
+/// A candidate's address without the part of it that is a credential.
+///
+/// A signed live URL's query *is* the signature the platform handed out, and the
+/// sweep used to write the whole address of every candidate it tried — into each
+/// failure log line and into the terminal failure message, which a host may well put
+/// on screen. Host and path still answer the only question these lines ask, which is
+/// *which line* failed; the same rule the recording manifest follows for its source.
+String? _lineAddress(PlayerSource? source) {
+  final uri = source?.uri;
+
+  return uri == null ? null : '${uri.host}${uri.path}';
 }

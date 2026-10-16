@@ -96,7 +96,7 @@ void main() {
 
       expect(failures, hasLength(1));
       expect(failures.single.code, PlayerErrorCode.noPlayableStream);
-      expect(failures.single.message, contains('https://a.example/live.flv'));
+      expect(failures.single.message, contains('a.example/live.flv'));
       expect(adapters['engine-a']!.calls, contains('open'));
 
       await subscription.cancel();
@@ -507,6 +507,144 @@ void main() {
       await kernel.dispose();
     }, timeout: const Timeout(Duration(seconds: 40)));
   });
+
+  group('what an exhausted sweep says', () {
+    test('it names the room the caller declared, and drops the signature', () async {
+      // Two halves of one rule. The address is what tells a caller which line died,
+      // and a signed live URL's query is the credential the platform attached to it —
+      // so the address belongs in the report with its query off. And the title the
+      // request carries existed, documented as shown in events, with no reader
+      // anywhere: the sentence it was meant for is this one, and a caller with three
+      // rooms open cannot tell them apart by `a.example/live.flv`.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(kernel, sourceReadyTimeout: const Duration(milliseconds: 400));
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      await controller.play(
+        LiveSourceRequest(
+          sources: <PlayerSource>[_line('https://a.example/live.flv?sign=abc123')],
+          title: '主播 8891',
+          allowEngineFallback: false,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(failures, hasLength(1));
+      expect(failures.single.message, contains('主播 8891'));
+      expect(failures.single.message, contains('a.example/live.flv'));
+      expect(
+        failures.single.message,
+        isNot(contains('abc123')),
+        reason: 'a failure a host may show the user is not where a signature belongs',
+      );
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 30)));
+  });
+
+  group('an engine that does not announce what it did', () {
+    test('a verified candidate is reported as playing, not as buffering', () async {
+      // Verification is the step that proves the position moved, and the staged
+      // engine's own `Playing` edge fires before this controller subscribes to it,
+      // so the mirror used to be written back to `buffering` right after it. Every
+      // consumer that trusts the mirror — the UI's play/pause control above all —
+      // then showed a spinner over a stream that had already started, until the next
+      // position heartbeat corrected it.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(kernel);
+
+      final playing = controller.play(_request(['https://a.example/live.flv'], allowEngineFallback: false));
+      await _advance(adapters['engine-a']!);
+      await playing;
+
+      expect(controller.state.playback, PlayerPlaybackState.playing);
+
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('a reopen on a state-latched engine is watched, not reopened for being quiet', () async {
+      // The latched engine is mpv's own shape: it announces `playing` once and never
+      // again, and a reopen cancels the watchdog observations, so after a line switch
+      // nothing re-tells them what the engine is doing. Following only the edge left
+      // the watchdogs believing playback was not running on a stream whose position was
+      // advancing — which cost a source-ready stall some seconds into a healthy stream
+      // (a reopen that burns a single-use signed line) and, in the other direction,
+      // kept the position-stall detector — the only one every engine can support, and
+      // the one that matters when a stream really does freeze — from ever arming.
+      final latched = FakePlayerAdapter(
+        id: 'engine-a',
+        behavior: const FakePlayerAdapterBehavior(announcesPlaying: false),
+      );
+      final adapters = {'engine-a': latched};
+      final kernel = _kernel(adapters);
+      final stalls = <LiveStallKind>[];
+      final controller = LivePlaybackController(
+        kernel,
+        watchdogs: LiveWatchdogs(
+          sourceReadyTimeout: const Duration(milliseconds: 600),
+          positionStallTimeout: const Duration(milliseconds: 300),
+        ),
+      );
+      // Record only. The subject here is what the watchdogs detect, not the recovery
+      // a detection would trigger on top of this test's own sequencing.
+      controller.watchdogs.onStall = stalls.add;
+
+      final playing = controller.play(_request(['https://a.example/live.flv', 'https://b.example/live.flv']));
+      await _advance(latched, times: 8);
+      await playing;
+
+      expect(controller.watchdogs.isPlaying, isTrue, reason: 'the first attach seeds from the declared intent');
+
+      await controller.switchLine(1);
+      await _advance(latched, times: 8);
+
+      expect(
+        controller.watchdogs.isPlaying,
+        isTrue,
+        reason: 'a reopen has to be re-adopted from the engine state: the edge it would wait for never comes',
+      );
+      expect(stalls, isEmpty, reason: 'a stream whose position is advancing is not one that never played');
+
+      // And now freeze it: with the detector armed for the reopened line, a position
+      // that stops moving is the one thing that should be reported.
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+
+      expect(stalls, contains(LiveStallKind.positionStallTimeout));
+
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 40)));
+  });
+}
+
+/// Advances [adapter]'s position a bounded number of times.
+///
+/// [_pumpPosition] runs for seconds and keeps reporting after the sweep has
+/// committed, which hides the difference between "the controller adopted the
+/// engine's state" and "the next heartbeat happened to correct it". This stops.
+Future<void> _advance(
+  FakePlayerAdapter adapter,
+  {int times = 4, Duration every = const Duration(milliseconds: 60)}
+) async {
+  var position = const Duration(seconds: 1);
+
+  for (var i = 0; i < times; i++) {
+    try {
+      await adapter.seek(position);
+    } on Object catch (_) {
+      // An adapter that failed to open has nothing to seek.
+    }
+
+    position += const Duration(seconds: 1);
+    await Future<void>.delayed(every);
+  }
 }
 
 /// Waits until the sweep has opened the source and asked for playback — the

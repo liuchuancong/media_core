@@ -66,14 +66,22 @@ final class LiveSourceRequest {
   /// Candidate sources, best first. [sources].first is opened first.
   final List<PlayerSource> sources;
 
-  /// Optional display title for events.
+  /// What to call this playback in the lines the caller reads.
+  ///
+  /// Carried on the terminal failure and on the exhausted-sweep log, because a host
+  /// with several rooms open at once has to tell from one line *which* one died —
+  /// the candidate URLs say that badly at best, and a signed URL's query is a
+  /// credential that should not be echoed.
   final String? title;
 
   /// Whether recovery may attach another engine after every source failed.
   ///
-  /// `null` — the default — means automatic: allowed for multi-source
-  /// requests, refused for a single-source request, whose failure is
-  /// reported to the caller instead.
+  /// `null` — the default — means allowed: the number of sources decides how much
+  /// *line* fallback there is and nothing decides whether engines may be tried, so
+  /// a single-URL request still gets the next engine on the same address before the
+  /// failure surfaces. A decoder that cannot open a stream is not the stream's
+  /// fault, and refusing escalation would report the room as dead. Pass `false` to
+  /// stop the sweep at the first engine.
   final bool? allowEngineFallback;
 
   /// The source recovery starts from.
