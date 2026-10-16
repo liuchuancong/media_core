@@ -135,12 +135,13 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
 
   @override
   Future<void> showRunningLine(NotifyEvent event) async {
-    // One id, replaced in place: the line is one notification about several
-    // jobs, and a second show() must not stack a second one under it.
-    final ongoing = event.copyWith(id: kRunningLineNotificationId, tone: NotifyTone.progress);
+    // One id per feature, replaced in place: a line is one notification about
+    // several jobs of that feature, and a second show() must not stack a second one
+    // under it.
+    final ongoing = event.copyWith(id: event.id ?? kRunningLineNotificationId, tone: NotifyTone.progress);
 
     await _plugin.show(
-      id: kRunningLineNotificationId,
+      id: ongoing.id!,
       title: ongoing.title,
       body: ongoing.body,
       payload: ongoing.payload,
@@ -149,7 +150,7 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
   }
 
   @override
-  Future<void> clearRunningLine() => _plugin.cancel(id: kRunningLineNotificationId);
+  Future<void> clearRunningLine({required int id}) => _plugin.cancel(id: id);
 
   // ---------------------------------------------------------------------------
   // Tone mapping

@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:example/demos/module_demo.dart';
 import 'package:media_core_native/media_core_native.dart';
 
-/// Holding a background-execution session, and what its notification can say.
+/// Holding background-execution sessions, and what their notifications can say.
 ///
-/// The demo acquires two sessions, moves a progress bar, releases them one at a
-/// time, and prints every step — so on Android the notification shade and the
-/// output tell the same story: one notification, owned by the newest job, with a
-/// `+1` for the other, and a bar that fills while the download runs.
+/// The demo acquires two sessions of two different features, moves a progress bar,
+/// releases them one at a time, and prints every step — so on Android the shade and
+/// the output tell the same story: **two notifications, one per feature**, each
+/// owned by the newest job of its own feature, and a bar that fills while the
+/// download runs. Releasing the download takes its own line away and leaves the
+/// recording's text exactly where it was.
 class BackgroundExecutionDemo extends ModuleDemo {
   /// Creates the demo.
   const new();
@@ -101,6 +103,7 @@ await session?.release();   // 通知随会话消失
         kind: BackgroundJobKind.record,
         progress: BackgroundProgress.indeterminate(),
       ),
+      target: BackgroundServiceTarget.recording,
     );
 
     buffer.writeln('acquire -> $recording');
@@ -119,7 +122,7 @@ await session?.release();   // 通知随会话消失
         ..writeln()
         ..writeln('通知栏现在应该有一条常驻通知（Android），正文是 demo_recording。')
         ..writeln('A persistent notification should be in the shade now (Android), reading demo_recording.')
-        ..writeln('— 再取一个下载会话，它会"接管"这条通知 / a download session takes the notification over —');
+        ..writeln('— 再取一个下载会话：它是**另一个功能**，另起一条通知 / a download session is another feature, with its own line —');
 
       final download = await BackgroundExecution.acquire(
         notification: const BackgroundNotification(
@@ -128,12 +131,13 @@ await session?.release();   // 通知随会话消失
           kind: BackgroundJobKind.download,
           progress: BackgroundProgress.determinate(current: 0, total: 100),
         ),
+        target: BackgroundServiceTarget.download,
       );
 
       buffer
         ..writeln('acquire -> $download')
-        ..writeln('一条通知只能描述一个任务：最新启动的这个拥有它，录制那笔写在正文的 +1 里。')
-        ..writeln('One notification describes one job: the newest owns it, the recording shows up as +1 in the text.');
+        ..writeln('一条通知只能描述一个任务，但**每个功能各有自己的一条**：录制那行还在，下载这行说自己的。')
+        ..writeln('One notification describes one job — and each feature has its own: the recording line is untouched.');
 
       for (final step in const <int>[20, 40, 60, 80, 100]) {
         await download?.update(
@@ -150,7 +154,7 @@ await session?.release();   // 通知随会话消失
 
       buffer
         ..writeln()
-        ..writeln('— 释放下载：通知回到还在跑的那个录制上 —');
+        ..writeln('— 释放下载：只有下载那条线消失，录制那条照旧 —');
       await download?.release();
       buffer.writeln('released -> $download');
 

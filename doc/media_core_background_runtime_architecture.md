@@ -8,12 +8,12 @@
 
 当前后台运行能力分散在多个包中：
 
-- `media_core_native`：通过 `BackgroundExecutionService` 启动 Android 前台服务，持有 `PARTIAL_WAKE_LOCK`，并将多个会话聚合为一条作业通知。
+- `media_core_native`：通过 `BackgroundExecutionService` 启动 Android 前台服务，持有 `PARTIAL_WAKE_LOCK`，并将多个会话聚合为一条作业通知。（阶段 4 后该类已按功能拆成 `JobForegroundService` 的三个子类，见 §14.8；本节保留的是当初的问题形状。）
 - `media_core_notify`：负责完成、失败等事件通知；`ForegroundJobs` 还会通过 Flutter Local Notifications（FLN）启动独立前台服务。
 - `media_core_mediasession`：通过 `audio_service` 管理媒体播放服务和媒体控制条。
 - 录制目前会申请保活；下载、直播、多画面和音乐后台播放没有统一的后台执行声明。
 - `ForegroundJobs.start` 和 `MediaCoreNotify.enable` 没有形成一致的统一调用路径。
-- 示例宿主清单没有完整体现后台媒体播放所需的权限和服务声明。
+- 示例宿主清单没有完整体现后台媒体播放所需的权限和服务声明。（阶段 4 已补齐：见 §14.8。）
 
 这些实现导致服务生命周期、通知展示和后台能力申请彼此脱节，容易产生重复通知、权限申请重复、后台任务没有申请执行能力，以及播放和作业服务互相影响等问题。
 
@@ -561,6 +561,46 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 顺带一条测试脚手架的坑，值得写下来免得再踩：登记表、它的广播流和投影由此开出的节流定时器**属于创建它的那个 zone**。
 在 `setUp`（`fakeAsync` 之外）构造它们，`async.elapse` 就永远叫不响那条线的截止时间——看起来像投影逻辑坏了，其实是 harness。
 
+### 14.8 阶段 4 落地（2026-10-16）：一功能一服务一通知
+
+本轮需求是"录制、播放通知、后台播放各是各的通知和服务，互不影响"。这**修订**了 §13 第 1 条里"作业通知聚合
+原样保留"的那一半：聚合仍然在，但只在同一个功能内部；跨功能不再折进同一行、也不再共用同一个服务的生死。
+
+- **契约**：`BackgroundServiceOwner { recording, download, genericJob, mediaSession }`，`BackgroundExecutionKind.serviceOwner`
+  逐 kind 分流（原先三种 kind 全指同一个 `jobService`，所谓"映射是策略"只是一句承诺）。新增
+  `BackgroundServiceOwner.jobOwners`（除播放之外的三个，投影层用它迭代）与 `BackgroundRuntimeOwners.requestsFor(owner)`
+  扩展——做成扩展而不是接口成员，是因为它完全能从 `activeRequests` 推出来，不该逼宿主自己的假运行时多实现一个方法。
+  `changes` 继续无 payload：一个功能的变更会叫醒所有投影，但它读到的是自己那份列表，文本没变就不重贴。
+- **native**：`BackgroundExecutionService` 拆成 `JobForegroundService` 基类 + `RecordingForegroundService` /
+  `DownloadForegroundService` / `GenericForegroundService`。会话句柄是 `(featureCode << 16) | localId`，`update` / `release`
+  只凭句柄就能回到原来那个服务，不需要第二份"谁持有哪个 id"的登记表。每个功能各自的通知 id（`0x4D52` / `0x4D44` /
+  `0x4D43`——generic 沿用旧值，用户已经做过的静音选择不至于升级后失效）、各自渠道（`media_core.recording` /
+  `media_core.download` / `media_core.background`）、各自唤醒锁 tag（`media_core:recording` 等，泄漏时能说出是谁拿的）。
+  **`onTimeout` 自此只停自己那个服务**：过去录制撞到 `dataSync` 上限会把同一个服务里的下载一起摘掉保护。
+  （§14.1 记的旧通知 id 写作 `0x4D4C`，代码里实际是 `0x4D43`。）
+- **录制改用 `specialUse`**：Android 15 对 `dataSync` 是 6 小时/日硬上限，而直播录制没有可用的期限；清单里带
+  `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` 说明，上架时同样的理由还要在商店里再写一遍。下载与 generic 继续 `dataSync`。
+- **通道多一个 `owner` 字段**（拼写取 `BackgroundServiceOwner.name`）。路由只看它；缺 `owner` 的旧调用退回通知自带的
+  `kind`，那条退回路径是兼容用的，不是策略。`NativeBackgroundBackend.targetFor` 是两种词汇唯一的相遇点，
+  `mediaSession` 落到这里直接抛 `UnsupportedError`——播放不是作业，把它塞进下载那条线比报错更糟。
+- **notify**：`ForegroundJobs` 从"全局一条线"变成"每功能一条"。`runningLineIdFor(owner)` / `NotifySetup.channelFor(owner)`
+  各自派生 id 与渠道，新渠道 `media_core_recording` / `media_core_download`；正文里的"还有 N 个任务"只数同一功能的
+  其他会话；`clearRunningLine({required int id})` 按功能收线。开线收线依旧不节流。
+- **示例宿主清单补齐**：`POST_NOTIFICATIONS`、`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PLAYBACK`，以及
+  audio_service 的 `AudioService`（`mediaPlayback`）+ `MediaButtonReceiver`。后两项 audio_service 的库清单是空的、
+  替宿主声明不了，缺一项后台播放就没有服务可起、控制条也无从显示。作业那三个服务和相应权限由
+  `media_core_native` 的库清单合并进来，宿主不需要抄。
+- **`flutter_foreground_task` 依赖下线**：阶段 4 曾选它替代手写 Java 服务，实际全仓零引用，而它的模型是
+  "一个服务一条通知"，和这一轮的"各是各的服务"正面冲突；唤醒锁与聚合本来就在我们手里，回手写这条路线。
+
+测试：`media_core/test/background` 33 例（新增 3 例守隔离：每个 kind 各有其主、一个功能只看得到自己、
+同功能内部按优先级排队）；`media_core_native/test/background_runtime_test.dart` 24 例（owner 路由、播放不该来这里）；
+`media_core_notify` 原来那组"多任务一行"改写成"同功能一行、跨功能两行、别的功能变了不重贴我这条"。
+
 ### 14.7 还没做
 
-- 阶段 4/5：权限与渠道统一（`media_core_jobs` / `media_core_results`）、示例清单、Android 13/14/15 与 iOS 真机验证。超时与服务被系统杀掉上报成 `degraded` / `failed` 需要 Java 侧先事件化——`BackgroundBackendLease.statusChanges` 已经给它留了口。
+- 阶段 5：Android 13/14/15 与 iOS 真机验证——权限拒绝、`specialUse` 与 `dataSync` 的类型校验、息屏录制、
+  后台下载、录制与媒体播放同时跑（现在应当是**三条线**：录制、下载、媒体控制条，互不覆盖）。
+- 超时与服务被系统杀掉上报成 `degraded` / `failed`：`BackgroundBackendLease.statusChanges` 仍是空流，
+  Java 侧先把事件送进 Dart（服务拆分后，一个事件只影响一个功能，语义比从前干净）。
+- Linux 的后台执行仍未实现（logind `Inhibit`），`acquire` 在那边照实回答"没有能力"。

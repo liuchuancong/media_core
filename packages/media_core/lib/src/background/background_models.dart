@@ -16,8 +16,12 @@ import 'package:meta/meta.dart';
 ///
 /// Media playback is not one of these. It has its own service ownership on
 /// Android (`media_core_mediasession` over `audio_service`) and its own control
-/// surface, and folding it in here would put `mediaPlayback` on a service that
-/// declares `dataSync` — which Android 14 rejects rather than forgiving.
+/// surface, and folding it in here would put `mediaPlayback` on a job service —
+/// which Android 14 rejects rather than forgiving.
+///
+/// The kind is also the *isolation* boundary: each one maps to a different
+/// [BackgroundServiceOwner], so a recording's foreground service, its
+/// notification and its wake lock never live or die with a download's.
 enum BackgroundExecutionKind {
   /// Capturing a stream to disk.
   recording,
@@ -30,22 +34,44 @@ enum BackgroundExecutionKind {
 
   /// Which service owns this kind's life and death.
   ///
-  /// Today every kind is a job, so the answer is always
-  /// [BackgroundServiceOwner.jobService]; the method
-  /// exists because the mapping is a policy, not a coincidence, and the media
-  /// case arrives with a different owner.
-  BackgroundServiceOwner get serviceOwner => BackgroundServiceOwner.jobService;
+  /// This is a policy, not a coincidence: the owner decides the Android service
+  /// class that gets started, the notification channel and id it draws on, the
+  /// wake-lock tag it holds, and which session `onTimeout` is allowed to end.
+  BackgroundServiceOwner get serviceOwner => switch (this) {
+    BackgroundExecutionKind.recording => BackgroundServiceOwner.recording,
+    BackgroundExecutionKind.download => BackgroundServiceOwner.download,
+    BackgroundExecutionKind.generic => BackgroundServiceOwner.genericJob,
+  };
 }
 
 /// Which of the runtime's executors a request belongs to.
+///
+/// One owner means one foreground service, one notification and one wake lock.
+/// Nothing that happens to one owner — a release, a system timeout, a declined
+/// notification permission — is allowed to reach another owner's sessions.
 enum BackgroundServiceOwner {
-  /// The job foreground service in `media_core_native`: recording, download and
-  /// anything else that is work rather than playback.
-  jobService,
+  /// The recording foreground service in `media_core_native`.
+  ///
+  /// A live capture runs for hours, which is more than Android's `dataSync`
+  /// allowance, so this owner's service declares `specialUse`.
+  recording,
+
+  /// The download foreground service in `media_core_native`.
+  download,
+
+  /// The catch-all job service for [BackgroundExecutionKind.generic]: work the
+  /// runtime hosts but cannot name.
+  genericJob,
 
   /// The media session backend in `media_core_mediasession`: the platform's
   /// playback surface, its own service and its own notification.
-  mediaSession,
+  mediaSession;
+
+  /// The owners that are jobs — everything that is work rather than playback.
+  ///
+  /// A projector that draws one line per feature iterates this, rather than
+  /// [values], so the playback surface is never handed a job line of its own.
+  static const List<BackgroundServiceOwner> jobOwners = <BackgroundServiceOwner>[recording, download, genericJob];
 }
 
 /// A capability the runtime can grant a session.

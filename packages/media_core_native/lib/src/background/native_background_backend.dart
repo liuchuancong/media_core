@@ -14,6 +14,7 @@ import 'package:media_core/media_core.dart'
         BackgroundRequest,
         BackgroundRuntime,
         BackgroundRuntimes,
+        BackgroundServiceOwner,
         BackgroundSessionStatus;
 import 'package:media_core_native/src/background/background_execution.dart'
     show
@@ -22,19 +23,27 @@ import 'package:media_core_native/src/background/background_execution.dart'
         BackgroundExecutionRefusal,
         BackgroundJobKind,
         BackgroundNotification,
-        BackgroundProgress;
+        BackgroundProgress,
+        BackgroundServiceTarget;
 
 /// The Android/iOS/macOS/Windows side of the background runtime contract.
 ///
-/// This is the only place the contract touches the platform channel. It starts
-/// the job foreground service, holds the wake lock and updates the notification
-/// through [BackgroundExecution]; everything above it — which id means what, who
-/// still holds the CPU, whether a second request for one job is a duplicate —
-/// stays in the registry, where it can be tested without a device.
+/// This is the only place the contract touches the platform channel. It starts the
+/// foreground service for the request's own feature, holds that feature's wake
+/// lock and updates that feature's notification through [BackgroundExecution];
+/// everything above it — which id means what, who still holds the CPU, whether a
+/// second request for one job is a duplicate — stays in the registry, where it can
+/// be tested without a device.
 ///
-/// What it deliberately does not do: decide what the aggregate notification
-/// looks like, and compute reference counts. The Java service already does both,
-/// and doing them again here would give one job two owners of the same lock.
+/// The owner → target mapping is this file's own decision point: the contract says
+/// which feature a request belongs to, and the wire spelling is the channel's.
+/// Keeping the table here is what makes the two vocabularies drift visibly instead
+/// of silently.
+///
+/// What it deliberately does not do: decide what a feature's aggregate
+/// notification looks like, and compute reference counts. The Java service already
+/// does both per feature, and doing them again here would give one job two owners
+/// of the same lock.
 final class NativeBackgroundBackend implements BackgroundExecutionBackend {
   /// Creates the backend. Stateless: the channel is a singleton.
   const NativeBackgroundBackend();
@@ -46,6 +55,7 @@ final class NativeBackgroundBackend implements BackgroundExecutionBackend {
   Future<BackgroundBackendOutcome> open(BackgroundRequest request) async {
     final attempt = await BackgroundExecution.acquireDetailed(
       notification: notificationFor(request),
+      target: targetFor(request.kind.serviceOwner),
       wakeLock: request.requiresCpuWakeLock,
     );
 
@@ -87,6 +97,24 @@ final class NativeBackgroundBackend implements BackgroundExecutionBackend {
     );
   }
 
+  /// Which foreground service holds a session for [owner].
+  ///
+  /// Playback never reaches this backend — it is not a job kind, and the media
+  /// session has its own service and its own notification — so
+  /// [BackgroundServiceOwner.mediaSession] here is a caller that routed a request
+  /// through the wrong door. Saying so beats parking playback on the download
+  /// service with a label that describes neither.
+  static BackgroundServiceTarget targetFor(BackgroundServiceOwner owner) {
+    return switch (owner) {
+      BackgroundServiceOwner.recording => BackgroundServiceTarget.recording,
+      BackgroundServiceOwner.download => BackgroundServiceTarget.download,
+      BackgroundServiceOwner.genericJob => BackgroundServiceTarget.generic,
+      BackgroundServiceOwner.mediaSession => throw UnsupportedError(
+        'media playback is not a job session: it belongs to the media session service',
+      ),
+    };
+  }
+
   static BackgroundAcquireFailure _failureFor(BackgroundExecutionRefusal? refusal) {
     return switch (refusal) {
       BackgroundExecutionRefusal.serviceRefused => BackgroundAcquireFailure.foregroundStartRejected,
@@ -101,7 +129,7 @@ final class NativeBackgroundBackend implements BackgroundExecutionBackend {
   ///
   /// | platform | mechanism |
   /// | --- | --- |
-  /// | Android | foreground service (`dataSync`) + `PARTIAL_WAKE_LOCK` + a persistent notification |
+  /// | Android | the feature's own foreground service (`specialUse` for recording, `dataSync` for the rest) + its own `PARTIAL_WAKE_LOCK` + its own persistent notification |
   /// | iOS | a background task assertion: the process is not suspended, for a bounded window |
   /// | macOS | a sleep assertion held until the last session ends |
   /// | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)` |
@@ -139,10 +167,11 @@ class _NativeBackendLease implements BackgroundBackendLease {
 
   /// Nothing to report yet.
   ///
-  /// The Android service knows about its `dataSync` timeout and about being
-  /// killed, and the day it forwards that, this stream is where it arrives —
-  /// which is exactly what [BackgroundSessionStatus.degraded] and
-  /// [BackgroundSessionStatus.failed] exist for.
+  /// The Android service knows about its foreground-service allowance running out
+  /// and about being killed, and the day it forwards that, this stream is where it
+  /// arrives — which is exactly what [BackgroundSessionStatus.degraded] and
+  /// [BackgroundSessionStatus.failed] exist for. Since the services split per
+  /// feature, such an event ends one feature's sessions only.
   @override
   Stream<BackgroundSessionStatus> get statusChanges => const Stream<BackgroundSessionStatus>.empty();
 

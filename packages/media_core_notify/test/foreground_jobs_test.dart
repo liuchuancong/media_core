@@ -16,6 +16,7 @@ import 'package:media_core/media_core.dart'
         BackgroundLeaseRegistry,
         BackgroundRequest,
         BackgroundRuntimes,
+        BackgroundServiceOwner,
         BackgroundSessionStatus;
 import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/media_core_notify.dart';
@@ -107,12 +108,18 @@ BackgroundRequest _job(
   );
 }
 
-/// The client this suite needs: what the line was told to show.
+/// The client this suite needs: what the lines were told to show.
 final class _LineClient implements LocalNotificationClient {
   final List<NotifyEvent> shown = <NotifyEvent>[];
   final List<String> calls = <String>[];
 
-  int get clearCount => calls.where((call) => call == 'clearRunningLine').length;
+  /// The line ids that were taken down, in order.
+  final List<int> cleared = <int>[];
+
+  int get clearCount => cleared.length;
+
+  /// Events posted for one line id, so a test can ask what *that* feature's line did.
+  List<NotifyEvent> forId(int id) => shown.where((event) => event.id == id).toList();
 
   @override
   Future<bool> configure(NotifySetup setup) async => true;
@@ -137,7 +144,10 @@ final class _LineClient implements LocalNotificationClient {
   }
 
   @override
-  Future<void> clearRunningLine() async => calls.add('clearRunningLine');
+  Future<void> clearRunningLine({required int id}) async {
+    calls.add('clearRunningLine');
+    cleared.add(id);
+  }
 }
 
 /// Runs [future] to its value inside the fake zone.
@@ -224,8 +234,8 @@ void main() {
     return (result as BackgroundAcquireSuccess).lease;
   }
 
-  group('several jobs, one line', () {
-    test('the first session opens the line and says nothing about the others', () {
+  group('several jobs of one feature, one line', () {
+    test('the first session opens its feature line on its own channel and id', () {
       fakeAsync((async) {
         arm(async);
         _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
@@ -233,16 +243,16 @@ void main() {
 
         expect(client.shown, hasLength(1));
         expect(client.shown.single.tone, NotifyTone.progress);
-        expect(client.shown.single.channel.id, kNotifyChannelJobs.id);
+        expect(client.shown.single.channel.id, kNotifyChannelDownload.id);
         expect(client.shown.single.title, '正在下载');
         expect(client.shown.single.body, 'room-42 · 25%');
         expect(client.shown.single.kind, BackgroundJobKind.download);
-        expect(client.shown.single.id, kRunningLineNotificationId);
+        expect(client.shown.single.id, kDownloadLineNotificationId);
         expect(ForegroundJobs.isShowingLine, isTrue);
       });
     });
 
-    test('a second session joins the line instead of taking another notification', () {
+    test('a second job of the same feature joins the line instead of taking another notification', () {
       fakeAsync((async) {
         arm(async);
         _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
@@ -250,41 +260,76 @@ void main() {
           async,
           hold(
             _job(
-              'recording/b',
-              title: '正在录制',
+              'download/b',
               description: 'room-7 · 00:12',
-              kind: BackgroundExecutionKind.recording,
               priority: 10,
             ),
           ),
         );
         tick(async, const Duration(milliseconds: 1100));
 
-        expect(client.shown, hasLength(2), reason: 'one line, opened and then repainted — never a second service');
+        expect(
+          client.forId(kDownloadLineNotificationId),
+          hasLength(2),
+          reason: 'one line, opened and then repainted — never a second notification',
+        );
         expect(client.shown.map((event) => event.id).toSet(), {
-          kRunningLineNotificationId,
-        }, reason: 'several jobs, one notification id');
+          kDownloadLineNotificationId,
+        }, reason: 'several jobs of one feature, one notification id');
         expect(ForegroundJobs.runningCount, 2);
-        expect(ForegroundJobs.lineBody, 'room-7 · 00:12  (还有 1 个任务)');
+        expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.download), 'room-7 · 00:12  (还有 1 个任务)');
       });
     });
 
-    test('the job the host put first is what the line names first', () {
+    test('another feature is another line, not a count in this one', () {
       fakeAsync((async) {
         arm(async);
         _resolve(async, hold(_job('download/a', description: 'a · 25%')));
-        _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', priority: 10)));
+        _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', kind: BackgroundExecutionKind.recording)));
         tick(async, const Duration(milliseconds: 1100));
 
-        expect(ForegroundJobs.lineTitle, '正在录制');
-        expect(ForegroundJobs.lineBody, 'b · 00:12  (还有 1 个任务)');
+        expect(
+          client.shown.map((event) => event.id).toSet(),
+          {kDownloadLineNotificationId, kRecordingLineNotificationId},
+          reason: 'two features, two lines: neither one buries the other in a "+1"',
+        );
+        expect(
+          client.forId(kRecordingLineNotificationId).single.channel.id,
+          kNotifyChannelRecording.id,
+          reason: 'and each on its own channel, so a user can silence one',
+        );
+        expect(ForegroundJobs.titleFor(BackgroundServiceOwner.recording), '正在录制');
+        expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.recording), 'b · 00:12');
+        expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.download), 'a · 25%');
+      });
+    });
+
+    test('the job the host put first is what its own line names first', () {
+      fakeAsync((async) {
+        arm(async);
+        _resolve(async, hold(_job('download/a', description: 'a · 25%')));
+        _resolve(async, hold(_job('download/b', description: 'b · 00:12', priority: 10)));
+        _resolve(async, hold(_job('recording/c', title: '正在录制', description: 'c', kind: BackgroundExecutionKind.recording)));
+        tick(async, const Duration(milliseconds: 1100));
+
+        expect(ForegroundJobs.titleFor(BackgroundServiceOwner.download), '正在下载');
+        expect(
+          ForegroundJobs.bodyFor(BackgroundServiceOwner.download),
+          'b · 00:12  (还有 1 个任务)',
+          reason: 'the loudest *download* heads the download line',
+        );
+        expect(
+          ForegroundJobs.bodyFor(BackgroundServiceOwner.recording),
+          'c',
+          reason: 'a recording with nothing else running says nothing about the transfers',
+        );
       });
     });
 
     test('the line falls back to what is left when the loudest job ends', () {
       fakeAsync((async) {
         arm(async);
-        final loud = _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'b · 00:12', priority: 10)));
+        final loud = _resolve(async, hold(_job('download/b', description: 'b · 00:12', priority: 10)));
         _resolve(async, hold(_job('download/a', description: 'a · 25%')));
         tick(async, const Duration(milliseconds: 1100));
 
@@ -298,21 +343,55 @@ void main() {
       });
     });
 
-    test('the last session released clears the line once', () {
+    test('the last session of a feature clears that line and no other', () {
       fakeAsync((async) {
         arm(async);
         final a = _resolve(async, hold(_job('download/a', description: 'a')));
         final b = _resolve(async, hold(_job('download/b', description: 'b')));
+        final c = _resolve(async, hold(_job('recording/c', title: '正在录制', description: 'c', kind: BackgroundExecutionKind.recording)));
         tick(async, const Duration(milliseconds: 1100));
 
         _settle(async, a.release());
         _settle(async, b.release());
         async.flushMicrotasks();
 
-        expect(client.clearCount, 1);
+        expect(
+          client.cleared,
+          [kDownloadLineNotificationId],
+          reason: 'the download line went down; the recording line was never touched',
+        );
+        expect(ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.download), isFalse);
+        expect(ForegroundJobs.isShowingLineFor(BackgroundServiceOwner.recording), isTrue);
+        expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.recording), 'c');
+        expect(ForegroundJobs.runningCount, 1);
+
+        _settle(async, c.release());
+        async.flushMicrotasks();
+
+        expect(client.cleared, [kDownloadLineNotificationId, kRecordingLineNotificationId]);
         expect(ForegroundJobs.isShowingLine, isFalse);
-        expect(ForegroundJobs.runningCount, 0);
-        expect(ForegroundJobs.lineBody, isNull);
+        expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.recording), isNull);
+      });
+    });
+
+    test('another feature changing does not repost this feature line', () {
+      fakeAsync((async) {
+        arm(async);
+        _resolve(async, hold(_job('recording/a', title: '正在录制', description: '00:01', kind: BackgroundExecutionKind.recording)));
+        async.flushMicrotasks();
+
+        expect(client.forId(kRecordingLineNotificationId), hasLength(1));
+
+        _resolve(async, hold(_job('download/b', description: '50%')));
+        tick(async, const Duration(milliseconds: 1100));
+        _resolve(async, hold(_job('download/c', description: '25%')));
+        tick(async, const Duration(milliseconds: 1100));
+
+        expect(
+          client.forId(kRecordingLineNotificationId),
+          hasLength(1),
+          reason: 'the recording line says the same thing, so the transfers do not spend it again',
+        );
       });
     });
   });
@@ -322,16 +401,28 @@ void main() {
       fakeAsync((async) {
         arm(async, persistent: true);
         _resolve(async, hold(_job('download/a', description: 'room-42 · 25%')));
-        _resolve(async, hold(_job('recording/b', title: '正在录制', description: 'room-7 · 00:12', priority: 10)));
+        _resolve(
+          async,
+          hold(
+            _job(
+              'recording/b',
+              title: '正在录制',
+              description: 'room-7 · 00:12',
+              kind: BackgroundExecutionKind.recording,
+              priority: 10,
+            ),
+          ),
+        );
         tick(async, const Duration(seconds: 5));
 
         expect(client.shown, isEmpty, reason: 'two persistent notifications for one job is the bug, not the feature');
         expect(ForegroundJobs.drawsLine, isFalse);
         expect(
-          ForegroundJobs.lineBody,
-          'room-7 · 00:12  (还有 1 个任务)',
-          reason: 'the aggregate is still the answer to the question',
+          ForegroundJobs.bodyFor(BackgroundServiceOwner.recording),
+          'room-7 · 00:12',
+          reason: 'each feature still composes its own line, and only its own',
         );
+        expect(ForegroundJobs.bodyFor(BackgroundServiceOwner.download), 'room-42 · 25%');
       });
     });
   });
@@ -352,7 +443,7 @@ void main() {
         tick(async, const Duration(milliseconds: 500));
 
         expect(
-          client.shown.where((event) => event.id == kRunningLineNotificationId).length,
+          client.shown.where((event) => event.id == kDownloadLineNotificationId).length,
           1,
           reason: 'the window opened by the first paint has not expired',
         );

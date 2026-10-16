@@ -20,7 +20,9 @@ dependencies:
     sdk: flutter
 
   # The notification mechanism itself: Android, iOS, macOS, Windows and Linux
-  # behind one API, including the foreground-service notification.
+  # behind one API. It posts the lines and the results; the Android *foreground
+  # service* that keeps a job alive, and the notification that belongs to it, are
+  # media_core_native's per-feature services, not this plugin's.
   flutter_local_notifications: ^22.3.2
 
   # The job-outcome contract this package registers itself into, so the download

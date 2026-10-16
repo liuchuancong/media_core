@@ -125,7 +125,7 @@ final class _RecordingClient implements LocalNotificationClient {
   }
 
   @override
-  Future<void> clearRunningLine() async {
+  Future<void> clearRunningLine({required int id}) async {
     calls.add('clearRunningLine');
     _maybeThrow('clearRunningLine');
   }

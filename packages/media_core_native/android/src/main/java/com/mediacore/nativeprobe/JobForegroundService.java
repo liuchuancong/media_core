@@ -12,49 +12,41 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Keeps long-running jobs alive while the app is in the background.
+ * Base of the per-feature foreground services.
  *
- * A foreground service is the platform's own mechanism for "the user knows this
- * is running": the process is not frozen with the screen off, and the
- * notification is what tells the user why. Two things are held here together:
+ * <p><strong>One feature, one service, one notification, one wake lock.</strong>
+ * {@link Feature} names the features — recording, download and generic work — and
+ * each one is a separate service class with its own channel, its own notification
+ * id, its own session register and its own foreground-service type. That is the
+ * isolation the runtime contract asks for: with a single service, the six-hour
+ * {@code dataSync} cap a long recording eventually hits also stopped the download
+ * sharing that instance, and one notification could only ever describe one of the
+ * two jobs while the rest were reduced to a "+2" in its second line.
  *
- * <ul>
- *   <li>the service itself, typed {@code dataSync} on API 34+ (a download or a
- *       recording is data transfer, not media playback);
- *   <li>a {@link PowerManager#PARTIAL_WAKE_LOCK}, so the CPU keeps running after
- *       the screen goes off — a phone or a TV box that suspends the CPU would
- *       otherwise stall the writer mid-segment.
- * </ul>
+ * <p>Sessions of <em>one</em> feature still share that feature's notification,
+ * because that is what a foreground service is: three concurrent recordings are
+ * one line saying what is newest and how many others are running. A feature's
+ * release ends only its own sessions, and {@link #onTimeout} stops only the
+ * service the platform gave up on.
  *
- * <p><strong>One service, one notification, several sessions.</strong> A
- * foreground service is per-service, not per-job, so two jobs (a recording and a
- * download) share this instance. They are tracked in a register: the
- * notification describes the newest session and says how many others are
- * running, and a job that ends removes only itself. Stopping the service on the
- * first release would silently take the protection away from a job that is still
- * running, and dropping the wake lock with it would let the device sleep
- * mid-recording — so the lock is released only once no remaining session wants
- * it. The newest session is also the one whose title, icon and progress the
- * notification shows; an older job updates its own description without taking
- * the notification over from a job the user started later.
+ * <p>A session handle is {@code (featureCode << 16) | localId}. Dart holds it
+ * opaquely and hands it back on update and release, which is how a call reaches
+ * the right service without a second, separately-failing registry of who owns
+ * which id.
  *
- * <p>Declared in this plugin's own manifest, which the app inherits — a plain
- * {@code <service>} merges from a library manifest, unlike audio_service's
- * activity replacement, so the host does not have to copy anything. The
- * notification permission is asked for by {@link BackgroundExecutionDelegate}
- * while an activity is attached.
+ * <p>State is keyed per feature rather than held in statics of one class, and all
+ * of it is touched on the platform's main thread: the method channel and the
+ * service callbacks run there, so the registers need no locking of their own.
  */
-public final class BackgroundExecutionService extends Service {
+public abstract class JobForegroundService extends Service {
 
-  /** Notification channel every session uses. */
-  static final String CHANNEL_ID = "media_core.background";
-
-  /** Extras the service is started with. */
+  /** Extras a service is started with. */
   static final String EXTRA_TITLE = "title";
   static final String EXTRA_TEXT = "text";
   static final String EXTRA_SESSION_ID = "sessionId";
@@ -65,30 +57,166 @@ public final class BackgroundExecutionService extends Service {
   static final String EXTRA_PROGRESS_CURRENT = "progressCurrent";
   static final String EXTRA_PROGRESS_TOTAL = "progressTotal";
 
-  /**
-   * Notification id.
-   *
-   * A constant rather than the session id: the platform associates one
-   * notification with the foreground service, and a per-session id would leave
-   * the previous session's notification behind as an orphan the user cannot
-   * dismiss.
-   */
-  private static final int NOTIFICATION_ID = 0x4D43;
+  /** Bits of a session handle that say which feature issued it. */
+  private static final int HANDLE_SHIFT = 16;
 
-  /** Session ids, unique per process. */
-  private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
+  /** Local ids of one feature, unique within it. */
+  private static final int LOCAL_ID_MASK = 0xFFFF;
 
   /**
-   * Running sessions, oldest first.
+   * A feature that needs to keep running in the background, and everything that
+   * belongs to it alone.
    *
-   * Static because the sessions belong to the process rather than to an
-   * instance: a service the platform recreated must not forget what is still
-   * running.
+   * <p>The {@code key} is the wire spelling of the runtime contract's
+   * {@code BackgroundServiceOwner}, sent by Dart on every acquire: routing is
+   * decided by the declared owner, never by guessing from a title or a glyph.
    */
-  private static final Map<Integer, Session> SESSIONS = new LinkedHashMap<Integer, Session>();
+  public enum Feature {
+    /** Capturing a stream to disk: hours long, so {@code specialUse}. */
+    RECORDING("recording", 1, "media_core.recording", "录制 / Recording", 0x4D52, "media_core:recording", "specialUse", R.drawable.ic_stat_media_core_record),
 
-  /** The process's single instance, while it is alive. */
-  private static BackgroundExecutionService instance;
+    /** Fetching a file: bounded by the file, so {@code dataSync}. */
+    DOWNLOAD("download", 2, "media_core.download", "下载 / Downloads", 0x4D44, "media_core:download", "dataSync", R.drawable.ic_stat_media_core_download),
+
+    /** Work the runtime hosts but cannot name. */
+    GENERIC("generic", 3, "media_core.background", "后台任务 / Background tasks", 0x4D43, "media_core:background", "dataSync", R.drawable.ic_stat_media_core_task);
+
+    /** The wire spelling, matching {@code BackgroundServiceOwner.name}. */
+    public final String key;
+
+    /** High half of every handle this feature issues. */
+    public final int code;
+
+    /** Notification channel this feature alone uses. */
+    public final String channelId;
+
+    /** Channel label the user sees in the system's settings. */
+    public final String channelName;
+
+    /**
+     * Notification id.
+     *
+     * Constant per feature rather than the session id: the platform associates one
+     * notification with one foreground service, and a per-session id would leave
+     * the previous session's notification behind as an orphan the user cannot
+     * dismiss.
+     */
+    public final int notificationId;
+
+    /** Tag of this feature's wake lock, so a leak names the feature that took it. */
+    public final String wakeLockTag;
+
+    /**
+     * {@code android:foregroundServiceType} spelling this feature declares.
+     *
+     * Kept as text because the manifest is where it has to match; see
+     * {@link #serviceTypeId()} for the numeric form the start call needs.
+     */
+    public final String serviceType;
+
+    /** Glyph shipped for this feature when the host named no icon. */
+    public final int defaultGlyph;
+
+    Feature(
+        String key,
+        int code,
+        String channelId,
+        String channelName,
+        int notificationId,
+        String wakeLockTag,
+        String serviceType,
+        int defaultGlyph) {
+      this.key = key;
+      this.code = code;
+      this.channelId = channelId;
+      this.channelName = channelName;
+      this.notificationId = notificationId;
+      this.wakeLockTag = wakeLockTag;
+      this.serviceType = serviceType;
+      this.defaultGlyph = defaultGlyph;
+    }
+
+    /**
+     * The {@link ServiceInfo} type constant for this feature, on API 34 and up.
+     *
+     * A long recording must not be declared {@code dataSync}: Android caps that
+     * type at six hours a day and calls {@code onTimeout} when it runs out, which
+     * would end a recording that the user asked to keep running.
+     */
+    @SuppressWarnings("deprecation")
+    public int serviceTypeId() {
+      if ("specialUse".equals(serviceType)) {
+        // ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE is the API 34 constant;
+        // asking for it by name would break a compile against an older SDK the way
+        // the rest of this file avoids.
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            : 0;
+      }
+
+      return ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+    }
+
+    /** Which service class implements this feature. */
+    public Class<? extends JobForegroundService> serviceClass() {
+      switch (this) {
+        case RECORDING:
+          return RecordingForegroundService.class;
+        case DOWNLOAD:
+          return DownloadForegroundService.class;
+        default:
+          return GenericForegroundService.class;
+      }
+    }
+  }
+
+  /** Per-feature session state, alive as long as the process is. */
+  private static final class Register {
+    /** Running sessions, oldest first. */
+    final Map<Integer, Session> sessions = new LinkedHashMap<Integer, Session>();
+
+    final AtomicInteger nextLocalId = new AtomicInteger(1);
+
+    /** The live instance of that feature, while it exists. */
+    JobForegroundService instance;
+  }
+
+  private static final Map<Feature, Register> REGISTERS = new EnumMap<Feature, Register>(Feature.class);
+
+  private static Register register(Feature feature) {
+    Register existing = REGISTERS.get(feature);
+
+    if (existing == null) {
+      existing = new Register();
+      REGISTERS.put(feature, existing);
+    }
+
+    return existing;
+  }
+
+  /** Feature a session handle was issued for. */
+  public static Feature featureOf(int handle) {
+    for (Feature feature : Feature.values()) {
+      if (feature.code == (handle >>> HANDLE_SHIFT)) {
+        return feature;
+      }
+    }
+
+    return Feature.GENERIC;
+  }
+
+  /** The feature named on the wire, or generic when Dart named none it knows. */
+  public static Feature featureForKey(String key) {
+    if (key != null) {
+      for (Feature feature : Feature.values()) {
+        if (feature.key.equals(key)) {
+          return feature;
+        }
+      }
+    }
+
+    return Feature.GENERIC;
+  }
 
   /**
    * What the host asked the notification to say.
@@ -159,28 +287,32 @@ public final class BackgroundExecutionService extends Service {
     }
   }
 
-  /** Counter handed to whoever asked for a session. */
-  static int nextSessionId() {
-    return NEXT_SESSION_ID.getAndIncrement();
-  }
-
   /**
-   * Starts a session.
+   * Starts a session for {@code ownerKey}.
    *
-   * Returns the session id, or -1 when the platform refuses to run the service
+   * Returns the session handle, or -1 when the platform refuses to run the service
    * at all (a restricted background launch, a missing declaration) — the caller
    * then runs the job unprotected instead of failing it. A refused
    * <em>notification</em> is not that case: the service still runs and the wake
    * lock still holds, only the notification is hidden.
    */
-  static int start(Context context, Description description, boolean wakeLock) {
-    final int sessionId = nextSessionId();
+  public static int start(Context context, String ownerKey, Description description, boolean wakeLock) {
+    final Feature feature = featureForKey(ownerKey);
+    final Register register = register(feature);
+    final int localId = register.nextLocalId.getAndIncrement();
 
-    final Intent intent = new Intent(context, BackgroundExecutionService.class);
+    if (localId > LOCAL_ID_MASK) {
+      // 65k sessions in one feature is a caller that stopped releasing them; the
+      // handle would collide with the next one, and a wrong release is worse than
+      // no protection at all.
+      return -1;
+    }
+
+    final Intent intent = new Intent(context, feature.serviceClass());
 
     putDescription(intent, description);
 
-    intent.putExtra(EXTRA_SESSION_ID, sessionId).putExtra(EXTRA_WAKE_LOCK, wakeLock);
+    intent.putExtra(EXTRA_SESSION_ID, localId).putExtra(EXTRA_WAKE_LOCK, wakeLock);
 
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -194,7 +326,7 @@ public final class BackgroundExecutionService extends Service {
       return -1;
     }
 
-    return sessionId;
+    return (feature.code << HANDLE_SHIFT) | localId;
   }
 
   /**
@@ -203,25 +335,34 @@ public final class BackgroundExecutionService extends Service {
    * A no-op for a session that is gone: the notification went with it, and a job
    * that finishes while an update is in flight must not resurrect one.
    */
-  static void update(int sessionId, Description description) {
-    final BackgroundExecutionService service = instance;
+  public static void update(int handle, Description description) {
+    final JobForegroundService service = serviceFor(handle);
 
     if (service != null) {
-      service.updateSession(sessionId, description);
+      service.updateSession(localIdOf(handle), description);
     }
   }
 
   /**
-   * Ends the session with {@code sessionId}, leaving every other session alone.
+   * Ends the session behind {@code handle}, leaving that feature's other sessions
+   * and every other feature alone.
    *
-   * A no-op when the service is already gone: the sessions went with it.
+   * A no-op when the service is already gone: its sessions went with it.
    */
-  static void stop(int sessionId) {
-    final BackgroundExecutionService service = instance;
+  public static void stop(int handle) {
+    final JobForegroundService service = serviceFor(handle);
 
     if (service != null) {
-      service.releaseSession(sessionId);
+      service.releaseSession(localIdOf(handle));
     }
+  }
+
+  private static JobForegroundService serviceFor(int handle) {
+    return handle < 0 ? null : register(featureOf(handle)).instance;
+  }
+
+  private static int localIdOf(int handle) {
+    return handle & LOCAL_ID_MASK;
   }
 
   private static void putDescription(Intent intent, Description description) {
@@ -239,8 +380,8 @@ public final class BackgroundExecutionService extends Service {
    * Reads a description back out of the Intent.
    *
    * The Intent is the durable half: extras survive a service the platform
-   * recreated, which is why the description travels with it rather than through
-   * a field of this instance.
+   * recreated, which is why the description travels with it rather than through a
+   * field of this instance.
    */
   private static Description readDescription(Intent intent) {
     if (intent == null) {
@@ -257,17 +398,25 @@ public final class BackgroundExecutionService extends Service {
         intent.getIntExtra(EXTRA_PROGRESS_TOTAL, 0));
   }
 
+  /** Which feature this instance serves. */
+  abstract Feature feature();
+
+  private Register myRegister() {
+    return register(feature());
+  }
+
   private PowerManager.WakeLock wakeLock;
 
   @Override
   public void onCreate() {
     super.onCreate();
 
-    instance = this;
+    myRegister().instance = this;
   }
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
+    final Register register = myRegister();
     final int sessionId = intent == null ? -1 : intent.getIntExtra(EXTRA_SESSION_ID, -1);
 
     if (sessionId < 0) {
@@ -279,7 +428,7 @@ public final class BackgroundExecutionService extends Service {
     final boolean wakeLock = intent.getBooleanExtra(EXTRA_WAKE_LOCK, false);
     final Session session = new Session(sessionId, readDescription(intent), wakeLock);
 
-    SESSIONS.put(sessionId, session);
+    register.sessions.put(sessionId, session);
 
     startForegroundInternal(startId);
 
@@ -296,10 +445,12 @@ public final class BackgroundExecutionService extends Service {
   public void onDestroy() {
     releaseWakeLock();
 
-    SESSIONS.clear();
+    final Register register = myRegister();
 
-    if (instance == this) {
-      instance = null;
+    register.sessions.clear();
+
+    if (register.instance == this) {
+      register.instance = null;
     }
 
     super.onDestroy();
@@ -314,9 +465,12 @@ public final class BackgroundExecutionService extends Service {
    * Android 15 caps {@code dataSync} foreground services at six hours a day.
    *
    * When the cap is reached the platform calls this and the service has to stop.
-   * Stopping here is what keeps the process from being killed for not
-   * responding; the job itself keeps running (it is the app's own process), just
-   * without the protection — which is what the recording module documents.
+   * Stopping here is what keeps the process from being killed for not responding,
+   * and it takes down <em>only this feature's</em> sessions: a download that ran
+   * out of allowance used to stop the service a recording shared with it, which
+   * is exactly the interference this split exists to remove. The job itself keeps
+   * running (it is the app's own process), just without the protection — which is
+   * what the recording module documents.
    */
   @Override
   public void onTimeout(int startId, int foregroundServiceType) {
@@ -328,7 +482,8 @@ public final class BackgroundExecutionService extends Service {
   // ---------------------------------------------------------------------------
 
   private void updateSession(int sessionId, Description description) {
-    final Session session = SESSIONS.get(sessionId);
+    final Register register = myRegister();
+    final Session session = register.sessions.get(sessionId);
 
     if (session == null) {
       return;
@@ -336,25 +491,27 @@ public final class BackgroundExecutionService extends Service {
 
     // Replacement keeps the register's order, so an update never decides which
     // job owns the notification.
-    SESSIONS.put(sessionId, new Session(sessionId, description, session.wakeLock));
+    register.sessions.put(sessionId, new Session(sessionId, description, session.wakeLock));
 
     updateNotification();
   }
 
   private void releaseSession(int sessionId) {
-    if (SESSIONS.remove(sessionId) == null) {
+    final Register register = myRegister();
+
+    if (register.sessions.remove(sessionId) == null) {
       return;
     }
 
-    if (SESSIONS.isEmpty()) {
+    if (register.sessions.isEmpty()) {
       releaseWakeLock();
       stopForegroundAndSelf();
 
       return;
     }
 
-    // Other jobs are still running: keep the service, but stop holding the CPU
-    // for a job that no longer needs it.
+    // Other jobs of the same feature are still running: keep the service, but stop
+    // holding the CPU for a job that no longer needs it.
     if (!anySessionWantsWakeLock()) {
       releaseWakeLock();
     }
@@ -366,7 +523,7 @@ public final class BackgroundExecutionService extends Service {
   private Session newestSession() {
     Session newest = null;
 
-    for (Session session : SESSIONS.values()) {
+    for (Session session : myRegister().sessions.values()) {
       newest = session;
     }
 
@@ -374,7 +531,7 @@ public final class BackgroundExecutionService extends Service {
   }
 
   private boolean anySessionWantsWakeLock() {
-    for (Session session : SESSIONS.values()) {
+    for (Session session : myRegister().sessions.values()) {
       if (session.wakeLock) {
         return true;
       }
@@ -403,14 +560,15 @@ public final class BackgroundExecutionService extends Service {
     createChannel();
 
     final Notification notification = buildNotification();
+    final Feature feature = feature();
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+      startForeground(feature.notificationId, notification, feature.serviceTypeId());
 
       return;
     }
 
-    startForeground(NOTIFICATION_ID, notification);
+    startForeground(feature.notificationId, notification);
   }
 
   /** Reposts the notification after a session ended, without re-alerting. */
@@ -418,7 +576,7 @@ public final class BackgroundExecutionService extends Service {
     final NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
     if (manager != null) {
-      manager.notify(NOTIFICATION_ID, buildNotification());
+      manager.notify(feature().notificationId, buildNotification());
     }
   }
 
@@ -433,11 +591,13 @@ public final class BackgroundExecutionService extends Service {
       return;
     }
 
+    final Feature feature = feature();
     final NotificationChannel channel =
-        new NotificationChannel(CHANNEL_ID, "Background tasks", NotificationManager.IMPORTANCE_LOW);
+        new NotificationChannel(feature.channelId, feature.channelName, NotificationManager.IMPORTANCE_LOW);
 
     // Silence and no badge: work the user started, not news.
     channel.setShowBadge(false);
+    channel.setDescription(feature.channelName);
 
     manager.createNotificationChannel(channel);
   }
@@ -446,6 +606,7 @@ public final class BackgroundExecutionService extends Service {
   // way to build one from 26 on.
   @SuppressWarnings("deprecation")
   private Notification buildNotification() {
+    final Feature feature = feature();
     final Session visible = newestSession();
     final Description description =
         visible == null
@@ -454,7 +615,7 @@ public final class BackgroundExecutionService extends Service {
 
     final Notification.Builder builder =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-            ? new Notification.Builder(this, CHANNEL_ID)
+            ? new Notification.Builder(this, feature.channelId)
             : new Notification.Builder(this);
 
     final Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
@@ -470,7 +631,7 @@ public final class BackgroundExecutionService extends Service {
     }
 
     final String text = description.text;
-    final String others = count(SESSIONS.size() - 1);
+    final String others = count(myRegister().sessions.size() - 1);
 
     builder
         .setContentTitle(description.title)
@@ -479,7 +640,7 @@ public final class BackgroundExecutionService extends Service {
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setShowWhen(false)
-        .setSmallIcon(notificationIcon(description));
+        .setSmallIcon(notificationIcon(description, feature));
 
     if (description.hasProgress()) {
       // The two shapes the platform draws: a filled bar with a known total, and
@@ -506,28 +667,15 @@ public final class BackgroundExecutionService extends Service {
    * Icon of the notification.
    *
    * The host's own drawable when it named one (the convention the media
-   * notification uses too), otherwise the glyph shipped with this plugin for the
-   * job's kind — borrowing a system drawable would show a download arrow on a
-   * recording. A name that does not resolve falls back to that glyph rather than
-   * leaving the notification without an icon, which the platform refuses to post
-   * at all.
+   * notification uses too), otherwise the glyph shipped for the feature —
+   * borrowing a system drawable would show a download arrow on a recording. A name
+   * that does not resolve falls back to that glyph rather than leaving the
+   * notification without an icon, which the platform refuses to post at all.
    */
-  private int notificationIcon(Description description) {
+  private int notificationIcon(Description description, Feature feature) {
     final int named = resolveIcon(description.icon);
 
-    if (named != 0) {
-      return named;
-    }
-
-    if ("record".equals(description.kind)) {
-      return R.drawable.ic_stat_media_core_record;
-    }
-
-    if ("download".equals(description.kind)) {
-      return R.drawable.ic_stat_media_core_download;
-    }
-
-    return R.drawable.ic_stat_media_core_task;
+    return named != 0 ? named : feature.defaultGlyph;
   }
 
   /**
@@ -571,7 +719,7 @@ public final class BackgroundExecutionService extends Service {
         return;
       }
 
-      wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "media_core:background");
+      wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, feature().wakeLockTag);
       wakeLock.setReferenceCounted(false);
       wakeLock.acquire();
     } catch (Throwable ignored) {

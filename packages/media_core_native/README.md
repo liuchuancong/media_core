@@ -84,17 +84,17 @@ try {
 | `icon` | 宿主自己 `res/drawable` 或 `res/mipmap` 里的名字（与 `MediaSessionConfig.playIcon` 同一套约定，`@drawable/` 前缀也接受）；找不到名字就退回内置字形，不会留下一条没有图标的通知 |
 | `progress` | `BackgroundProgress.determinate(current, total)` 画进度条，`BackgroundProgress.indeterminate()` 画转圈 —— 直播录制没有总量，转圈才是诚实的形状 |
 
-跑起来以后用 `session.update(description.copyWith(text: ...))` 替换描述：录制就是每秒推一次"已录时长 · 已写字节"。**一条通知只描述最新启动的那个会话**，早启动的任务更新自己的描述不会把通知从后来的任务手里抢走；它结束时通知回到还在跑的那个，正文的 `+N` 数剩下的任务。
+跑起来以后用 `session.update(description.copyWith(text: ...))` 替换描述：录制就是每秒推一次"已录时长 · 已写字节"。**一个功能的那条通知只描述该功能里最新启动的会话**，早启动的任务更新自己的描述不会把通知从后来的任务手里抢走；它结束时通知回到还在跑的那个，正文的 `+N` 数的是**同一功能**剩下的任务。
 
-按钮 / 操作（需要一条回调进 Dart 的通道）和通知渠道名（整库一个，好让用户一次静音掉所有后台任务）都是**故意不可配**的；媒体**播放**通知是另一套面（`media_core_mediasession` 的 `MediaSessionConfig`）。
+按钮 / 操作（需要一条回调进 Dart 的通道）是**故意不可配**的；通知渠道按功能一个（`media_core.recording` / `media_core.download` / `media_core.background`），用户想只静音下载、留着录制做得到。媒体**播放**通知是另一套面（`media_core_mediasession` 的 `MediaSessionConfig`），不是这里的任何一条线。
 
-会话是**按 id 计数**的：两个任务（一个录制 + 一个下载）共享同一个前台服务与同一条通知（标题是后取的那个，正文标 `+N`），释放一个只退自己 —— 把服务停掉就等于把还在跑的那个任务暴露给系统，所以唤醒锁只在最后一个需要它的会话消失时才放开。释放是幂等的。
+会话是**按 id 计数**的，而**一个功能一个前台服务**：`RecordingForegroundService` / `DownloadForegroundService` / `GenericForegroundService`（共同基类 `JobForegroundService`），各自的通知 id（`0x4D52` / `0x4D44` / `0x4D43`）、各自的渠道、各自的唤醒锁 tag。会话句柄的高 16 位是功能、低 16 位是序号，所以 `update` / `release` 回到的一定是它原来那个服务，不需要第二份"谁持有哪个 id"的登记表。释放只退自己 —— 把服务停掉就等于把还在跑的任务暴露给系统，所以唤醒锁只在最后一个需要它的会话消失时才放开，且那只影响本功能。释放是幂等的。
 
-`POST_NOTIFICATIONS`（Android 13+）由这个包自己申请：第一次需要它的 `acquire` 会通过当前 Activity 弹窗，Dart 侧只是等结果。**拒绝不等于失败** —— 前台服务与唤醒锁照旧生效，只是用户看不到那条通知，这是用户的选择，不是让录制失败的 reason。平台连服务都不肯起（受限后台启动、清单缺失）时才返回 null。
+`POST_NOTIFICATIONS`（Android 13+）由本包**声明但不申请**：什么时候问用户是宿主决定，`media_core_notify` 的 `requestPermission()` 是这个问题唯一的入口。早先版本在第一次 `acquire` 里通过当前 Activity 弹窗，那等于让一个后台恢复的下载把系统对话框顶在用户脸上并等答案。**拒绝不等于失败** —— 前台服务与唤醒锁照旧生效，只是用户看不到那条通知，这是用户的选择，不是让录制失败的 reason。平台连服务都不肯起（受限后台启动、清单缺失）时才返回 null。
 
-Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那个 `<service>`）**已在本插件的清单里声明**，会合并进应用——服务声明可以来自库清单（`audio_service` 那种需要替换 Activity 的才不行）。运行时权限也由本插件在第一次 `acquire` 时代为申请，应用不需要知道这一步；宿主若想自己先问（例如启动录制前统一走一遍权限引导），把 `POST_NOTIFICATIONS` 交给自己处理即可，插件发现已授权就不会再弹。
+Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `FOREGROUND_SERVICE_SPECIAL_USE` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那三个 `<service>`）**已在本插件的清单里声明**，会合并进应用——普通的 `<service>` 可以来自库清单。**audio_service 不在这一条里**：它自己的库清单是空的，媒体播放的 `AudioService`（`mediaPlayback`）和 `MediaButtonReceiver` 必须写在应用的清单里，缺一项后台播放就没有服务可起、控制条也无从显示（`example/` 里已经写了）。
 
-Android 15 给 `dataSync` 前台服务设了**每天 6 小时**的额度：用完系统会停止服务（任务本身还在这个进程里跑，只是失去保护），插件在 `onTimeout` 里干净地收尾，不会让进程因为不响应被杀。
+Android 15 给 `dataSync` 前台服务设了**每天 6 小时**的额度，所以下载和普通任务留在 `dataSync`；直播录制没有可用期限，它声明 `specialUse`（清单里带 `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` 的理由说明，上架时同样的话还要在商店里再写一遍）。额度用完系统会停掉**那个**服务并在 `onTimeout` 里干净收尾，不会让进程因为不响应被杀，也不会连带摘掉别的功能的保护。
 
 ## 能力探针
 

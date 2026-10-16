@@ -627,10 +627,55 @@ void main() {
       expect(indeterminate.isIndeterminate, isTrue);
     });
 
-    test('every kind belongs to the job service, not the media surface', () {
-      for (final kind in BackgroundExecutionKind.values) {
-        expect(kind.serviceOwner, BackgroundServiceOwner.jobService);
-      }
+    test('each kind is owned by its own service', () {
+      expect(BackgroundExecutionKind.recording.serviceOwner, BackgroundServiceOwner.recording);
+      expect(BackgroundExecutionKind.download.serviceOwner, BackgroundServiceOwner.download);
+      expect(BackgroundExecutionKind.generic.serviceOwner, BackgroundServiceOwner.genericJob);
+
+      expect(
+        BackgroundExecutionKind.values.map((kind) => kind.serviceOwner).toSet().length,
+        BackgroundExecutionKind.values.length,
+        reason: 'one kind one owner: whatever ends a recording may not end a download with it',
+      );
+    });
+
+    test('an owner sees only its own sessions', () async {
+      final registry = BackgroundLeaseRegistry(backend: _FakeBackend());
+      final recording = await _grant(registry, _request('rec-1', title: '房间 42'));
+      await _grant(registry, _request('dl-1', title: '下载 vlog.mp4', kind: BackgroundExecutionKind.download));
+      await _grant(registry, _request('misc', title: '别的工作', kind: BackgroundExecutionKind.generic));
+
+      expect(registry.requestsFor(BackgroundServiceOwner.recording).map((request) => request.id), ['rec-1']);
+      expect(registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.id), ['dl-1']);
+      expect(registry.requestsFor(BackgroundServiceOwner.genericJob).map((request) => request.id), ['misc']);
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.mediaSession),
+        isEmpty,
+        reason: 'playback is not a job kind, and its line is the media notification, not this one',
+      );
+
+      await recording.lease.release();
+
+      expect(registry.requestsFor(BackgroundServiceOwner.recording), isEmpty);
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.id),
+        ['dl-1'],
+        reason: 'the recording ending must not move the download line',
+      );
+    });
+
+    test('an owner orders its own sessions, and the loudest of them wins its line', () async {
+      final registry = BackgroundLeaseRegistry(backend: _FakeBackend());
+      await _grant(registry, _request('dl-1', title: '低优先', kind: BackgroundExecutionKind.download));
+      await _grant(registry, _request('dl-2', title: '高优先', kind: BackgroundExecutionKind.download, priority: 5));
+      await _grant(registry, _request('rec-1', title: '录制', priority: 100));
+
+      expect(
+        registry.requestsFor(BackgroundServiceOwner.download).map((request) => request.title),
+        ['高优先', '低优先'],
+        reason: 'a recording with a higher priority does not get to head the download line',
+      );
+      expect(registry.activeRequests.first.title, '录制', reason: 'the global order still spans owners');
     });
   });
 }

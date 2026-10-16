@@ -19,7 +19,42 @@ enum BackgroundJobKind {
   download,
 
   /// Anything else: the generic glyph.
-  task,
+  task;
+
+  /// Which foreground service a session of this kind belongs to by default.
+  ///
+  /// A default, not a decision: a caller that knows the runtime contract passes an
+  /// explicit `target:` to [BackgroundExecution.acquire], and the Android side
+  /// routes on that rather than guessing from a glyph name.
+  BackgroundServiceTarget get serviceTarget => switch (this) {
+    BackgroundJobKind.record => BackgroundServiceTarget.recording,
+    BackgroundJobKind.download => BackgroundServiceTarget.download,
+    BackgroundJobKind.task => BackgroundServiceTarget.generic,
+  };
+}
+
+/// Which foreground service holds a session.
+///
+/// One target means one service, one notification, one wake lock and one
+/// platform allowance. Nothing that ends a session of one target — a release, an
+/// Android `dataSync` timeout, a notification permission the user declined —
+/// reaches another target's sessions, which is the reason this exists: with a
+/// single service for everything, a download that outlived its allowance stopped
+/// the service a recording was still using.
+///
+/// The names are the wire spelling of the runtime contract's
+/// `BackgroundServiceOwner` (`recording`, `download`, `genericJob` → [generic]);
+/// `media_core_native` does not import that type here so the channel stays
+/// usable from a host that links no core package.
+enum BackgroundServiceTarget {
+  /// The recording service: its own line, its own lock, `specialUse` on API 34+.
+  recording,
+
+  /// The download service: its own line, its own lock, `dataSync`.
+  download,
+
+  /// The catch-all service for work the runtime cannot name.
+  generic,
 }
 
 /// What a session's notification says, and how far along the job is.
@@ -158,7 +193,7 @@ typedef BackgroundExecutionAttempt = ({BackgroundExecutionSession? session, Back
 ///
 /// | platform | what a session does |
 /// | --- | --- |
-/// | Android | starts a foreground service (`dataSync`) with a notification the user can see (and tap, which returns to the app), plus a partial wake lock so the CPU keeps running with the screen off |
+/// | Android | starts **that target's** foreground service — `specialUse` for recording, `dataSync` for download and generic work — with a notification the user can see (and tap, which returns to the app), plus a partial wake lock so the CPU keeps running with the screen off |
 /// | iOS | asks for a background task assertion, which buys the transition window rather than unlimited time (see below) |
 /// | macOS | keeps the system from idle-sleeping for as long as the session lives |
 /// | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)`: the system stays awake, the display may still turn off |
@@ -174,18 +209,19 @@ typedef BackgroundExecutionAttempt = ({BackgroundExecutionSession? session, Back
 ///
 /// What is deliberately **not** configurable: buttons/actions (a stop button
 /// needs a callback path and a wake-up into Dart, which is a feature of its own),
-/// and the Android notification channel (one per library, so a user can silence
-/// "background tasks" as a group without hunting per job). Media *playback*
-/// notifications are a different surface with a different owner: that is
-/// `MediaSessionConfig` in `media_core_mediasession`.
+/// and the Android notification channel — one per [BackgroundServiceTarget], so a
+/// user can silence downloads while leaving recordings loud, without hunting per
+/// job. Media *playback* notifications are a different surface with a different
+/// owner: that is `MediaSessionConfig` in `media_core_mediasession`.
 ///
 /// ### The Android notification permission
 ///
 /// From Android 13 a foreground service shows its notification only with
-/// `POST_NOTIFICATIONS`. The plugin declares it and asks for it on the first
-/// [acquire] that needs it, while an activity is attached, so a host does not
-/// have to know this step exists. A refusal is not a failure: the service and
-/// the wake lock still hold — the user simply sees no notification, which is
+/// `POST_NOTIFICATIONS`. The plugin declares it and never asks for it: when the
+/// user is asked is the app's decision, and an acquire that popped a dialog could
+/// hold a resumed download hostage to the answer. `MediaCoreNotify.requestPermission()`
+/// is the one entry point for the question. A refusal is not a failure: the service
+/// and the wake lock still hold — the user simply sees no notification, which is
 /// their choice rather than something to fail a recording over.
 ///
 /// ### What this cannot do
@@ -236,9 +272,17 @@ final class BackgroundExecution {
   /// permission (a quick upload, a short download) passes false to avoid the
   /// battery cost.
   ///
-  /// Several sessions can be held at once — on Android they share one service
-  /// and one notification, and releasing one leaves the others running, so a
-  /// recording and a download do not take each other's protection away.
+  /// Several sessions can be held at once. Within one [BackgroundServiceTarget]
+  /// they share that target's service and its one notification — the newest
+  /// session supplies the text and the others are counted in its second line —
+  /// and releasing one leaves the rest running. Sessions of *different* targets
+  /// share nothing at all: different service, different notification, different
+  /// wake lock, different platform allowance.
+  ///
+  /// [target] decides which service holds the session; it defaults to
+  /// `notification.kind`'s own target. Pass it explicitly when the session is a
+  /// runtime-contract session, so the routing follows the declared owner instead
+  /// of a glyph.
   ///
   /// Returns null when the platform has no implementation, or when it refuses
   /// to run the service at all. A refused *notification* still returns a
@@ -247,9 +291,10 @@ final class BackgroundExecution {
   /// declined a notification would be worse.
   static Future<BackgroundExecutionSession?> acquire({
     required BackgroundNotification notification,
+    BackgroundServiceTarget? target,
     bool wakeLock = true,
   }) async {
-    return (await acquireDetailed(notification: notification, wakeLock: wakeLock)).session;
+    return (await acquireDetailed(notification: notification, target: target, wakeLock: wakeLock)).session;
   }
 
   /// [acquire], with the reason kept.
@@ -261,6 +306,7 @@ final class BackgroundExecution {
   /// asks this instead.
   static Future<BackgroundExecutionAttempt> acquireDetailed({
     required BackgroundNotification notification,
+    BackgroundServiceTarget? target,
     bool wakeLock = true,
   }) async {
     if (!isSupported) {
@@ -270,6 +316,10 @@ final class BackgroundExecution {
     try {
       final id = await _channel.invokeMethod<int>('acquire', <String, Object?>{
         'notification': encodeNotification(notification),
+        // Which service holds this session. Sent as text so an older native side
+        // that ignores the key still starts a service and the job is protected —
+        // it just lands in the catch-all one, which is a worse label, not a failure.
+        'owner': (target ?? notification.kind.serviceTarget).name,
         'wakeLock': wakeLock,
       });
 
@@ -300,7 +350,7 @@ final class BackgroundExecution {
   ///
   /// Public so a host implementing its own [BackgroundExecutionLease] against
   /// the same channel sends the same shape; the native side reads it in
-  /// `BackgroundExecutionDelegate` and `BackgroundExecutionService`.
+  /// `BackgroundExecutionDelegate` and `JobForegroundService`.
   ///
   /// Progress says which of its two shapes it is (`indeterminate`) rather than
   /// leaving it to be inferred from missing numbers: "no total yet" and "no

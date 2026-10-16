@@ -100,6 +100,7 @@ void main() {
       expect(result, isA<BackgroundAcquireSuccess>(), reason: '$result');
       expect(calls.acquires, hasLength(1));
       expect(calls.acquires.single['wakeLock'], isTrue);
+      expect(calls.acquires.single['owner'], 'recording', reason: 'a recording session belongs to the recording service');
 
       final notification = calls.lastNotification;
       expect(notification['title'], '正在录制');
@@ -130,6 +131,30 @@ void main() {
       expect(calls.acquires.single['wakeLock'], isFalse);
       expect(calls.lastNotification['kind'], 'download');
       expect(calls.lastNotification['progress'], isNull, reason: 'a job with no bar must not draw a spinner');
+    });
+
+    test('each kind is routed to its own service, not to one shared one', () async {
+      final registry = BackgroundLeaseRegistry(backend: const NativeBackgroundBackend());
+
+      await registry.acquire(_recording());
+      await registry.acquire(
+        const BackgroundRequest(id: 'download/a.bin', kind: BackgroundExecutionKind.download, title: '正在下载'),
+      );
+      await registry.acquire(const BackgroundRequest(id: 'misc-1', kind: BackgroundExecutionKind.generic, title: '别的工作'));
+
+      expect(
+        calls.acquires.map((call) => call['owner']),
+        ['recording', 'download', 'generic'],
+        reason: 'three kinds, three services: what ends one of them cannot end the others',
+      );
+    });
+
+    test('playback is not a job this backend would route', () {
+      expect(
+        () => NativeBackgroundBackend.targetFor(BackgroundServiceOwner.mediaSession),
+        throwsUnsupportedError,
+        reason: 'the media session owns its own service; parking playback on a job line would be a second owner of one surface',
+      );
     });
 
     test('update and release travel by the id the platform issued', () async {

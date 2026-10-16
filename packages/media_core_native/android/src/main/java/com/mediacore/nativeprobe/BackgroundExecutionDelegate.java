@@ -11,22 +11,33 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
 /**
- * Dart side of {@link BackgroundExecutionService}.
+ * Dart side of the per-feature foreground services.
  *
  * Wire protocol (see {@code BackgroundExecution} on the Dart side, which is the
  * source of truth):
  *
  * | direction | method | arguments | result |
  * |---|---|---|---|
- * | Dart → host | {@code acquire} | {notification, wakeLock} | session id, or null when the platform refused |
+ * | Dart → host | {@code acquire} | {notification, owner, wakeLock} | session handle, or null when the platform refused |
  * | Dart → host | {@code update} | {id, notification} | – |
  * | Dart → host | {@code release} | {id} | – |
  * | Dart → host | {@code notificationsPermitted} | – | whether the user may see notifications at all |
  *
- * <p>{@code notification} is the map `BackgroundExecution.encodeNotification`
+ * <p>{@code notification} is the map {@code BackgroundExecution.encodeNotification}
  * builds: title, text, kind, icon and an optional progress map that says which
  * of the two shapes it is. None of it is defaulted here beyond a placeholder
  * title — the words and the icon are the host's.
+ *
+ * <p>{@code owner} is the wire spelling of {@code BackgroundServiceOwner} and it
+ * alone decides <em>which service</em> the session lands in, so a recording and a
+ * download never share a notification, a wake lock or a timeout. A call that
+ * names no owner (an older Dart side, a host on the channel directly) falls back
+ * to the notification's {@code kind}; the fallback exists for compatibility, and
+ * new callers should name the owner they mean.
+ *
+ * <p>A session handle is opaque to Dart: its high half is the feature, its low
+ * half the session, which is how {@code update} and {@code release} find the
+ * service again without a second registry that could disagree with the first.
  *
  * <p>No {@code isSupported} call: the platform name is known in Dart, and a
  * round trip to answer "am I Android" would only be a way to disagree with it.
@@ -66,7 +77,9 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
   public void onMethodCall(MethodCall call, MethodChannel.Result result) {
     switch (call.method) {
       case "acquire":
-        result.success(start(descriptionOf(call), Boolean.TRUE.equals(call.argument("wakeLock"))));
+        final JobForegroundService.Description description = descriptionOf(call);
+
+        result.success(start(ownerOf(call, description), description, Boolean.TRUE.equals(call.argument("wakeLock"))));
         break;
 
       case "update":
@@ -76,10 +89,10 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
         break;
 
       case "release":
-        final Integer id = call.argument("id");
+        final Integer released = call.argument("id");
 
-        if (id != null && id >= 0) {
-          BackgroundExecutionService.stop(id);
+        if (released != null && released >= 0) {
+          JobForegroundService.stop(released);
         }
 
         result.success(null);
@@ -102,25 +115,50 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
       return;
     }
 
-    BackgroundExecutionService.update(id, descriptionOf(call));
+    JobForegroundService.update(id, descriptionOf(call));
   }
 
   /**
    * Whether a notification posted here can reach the user.
    *
    * A check, not a question: this never shows a dialog, because when the user is
-   * asked is the app's decision. Below API 33 the permission does not exist, so
-   * the answer is what the platform has always been — permitted.
+   * asked is the app's decision. Below API 33 the permission does not exist, so the
+   * answer is what the platform has always been — permitted.
    */
   private boolean notificationsPermitted() {
     return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
         || context.checkSelfPermission(PERMISSION_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
   }
 
-  private Integer start(BackgroundExecutionService.Description description, boolean wakeLock) {
-    final int sessionId = BackgroundExecutionService.start(context, description, wakeLock);
+  private Integer start(String owner, JobForegroundService.Description description, boolean wakeLock) {
+    final int handle = JobForegroundService.start(context, owner, description, wakeLock);
 
-    return sessionId < 0 ? null : sessionId;
+    return handle < 0 ? null : handle;
+  }
+
+  /**
+   * Which feature the session belongs to.
+   *
+   * The declared owner wins. Without one the notification's kind is the only
+   * evidence left, and "record" means the same thing here as it does in the glyph
+   * lookup — a legacy spelling, not a policy.
+   */
+  private static String ownerOf(MethodCall call, JobForegroundService.Description description) {
+    final String owner = call.argument("owner");
+
+    if (owner != null && !owner.isEmpty()) {
+      return owner;
+    }
+
+    if ("record".equals(description.kind)) {
+      return JobForegroundService.Feature.RECORDING.key;
+    }
+
+    if ("download".equals(description.kind)) {
+      return JobForegroundService.Feature.DOWNLOAD.key;
+    }
+
+    return JobForegroundService.Feature.GENERIC.key;
   }
 
   /**
@@ -130,18 +168,18 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
    * needs a notification, and refusing to start a job over a bad title would
    * fail the work for the label on it.
    */
-  private BackgroundExecutionService.Description descriptionOf(MethodCall call) {
+  private JobForegroundService.Description descriptionOf(MethodCall call) {
     final Object encoded = call.argument("notification");
 
     if (!(encoded instanceof Map)) {
-      return new BackgroundExecutionService.Description(
-          null, null, null, null, BackgroundExecutionService.Description.PROGRESS_NONE, 0, 0);
+      return new JobForegroundService.Description(
+          null, null, null, null, JobForegroundService.Description.PROGRESS_NONE, 0, 0);
     }
 
     final Map<?, ?> notification = (Map<?, ?>) encoded;
     final Object progress = notification.get("progress");
 
-    int state = BackgroundExecutionService.Description.PROGRESS_NONE;
+    int state = JobForegroundService.Description.PROGRESS_NONE;
     int current = 0;
     int total = 0;
 
@@ -149,15 +187,15 @@ final class BackgroundExecutionDelegate implements MethodChannel.MethodCallHandl
       final Map<?, ?> values = (Map<?, ?>) progress;
 
       if (Boolean.TRUE.equals(values.get("indeterminate"))) {
-        state = BackgroundExecutionService.Description.PROGRESS_INDETERMINATE;
+        state = JobForegroundService.Description.PROGRESS_INDETERMINATE;
       } else {
-        state = BackgroundExecutionService.Description.PROGRESS_DETERMINATE;
+        state = JobForegroundService.Description.PROGRESS_DETERMINATE;
         current = intValue(values.get("current"));
         total = intValue(values.get("total"));
       }
     }
 
-    return new BackgroundExecutionService.Description(
+    return new JobForegroundService.Description(
         stringValue(notification.get("title")),
         stringValue(notification.get("text")),
         stringValue(notification.get("kind")),

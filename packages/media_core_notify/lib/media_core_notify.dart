@@ -64,9 +64,24 @@ library;
 
 export 'package:media_core_notify/src/client/flutter_local_notifications_client.dart' show FlutterLocalNotificationsClient;
 export 'package:media_core_notify/src/client/notification_client.dart'
-    show LocalNotificationClient, NotifySetup, kFirstPostedNotificationId, kRunningLineNotificationId;
+    show
+        LocalNotificationClient,
+        NotifySetup,
+        kDownloadLineNotificationId,
+        kFirstPostedNotificationId,
+        kRecordingLineNotificationId,
+        kRunningLineNotificationId,
+        runningLineIdFor;
 export 'package:media_core_notify/src/client/notify_event.dart'
-    show NotifyChannel, NotifyEvent, NotifyTap, NotifyTone, kNotifyChannelJobs, kNotifyChannelResults;
+    show
+        NotifyChannel,
+        NotifyEvent,
+        NotifyTap,
+        NotifyTone,
+        kNotifyChannelDownload,
+        kNotifyChannelJobs,
+        kNotifyChannelRecording,
+        kNotifyChannelResults;
 export 'package:media_core_notify/src/jobs/foreground_jobs.dart' show ForegroundJobs;
 export 'package:media_core_notify/src/jobs/job_reporting.dart' show JobNotifications;
 export 'package:media_core_notify/src/media_core_notify.dart' show MediaCoreNotify, NotifyOn;

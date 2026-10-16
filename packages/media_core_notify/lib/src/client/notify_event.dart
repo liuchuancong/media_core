@@ -63,11 +63,31 @@ final class NotifyChannel {
   String toString() => 'NotifyChannel($id, $name, ${tone.name})';
 }
 
-/// The running-jobs channel.
+/// The running-jobs channel — generic work, the catch-all line.
 const NotifyChannel kNotifyChannelJobs = NotifyChannel(
   id: 'media_core_jobs',
   name: '媒体任务 / Media jobs',
-  description: '录制与下载进行中时的提示线 / Shown while a recording or download runs',
+  description: '没有归类的后台任务进行中时的提示线 / Shown while unnamed background work runs',
+  tone: NotifyTone.progress,
+);
+
+/// The recording line's own channel.
+///
+/// Separate from [kNotifyChannelJobs] on purpose: a user who silences downloads
+/// while leaving recordings loud can do that, and the Android service behind each
+/// of them has its own channel for the same reason.
+const NotifyChannel kNotifyChannelRecording = NotifyChannel(
+  id: 'media_core_recording',
+  name: '录制进行中 / Recording in progress',
+  description: '录制进行中时的提示线 / Shown while a recording runs',
+  tone: NotifyTone.progress,
+);
+
+/// The download line's own channel.
+const NotifyChannel kNotifyChannelDownload = NotifyChannel(
+  id: 'media_core_download',
+  name: '下载进行中 / Downloads',
+  description: '下载进行中时的提示线 / Shown while a transfer runs',
   tone: NotifyTone.progress,
 );
 

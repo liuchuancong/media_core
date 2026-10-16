@@ -52,6 +52,10 @@ abstract interface class BackgroundRuntime {
   /// the line say now?" is [activeRequests], and an event that also tried to say
   /// it would be a second version of the same list to keep in step. A projector
   /// debounces this — the byte counter of a download is not a notification rate.
+  ///
+  /// One owner's change wakes every projector, not just its own; that is safe
+  /// because a projector reads only `requestsFor(owner)` and reposts nothing when
+  /// its own text did not change.
   Stream<void> get changes;
 }
 
@@ -98,6 +102,26 @@ abstract final class BackgroundRuntimes {
 
   /// Forgets the runtime. Used by a host tearing a process down, and by tests.
   static void reset() => current = null;
+}
+
+/// The per-owner view over a runtime's sessions.
+///
+/// An extension rather than an interface member: everything it answers is
+/// already in [BackgroundRuntime.activeRequests], and a host writing its own test
+/// runtime should not have to reimplement the filter to satisfy the contract.
+extension BackgroundRuntimeOwners on BackgroundRuntime {
+  /// The sessions held for one [owner], in the order a notification would list
+  /// them — highest priority first, then by arrival.
+  ///
+  /// This is what lets each feature draw its own line: a recorder projects over
+  /// its own sessions and nothing else, so a download starting or ending cannot
+  /// change the text of the recording notification, and the last download to
+  /// finish clears the download line only.
+  List<BackgroundRequest> requestsFor(BackgroundServiceOwner owner) {
+    final requests = activeRequests.where((request) => request.kind.serviceOwner == owner).toList(growable: false);
+
+    return List<BackgroundRequest>.unmodifiable(requests);
+  }
 }
 
 /// The Lease Registry, the policy engine and the session state machine.
