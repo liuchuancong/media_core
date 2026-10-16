@@ -22,11 +22,11 @@ library;
 
 import 'package:media_core_download/media_core_download.dart' show DownloadManager, DownloadResumePlanner;
 
-export 'package:media_core_download/src/download_config.dart';
-export 'package:media_core_download/src/download_file_sink.dart';
-export 'package:media_core_download/src/download_manager.dart';
-export 'package:media_core_download/src/download_progress.dart';
-export 'package:media_core_download/src/download_resume.dart';
-export 'package:media_core_download/src/download_status.dart';
-export 'package:media_core_download/src/download_task.dart';
-export 'package:media_core_download/src/download_transport.dart';
+export 'package:media_core_download/src/core/download_config.dart';
+export 'package:media_core_download/src/core/download_manager.dart';
+export 'package:media_core_download/src/core/download_progress.dart';
+export 'package:media_core_download/src/core/download_status.dart';
+export 'package:media_core_download/src/core/download_task.dart';
+export 'package:media_core_download/src/transport/download_file_sink.dart';
+export 'package:media_core_download/src/transport/download_resume.dart';
+export 'package:media_core_download/src/transport/download_transport.dart';

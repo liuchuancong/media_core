@@ -1,11 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:media_core/casting/cast_media.dart';
-
-import 'package:media_core_cast_dlna/src/didl_lite.dart';
-import 'package:media_core_cast_dlna/src/dlna_device_description.dart';
-import 'package:media_core_cast_dlna/src/soap.dart';
-import 'package:media_core_cast_dlna/src/ssdp_message.dart';
+import 'package:media_core/media_core.dart';
+import 'package:media_core_cast_dlna/src/discovery/ssdp_message.dart';
+import 'package:media_core_cast_dlna/src/protocol/didl_lite.dart';
+import 'package:media_core_cast_dlna/src/protocol/dlna_device_description.dart';
+import 'package:media_core_cast_dlna/src/protocol/soap.dart';
 
 const _aliveTv = '''
 NOTIFY * HTTP/1.1

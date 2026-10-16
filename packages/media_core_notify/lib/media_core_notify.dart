@@ -62,11 +62,11 @@
 ///    about.
 library;
 
-export 'package:media_core_notify/src/flutter_local_notifications_client.dart' show FlutterLocalNotificationsClient;
-export 'package:media_core_notify/src/foreground_jobs.dart' show ForegroundJobs;
-export 'package:media_core_notify/src/job_reporting.dart' show JobNotifications;
-export 'package:media_core_notify/src/media_core_notify.dart' show MediaCoreNotify, NotifyOn;
-export 'package:media_core_notify/src/notification_client.dart'
+export 'package:media_core_notify/src/client/flutter_local_notifications_client.dart' show FlutterLocalNotificationsClient;
+export 'package:media_core_notify/src/client/notification_client.dart'
     show LocalNotificationClient, NotifySetup, kFirstPostedNotificationId, kRunningLineNotificationId;
-export 'package:media_core_notify/src/notify_event.dart'
+export 'package:media_core_notify/src/client/notify_event.dart'
     show NotifyChannel, NotifyEvent, NotifyTap, NotifyTone, kNotifyChannelJobs, kNotifyChannelResults;
+export 'package:media_core_notify/src/jobs/foreground_jobs.dart' show ForegroundJobs;
+export 'package:media_core_notify/src/jobs/job_reporting.dart' show JobNotifications;
+export 'package:media_core_notify/src/media_core_notify.dart' show MediaCoreNotify, NotifyOn;

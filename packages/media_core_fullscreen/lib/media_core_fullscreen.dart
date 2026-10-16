@@ -11,11 +11,11 @@
 /// wants, so a host does not have to re-derive portrait/landscape rules.
 library;
 
-export 'package:media_core_fullscreen/src/fullscreen_config.dart';
-export 'package:media_core_fullscreen/src/fullscreen_driver.dart';
-export 'package:media_core_fullscreen/src/fullscreen_window.dart';
+export 'package:media_core_fullscreen/src/driver/fullscreen_config.dart';
+export 'package:media_core_fullscreen/src/driver/fullscreen_driver.dart';
+export 'package:media_core_fullscreen/src/window/fullscreen_window.dart';
+export 'package:media_core_fullscreen/src/window/win32_fullscreen_window.dart';
+export 'package:media_core_fullscreen/src/window/window_manager_fullscreen_window.dart';
 
 /// The Windows-native implementation; hosts whose window is created with a
 /// hidden title bar must use this instead of the window_manager bridge.
-export 'package:media_core_fullscreen/src/win32_fullscreen_window.dart';
-export 'package:media_core_fullscreen/src/window_manager_fullscreen_window.dart';

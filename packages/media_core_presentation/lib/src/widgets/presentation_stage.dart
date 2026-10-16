@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart' show VideoOrientation;
 
-import 'package:media_core_presentation/src/media_core_presentation.dart';
-import 'package:media_core_presentation/src/presentation_capability_config.dart';
+import 'package:media_core_presentation/src/driver/media_core_presentation.dart';
+import 'package:media_core_presentation/src/geometry/presentation_capability_config.dart';
 import 'package:media_core_presentation/src/widgets/player_overlay.dart';
 
 /// Orientation-aware fullscreen stage for one player.

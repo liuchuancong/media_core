@@ -1,15 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:media_core/casting/cast_device.dart';
-import 'package:media_core/casting/cast_media.dart';
-import 'package:media_core/casting/cast_transport.dart';
-import 'package:media_core/casting/media_cast_backend.dart';
+import 'package:media_core/media_core.dart';
+import 'package:media_core_cast_dlna/src/discovery/ssdp_message.dart';
+import 'package:media_core_cast_dlna/src/discovery/ssdp_source.dart';
 import 'package:media_core_cast_dlna/src/dlna_cast_backend.dart';
-import 'package:media_core_cast_dlna/src/http_transport.dart';
-import 'package:media_core_cast_dlna/src/ssdp_message.dart';
-import 'package:media_core_cast_dlna/src/ssdp_source.dart';
+import 'package:media_core_cast_dlna/src/protocol/http_transport.dart';
 
 const _description = '''
 <?xml version="1.0"?>

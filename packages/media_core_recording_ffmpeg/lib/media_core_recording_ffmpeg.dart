@@ -23,17 +23,17 @@
 /// [FfmpegRecordingBackend], the last on [FfmpegLiveRecordingWatcher].
 library;
 
-import 'package:media_core_recording_ffmpeg/src/ffmpeg_recording_backend.dart' show FfmpegRecordingBackend;
-import 'package:media_core_recording_ffmpeg/src/live_recording_watcher.dart' show FfmpegLiveRecordingWatcher;
+import 'package:media_core_recording_ffmpeg/src/backend/ffmpeg_recording_backend.dart' show FfmpegRecordingBackend;
+import 'package:media_core_recording_ffmpeg/src/backend/live_recording_watcher.dart' show FfmpegLiveRecordingWatcher;
 
-export 'package:media_core_recording_ffmpeg/src/ffmpeg_executor.dart';
-export 'package:media_core_recording_ffmpeg/src/ffmpeg_probe.dart';
-export 'package:media_core_recording_ffmpeg/src/ffmpeg_record_arguments.dart';
-export 'package:media_core_recording_ffmpeg/src/ffmpeg_record_config.dart';
-export 'package:media_core_recording_ffmpeg/src/ffmpeg_record_container.dart';
-export 'package:media_core_recording_ffmpeg/src/ffmpeg_recording_backend.dart';
-export 'package:media_core_recording_ffmpeg/src/live_recording_watcher.dart';
-export 'package:media_core_recording_ffmpeg/src/recording_manifest.dart';
-export 'package:media_core_recording_ffmpeg/src/recording_recovery.dart';
-export 'package:media_core_recording_ffmpeg/src/recording_remuxer.dart';
-export 'package:media_core_recording_ffmpeg/src/recording_verification.dart';
+export 'package:media_core_recording_ffmpeg/src/backend/ffmpeg_recording_backend.dart';
+export 'package:media_core_recording_ffmpeg/src/backend/live_recording_watcher.dart';
+export 'package:media_core_recording_ffmpeg/src/config/ffmpeg_record_config.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_executor.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_probe.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_record_arguments.dart';
+export 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_record_container.dart';
+export 'package:media_core_recording_ffmpeg/src/journal/recording_manifest.dart';
+export 'package:media_core_recording_ffmpeg/src/journal/recording_recovery.dart';
+export 'package:media_core_recording_ffmpeg/src/journal/recording_remuxer.dart';
+export 'package:media_core_recording_ffmpeg/src/journal/recording_verification.dart';

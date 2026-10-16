@@ -495,7 +495,7 @@ Dart 单元测试不能代替真机验证 Android 系统服务、WakeLock、运�
 ### 14.2 已落地
 
 - `packages/media_core/lib/background/`：`BackgroundRequest`、`BackgroundExecutionKind {recording, download, generic}`、`BackgroundCapability`、`BackgroundSessionStatus`、`BackgroundAcquireFailure`、`BackgroundDuplicatePolicy`、`BackgroundLease`、`BackgroundAcquireResult`（sealed）、`BackgroundExecutionBackend` / `BackgroundBackendOutcome`、`BackgroundLeaseRegistry`、`BackgroundRuntimes` 安装槽、`MediaBackgroundSession`。没有新增包，按 §4.1 先做逻辑模块。
-- `packages/media_core_native/lib/src/native_background_backend.dart`：Android/iOS/macOS/Windows 的执行后端，把请求翻译成既有通道形状；`NativeBackgroundRuntime.shared` 是全进程共用的登记表。
+- `packages/media_core_native/lib/src/background/native_background_backend.dart`：Android/iOS/macOS/Windows 的执行后端，把请求翻译成既有通道形状；`NativeBackgroundRuntime.shared` 是全进程共用的登记表。
 - 录制接入：`FfmpegRecordingBackend` 以 `recording/<前缀>` 申请会话，更新只写自己那条，释放路径不变。通知表现与阶段 1 之前一致。
 - 测试：`media_core/test/background`（31 例，覆盖 §9 的 id、重复、幂等、逐会话唤醒锁、平台无能力、被拒原因、聚合排序）；`media_core_native/test/background_runtime_test.dart`（11 例，覆盖通道形状与拒绝原因映射）。
 

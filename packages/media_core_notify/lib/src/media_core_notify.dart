@@ -7,11 +7,11 @@
 /// was only trying to be informative.
 library;
 
-import 'package:media_core_notify/src/flutter_local_notifications_client.dart';
-import 'package:media_core_notify/src/foreground_jobs.dart';
-import 'package:media_core_notify/src/job_reporting.dart';
-import 'package:media_core_notify/src/notification_client.dart';
-import 'package:media_core_notify/src/notify_event.dart';
+import 'package:media_core_notify/src/client/flutter_local_notifications_client.dart';
+import 'package:media_core_notify/src/client/notification_client.dart';
+import 'package:media_core_notify/src/client/notify_event.dart';
+import 'package:media_core_notify/src/jobs/foreground_jobs.dart';
+import 'package:media_core_notify/src/jobs/job_reporting.dart';
 
 /// What a host may ask to be told about.
 ///

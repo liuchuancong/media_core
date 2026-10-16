@@ -1,8 +1,7 @@
 import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/testing.dart';
 import 'package:media_core_audio/media_core_audio.dart';
 
 /// A source that streams a test URL; the queue path needs one to open a player.

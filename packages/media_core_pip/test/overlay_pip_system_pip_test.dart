@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core_pip/src/overlay_pip.dart';
-import 'package:media_core_pip/src/overlay_pip_system_pip.dart';
-import 'package:media_core_pip/src/system_pip.dart';
+import 'package:media_core_pip/src/driver/overlay_pip.dart';
+import 'package:media_core_pip/src/driver/overlay_pip_system_pip.dart';
+import 'package:media_core_pip/src/driver/system_pip.dart';
 import 'package:pip_kit/pip_kit.dart';
 
 /// Records every call the implementation makes, without a device.

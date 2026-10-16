@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_core/media_core.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
+import 'package:media_core/testing.dart';
 
 import 'package:media_core_live/media_core_live.dart';
 

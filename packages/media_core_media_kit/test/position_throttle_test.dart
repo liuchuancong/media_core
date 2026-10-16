@@ -1,6 +1,6 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core_media_kit/src/position_throttle.dart';
+import 'package:media_core_media_kit/src/adapter/position_throttle.dart';
 
 void main() {
   group('PositionThrottle', () {

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_recording_ffmpeg/media_core_recording_ffmpeg.dart';
-import 'package:media_core_recording_ffmpeg/src/output_path.dart';
+import 'package:media_core_recording_ffmpeg/src/config/output_path.dart';
 
 final class _FakeExecution implements FfmpegExecution {
   _FakeExecution(this.arguments);

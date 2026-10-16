@@ -142,10 +142,10 @@ handle.session.context.platform;   // 能力标志（reported: true）
 | 文件 | 说明 |
 | --- | --- |
 | `lib/media_core_native.dart` | 对外门面：`NativePlatformProvider`、`PlatformProbeReport`、平台接口 |
-| `lib/src/native_platform_provider.dart` | `PlatformProvider` 实现：探针一次、缓存、`refresh()` |
-| `lib/src/platform_probe_report.dart` | 通道载荷 → 核心词汇（`PlatformCapabilities` / `PlatformDeviceProfile` / `PlatformCodecCapabilities` / `PlatformInfo`） |
-| `lib/src/media_core_native_platform.dart` | 平台接口（token 校验的 `instance`，便于替换实现） |
-| `lib/src/method_channel_media_core_native.dart` | MethodChannel (`media_core_native`) 默认实现 |
+| `lib/src/platform/native_platform_provider.dart` | `PlatformProvider` 实现：探针一次、缓存、`refresh()` |
+| `lib/src/platform/platform_probe_report.dart` | 通道载荷 → 核心词汇（`PlatformCapabilities` / `PlatformDeviceProfile` / `PlatformCodecCapabilities` / `PlatformInfo`） |
+| `lib/src/platform/media_core_native_platform.dart` | 平台接口（token 校验的 `instance`，便于替换实现） |
+| `lib/src/platform/method_channel_media_core_native.dart` | MethodChannel (`media_core_native`) 默认实现 |
 | `android/**/MediaCoreNativePlugin.java` | `MediaCodecList` / `ActivityManager` / `DisplayManager` / `Build` |
 | `windows/platform_probe.cc` | `MFTEnumEx` 硬解枚举 / `DXGI` 外接屏 / `GlobalMemoryStatusEx` / `RtlGetVersion` |
 | `linux/platform_probe.cc` | `/proc/meminfo`、`/sys/class/drm`、`/dev/dri`、`/etc/os-release`（纯 std C++，无 GLib） |

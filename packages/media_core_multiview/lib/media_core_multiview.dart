@@ -21,8 +21,8 @@ library;
 
 import 'package:media_core/media_core.dart' show PoolPlayerHost;
 
-export 'package:media_core_multiview/src/multiview_cell.dart';
-export 'package:media_core_multiview/src/multiview_config.dart';
-export 'package:media_core_multiview/src/multiview_controller.dart';
-export 'package:media_core_multiview/src/multiview_layout.dart';
-export 'package:media_core_multiview/src/multiview_snapshot.dart';
+export 'package:media_core_multiview/src/controller/multiview_controller.dart';
+export 'package:media_core_multiview/src/model/multiview_cell.dart';
+export 'package:media_core_multiview/src/model/multiview_config.dart';
+export 'package:media_core_multiview/src/model/multiview_layout.dart';
+export 'package:media_core_multiview/src/model/multiview_snapshot.dart';

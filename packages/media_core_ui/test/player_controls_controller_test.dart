@@ -2,8 +2,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/media_core.dart';
-import 'package:media_core/testing/fake_player_adapter.dart';
-import 'package:media_core/testing/test_player_factory.dart';
+import 'package:media_core/testing.dart';
 import 'package:media_core_ui/media_core_ui.dart';
 
 PlayerSource _vod(String id) => PlayerSource(id: SourceId(id), uri: Uri.parse('https://example.com/$id.mp4'));

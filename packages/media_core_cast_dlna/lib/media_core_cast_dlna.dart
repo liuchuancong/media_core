@@ -5,11 +5,11 @@
 /// SOAP AVTransport/RenderingControl commands and DIDL-Lite payloads.
 library;
 
-export 'package:media_core_cast_dlna/src/didl_lite.dart';
+export 'package:media_core_cast_dlna/src/discovery/ssdp_discovery.dart';
+export 'package:media_core_cast_dlna/src/discovery/ssdp_message.dart';
+export 'package:media_core_cast_dlna/src/discovery/ssdp_source.dart';
 export 'package:media_core_cast_dlna/src/dlna_cast_backend.dart';
-export 'package:media_core_cast_dlna/src/dlna_device_description.dart';
-export 'package:media_core_cast_dlna/src/http_transport.dart';
-export 'package:media_core_cast_dlna/src/soap.dart';
-export 'package:media_core_cast_dlna/src/ssdp_discovery.dart';
-export 'package:media_core_cast_dlna/src/ssdp_message.dart';
-export 'package:media_core_cast_dlna/src/ssdp_source.dart';
+export 'package:media_core_cast_dlna/src/protocol/didl_lite.dart';
+export 'package:media_core_cast_dlna/src/protocol/dlna_device_description.dart';
+export 'package:media_core_cast_dlna/src/protocol/http_transport.dart';
+export 'package:media_core_cast_dlna/src/protocol/soap.dart';

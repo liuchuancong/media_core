@@ -6,8 +6,8 @@
 /// queue so one line switch cannot race another.
 library;
 
-export 'package:media_core_live/src/live_playback_controller.dart';
-export 'package:media_core_live/src/live_playback_models.dart';
-export 'package:media_core_live/src/live_pool_policy.dart';
-export 'package:media_core_live/src/live_source_request.dart';
-export 'package:media_core_live/src/live_watchdogs.dart';
+export 'package:media_core_live/src/controller/live_playback_controller.dart';
+export 'package:media_core_live/src/controller/live_pool_policy.dart';
+export 'package:media_core_live/src/model/live_playback_models.dart';
+export 'package:media_core_live/src/model/live_source_request.dart';
+export 'package:media_core_live/src/watchdog/live_watchdogs.dart';
