@@ -33,3 +33,9 @@ dev_dependencies:
 
   flutter_test:
     sdk: flutter
+
+
+ffmpeg_kit_extended_config:
+  type: "base" 
+  gpl: true 
+  small: true 
