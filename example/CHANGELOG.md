@@ -13,10 +13,13 @@ underneath it.
   `PlaybackListConfig.recommendedPoolConfig` and `LivePoolPolicy.defaults.toPoolConfig()`,
   and each row prints the config it used and the items the pool actually kept on the
   books. The walk's own header line is read from the same config too, so the narration
-  cannot drift from what the pool was told. Running them is what surfaced the thing the
-  section now prints as a warning: `LivePoolPolicy` promises one spare line and the pool
-  keeps two, because `PlayerPoolConfig.warmSize` is read as "warm players" by one bound
-  and as "players held in total" by another.
+  cannot drift from what the pool was told. Running them is what surfaced the disagreement
+  the section now explains: `LivePoolPolicy` promises one spare line and the pool warmed
+  two, because `PlayerPoolConfig.warmSize` was read as "warm players" by the cap that
+  decides whether another neighbour gets warmed and as "players held in total" by the
+  decision that holds or releases an idle one — and the preset's `+ 1` was arithmetic for
+  that second reading, which left the first reading's cap loose enough to warm both sides.
+  The pool reads the number one way now, and the live row is one spare.
 
 ### Added
 

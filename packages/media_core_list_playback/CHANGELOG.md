@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Same clarification as the feed's preset: `warmSize: 3` counts warm players, so it is the headroom a host rises into when it widens `preloadCount`; the "three players cover an endless list" sentence describes the window (one item each side, plus the one playing).
 - Switch coalescing: a jump requested while an item is still opening **retargets** the running open instead of queueing behind it, and the index is re-checked both before touching the engine and before reporting the item settled. Rapid `next()` taps or a dragged list no longer pay one full open per row crossed, and a superseded open can no longer mark a newer row as finished loading.
 - `dispose()` releases callers still awaiting an in-flight open instead of leaving them hanging.
 

@@ -20,9 +20,11 @@ final class PlaybackListConfig {
   ///
   /// A list is the case pooling was built for: one item plays while the item a
   /// swipe reaches stays open, so the swipe is a source swap rather than a cold
-  /// start. One neighbour each side is enough for a swipe in either direction,
-  /// and idle players are reused instead of released — three players cover an
-  /// endless list.
+  /// start. The warm window reaches one item each side (`preloadCount`), so the
+  /// ledger is three players for an endless list; `warmSize: 3` counts *warm*
+  /// players — the playing item is not one of them — so it is the headroom a host
+  /// rises into when it widens that window, not a fourth player this preset asks
+  /// for.
   ///
   /// Hosts pass this to their [PlaybackPoolOrchestrator]; nothing here creates
   /// one, because only the host knows where players come from.

@@ -216,7 +216,9 @@ if (pool.handleFor(3) != null) {
 
       buffer
         ..writeln('  → 差别只在 idle：直播 15 秒放手，列表与刷流 30 秒。直播没有"下一条"，暖着的是备用线路，开着不放等于替没人看的流付带宽。')
-        ..writeln('  ⚠ 而 `LivePoolPolicy` 自己写着"只留一份备用"，这一跑却留了两份（#2 与 #4）。原因不在预设，在 `warmSize`：池里一处把它读成"暖着的播放器数"，另一处读成"在册总数"，同一个数字两种口径，预设的算术与它的文档就只能有一边是真的。');
+        ..writeln(
+          '  ⚠ 只有直播那份是"紧"的，而它以前并不紧：它说自己留一条备用线路，池的暖窗却按 `preloadCount` 向两侧各伸那么多 —— `warmSize` 数的是"暖着的播放器"（在播那条不算），旧算术的 +1 让这道容量对 ±1 的窗口完全失效，实跑留住的是两份。',
+        );
 
       // What the memory module sees from this pool.
       final account = MediaCoreMemory.report().forModule(MemoryModule.pool);

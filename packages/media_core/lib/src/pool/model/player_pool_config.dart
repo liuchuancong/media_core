@@ -42,7 +42,16 @@ abstract class PlayerPoolConfig with _$PlayerPoolConfig {
     /// Whether pool should keep at least one warm player.
     @Default(false) bool keepWarm,
 
-    /// Number of warm players.
+    /// How many **warm** players the pool may hold — the one playing is not one of
+    /// them, so `warmSize: 2` is a ledger of at most three players.
+    ///
+    /// Zero means unbounded. It is one number with one meaning, read the same way by
+    /// the cap that decides whether another neighbour gets warmed and by the decision
+    /// that holds or releases an idle player outside the window — the second of those
+    /// used to compare it against the whole ledger instead, which is a second meaning
+    /// no doc comment can tell apart from the first. A preset that sizes itself for
+    /// the ledger leaves the cap loose: `warmSize: 2` with a one-each-side window is
+    /// the budget doing nothing at all.
     @Default(0) int warmSize,
 
     /// Maximum concurrent active sessions.

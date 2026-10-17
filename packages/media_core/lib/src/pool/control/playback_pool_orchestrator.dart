@@ -642,29 +642,51 @@ final class PlaybackPoolOrchestrator {
 
   /// Whether another warm player is still allowed.
   ///
-  /// Two bounds apply: the configured warm size (0 means unbounded) and, when
-  /// set, the absolute player cap. Both are about decoders — a warm player
-  /// costs one whether or not it is playing.
+  /// Two bounds apply, both about decoders — a warm player costs one whether or not
+  /// it is playing: the configured warm size (0 means unbounded) and, when set, the
+  /// absolute player cap. See [_shouldKeepWarm] for the other reader of that same
+  /// number.
   bool get _canWarm {
     if (_config.maxPlayers > 0 && _assignments.length >= _config.maxPlayers) {
       return false;
     }
-    final warmSize = _config.warmSize;
-    if (warmSize <= 0) {
+
+    if (_warmBudget <= 0) {
       return true;
     }
-    final warmCount = _assignments.values.where((assignment) => assignment.role == PooledItemRole.warming).length;
-    return warmCount < warmSize;
+
+    return _warmCount < _warmBudget;
   }
 
-  /// Whether idle players should be kept rather than released.
+  /// Whether an idle player outside the warm window is held rather than released.
+  ///
+  /// `warmSize` means the same thing here as in [_canWarm]: warm players, the one
+  /// playing not counted. This compared the pool's whole ledger against it, which is
+  /// the same field read as a second thing — a definition with two meanings is how the
+  /// next preset gets sized wrong, since both readings look plausible in a doc comment.
+  /// It is fixed before it is a behaviour: with reuse on, an idle player is normally
+  /// re-pointed at the new item before this decision is reached, so no state in the
+  /// current reconcile order shows a difference.
+  ///
+  /// At the budget is still "keep": the player asked about is one of those counted, so
+  /// releasing begins only once the pool is *over* what was asked for.
   bool get _shouldKeepWarm {
     if (!_config.keepWarm) {
       return false;
     }
-    final warmSize = _config.warmSize;
-    return warmSize <= 0 || _assignments.length <= warmSize;
+
+    if (_warmBudget <= 0) {
+      return true;
+    }
+
+    return _warmCount <= _warmBudget;
   }
+
+  /// Players held for something other than the one playing.
+  int get _warmCount => _assignments.values.where((assignment) => assignment.role == PooledItemRole.warming).length;
+
+  /// [PlayerPoolConfig.warmSize], with its "0 means unbounded" reading spelled out.
+  int get _warmBudget => _config.warmSize;
 
   _Assignment? _findAssignment(int index) {
     for (final assignment in _assignments.values) {

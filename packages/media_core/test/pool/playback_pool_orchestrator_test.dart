@@ -261,6 +261,23 @@ void main() {
       expect(host.releaseCount, 0);
     });
 
+    test('warmSize bounds the spares, not the spares plus the item playing', () async {
+      // The window reaches `preloadCount` items on each side, so a budget of one warm
+      // player holds exactly one neighbour. That is what a feature preset means when it
+      // promises "a single spare", and it is why `warmSize` must not also be read as
+      // the size of the whole ledger: a preset sized for the ledger arithmetic leaves
+      // the cap loose (`+ 1` in one, an inert budget in the other), and both numbers
+      // still look plausible in the docs.
+      // `preloadCount: 1` is the default, and the point of the case is that the
+      // one-each-side window is wider than the budget: the cap is what decides.
+      final pool = await build(config: const PlayerPoolConfig(warmSize: 1));
+
+      final plan = await pool.onVisibilityChanged(2, 1);
+
+      expect(plan.playing, <int>{2});
+      expect(plan.warming, hasLength(1), reason: 'one warm player is the whole budget, whichever side it falls on');
+    });
+
     test('recycling off disposes the player instead of returning it', () async {
       final pool = await build(
         config: const PlayerPoolConfig(

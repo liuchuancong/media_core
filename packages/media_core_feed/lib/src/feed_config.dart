@@ -19,7 +19,9 @@ final class FeedConfig {
   /// Exactly one item plays at a time in a feed, one neighbour each side is
   /// what a swipe can reach, and idle players are reused rather than released:
   /// three players then cover an unlimited feed, and a swipe is a source swap
-  /// on a player that is already open.
+  /// on a player that is already open. `warmSize` is that count of *warm* players
+  /// (the playing item is not one of them), so it is headroom above the one-each-side
+  /// window rather than a budget the window itself runs out of.
   static const PlayerPoolConfig recommendedPoolConfig = PlayerPoolConfig(
     idleTimeout: Duration(seconds: 30),
     keepWarm: true,

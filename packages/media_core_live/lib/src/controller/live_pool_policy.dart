@@ -30,6 +30,10 @@ final class LivePoolPolicy {
   ///
   /// One is enough for the common case (the next line in the list); more only
   /// helps a session that falls through several dead lines in a row.
+  ///
+  /// This is the pool's *warm* budget, and the pool's window reaches this many items
+  /// on **each** side of the playing one — so a standby of one means what it says: the
+  /// window asks for a neighbour either way and the budget holds one of them.
   final int warmStandbyCount;
 
   /// How long a spare player may stay open without being used.
@@ -45,7 +49,11 @@ final class LivePoolPolicy {
       preloadCount: warmStandbyEnabled ? warmStandbyCount : 0,
       idleTimeout: releaseIdleAfter,
       keepWarm: warmStandbyEnabled,
-      warmSize: warmStandbyEnabled ? warmStandbyCount + 1 : 0,
+      // Not `+ 1`: `warmSize` counts warm players and the item playing is not one of
+      // them, so a standby of one is `1` — the +1 sized the number for a ledger the
+      // field does not describe, and the window (one neighbour each side) then fitted
+      // inside it, which is why "a single spare" warmed two.
+      warmSize: warmStandbyEnabled ? warmStandbyCount : 0,
       preloadTimeout: const Duration(seconds: 10),
     );
   }

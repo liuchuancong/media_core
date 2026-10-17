@@ -109,7 +109,11 @@ void main() {
 
       expect(config.preloadCount, 2);
       expect(config.keepWarm, isTrue);
-      expect(config.warmSize, 3);
+      expect(
+        config.warmSize,
+        2,
+        reason: 'warmSize is a count of warm players, and the item playing is not one of them',
+      );
       expect(config.maxActivePlayers, 1);
     });
 
