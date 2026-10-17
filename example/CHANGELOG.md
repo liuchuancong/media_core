@@ -6,6 +6,18 @@ underneath it.
 
 ## Unreleased
 
+### Changed
+
+- The pool demo now **runs** the feature presets instead of only describing the pool:
+  one settle of item 3 is replayed under `FeedConfig.recommendedPoolConfig`,
+  `PlaybackListConfig.recommendedPoolConfig` and `LivePoolPolicy.defaults.toPoolConfig()`,
+  and each row prints the config it used and the items the pool actually kept on the
+  books. The walk's own header line is read from the same config too, so the narration
+  cannot drift from what the pool was told. Running them is what surfaced the thing the
+  section now prints as a warning: `LivePoolPolicy` promises one spare line and the pool
+  keeps two, because `PlayerPoolConfig.warmSize` is read as "warm players" by one bound
+  and as "players held in total" by another.
+
 ### Added
 
 - `test/demo_log_test.dart`: the in-page event log collapses a repeating line
