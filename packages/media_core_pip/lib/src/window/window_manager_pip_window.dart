@@ -1,7 +1,7 @@
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:media_core_pip/src/window/pip_window.dart';
 import 'package:media_core_pip/src/window/win32_pip_window.dart' show Win32PipWindow;
-import 'package:window_manager/window_manager.dart';
+import 'package:window_frame_kit/window_frame_kit.dart';
 
 /// [PipWindow] for the window_manager backends: macOS and Linux.
 ///

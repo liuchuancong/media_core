@@ -43,8 +43,8 @@ final class MediaCorePresentation implements KernelPresentationDriver {
   /// Creates the driver.
   MediaCorePresentation({
     this.config = const PresentationCapabilityConfig(),
-    WindowManagerPresentationDriver? desktopDriver,
-  }) : _desktopDriver = desktopDriver;
+    this._desktopDriver,
+  });
 
   /// Capability configuration.
   final PresentationCapabilityConfig config;

@@ -13,3 +13,9 @@ linter:
   rules:
     lines_longer_than_80_chars: false
     public_member_api_docs: true
+    # New in the Dart 3.10 language revision, which the workspace moved to
+    # when window_frame_kit raised its floor to 3.13. The private-constructor
+    # style it flags (`ClassName._()` spelled with the type name) is the
+    # house style across every module; renaming 50+ declarations is churn
+    # with no reader value.
+    unnecessary_type_name_in_constructor: false

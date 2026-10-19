@@ -132,13 +132,12 @@ final class PipSessionController {
   /// players outside a [PlayerKernel] can hand over its own lookup instead of
   /// losing the handover.
   PipSessionController({
-    required PipDriver driver,
-    required PortablePlayerRegistry registry,
+    required this._driver,
+    required this._registry,
     this.config = PipConfig.defaults,
     this.autoEnter = PipAutoEnterPolicy.defaults,
     this.surfaceBuilder,
-  }) : _driver = driver,
-       _registry = registry;
+  });
 
   /// Builds a controller over a kernel's players.
   factory PipSessionController.forKernel({
