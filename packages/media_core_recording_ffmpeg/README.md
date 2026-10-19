@@ -128,8 +128,10 @@ watcher 从录制结束这件事本身得知房间没了，然后再问一次。
   本来就不该有两路）。
   宿主或测试换一个运行时：`FfmpegRecordingBackend(backgroundRuntime: ...)`（旧名 `keepAliveStarter` 已移除）。
 - **macOS / Windows**：持有睡眠断言（系统不睡，屏幕可以关）。
-- **iOS**：只买到过渡窗口（约 30 秒）。要长时间后台录制，需要应用在 `Info.plist` 声明 `audio` 后台模式——
-  这是应用的决定，库替不了；声明后录制才能在后台持续。
+- **iOS**：两层机制。过渡窗口（约 30 秒的 task assertion）覆盖退到后台的瞬间；声明了 `audio` 后台模式的应用，录制会话会同时挂一条
+  **静音保活**（`AVAudioSession` + 循环播放 0.01 音量的静音缓冲，`mixWithOthers` 不打断用户正在听的直播）——活跃的音频会话才是
+  iOS 不挂起进程的凭据，声明了模式 + 会话活跃，录制就能在后台持续到结束。应用没声明模式时保活如实返回失败，录制退回 30 秒窗口，
+  不会假装受保护。声明是应用的决定（`Info.plist` 的 `UIBackgroundModes` 加 `audio`），库替不了。
 - **Linux**：⏳ 未实现（logind `Inhibit`）。
 
 释放是"随录制结束"的，且覆盖每条结束路径（stop / cancel / 自行退出 / dispose）——通知不会比它描述的任务活得更久。

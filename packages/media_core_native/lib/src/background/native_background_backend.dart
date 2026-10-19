@@ -69,7 +69,13 @@ final class NativeBackgroundBackend implements BackgroundExecutionBackend {
       );
     }
 
-    return BackgroundBackendGranted(_NativeBackendLease(session));
+    // iOS only: the bounded task assertion covers the transition to the
+    // background, and the silent keep-alive covers the hours after it. Every
+    // other platform answers without a round trip, so this is unconditional
+    // on purpose.
+    final keepAlive = await BackgroundExecution.acquireAudioKeepAlive();
+
+    return BackgroundBackendGranted(_NativeBackendLease(session, keepAliveHeld: keepAlive));
   }
 
   /// The words the platform shows for [request].
@@ -131,15 +137,18 @@ final class NativeBackgroundBackend implements BackgroundExecutionBackend {
   /// | platform | mechanism |
   /// | --- | --- |
   /// | Android | the feature's own foreground service (`specialUse` for recording, `dataSync` for the rest) + its own `PARTIAL_WAKE_LOCK` + its own persistent notification |
-  /// | iOS | a background task assertion: the process is not suspended, for a bounded window |
+  /// | iOS | a background task assertion (bounded) + an optional silent audio keep-alive: with the app's `audio` background mode declared and the session active, the process is not suspended for as long as the job runs |
   /// | macOS | a sleep assertion held until the last session ends |
   /// | Windows | `SetThreadExecutionState(ES_SYSTEM_REQUIRED)` |
   /// | Linux, web | nothing yet; every request comes back [BackgroundAcquireFailure.unsupportedPlatform] |
   ///
   /// iOS, macOS and Windows report [BackgroundCapability.cpuWakeLock] because
   /// their one mechanism does keep the work running with the display off — but
-  /// the assertion is bounded on iOS, and no platform's answer survives the
-  /// process being killed. A grant is an undertaking, not a guarantee.
+  /// no platform's answer survives the process being killed, and on iOS the
+  /// unbounded part additionally needs the app's `audio` background mode: the
+  /// backend starts the silent keep-alive beside every job session and the
+  /// keep-alive reports honestly when the declaration is missing. A grant is
+  /// an undertaking, not a guarantee.
   static Set<BackgroundCapability> _capabilitiesFor(TargetPlatform platform) {
     if (kIsWeb) {
       return const <BackgroundCapability>{};
@@ -162,9 +171,13 @@ final class NativeBackgroundBackend implements BackgroundExecutionBackend {
 
 /// One session the channel is holding.
 class _NativeBackendLease implements BackgroundBackendLease {
-  _NativeBackendLease(this._session);
+  _NativeBackendLease(this._session, {required bool keepAliveHeld}) : _keepAliveHeld = keepAliveHeld;
 
   final BackgroundExecutionLease _session;
+
+  /// Whether the iOS silent keep-alive was granted beside this session; only
+  /// then does releasing it below send the counterpart call.
+  final bool _keepAliveHeld;
 
   /// The platform's own reports about this session, and nothing else's.
   ///
@@ -185,7 +198,15 @@ class _NativeBackendLease implements BackgroundBackendLease {
   Future<void> update(BackgroundRequest request) => _session.update(NativeBackgroundBackend.notificationFor(request));
 
   @override
-  Future<void> release() => _session.release();
+  Future<void> release() async {
+    if (_keepAliveHeld) {
+      // The native side reference counts, so two sessions releasing in either
+      // order keep the survivor's audio alive.
+      await BackgroundExecution.releaseAudioKeepAlive();
+    }
+
+    await _session.release();
+  }
 }
 
 /// The runtime every job in this process shares.

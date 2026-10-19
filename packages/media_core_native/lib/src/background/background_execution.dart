@@ -388,6 +388,49 @@ final class BackgroundExecution {
     }
   }
 
+  /// Starts the iOS silent keep-alive, reference counted, and says whether it
+  /// actually runs.
+  ///
+  /// An active `AVAudioSession` under the app's `audio` background mode is the
+  /// one thing that keeps an iOS process unsuspended for longer than the bounded
+  /// task assertion allows — a recording or a long download holds this beside
+  /// its session and the system leaves it alone until the audio stops.
+  ///
+  /// `false` means the platform refused or the app does not declare the mode:
+  /// either way the job continues on the bounded assertion alone, which is the
+  /// honest outcome to report rather than a silent assumption of protection.
+  /// Android, macOS, Windows and Linux answer `false` without a round trip —
+  /// their mechanisms do not need it — so a caller can ask unconditionally.
+  static Future<bool> acquireAudioKeepAlive() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS || kIsWeb) {
+      return false;
+    }
+
+    try {
+      return await _channel.invokeMethod<bool>('keepAlive/acquire') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Stops the keep-alive; the native side reference counts, so this is safe to
+  /// call once per released session.
+  static Future<void> releaseAudioKeepAlive() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS || kIsWeb) {
+      return;
+    }
+
+    try {
+      await _channel.invokeMethod<void>('keepAlive/release');
+    } on PlatformException {
+      // Nothing on the platform side to stop; the keep-alive never started.
+    } on MissingPluginException {
+      // Same answer as above, from a host without the plugin.
+    }
+  }
+
   static const EventChannel _statusChannel = EventChannel(kBackgroundStatusChannel);
 
   /// What the platform reports about sessions it holds.

@@ -1,3 +1,4 @@
+import AVFoundation
 import AVKit
 import CoreVideo
 import Darwin
@@ -34,6 +35,11 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
   private var tasks: [Int: UIBackgroundTaskIdentifier] = [:]
   private var nextSessionId = 1
 
+  /// The silent keep-alive player and its session, created on the first
+  /// `keepAlive/acquire` and torn down when the last holder releases.
+  private var keepAlivePlayer: AVAudioPlayer?
+  private var keepAliveCount = 0
+
   /// Method the probe is requested through.
   private static let probeMethod = "probe"
 
@@ -63,10 +69,11 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
   /// survive the app *transitioning* to the background instead of being frozen
   /// mid-segment.
   ///
-  /// A recording that must keep running for minutes needs the app to declare
-  /// the `audio` background mode, and only the app can do that — so this
-  /// method does not pretend to cover it, and the recording module documents
-  /// the limit.
+  /// A recording that must keep running for minutes needs the `keepAlive/acquire`
+  /// call beside it: an active `AVAudioSession` under the app's `audio`
+  /// background mode is what keeps the process unsuspended for as long as the
+  /// job runs. This method still runs first — the assertion covers the
+  /// transition and the keep-alive covers the hours after it.
   private func handleBackground(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "acquire":
@@ -93,9 +100,126 @@ public class MediaCoreNativePlugin: NSObject, FlutterPlugin {
 
       result(nil)
 
+    case "keepAlive/acquire":
+      result(self.acquireKeepAlive())
+
+    case "keepAlive/release":
+      self.releaseKeepAlive()
+
+      result(nil)
+
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audio keep-alive
+  // ---------------------------------------------------------------------------
+
+  /// Starts the silent keep-alive, reference counted.
+  ///
+  /// Answers whether it actually runs: `false` when the app does not declare
+  /// the `audio` background mode, because an active session without the
+  /// declaration keeps nothing alive and pretending otherwise would leave a
+  /// host believing a recording is protected when iOS is about to suspend it.
+  ///
+  /// The session is `.playback` with `.mixWithOthers`, so a live stream the
+  /// user is listening to keeps playing underneath; the player holds a
+  /// generated silent buffer at near-zero volume — loud enough that iOS
+  /// counts the session as active, quiet enough that nobody hears it.
+  private func acquireKeepAlive() -> Bool {
+    keepAliveCount += 1
+
+    if keepAlivePlayer != nil {
+      return true
+    }
+
+    guard declaresBackgroundAudio() else {
+      keepAliveCount -= 1
+
+      return false
+    }
+
+    do {
+      let session = AVAudioSession.sharedInstance()
+
+      try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+      try session.setActive(true)
+
+      let player = try AVAudioPlayer(data: MediaCoreNativePlugin.silentWav())
+
+      player.numberOfLoops = -1
+      player.volume = 0.01
+      player.prepareToPlay()
+      player.play()
+
+      keepAlivePlayer = player
+
+      return true
+    } catch {
+      // No session, no protection: the caller learns the same way the
+      // declaration-missing case learns, and the bounded task assertion is
+      // all the job has.
+      keepAliveCount -= 1
+
+      return false
+    }
+  }
+
+  /// Stops the keep-alive when the last holder lets go.
+  private func releaseKeepAlive() {
+    guard keepAliveCount > 0 else {
+      return
+    }
+
+    keepAliveCount -= 1
+
+    guard keepAliveCount == 0, let player = keepAlivePlayer else {
+      return
+    }
+
+    player.stop()
+    keepAlivePlayer = nil
+
+    try? AVAudioSession.sharedInstance().setActive(
+      false,
+      options: [.notifyOthersOnDeactivation]
+    )
+  }
+
+  /// A half second of silence as a valid WAV, generated once.
+  ///
+  /// A bundled asset would work too, but this keeps the plugin
+  /// self-contained and the format is five lines of header.
+  private static func silentWav() -> Data {
+    let sampleRate = 8_000
+    let samples = sampleRate / 2
+    let dataSize = samples * 2
+
+    var data = Data()
+
+    func append(_ value: UInt32) {
+      var little = value.littleEndian
+      withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
+    }
+
+    data.append(contentsOf: Array("RIFF".utf8))
+    append(UInt32(36 + dataSize))
+    data.append(contentsOf: Array("WAVE".utf8))
+    data.append(contentsOf: Array("fmt ".utf8))
+    append(16)
+    append(1)                 // PCM
+    append(1)                 // mono
+    append(UInt32(sampleRate))
+    append(UInt32(sampleRate * 2))
+    append(2)                 // block align
+    append(16)                // bits per sample
+    data.append(contentsOf: Array("data".utf8))
+    append(UInt32(dataSize))
+    data.append(contentsOf: Data(count: dataSize))
+
+    return data
   }
 
   private func endTask(_ sessionId: Int) {
