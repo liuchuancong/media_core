@@ -119,6 +119,8 @@ final class NotifyEvent {
     this.kind,
     this.payload,
     this.id,
+    this.progress,
+    this.indeterminate = false,
   });
 
   /// First line.
@@ -145,8 +147,20 @@ final class NotifyEvent {
   /// Null lets [MediaCoreNotify] allocate a fresh id.
   final int? id;
 
+  /// Completion in `0..1` while a job runs, drawn as a progress bar where the
+  /// platform has one (Android) and ignored where it has none.
+  ///
+  /// Null shows no bar — including on the platforms that only draw text.
+  final double? progress;
+
+  /// Whether the bar shows activity without a known end.
+  ///
+  /// Only read when [progress] is null: a known fraction always wins, and a
+  /// platform without progress bars reads neither.
+  final bool indeterminate;
+
   /// Same event with some fields replaced.
-  NotifyEvent copyWith({String? title, String? body, NotifyTone? tone, int? id, String? payload}) {
+  NotifyEvent copyWith({String? title, String? body, NotifyTone? tone, int? id, String? payload, double? progress}) {
     return NotifyEvent(
       title: title ?? this.title,
       body: body ?? this.body,
@@ -155,11 +169,16 @@ final class NotifyEvent {
       kind: kind,
       payload: payload ?? this.payload,
       id: id ?? this.id,
+      progress: progress ?? this.progress,
+      indeterminate: indeterminate,
     );
   }
 
   @override
-  String toString() => 'NotifyEvent(${tone.name}, $channel, "$title", "$body", id: $id)';
+  String toString() =>
+      'NotifyEvent(${tone.name}, $channel, "$title", "$body", id: $id'
+      '${progress == null ? '' : ', ${(progress! * 100).round()}%'}'
+      '${indeterminate ? ', indeterminate' : ''})';
 }
 
 /// What a tap on a notification meant.

@@ -53,6 +53,7 @@ final class MediaJobOutcome {
     required this.success,
     this.bytesWritten,
     this.elapsed,
+    this.path,
     this.error,
   });
 
@@ -77,6 +78,12 @@ final class MediaJobOutcome {
   /// a stream that dropped for ten minutes is a ten-minutes-shorter file, and that
   /// is the number the viewer opens the file to check.
   final Duration? elapsed;
+
+  /// Where the job's output landed, when there is one file to point at.
+  ///
+  /// A notification that carries it can open the file on tap; a recording that
+  /// produced several leaves this null and names the folder in its own words.
+  final String? path;
 
   /// Why it failed, when it did.
   final Object? error;

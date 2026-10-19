@@ -80,6 +80,10 @@ final class JobNotifications implements MediaJobReporter {
       body: details.join(' · '),
       tone: outcome.success ? NotifyTone.success : NotifyTone.failure,
       kind: _kindOf(outcome.kind),
+      // The finished file's location: a host whose tap handler opens what the
+      // payload names gets the tapOpensFile behaviour for nothing, and a host
+      // that keys its own routing on the payload string ignores it freely.
+      payload: outcome.path,
     );
   }
 

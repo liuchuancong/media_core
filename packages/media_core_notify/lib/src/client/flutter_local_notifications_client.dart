@@ -252,6 +252,7 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
 
   static AndroidNotificationDetails _androidDetails(NotifyEvent event, {required bool ongoing}) {
     final progress = event.tone == NotifyTone.progress;
+    final fraction = event.progress;
 
     return AndroidNotificationDetails(
       event.channel.id,
@@ -259,6 +260,12 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
       channelDescription: event.channel.description,
       importance: _importanceOf(event.tone),
       priority: _priorityOf(event.tone),
+      // The bar only exists on this platform; the others read the percentage
+      // the running line's body already carries.
+      showProgress: progress && (fraction != null || event.indeterminate),
+      maxProgress: 100,
+      progress: fraction == null ? 0 : (fraction.clamp(0.0, 1.0) * 100).round(),
+      indeterminate: progress && fraction == null && event.indeterminate,
       playSound: !progress,
       silent: progress,
       // The line is the one thing here worth knowing when it goes away on its own,

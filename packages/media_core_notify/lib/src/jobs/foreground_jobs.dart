@@ -36,6 +36,7 @@ import 'package:media_core/media_core.dart'
     show
         BackgroundCapability,
         BackgroundExecutionKind,
+        BackgroundJobProgress,
         BackgroundRequest,
         BackgroundRuntime,
         BackgroundRuntimeOwners,
@@ -318,7 +319,9 @@ abstract final class ForegroundJobs {
       return;
     }
 
-    final others = sessionsFor(owner).length - 1;
+    final sessions = sessionsFor(owner);
+    final others = sessions.length - 1;
+    final aggregate = _aggregateProgress(sessions);
 
     final event = NotifyEvent(
       title: first.title,
@@ -327,6 +330,8 @@ abstract final class ForegroundJobs {
       channel: MediaCoreNotify.setup.channelFor(owner),
       kind: _kindOf(first.kind),
       id: line.id,
+      progress: aggregate?.fraction,
+      indeterminate: aggregate == null && sessions.any((request) => request.progress != null),
     );
 
     try {
@@ -371,6 +376,34 @@ abstract final class ForegroundJobs {
     BackgroundExecutionKind.download => BackgroundJobKind.download,
     BackgroundExecutionKind.generic => BackgroundJobKind.task,
   };
+
+  /// One aggregate over the feature's sessions: the sum of every determinate
+  /// job's units, the way a queue's progress bar means "this batch".
+  ///
+  /// Null when no session carries a determinate progress. An indeterminate bar
+  /// (some session tracks progress but none can be summed) is answered through
+  /// the second record field, not here.
+  static BackgroundJobProgress? _aggregateProgress(List<BackgroundRequest> sessions) {
+    var current = 0;
+    var total = 0;
+    var determinate = false;
+
+    for (final request in sessions) {
+      final progress = request.progress;
+      if (progress == null || progress.isIndeterminate) {
+        continue;
+      }
+      determinate = true;
+      current += progress.current ?? 0;
+      total += progress.total ?? 0;
+    }
+
+    if (!determinate || total <= 0) {
+      return null;
+    }
+
+    return BackgroundJobProgress.determinate(current: current, total: total);
+  }
 
   /// The loudest job's own words, plus a count of what else is running.
   static String? _compose(BackgroundRequest newest, int others) {
