@@ -7,8 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   media_core_audio
   media_core_native
   media_kit_video
-  screen_retriever_linux
-  window_manager
+  window_frame_kit
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
