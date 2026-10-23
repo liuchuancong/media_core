@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:media_core_pip/src/window/pip_window.dart';
 import 'package:media_core_win32/media_core_win32.dart';
-import 'package:window_frame_kit/window_frame_kit.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// [PipWindow] implemented with direct user32 calls — no plugin, no channel.
 ///

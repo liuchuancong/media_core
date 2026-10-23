@@ -157,19 +157,19 @@ final class DisplayAwarePipWindow implements PipWindow {
   ///
   /// [windowBuilder] is called on first use, not in here, so a host can build
   /// this object before its window exists (and a test can hand in a fake).
-  /// The always-on-top override, when supplied, wins over what each request
-  /// asks for: the host's own z-order setting takes precedence over the
-  /// caller's.
+  /// [alwaysOnTop], when supplied, overrides what each request asks for: the
+  /// host's own z-order setting wins over the caller.
   DisplayAwarePipWindow({
     PipWindow Function()? windowBuilder,
     this.workAreasReader,
     this.readSavedBounds,
     this.writeSavedBounds,
-    this._alwaysOnTop,
+    bool Function()? alwaysOnTop,
     this.normalMinSize = Size.zero,
     this.defaultSize = const Size(1280, 720),
     this.placementMargin = 20,
-  }) : _windowBuilder = windowBuilder ?? defaultDesktopPipWindow;
+  }) : _windowBuilder = windowBuilder ?? defaultDesktopPipWindow,
+       _alwaysOnTop = alwaysOnTop;
 
   final PipWindow Function() _windowBuilder;
 

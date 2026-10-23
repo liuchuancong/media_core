@@ -7,8 +7,8 @@ issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
 
 environment:
-  sdk: ">=3.13.2 <4.0.0"
-  flutter: ">=3.47.0"
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
@@ -17,7 +17,7 @@ dependencies:
     path: ../media_core
 
   # Desktop fullscreen / always-on-top floating window (Windows, macOS, Linux)
-  window_frame_kit: ^0.3.0
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_lints: ^6.0.0

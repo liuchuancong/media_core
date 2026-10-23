@@ -97,9 +97,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
   FullscreenDriver({
     this.config = FullscreenConfig.defaults,
     FullscreenPlatform? platform,
-    this._desktopWindow,
+    FullscreenWindow? desktopWindow,
     PresentationLifecycleHooks? lifecycleHooks,
   }) : platform = platform ?? FullscreenPlatform.resolve(),
+       _desktopWindow = desktopWindow,
        lifecycleHooks = lifecycleHooks ?? const PresentationLifecycleHooks();
 
   /// Tunables, including the per-orientation fit strategies.

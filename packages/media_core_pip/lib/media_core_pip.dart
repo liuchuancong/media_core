@@ -4,11 +4,8 @@
 ///
 /// ```text
 /// desktop → an always-on-top, aspect-shaped small window
-///   all three  → WindowManagerPipWindow (window_frame_kit: frame takeover,
-///                native 4-edge resizing; one C++ window procedure, so the
-///                frameless fast path that used to force a Win32 FFI backend
-///                on Windows is gone — Win32PipWindow stays as an explicit
-///                legacy option)
+///   Windows    → Win32PipWindow (direct user32 calls, no plugin)
+///   macOS/Linux→ WindowManagerPipWindow (the window_manager plugin)
 ///   selection  → defaultDesktopPipWindow(), injectable per host
 /// android → a draggable overlay above every app (OverlayPipSystemPip,
 ///           flutter_overlay_window). The video replays in a second Flutter

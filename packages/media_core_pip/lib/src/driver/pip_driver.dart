@@ -89,12 +89,14 @@ final class PipDriver implements KernelPresentationDriver {
   PipDriver({
     this.config = PipConfig.defaults,
     PipPlatform? platform,
-    this._desktopWindow,
-    this._systemPip,
+    PipWindow? desktopWindow,
+    SystemPip? systemPip,
     PresentationLifecycleHooks? lifecycleHooks,
     this.pipMediaResolver,
     this.onHandoffReturn,
   }) : platform = platform ?? PipPlatform.resolve(),
+       _desktopWindow = desktopWindow,
+       _systemPip = systemPip,
        lifecycleHooks = lifecycleHooks ?? const PresentationLifecycleHooks();
 
   /// Fallback identity for system-initiated transitions that happen before

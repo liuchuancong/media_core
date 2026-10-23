@@ -92,12 +92,13 @@ final class OverlayPipSystemPip implements SystemPip {
   /// Both platform seams are injectable for tests.
   OverlayPipSystemPip({
     this.surfaceBuilder,
-    this._overlayWindow = const MethodChannelOverlayWindow(),
-    this._pipKit = const PipKitControllerApi(),
+    OverlayWindowApi overlayWindow = const MethodChannelOverlayWindow(),
+    PipKitApi pipKit = const PipKitControllerApi(),
     this.overlayTitle = 'media_core PiP',
     this.overlayEnableDrag = true,
     this.overlayShortSide = 180,
-  });
+  })  : _overlayWindow = overlayWindow,
+        _pipKit = pipKit;
 
   /// Widget drawn in the iOS system window.
   ///

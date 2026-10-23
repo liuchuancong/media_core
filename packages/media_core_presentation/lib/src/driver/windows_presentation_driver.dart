@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_presentation/media_core_presentation.dart' show MediaCorePresentation;
 import 'package:media_core_presentation/src/geometry/presentation_capability_config.dart';
-import 'package:window_frame_kit/window_frame_kit.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// Desktop presentation driver backed by window_manager.
 ///

@@ -99,11 +99,11 @@ final class _FakeInnerWindow implements PipWindow {
 
 void main() {
   group('defaultDesktopPipWindow', () {
-    test('picks the window_frame_kit backend on every desktop', () {
-      // One backend for all three desktops: the kit's C++ window procedure
-      // owns the frameless window natively, which removed the Windows-only
-      // frameless fast path that used to force the Win32 FFI backend there.
-      expect(defaultDesktopPipWindow(isWindows: true, isMacOS: false, isLinux: false), isA<WindowManagerPipWindow>());
+    test('picks the Win32 backend on Windows', () {
+      expect(defaultDesktopPipWindow(isWindows: true, isMacOS: false, isLinux: false), isA<Win32PipWindow>());
+    });
+
+    test('picks the window_manager backend on macOS and Linux', () {
       expect(defaultDesktopPipWindow(isWindows: false, isMacOS: true, isLinux: false), isA<WindowManagerPipWindow>());
       expect(defaultDesktopPipWindow(isWindows: false, isMacOS: false, isLinux: true), isA<WindowManagerPipWindow>());
     });

@@ -9,8 +9,8 @@ issue_tracker: https://github.com/liuchuancong/media_core/issues
 resolution: workspace
 
 environment:
-  sdk: ">=3.13.2 <4.0.0"
-  flutter: ">=3.47.0"
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
@@ -25,7 +25,7 @@ dependencies:
     path: ../media_core_win32
   # Desktop small window (Windows, macOS, Linux) and the iOS system PiP window.
   pip_kit: ^1.0.2
-  window_frame_kit: ^0.3.0
+  window_manager: ^0.5.2
 dev_dependencies:
   flutter_lints: ^6.0.0
 

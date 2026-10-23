@@ -7,17 +7,13 @@ import 'package:media_core_pip/src/window/window_manager_pip_window.dart';
 
 /// Builds the best [PipWindow] backend for the host platform.
 ///
-/// - **every desktop platform** — [WindowManagerPipWindow], now backed by
-///   `window_frame_kit`: one plugin whose C++ window procedure owns the
-///   frameless window *and* native edge resizing, which removes the
-///   frameless fast path that used to make the old plugin silently skip
-///   style and bounds updates on Windows — the exact defect [Win32PipWindow]
-///   worked around with direct user32 calls. The kit fixes the cause, so
-///   one backend serves all three desktops, and a compact window gains
-///   native edge resizing for free.
-/// - **legacy** — [Win32PipWindow] stays available for a host that wants the
-///   proven user32 path (pass it explicitly); it is no longer the default
-///   and no longer reached from here.
+/// - **Windows** — [Win32PipWindow]: direct user32 calls. The plugin's style
+///   APIs sit behind a frameless fast path for hosts with a hidden title
+///   bar, and their `setSkipTaskbar` has shipped crash reports; the native
+///   path has neither problem.
+/// - **macOS, Linux** — [WindowManagerPipWindow]: the frameless fast path is
+///   a Windows-only behaviour, so the plugin stays the pragmatic backend
+///   there.
 /// - **anything else** — [UnsupportedError]: a desktop small window needs a
 ///   real window to shrink; mobile platforms are served by the system-PiP
 ///   path ([PipDriver]'s mobile branch), and iOS has no system PiP API
@@ -30,7 +26,10 @@ PipWindow defaultDesktopPipWindow({bool? isWindows, bool? isMacOS, bool? isLinux
   final macos = isMacOS ?? (!kIsWeb && Platform.isMacOS);
   final linux = isLinux ?? (!kIsWeb && Platform.isLinux);
 
-  if (windows || macos || linux) {
+  if (windows) {
+    return Win32PipWindow();
+  }
+  if (macos || linux) {
     return const WindowManagerPipWindow();
   }
   throw UnsupportedError('Desktop picture-in-picture needs Windows, macOS or Linux.');
