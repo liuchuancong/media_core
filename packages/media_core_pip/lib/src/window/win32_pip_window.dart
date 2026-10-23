@@ -223,18 +223,22 @@ final class Win32PipWindow implements PipWindow {
 
   @override
   Future<void> setMinimumSize(Size size) async {
-    // Everything else in this backend bypasses `window_manager` because its
-    // style and bounds calls sit behind a frameless fast path for hosts with a
-    // hidden title bar. A minimum size is a different animal: the plugin keeps
-    // one plain value and enforces it from `WM_GETMINMAXINFO`, which is exactly
-    // the platform mechanism this backend has no other way to reach, and it
-    // touches no style or bounds. A zero axis releases the minimum.
+    // Everything else in this backend bypasses window-manager APIs because
+    // their plugin predecessor sat behind a frameless fast path for hosts
+    // with a hidden title bar. A minimum size is a different animal: the
+    // nativeapi `Window` keeps one plain value and enforces it from
+    // `WM_GETMINMAXINFO`, which is exactly the platform mechanism this
+    // backend has no other way to reach, and it touches no style or bounds.
+    // A zero axis releases the minimum.
     //
     // Zero handle means no runner window to constrain, which is the same
-    // degradation contract every other call here follows — and unlike the FFI
-    // calls, a channel call with no plugin attached would throw.
+    // degradation contract every other call here follows — and a nativeapi
+    // FFI call without a native library throws, so the guard stays.
     if (_windowHandle == 0) return;
-    await windowManager.setMinimumSize(size);
+    final window = WindowManager.instance.getCurrent();
+    if (window != null) {
+      window.minimumSize = size.toNative();
+    }
   }
 
   @override
