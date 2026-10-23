@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/painting.dart' show Rect;
-import 'package:flutter/services.dart' show SystemChrome, SystemUiMode, SystemUiOverlay;
+import 'package:flutter/services.dart' show DeviceOrientation, SystemChrome, SystemUiMode, SystemUiOverlay;
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:media_core/media_core.dart';
 import 'package:media_core_fullscreen/src/driver/fullscreen_config.dart';
 import 'package:media_core_fullscreen/src/window/fullscreen_window.dart';
@@ -71,8 +72,11 @@ enum FullscreenPlatform {
 /// window covers the screen, a phone hides the system UI. It is a real platform
 /// state, so it can fail and has to be restored on exit. On mobile the driver
 /// performs the immersive switch itself (`SystemUiMode`); the orientation to
-/// lock and the status bar styling are presentation policy and stay with the
-/// host.
+/// lock during fullscreen and the status bar styling are presentation policy
+/// and stay with the host. What the driver does own is the *exit* orientation:
+/// it records the side the device was held in at enter and re-locks it on
+/// leave, so a tablet does not swing to portrait under a landscape-held viewer
+/// (see [FullscreenConfig.restoreMobileOrientation]).
 ///
 /// [PresentationMode.windowFullscreen] is the host's layout: the video fills
 /// the application window while the window stays a window. Nothing platform
@@ -120,6 +124,11 @@ final class FullscreenDriver implements KernelPresentationDriver {
   final StreamController<bool> _fullscreenChanges = StreamController<bool>.broadcast();
 
   Rect? _preFullscreenBounds;
+
+  // The orientation family the device was held in when mobile fullscreen was
+  // entered; restored on exit so a tablet does not snap to the accelerometer's
+  // favourite side. Null when the orientation could not be read.
+  List<DeviceOrientation>? _preFullscreenOrientation;
 
   static final _togglePlayerId = PlayerId('fullscreen-toggle');
 
@@ -329,8 +338,13 @@ final class FullscreenDriver implements KernelPresentationDriver {
         await window.setFullscreen(value: true);
       case FullscreenPlatform.mobile:
         // Mobile fullscreen is the system UI itself: immersive sticky hides
-        // the status and navigation bars for the presentation. The
-        // orientation to lock is presentation policy and stays with the host.
+        // the status and navigation bars for the presentation. The host still
+        // owns the orientation lock *during* fullscreen; what the driver
+        // records is the side the device was held in, so the exit can put the
+        // lock back there instead of leaving a tablet to the accelerometer.
+        if (config.restoreMobileOrientation) {
+          _preFullscreenOrientation = _captureDeviceOrientation();
+        }
         await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       case FullscreenPlatform.unsupported:
         _log.error('system fullscreen is not supported on this platform');
@@ -419,12 +433,39 @@ final class FullscreenDriver implements KernelPresentationDriver {
         restoreBounds: config.restorePreviousBounds ? _preFullscreenBounds : null,
       );
     } else if (platform == FullscreenPlatform.mobile) {
-      // Restores the status and navigation bars. The status bar styling and
-      // the orientation release are host policy and stay there.
+      // Restores the status and navigation bars. The status bar styling stays
+      // host policy; the orientation lock goes back to the side the device was
+      // held in at enter (see [_captureDeviceOrientation]) when it could be
+      // read — releasing it outright would let a tablet swing to portrait
+      // under a landscape-held viewer.
+      final orientation = _preFullscreenOrientation;
+      _preFullscreenOrientation = null;
+      if (orientation != null) {
+        await SystemChrome.setPreferredOrientations(orientation);
+      }
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     }
     _preFullscreenBounds = null;
     _setSystemFullscreen(false);
+  }
+
+  /// Reads the orientation family the device is currently held in.
+  ///
+  /// Flutter exposes no getter for the active orientation lock, and the host
+  /// may have re-locked during fullscreen, so the exit restores the *device's*
+  /// side from the view's physical pixels rather than a remembered request.
+  /// Both rotations of the family are kept — a viewer turning the device 180°
+  /// mid-fullscreen should not fight the restored lock. Returns null when no
+  /// view size is available (tests before a frame, headless hosts); the exit
+  /// then keeps the old release-the-lock behaviour.
+  List<DeviceOrientation>? _captureDeviceOrientation() {
+    final size = WidgetsBinding.instance.platformDispatcher.implicitView?.physicalSize;
+    if (size == null || size.isEmpty) {
+      return null;
+    }
+    return size.width >= size.height
+        ? const <DeviceOrientation>[DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+        : const <DeviceOrientation>[DeviceOrientation.portraitUp, DeviceOrientation.portraitDown];
   }
 
   // ---------------------------------------------------------------------------
