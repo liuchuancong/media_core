@@ -17,7 +17,10 @@ dependencies:
   audio_service_mpris: ^0.2.1
 
   # Windows implementation of audio_service
-  audio_service_win: ^0.0.3
+  audio_service_win: 
+    git:
+      url: https://github.com/Predidit/audio_service_win.git
+      ref: 8ad650c6eb487208b9861d44755c8e58db061c88
 
   # Audio focus / interruption / becoming-noisy events
   audio_session: ^0.2.3
@@ -60,3 +63,8 @@ flutter:
         pluginClass: MediaCoreAudioPlugin
       linux:
         pluginClass: MediaCoreAudioPlugin
+
+ffmpeg_kit_extended_config:
+  type: "base" # pre-bundled builds: debug, base, full, audio, video, video_hw
+  gpl: true # enable to include GPL libraries. WARNING: Make sure you understand what GPL license means before enabling. Check https://www.ffmpeg.org/legal.html for more information.
+  small: true # enable to use smaller builds

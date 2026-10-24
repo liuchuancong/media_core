@@ -5,7 +5,7 @@ import 'package:media_core_presentation/media_core_presentation.dart' show Media
 import 'package:media_core_presentation/src/geometry/presentation_capability_config.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// Desktop presentation driver backed by window_manager.
+/// Desktop presentation driver backed by window_manager's nativeapi `Window`.
 ///
 /// **Superseded.** The modes this driver bundles now have dedicated packages -
 /// `media_core_fullscreen` and `media_core_pip` - composed through
@@ -17,8 +17,8 @@ import 'package:window_manager/window_manager.dart';
 ///
 /// Implements the [KernelPresentationDriver] contract:
 ///
-/// - fullscreen: `windowManager.setFullScreen(true)` with the
-///   pre-fullscreen window bounds remembered for restore
+/// - fullscreen: `window.isFullScreen = true` with the pre-fullscreen
+///   window bounds remembered for restore
 /// - pip: an always-on-top, non-resizable, aspect-locked small
 ///   window sized from the video orientation — landscape video
 ///   gets a wide window, portrait video gets a tall one
@@ -28,6 +28,10 @@ import 'package:window_manager/window_manager.dart';
 /// through [onVideoSize] (wired automatically by
 /// [MediaCorePresentation] from adapter events), so PiP sizing
 /// matches the actual media.
+///
+/// The nativeapi API is synchronous FFI: every transition resolves the
+/// current window once and applies state directly. A missing desktop window
+/// (widget tests, mobile) makes the whole transition a no-op.
 final class WindowManagerPresentationDriver implements KernelPresentationDriver {
   /// Creates the driver.
   WindowManagerPresentationDriver({this.config = const PresentationCapabilityConfig()});
@@ -50,7 +54,7 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
 
   (int, int)? _latestVideoSize;
 
-  /// Whether window_manager has been initialized.
+  /// Whether this driver has been initialized.
   bool get initialized => _initialized;
 
   /// Current fullscreen state of the window.
@@ -62,14 +66,14 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
   /// Whether this driver's platform is supported.
   static bool get supportsPlatform => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  /// Initializes window_manager.
+  /// Marks the driver ready.
   ///
-  /// Call once early, before any presentation request.
+  /// The nativeapi API needs no explicit initialization; this only gates
+  /// [apply] so callers keep their "initialize once, then present" flow.
   Future<void> initialize() async {
     if (_initialized || _disposed) {
       return;
     }
-    await windowManager.ensureInitialized();
     _initialized = true;
   }
 
@@ -125,11 +129,13 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
       return;
     }
 
-    final position = await windowManager.getPosition();
-    final bounds = await windowManager.getBounds();
-    _preFullscreenBounds = Rect.fromLTWH(position.dx, position.dy, bounds.width, bounds.height);
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) {
+      return;
+    }
+    _preFullscreenBounds = window.bounds.toRect();
 
-    await windowManager.setFullScreen(true);
+    window.isFullScreen = true;
     _isFullscreen = true;
   }
 
@@ -138,12 +144,17 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
       return;
     }
 
-    await windowManager.setFullScreen(false);
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) {
+      _isFullscreen = false;
+      return;
+    }
+    window.isFullScreen = false;
     _isFullscreen = false;
 
     final bounds = _preFullscreenBounds;
     if (bounds != null) {
-      await windowManager.setBounds(bounds);
+      window.bounds = bounds.toNative();
       _preFullscreenBounds = null;
     }
   }
@@ -157,14 +168,16 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
       return;
     }
 
-    _wasAlwaysOnTop = await windowManager.isAlwaysOnTop();
-    _wasResizable = await windowManager.isResizable();
-    _wasSkipTaskbar = await windowManager.isSkipTaskbar();
-    _previousTitle = await windowManager.getTitle();
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) {
+      return;
+    }
 
-    final position = await windowManager.getPosition();
-    final bounds = await windowManager.getBounds();
-    _prePipBounds = Rect.fromLTWH(position.dx, position.dy, bounds.width, bounds.height);
+    _wasAlwaysOnTop = window.isAlwaysOnTop;
+    _wasResizable = window.isResizable;
+    _wasSkipTaskbar = !window.isVisibleInTaskbar;
+    _previousTitle = window.title;
+    _prePipBounds = window.bounds.toRect();
 
     final videoSize = _latestVideoSize;
     final orientation = VideoOrientation.fromSize(videoSize?.$1 ?? 0, videoSize?.$2 ?? 0);
@@ -182,11 +195,12 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
       pipSize = Size(config.pipWidth, config.pipHeight);
     }
 
-    await windowManager.setTitle(config.pipTitle);
-    await windowManager.setAlwaysOnTop(true);
-    await windowManager.setResizable(false);
+    window
+      ..title = config.pipTitle
+      ..isAlwaysOnTop = true
+      ..isResizable = false;
     if (lockAspectRatio) {
-      await windowManager.setAspectRatio(pipSize.width / pipSize.height);
+      window.aspectRatio = pipSize.width / pipSize.height;
     }
 
     // Bottom-right corner of the previous window bounds, clamped
@@ -197,10 +211,11 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
       (anchor.bottom - pipSize.height - config.pipCornerSpacing).clamp(0, double.infinity),
     );
 
-    await windowManager.setSize(pipSize);
-    await windowManager.setPosition(pipPosition);
+    window
+      ..setSize(pipSize.toNative(), false)
+      ..position = pipPosition.toNative();
     if (config.pipSkipTaskbar) {
-      await windowManager.setSkipTaskbar(true);
+      window.isVisibleInTaskbar = false;
     }
 
     _isPip = true;
@@ -211,18 +226,22 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
       return;
     }
 
-    await windowManager.setAlwaysOnTop(_wasAlwaysOnTop);
-    await windowManager.setResizable(_wasResizable);
-    if (config.pipSkipTaskbar) {
-      await windowManager.setSkipTaskbar(_wasSkipTaskbar);
-    }
-    if (_previousTitle != null) {
-      await windowManager.setTitle(_previousTitle!);
-    }
+    final window = WindowManager.instance.getCurrent();
+    if (window != null) {
+      window
+        ..isAlwaysOnTop = _wasAlwaysOnTop
+        ..isResizable = _wasResizable;
+      if (config.pipSkipTaskbar) {
+        window.isVisibleInTaskbar = !_wasSkipTaskbar;
+      }
+      if (_previousTitle != null) {
+        window.title = _previousTitle!;
+      }
 
-    final bounds = _prePipBounds;
-    if (config.exitPipRestoresWindow && bounds != null) {
-      await windowManager.setBounds(bounds);
+      final bounds = _prePipBounds;
+      if (config.exitPipRestoresWindow && bounds != null) {
+        window.bounds = bounds.toNative();
+      }
     }
 
     _isPip = false;

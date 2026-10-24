@@ -627,6 +627,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         success: success,
         bytesWritten: bytesWritten,
         elapsed: _recordedMediaTime,
+        path: success ? _activeDirectory : null,
         error: error,
       ),
     );

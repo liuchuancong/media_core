@@ -886,6 +886,7 @@ final class DownloadManager {
         label: task.title ?? task.fileName,
         success: success,
         bytesWritten: task.progress.receivedBytes,
+        path: success ? task.filePath : null,
         error: error,
       ),
     );

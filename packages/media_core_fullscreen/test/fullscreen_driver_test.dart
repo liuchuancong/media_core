@@ -412,11 +412,40 @@ void main() {
       await driver.apply(_player(), PresentationRequest.normal());
 
       expect(driver.isSystemFullscreen, isFalse);
-      // The manual mode restores both overlays; the host owns the status bar
-      // styling and the orientation release.
+      // The manual mode restores both overlays. The exit also re-locks the
+      // orientation family the device was held in at enter (the test view is
+      // 800x600 landscape), so the tablet never swings to portrait.
+      final orientationCall = systemCalls
+          .where((call) => call.method == 'SystemChrome.setPreferredOrientations')
+          .toList(growable: false);
+      expect(orientationCall, hasLength(1));
+      expect(
+        orientationCall.single.arguments,
+        <String>['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight'],
+      );
       final restoreCall = systemCalls.last;
       expect(restoreCall.method, 'SystemChrome.setEnabledSystemUIOverlays');
       expect(restoreCall.arguments, <String>['SystemUiOverlay.top', 'SystemUiOverlay.bottom']);
+    });
+
+    test('opting out of the orientation restore keeps the plain release', () async {
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      final systemCalls = recordedSystemCalls(binding);
+
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.mobile,
+        config: FullscreenConfig.defaults.copyWith(restoreMobileOrientation: false),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      await driver.apply(_player(), PresentationRequest.fullscreen());
+      await driver.apply(_player(), PresentationRequest.normal());
+
+      expect(
+        systemCalls.where((call) => call.method == 'SystemChrome.setPreferredOrientations'),
+        isEmpty,
+      );
     });
 
     test('dispose restores the system UI when torn down mid-fullscreen', () async {

@@ -11,8 +11,6 @@
 #include <media_core_audio/media_core_audio_plugin_c_api.h>
 #include <media_core_native/media_core_native_plugin_c_api.h>
 #include <media_kit_video/media_kit_video_plugin_c_api.h>
-#include <screen_retriever_windows/screen_retriever_windows_plugin_c_api.h>
-#include <window_manager/window_manager_plugin.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   AudioServiceWinPluginCApiRegisterWithRegistrar(
@@ -25,8 +23,4 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("MediaCoreNativePluginCApi"));
   MediaKitVideoPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("MediaKitVideoPluginCApi"));
-  ScreenRetrieverWindowsPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("ScreenRetrieverWindowsPluginCApi"));
-  WindowManagerPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("WindowManagerPlugin"));
 }
