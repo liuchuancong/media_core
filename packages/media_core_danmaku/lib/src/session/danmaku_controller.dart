@@ -412,6 +412,15 @@ final class DanmakuController {
     _startHeartbeat(transport, key, token);
   }
 
+  /// Accepts one message from outside a transport: a host bridging its own
+  /// session (a site's `LiveDanmakuSession`, a local echo of what the
+  /// viewer sent) feeds it here and the message runs the same gate, policy
+  /// and filters a transport's would. No-op before the controller is used.
+  void acceptExternal(DanmakuMessage message) {
+    if (_disposed || _sessionKey == null) return;
+    _handleMessage(message);
+  }
+
   void _handleMessage(DanmakuMessage message) {
     switch (message.type) {
       case DanmakuMessageType.chat:
