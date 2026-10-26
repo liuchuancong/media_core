@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/composition/timeline/media_timeline.dart' show MediaTimeline;
-import 'package:media_core/src/source/model/media_track.dart';
+import 'package:media_core/src/models/source/media_track.dart';
 
 /// One essence track placed on a shared presentation timeline.
 ///

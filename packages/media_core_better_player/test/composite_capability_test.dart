@@ -29,8 +29,8 @@ void main() {
 
   group('planning a DASH pair against the real adapters', () {
     final pair = CompositeMediaSource(
-      videoTracks: [MediaTrack(uri: Uri.parse('https://example.com/v.m4s'), kind: MediaTrackType.video)],
-      audioTracks: [MediaTrack(uri: Uri.parse('https://example.com/a.m4s'), kind: MediaTrackType.audio)],
+      videoTracks: [MediaTrack.of(uri: Uri.parse('https://example.com/v.m4s'), kind: MediaTrackType.video)],
+      audioTracks: [MediaTrack.of(uri: Uri.parse('https://example.com/a.m4s'), kind: MediaTrackType.audio)],
     );
 
     test('refuses loudly rather than playing the pair video-only', () {

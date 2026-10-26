@@ -4,12 +4,12 @@ import 'package:media_core/src/composition/timeline/media_cue.dart';
 import 'package:media_core/src/composition/timeline/media_segment.dart';
 import 'package:media_core/src/composition/timeline/media_timeline.dart';
 import 'package:media_core/src/composition/timeline/timeline_track.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 
 MediaTrack _track(String url, MediaTrackType kind, {Duration? startOffset}) {
-  return MediaTrack(uri: Uri.parse(url), kind: kind, startOffset: startOffset);
+  return MediaTrack.of(uri: Uri.parse(url), kind: kind, startOffset: startOffset);
 }
 
 void main() {

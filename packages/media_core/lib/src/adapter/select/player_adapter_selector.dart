@@ -1,9 +1,9 @@
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
 import 'package:media_core/src/adapter/select/composite_support.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';

@@ -88,7 +88,7 @@ PlayerTransportState _state(PlaybackCommand command, {Duration position = Durati
 
 PlayerSource _source(String id) {
   return ProgressiveMediaSource(
-    track: MediaTrack(uri: Uri.parse('https://example.com/$id.mp4'), kind: MediaTrackType.video),
+    track: MediaTrack.of(uri: Uri.parse('https://example.com/$id.mp4'), kind: MediaTrackType.video),
   ).toPlayerSource();
 }
 

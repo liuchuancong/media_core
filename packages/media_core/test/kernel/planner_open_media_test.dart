@@ -6,11 +6,11 @@ import 'package:media_core/src/event/player_event_bus.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/kernel_options.dart';
 import 'package:media_core/src/kernel/player_kernel.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/planning/media_source_plan.dart';
 import 'package:media_core/src/planning/media_source_planner.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 import 'package:media_core/src/source/service/media_source_bridge.dart';
 import 'package:media_core/src/testing/factory/test_player_factory.dart';
 import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
@@ -23,9 +23,9 @@ PlayerAdapterRegistration _reg(String id, {required PlayerAdapterCapabilities ca
       priority: priority,
     );
 
-MediaTrack _videoTrack(String url) => MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.video);
+MediaTrack _videoTrack(String url) => MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.video);
 
-MediaTrack _audioTrack(String url) => MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.audio);
+MediaTrack _audioTrack(String url) => MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.audio);
 
 void main() {
   group('PlayerKernel.planFor', () {
@@ -159,7 +159,7 @@ void main() {
       await handle.openMedia(
         CompositeMediaSource(
           videoTracks: [
-            MediaTrack(
+            MediaTrack.of(
               uri: Uri.parse('https://example.com/v.m4s'),
               kind: MediaTrackType.video,
               startOffset: const Duration(milliseconds: 40),

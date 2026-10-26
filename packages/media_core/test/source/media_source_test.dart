@@ -1,16 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
 import 'package:media_core/src/adapter/select/composite_support.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/planning/default_media_source_planner.dart';
 import 'package:media_core/src/planning/media_source_plan.dart';
 import 'package:media_core/src/planning/media_source_planner.dart' show MediaSourcePlanner;
 import 'package:media_core/src/source/descriptor/source_headers.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 import 'package:media_core/src/source/service/media_source_bridge.dart';
 
-MediaTrack _video(String url, {int bitrate = 1_000_000}) => MediaTrack(
+MediaTrack _video(String url, {int bitrate = 1_000_000}) => MediaTrack.of(
   uri: Uri.parse(url),
   kind: MediaTrackType.video,
   mimeType: 'video/mp4',
@@ -18,7 +18,7 @@ MediaTrack _video(String url, {int bitrate = 1_000_000}) => MediaTrack(
   bitrate: bitrate,
 );
 
-MediaTrack _audio(String url, {int bitrate = 192_000}) => MediaTrack(
+MediaTrack _audio(String url, {int bitrate = 192_000}) => MediaTrack.of(
   uri: Uri.parse(url),
   kind: MediaTrackType.audio,
   mimeType: 'audio/mp4',
@@ -27,7 +27,7 @@ MediaTrack _audio(String url, {int bitrate = 192_000}) => MediaTrack(
 );
 
 MediaTrack _subtitle(String url) =>
-    MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.subtitle, mimeType: 'text/vtt');
+    MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.subtitle, mimeType: 'text/vtt');
 
 /// A [MediaSourcePlanner] that only ever returns [UnsupportedPlan] so
 /// tests can verify [DefaultMediaSourcePlanner] is not the one the
@@ -60,7 +60,7 @@ void main() {
     });
 
     test('copies preserve every field unless overridden', () {
-      final original = MediaTrack(
+      final original = MediaTrack.of(
         uri: Uri.parse('https://example.com/v.m4s'),
         kind: MediaTrackType.video,
         headers: SourceHeaders(const {'User-Agent': 'test'}),
@@ -72,7 +72,7 @@ void main() {
         metadata: const <String, Object?>{'quality': 120},
       );
 
-      final copy = original.copyWith(bitrate: 8_000_000);
+      final copy = original.rebuild((builder) => builder..bitrate = 8_000_000);
 
       expect(copy.bitrate, 8_000_000);
       expect(copy.uri, original.uri);
@@ -160,12 +160,12 @@ void main() {
 
   group('DefaultMediaSourcePlanner', () {
     final progressive = ProgressiveMediaSource(
-      track: MediaTrack(uri: Uri.parse('https://a/v.mp4'), kind: MediaTrackType.video),
+      track: MediaTrack.of(uri: Uri.parse('https://a/v.mp4'), kind: MediaTrackType.video),
     );
 
     final composite = CompositeMediaSource(
-      videoTracks: [MediaTrack(uri: Uri.parse('https://a/v.m4s'), kind: MediaTrackType.video)],
-      audioTracks: [MediaTrack(uri: Uri.parse('https://a/a.m4s'), kind: MediaTrackType.audio)],
+      videoTracks: [MediaTrack.of(uri: Uri.parse('https://a/v.m4s'), kind: MediaTrackType.video)],
+      audioTracks: [MediaTrack.of(uri: Uri.parse('https://a/a.m4s'), kind: MediaTrackType.audio)],
     );
 
     const native = PlayerAdapterCapabilities(compositeSupport: CompositeSupport.native);
@@ -210,7 +210,7 @@ void main() {
     test('a live composite still takes a native backend', () {
       const planner = DefaultMediaSourcePlanner();
       final liveComposite = CompositeMediaSource(
-        videoTracks: [MediaTrack(uri: Uri.parse('https://example.com/live_v.m4s'), kind: MediaTrackType.video)],
+        videoTracks: [MediaTrack.of(uri: Uri.parse('https://example.com/live_v.m4s'), kind: MediaTrackType.video)],
         live: true,
       );
 
@@ -278,10 +278,10 @@ void main() {
       final headers = SourceHeaders(const {'Referer': 'https://www.bilibili.com/'});
       final composite = CompositeMediaSource(
         videoTracks: [
-          MediaTrack(uri: Uri.parse('https://example.com/v.m4s'), kind: MediaTrackType.video, headers: headers),
+          MediaTrack.of(uri: Uri.parse('https://example.com/v.m4s'), kind: MediaTrackType.video, headers: headers),
         ],
         audioTracks: [
-          MediaTrack(
+          MediaTrack.of(
             uri: Uri.parse('https://example.com/a.m4s'),
             kind: MediaTrackType.audio,
             headers: headers.set('Cookie', 'SESSDATA=x'),

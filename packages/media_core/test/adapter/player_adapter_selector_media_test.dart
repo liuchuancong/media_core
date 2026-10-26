@@ -6,9 +6,9 @@ import 'package:media_core/src/adapter/select/player_adapter_factory.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/adapter/select/player_adapter_selector.dart';
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';
@@ -33,10 +33,10 @@ PlayerAdapterCapabilities _caps({
 );
 
 MediaTrack _videoTrack(String url) =>
-    MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.video, mimeType: 'video/mp4');
+    MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.video, mimeType: 'video/mp4');
 
 MediaTrack _audioTrack(String url) =>
-    MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.audio, mimeType: 'audio/mp4');
+    MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.audio, mimeType: 'audio/mp4');
 
 void main() {
   _liveScoringTests();
@@ -114,7 +114,7 @@ void main() {
       final selector = PlayerAdapterSelector(registry);
 
       final progressiveAudio = ProgressiveMediaSource(
-        track: MediaTrack(uri: Uri.parse('https://example.com/song.mp4'), kind: MediaTrackType.audio),
+        track: MediaTrack.of(uri: Uri.parse('https://example.com/song.mp4'), kind: MediaTrackType.audio),
       );
 
       expect(

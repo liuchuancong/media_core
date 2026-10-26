@@ -1,6 +1,6 @@
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart' show PlayerAdapterCapabilities;
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:meta/meta.dart';
 
 part 'progressive_media_source.dart';

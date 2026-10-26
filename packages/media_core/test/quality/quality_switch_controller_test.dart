@@ -4,16 +4,16 @@ import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/event/player_event_bus.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/kernel_options.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/quality/quality_candidate.dart';
 import 'package:media_core/src/quality/quality_switch_controller.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 import 'package:media_core/src/testing/factory/test_player_factory.dart';
 import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 
 ProgressiveMediaSource _source(String url) => ProgressiveMediaSource(
-  track: MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.video),
+  track: MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.video),
 );
 
 PlayerHandle _handle(FakePlayerAdapter adapter) {
@@ -35,13 +35,13 @@ void main() {
   final low = QualityCandidate(
     label: '480P',
     source: ProgressiveMediaSource(
-      track: MediaTrack(uri: Uri.parse('https://example.com/low.mp4'), kind: MediaTrackType.video),
+      track: MediaTrack.of(uri: Uri.parse('https://example.com/low.mp4'), kind: MediaTrackType.video),
     ),
   );
   final high = QualityCandidate(
     label: '1080P',
     source: ProgressiveMediaSource(
-      track: MediaTrack(uri: Uri.parse('https://example.com/high.mp4'), kind: MediaTrackType.video),
+      track: MediaTrack.of(uri: Uri.parse('https://example.com/high.mp4'), kind: MediaTrackType.video),
     ),
     bitrate: 4_000_000,
   );
@@ -132,7 +132,7 @@ void main() {
       final bare = QualityCandidate.fromProgressive([_source('https://example.com/a.mp4')]);
       final withBitrate = QualityCandidate.fromProgressive([
         ProgressiveMediaSource(
-          track: MediaTrack(
+          track: MediaTrack.of(
             uri: Uri.parse('https://example.com/b.mp4'),
             kind: MediaTrackType.video,
             bitrate: 2_400_000,
@@ -149,10 +149,10 @@ void main() {
     test('fromCompositeTracks pairs every video essence with shared audio', () {
       final candidates = QualityCandidate.fromCompositeTracks(
         [
-          MediaTrack(uri: Uri.parse('https://example.com/v720.m4s'), kind: MediaTrackType.video, bitrate: 1_200_000),
-          MediaTrack(uri: Uri.parse('https://example.com/v1080.m4s'), kind: MediaTrackType.video, bitrate: 4_000_000),
+          MediaTrack.of(uri: Uri.parse('https://example.com/v720.m4s'), kind: MediaTrackType.video, bitrate: 1_200_000),
+          MediaTrack.of(uri: Uri.parse('https://example.com/v1080.m4s'), kind: MediaTrackType.video, bitrate: 4_000_000),
         ],
-        audioTracks: [MediaTrack(uri: Uri.parse('https://example.com/a.m4s'), kind: MediaTrackType.audio)],
+        audioTracks: [MediaTrack.of(uri: Uri.parse('https://example.com/a.m4s'), kind: MediaTrackType.audio)],
       );
 
       expect(candidates, hasLength(2));
@@ -161,7 +161,7 @@ void main() {
       expect(candidates.last.label, '4000000 bps');
 
       final labelled = QualityCandidate.fromCompositeTracks([
-        MediaTrack(uri: Uri.parse('https://example.com/v1080.m4s'), kind: MediaTrackType.video, bitrate: 4_000_000),
+        MediaTrack.of(uri: Uri.parse('https://example.com/v1080.m4s'), kind: MediaTrackType.video, bitrate: 4_000_000),
       ], labelOf: (track) => '${(track.bitrate! / 1000000).toStringAsFixed(1)} Mbps');
       expect(labelled.single.label, '4.0 Mbps');
     });

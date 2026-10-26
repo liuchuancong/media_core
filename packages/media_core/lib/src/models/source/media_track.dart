@@ -1,10 +1,12 @@
-import 'package:equatable/equatable.dart';
+import 'package:built_value/built_value.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/source/descriptor/source_headers.dart';
-import 'package:media_core/src/source/library.dart' show CompositeMediaSource, PlayerSource, ProgressiveMediaSource;
-import 'package:media_core/src/source/model/media_track_type.dart';
+import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_media_type.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';
+
+part 'media_track.g.dart';
 
 /// A single media stream that a player can consume.
 ///
@@ -14,7 +16,7 @@ import 'package:media_core/src/source/types/source_protocol.dart';
 /// subtitle file. Composite sources such as Bilibili DASH deliver a
 /// `video.m4s` and an `audio.m4s` as separate HTTP resources — each
 /// becomes one [MediaTrack], and the pair is assembled into a
-/// [CompositeMediaSource] so no layer above has to re-derive them.
+/// CompositeMediaSource so no layer above has to re-derive them.
 ///
 /// A track deliberately keeps the access information (headers,
 /// start offset) beside the location, because DASH and HLS segments
@@ -37,37 +39,60 @@ import 'package:media_core/src/source/types/source_protocol.dart';
 /// - MediaSource
 /// - SourceService
 /// - PlayerAdapter
-final class MediaTrack extends Equatable {
+abstract class MediaTrack implements Built<MediaTrack, MediaTrackBuilder> {
+  /// Builds a track from a [updates] callback — the codegen entry.
+  factory MediaTrack([void Function(MediaTrackBuilder)? updates]) = _$MediaTrack;
+
   /// Creates a media track.
   ///
   /// Every field except [uri] and [kind] is optional; a track with only
   /// those two is still valid — a caller that discovers URLs before it
   /// knows the codec, bitrate or MIME type is the normal case.
-  const MediaTrack({
-    required this.uri,
-    required this.kind,
-    this.headers,
-    this.mimeType,
-    this.codec,
-    this.bitrate,
-    this.language,
-    this.startOffset,
-    this.metadata = const <String, Object?>{},
-  });
+  factory MediaTrack.of({
+    required Uri uri,
+    required MediaTrackType kind,
+    SourceHeaders? headers,
+    String? mimeType,
+    String? codec,
+    int? bitrate,
+    String? language,
+    Duration? startOffset,
+    Map<String, Object?> metadata = const <String, Object?>{},
+  }) {
+    return MediaTrack(
+      (builder) => builder
+        ..uri = uri
+        ..kind = kind
+        ..headers = headers
+        ..mimeType = mimeType
+        ..codec = codec
+        ..bitrate = bitrate
+        ..language = language
+        ..startOffset = startOffset
+        ..metadata = metadata,
+    );
+  }
+
+  MediaTrack._();
+
+  /// An unset metadata bag stays empty rather than null; every other
+  /// optional field is genuinely absent until a provider states it.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(MediaTrackBuilder builder) => builder..metadata = const <String, Object?>{};
 
   /// Location of this track's stream.
   ///
   /// Typically an `https` URL for DASH and HLS essence streams, or a
   /// `file` URI for a local asset. The scheme is intentionally not
   /// duplicated here; derive it via [protocol].
-  final Uri uri;
+  Uri get uri;
 
   /// What kind of stream this track carries.
   ///
   /// Distinct from [mimeType]: `kind` classifies the essence for
-  /// grouping (which list of a [CompositeMediaSource] this track
-  /// belongs to), while `mimeType` describes the container encoding.
-  final MediaTrackType kind;
+  /// grouping (which list of a composite source this track belongs
+  /// to), while `mimeType` describes the container encoding.
+  MediaTrackType get kind;
 
   /// Optional HTTP or transport request headers.
   ///
@@ -75,10 +100,10 @@ final class MediaTrack extends Equatable {
   /// and `Cookie`; without carrying them per-track a downstream
   /// adapter would have no way to reproduce the request that produced
   /// the URL in the first place.
-  final SourceHeaders? headers;
+  SourceHeaders? get headers;
 
   /// Optional MIME type, for example `video/mp4` or `audio/mp4`.
-  final String? mimeType;
+  String? get mimeType;
 
   /// Optional codec identifier.
   ///
@@ -86,19 +111,19 @@ final class MediaTrack extends Equatable {
   /// `hev1.2.4.L153.B0` or `av01.0.08M.08`. Callers that need a
   /// family-level test should read [codecFamily] instead of parsing
   /// the raw string.
-  final String? codec;
+  String? get codec;
 
   /// Optional bitrate in bits per second.
   ///
   /// Mirrors the value advertised by the upstream manifest or API so a
   /// planner can rank tracks by bandwidth without re-fetching them.
-  final int? bitrate;
+  int? get bitrate;
 
   /// Optional BCP-47 language tag, e.g. `zh-CN`, `en`, `und`.
   ///
   /// Meaningful for audio and subtitle tracks; usually absent for the
   /// single video essence of a DASH stream.
-  final String? language;
+  String? get language;
 
   /// Presentation start of this track relative to the timeline it belongs to.
   ///
@@ -106,7 +131,7 @@ final class MediaTrack extends Equatable {
   /// period can trail the video period by a few frames. Adapters that
   /// merge essence streams must apply this offset to keep the
   /// presentation synchronized.
-  final Duration? startOffset;
+  Duration? get startOffset;
 
   /// Additional track-specific metadata.
   ///
@@ -114,7 +139,7 @@ final class MediaTrack extends Equatable {
   /// that produced the track (for example a Bilibili quality code or
   /// an HDR flag). Keys are documented by the producing provider, not
   /// by media_core.
-  final Map<String, Object?> metadata;
+  Map<String, Object?> get metadata;
 
   /// Whether the track carries request headers.
   bool get hasHeaders => headers != null && headers!.isNotEmpty;
@@ -147,8 +172,8 @@ final class MediaTrack extends Equatable {
   /// Media type equivalent to [kind], expressed at the source level.
   ///
   /// Bridges [MediaTrackType] into the vocabulary the rest of the
-  /// source layer uses, so a single-track [ProgressiveMediaSource] can
-  /// fill `PlayerSource.mediaType` without a separate hint.
+  /// source layer uses, so a single-track progressive source can fill
+  /// `PlayerSource.mediaType` without a separate hint.
   SourceMediaType get mediaType {
     switch (kind) {
       case MediaTrackType.video:
@@ -182,37 +207,4 @@ final class MediaTrack extends Equatable {
 
   /// Whether a metadata key exists.
   bool hasMetadataKey(String key) => metadata.containsKey(key);
-
-  /// Creates a copy with modifications.
-  ///
-  /// Pass [metadata] to replace the map wholesale. [headers], [mimeType],
-  /// [codec], [bitrate], [language] and [startOffset] can each be cleared
-  /// by supplying a sentinel — the semantics here follow the rest of
-  /// media_core: a `null` argument means "leave unchanged".
-  MediaTrack copyWith({
-    Uri? uri,
-    MediaTrackType? kind,
-    SourceHeaders? headers,
-    String? mimeType,
-    String? codec,
-    int? bitrate,
-    String? language,
-    Duration? startOffset,
-    Map<String, Object?>? metadata,
-  }) {
-    return MediaTrack(
-      uri: uri ?? this.uri,
-      kind: kind ?? this.kind,
-      headers: headers ?? this.headers,
-      mimeType: mimeType ?? this.mimeType,
-      codec: codec ?? this.codec,
-      bitrate: bitrate ?? this.bitrate,
-      language: language ?? this.language,
-      startOffset: startOffset ?? this.startOffset,
-      metadata: metadata ?? this.metadata,
-    );
-  }
-
-  @override
-  List<Object?> get props => <Object?>[uri, kind, headers, mimeType, codec, bitrate, language, startOffset, metadata];
 }

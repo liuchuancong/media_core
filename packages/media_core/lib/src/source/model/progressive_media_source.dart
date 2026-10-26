@@ -39,10 +39,10 @@ final class ProgressiveMediaSource extends MediaSource {
   /// building a single progressive source from a bare URL are holding
   /// a video file; audio-only or subtitle-only inputs should pass the
   /// kind explicitly. Any extra context (headers, mime type, codec)
-  /// belongs on the constructed [track] via [MediaTrack.copyWith].
+  /// belongs on the constructed [track] via [MediaTrack.rebuild].
   factory ProgressiveMediaSource.url(Object uri, {MediaTrackType kind = MediaTrackType.video, bool live = false}) {
     return ProgressiveMediaSource(
-      track: MediaTrack(uri: _coerceUri(uri), kind: kind),
+      track: MediaTrack.of(uri: _coerceUri(uri), kind: kind),
       live: live,
     );
   }

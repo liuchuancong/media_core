@@ -6,10 +6,10 @@ import 'package:media_core/src/adapter/select/composite_support.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/identity/source_id.dart';
 import 'package:media_core/src/kernel/player_kernel.dart';
+import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/media_track_type.dart';
 import 'package:media_core/src/source/inspect/source_inspector_chain.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/media_track.dart';
-import 'package:media_core/src/source/model/media_track_type.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/resolve/source_resolve_context.dart';
 import 'package:media_core/src/source/resolve/source_resolved.dart';
@@ -20,11 +20,11 @@ import 'package:media_core/src/source/service/source_service.dart';
 import 'package:media_core/src/source/types/source_type.dart';
 import 'package:media_core/src/testing/factory/test_player_factory.dart';
 
-MediaTrack _videoTrack(String url) => MediaTrack(uri: Uri.parse(url), kind: MediaTrackType.video);
+MediaTrack _videoTrack(String url) => MediaTrack.of(uri: Uri.parse(url), kind: MediaTrackType.video);
 
 CompositeMediaSource _bilibiliPair() => CompositeMediaSource(
   videoTracks: [_videoTrack('https://example.com/v.m4s')],
-  audioTracks: [MediaTrack(uri: Uri.parse('https://example.com/a.m4s'), kind: MediaTrackType.audio)],
+  audioTracks: [MediaTrack.of(uri: Uri.parse('https://example.com/a.m4s'), kind: MediaTrackType.audio)],
 );
 
 /// Minimal base-derived adapter used only to exercise the
@@ -123,7 +123,7 @@ void main() {
     test('a live composite keeps the declaration across the bridge', () {
       final pair = CompositeMediaSource(
         videoTracks: [_videoTrack('https://example.com/live_v.m4s')],
-        audioTracks: [MediaTrack(uri: Uri.parse('https://example.com/live_a.m4s'), kind: MediaTrackType.audio)],
+        audioTracks: [MediaTrack.of(uri: Uri.parse('https://example.com/live_a.m4s'), kind: MediaTrackType.audio)],
         live: true,
       );
 
