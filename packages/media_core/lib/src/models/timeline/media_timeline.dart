@@ -1,10 +1,12 @@
-import 'package:equatable/equatable.dart';
-import 'package:media_core/src/composition/timeline/media_cue.dart';
-import 'package:media_core/src/composition/timeline/media_segment.dart';
-import 'package:media_core/src/composition/timeline/timeline_track.dart';
+import 'package:built_value/built_value.dart';
 import 'package:media_core/src/models/source/media_track.dart';
 import 'package:media_core/src/models/source/media_track_type.dart';
+import 'package:media_core/src/models/timeline/media_cue.dart';
+import 'package:media_core/src/models/timeline/media_segment.dart';
+import 'package:media_core/src/models/timeline/timeline_track.dart';
 import 'package:media_core/src/source/model/media_source.dart';
+
+part 'media_timeline.g.dart';
 
 /// The presentation timeline of a [MediaSource].
 ///
@@ -37,14 +39,27 @@ import 'package:media_core/src/source/model/media_source.dart';
 /// - SourceInspector
 /// - a cue-producing provider
 /// - PlayerAdapter
-final class MediaTimeline extends Equatable {
+abstract class MediaTimeline implements Built<MediaTimeline, MediaTimelineBuilder> {
+  /// Builds a timeline from a [updates] callback — the codegen entry.
+  factory MediaTimeline([void Function(MediaTimelineBuilder)? updates]) = _$MediaTimeline;
+
   /// Creates a timeline from already-aligned [tracks].
-  const MediaTimeline({
-    required this.tracks,
-    this.originShift = Duration.zero,
-    this.segments = const <MediaSegment>[],
-    this.cues = const <MediaCue>[],
-  });
+  factory MediaTimeline.of({
+    required List<TimelineTrack> tracks,
+    Duration originShift = Duration.zero,
+    List<MediaSegment> segments = const <MediaSegment>[],
+    List<MediaCue> cues = const <MediaCue>[],
+  }) {
+    return MediaTimeline(
+      (builder) => builder
+        ..tracks = tracks
+        ..originShift = originShift
+        ..segments = segments
+        ..cues = cues,
+    );
+  }
+
+  MediaTimeline._();
 
   /// Derives the presentation timeline of [source].
   ///
@@ -61,7 +76,7 @@ final class MediaTimeline extends Equatable {
   factory MediaTimeline.from(MediaSource source) {
     final sourceTracks = source.tracks;
     if (sourceTracks.isEmpty) {
-      return const MediaTimeline(tracks: <TimelineTrack>[]);
+      return MediaTimeline.of(tracks: const <TimelineTrack>[]);
     }
 
     // The clock anchors at the earliest track, not at media zero: a
@@ -81,25 +96,33 @@ final class MediaTimeline extends Equatable {
     final aligned = sourceTracks
         .map((track) {
           final raw = track.startOffset ?? Duration.zero;
-          return TimelineTrack(track: track, offset: raw - minimum);
+          return TimelineTrack.of(track: track, offset: raw - minimum);
         })
         .toList(growable: false);
 
-    return MediaTimeline(tracks: aligned, originShift: minimum);
+    return MediaTimeline.of(tracks: aligned, originShift: minimum);
   }
 
+  /// The empty layers and the origin pin are the honest defaults; a
+  /// timeline is only ever defined by the tracks placed on it.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(MediaTimelineBuilder builder) => builder
+    ..originShift = Duration.zero
+    ..segments = const <MediaSegment>[]
+    ..cues = const <MediaCue>[];
+
   /// The aligned tracks of this timeline.
-  final List<TimelineTrack> tracks;
+  List<TimelineTrack> get tracks;
 
   /// How far the presentation origin was shifted from the raw period
   /// base during [MediaTimeline.from].
-  final Duration originShift;
+  Duration get originShift;
 
   /// Optional segment layer (chapters, discontinuities, ad breaks).
-  final List<MediaSegment> segments;
+  List<MediaSegment> get segments;
 
   /// Optional cue layer (subtitle captions) on presentation time.
-  final List<MediaCue> cues;
+  List<MediaCue> get cues;
 
   /// Whether the timeline has any placed tracks.
   bool get isEmpty => tracks.isEmpty;
@@ -163,22 +186,4 @@ final class MediaTimeline extends Equatable {
   List<MediaCue> cuesAt(Duration presentationTime) {
     return cues.where((cue) => cue.covers(presentationTime)).toList(growable: false);
   }
-
-  /// A copy with replaced optional layers and/or tracks.
-  MediaTimeline copyWith({
-    List<TimelineTrack>? tracks,
-    Duration? originShift,
-    List<MediaSegment>? segments,
-    List<MediaCue>? cues,
-  }) {
-    return MediaTimeline(
-      tracks: tracks ?? this.tracks,
-      originShift: originShift ?? this.originShift,
-      segments: segments ?? this.segments,
-      cues: cues ?? this.cues,
-    );
-  }
-
-  @override
-  List<Object?> get props => <Object?>[tracks, originShift, segments, cues];
 }

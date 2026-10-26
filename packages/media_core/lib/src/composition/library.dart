@@ -2,9 +2,11 @@
 
 /// Public library for the `composition` module.
 ///
-/// Composition layer: the presentation timeline that aligns composite
-/// tracks, plus schedule composition — programs, ad breaks and filler
+/// Composition layer: the placement engine over a presentation
+/// timeline, plus schedule composition — programs, ad breaks and filler
 /// placed onto one combined clock..
+///
+/// The timeline's value objects live in `lib/src/models/timeline/`.
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/composition/`.
@@ -24,8 +26,4 @@ export 'package:media_core/src/composition/schedule/schedule_clip.dart';
 export 'package:media_core/src/composition/schedule/schedule_navigator.dart';
 export 'package:media_core/src/composition/schedule/scheduled_playback.dart';
 export 'package:media_core/src/composition/timeline/media_break.dart';
-export 'package:media_core/src/composition/timeline/media_cue.dart';
-export 'package:media_core/src/composition/timeline/media_segment.dart';
-export 'package:media_core/src/composition/timeline/media_timeline.dart';
 export 'package:media_core/src/composition/timeline/timeline_composer.dart';
-export 'package:media_core/src/composition/timeline/timeline_track.dart';

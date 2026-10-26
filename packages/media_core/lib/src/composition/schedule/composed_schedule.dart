@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/composition/schedule/playback_schedule.dart' show PlaybackSchedule;
 import 'package:media_core/src/composition/schedule/schedule_clip.dart';
-import 'package:media_core/src/composition/timeline/media_segment.dart';
+import 'package:media_core/src/models/timeline/library.dart' show MediaSegment;
 
 /// One clip placed at an absolute position on the combined timeline.
 ///
@@ -40,7 +40,7 @@ final class ScheduledSegment extends Equatable {
 
   /// The segment's [MediaSegment] geometry, for overlay layers that
   /// only need ranges and labels.
-  MediaSegment toMediaSegment() => MediaSegment(
+  MediaSegment toMediaSegment() => MediaSegment.of(
     start: start,
     duration: duration,
     label: clip.kind.name,

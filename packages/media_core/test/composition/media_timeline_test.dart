@@ -1,11 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/src/composition/timeline/media_cue.dart';
-import 'package:media_core/src/composition/timeline/media_segment.dart';
-import 'package:media_core/src/composition/timeline/media_timeline.dart';
-import 'package:media_core/src/composition/timeline/timeline_track.dart';
 import 'package:media_core/src/models/source/media_track.dart';
 import 'package:media_core/src/models/source/media_track_type.dart';
+import 'package:media_core/src/models/timeline/library.dart';
 import 'package:media_core/src/source/model/media_source.dart';
 
 MediaTrack _track(String url, MediaTrackType kind, {Duration? startOffset}) {
@@ -122,7 +119,7 @@ void main() {
 
   group('MediaSegment', () {
     test('covers is start-inclusive end-exclusive', () {
-      final segment = MediaSegment(
+      final segment = MediaSegment.of(
         start: const Duration(seconds: 10),
         duration: const Duration(seconds: 5),
         label: 'chapter-2',
@@ -135,8 +132,8 @@ void main() {
     });
 
     test('intersects and shiftedBy compose ranges', () {
-      final a = MediaSegment(start: Duration.zero, duration: const Duration(seconds: 4));
-      final b = MediaSegment(start: const Duration(seconds: 3), duration: const Duration(seconds: 2));
+      final a = MediaSegment.of(start: Duration.zero, duration: const Duration(seconds: 4));
+      final b = MediaSegment.of(start: const Duration(seconds: 3), duration: const Duration(seconds: 2));
       final c = a.shiftedBy(const Duration(seconds: 10));
 
       expect(a.intersects(b), isTrue);
@@ -146,11 +143,11 @@ void main() {
     });
 
     test('timeline segmentAt finds the covering segment', () {
-      final timeline = MediaTimeline(
-        tracks: [TimelineTrack(track: _track('https://example.com/v.mp4', MediaTrackType.video))],
+      final timeline = MediaTimeline.of(
+        tracks: [TimelineTrack.of(track: _track('https://example.com/v.mp4', MediaTrackType.video))],
         segments: [
-          MediaSegment(start: Duration.zero, duration: const Duration(seconds: 30)),
-          MediaSegment(start: const Duration(seconds: 30), duration: const Duration(seconds: 30)),
+          MediaSegment.of(start: Duration.zero, duration: const Duration(seconds: 30)),
+          MediaSegment.of(start: const Duration(seconds: 30), duration: const Duration(seconds: 30)),
         ],
       );
 
@@ -161,7 +158,7 @@ void main() {
 
   group('MediaCue', () {
     test('covers spans the cue window', () {
-      final cue = MediaCue(start: const Duration(seconds: 2), end: const Duration(seconds: 5), text: 'hello');
+      final cue = MediaCue.of(start: const Duration(seconds: 2), end: const Duration(seconds: 5), text: 'hello');
 
       expect(cue.duration, const Duration(seconds: 3));
       expect(cue.covers(const Duration(seconds: 2)), isTrue);
@@ -169,12 +166,12 @@ void main() {
     });
 
     test('cuesAt returns every active cue', () {
-      final timeline = MediaTimeline(
-        tracks: [TimelineTrack(track: _track('https://example.com/v.mp4', MediaTrackType.video))],
+      final timeline = MediaTimeline.of(
+        tracks: [TimelineTrack.of(track: _track('https://example.com/v.mp4', MediaTrackType.video))],
         cues: [
-          MediaCue(start: Duration.zero, end: const Duration(seconds: 3), text: 'a'),
-          MediaCue(start: const Duration(seconds: 1), end: const Duration(seconds: 3), text: 'b'),
-          MediaCue(start: const Duration(seconds: 4), end: const Duration(seconds: 6), text: 'c'),
+          MediaCue.of(start: Duration.zero, end: const Duration(seconds: 3), text: 'a'),
+          MediaCue.of(start: const Duration(seconds: 1), end: const Duration(seconds: 3), text: 'b'),
+          MediaCue.of(start: const Duration(seconds: 4), end: const Duration(seconds: 6), text: 'c'),
         ],
       );
 
