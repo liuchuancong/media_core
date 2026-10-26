@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:media_core/src/preload/preload_metrics.dart';
+import 'package:media_core/src/models/preload/library.dart';
 import 'package:media_core/src/preload/preload_request.dart';
 import 'package:media_core/src/preload/preload_scheduler.dart';
 import 'package:media_core/src/preload/preload_task.dart';
@@ -16,7 +16,7 @@ final class PreloadManager {
 
   final Map<String, PreloadTask> _tasks = {};
 
-  final BehaviorSubject<PreloadMetrics> _metricsSubject = BehaviorSubject.seeded(const PreloadMetrics());
+  final BehaviorSubject<PreloadMetrics> _metricsSubject = BehaviorSubject.seeded(PreloadMetrics.of());
 
   /// A stream of preload statistics, emitting whenever a task changes state.
   Stream<PreloadMetrics> get metrics => _metricsSubject.stream;
@@ -106,8 +106,16 @@ final class PreloadManager {
   }
 
   void _updateMetrics({int? total, int? completed, int? failed, int? cancelled}) {
+    // A null argument here means "this counter did not move", so it has
+    // to read the current value; assigning null to the builder would
+    // clear a count nobody asked to clear.
     _metricsSubject.add(
-      currentMetrics.copyWith(total: total, completed: completed, failed: failed, cancelled: cancelled),
+      PreloadMetrics.of(
+        total: total ?? currentMetrics.total,
+        completed: completed ?? currentMetrics.completed,
+        failed: failed ?? currentMetrics.failed,
+        cancelled: cancelled ?? currentMetrics.cancelled,
+      ),
     );
   }
 

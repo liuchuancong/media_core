@@ -4,6 +4,9 @@
 ///
 /// Media preloading, warm-up and preload scheduling..
 ///
+/// The state and metrics records live in `lib/src/models/preload/`; the
+/// context, priority, request, task, scheduler and manager stay here.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/preload/`.
 ///
@@ -18,9 +21,7 @@ library;
 
 export 'package:media_core/src/preload/preload_context.dart';
 export 'package:media_core/src/preload/preload_manager.dart';
-export 'package:media_core/src/preload/preload_metrics.dart';
 export 'package:media_core/src/preload/preload_priority.dart';
 export 'package:media_core/src/preload/preload_request.dart';
 export 'package:media_core/src/preload/preload_scheduler.dart';
-export 'package:media_core/src/preload/preload_state.dart';
 export 'package:media_core/src/preload/preload_task.dart';

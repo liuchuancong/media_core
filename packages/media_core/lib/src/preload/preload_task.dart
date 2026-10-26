@@ -1,6 +1,6 @@
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/preload/library.dart';
 import 'package:media_core/src/preload/preload_priority.dart';
-import 'package:media_core/src/preload/preload_state.dart';
 
 /// Single preload task.
 final class PreloadTask {
@@ -14,7 +14,7 @@ final class PreloadTask {
   final PreloadPriority priority;
 
   /// The task's current lifecycle state.
-  PreloadState state = const PreloadState();
+  PreloadState state = PreloadState.of();
 
   /// Moves the task into the queued state.
   void queue() {
