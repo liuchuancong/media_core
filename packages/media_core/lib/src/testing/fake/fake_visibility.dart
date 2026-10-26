@@ -1,6 +1,6 @@
 import 'package:clock/clock.dart';
 
-import 'package:media_core/src/visibility/visibility_event.dart';
+import 'package:media_core/src/models/visibility/library.dart';
 import 'package:media_core/src/visibility/visibility_observer.dart';
 
 /// Recording [VisibilityObserver] for tests.
@@ -40,16 +40,20 @@ final class FakeVisibilityEvents {
 
   /// Builds a ratio changed event.
   static VisibilityEvent ratio(double ratio, {DateTime? timestamp}) {
-    return VisibilityEvent(type: VisibilityEventType.changed, visibility: ratio, timestamp: timestamp ?? clock.now());
+    return VisibilityEvent.of(
+      type: VisibilityEventType.changed,
+      visibility: ratio,
+      timestamp: timestamp ?? clock.now(),
+    );
   }
 
   /// Builds a fully visible event.
   static VisibilityEvent visible({DateTime? timestamp}) {
-    return VisibilityEvent(type: VisibilityEventType.visible, visibility: 1, timestamp: timestamp ?? clock.now());
+    return VisibilityEvent.of(type: VisibilityEventType.visible, visibility: 1, timestamp: timestamp ?? clock.now());
   }
 
   /// Builds a fully hidden event.
   static VisibilityEvent hidden({DateTime? timestamp}) {
-    return VisibilityEvent(type: VisibilityEventType.hidden, visibility: 0, timestamp: timestamp ?? clock.now());
+    return VisibilityEvent.of(type: VisibilityEventType.hidden, visibility: 0, timestamp: timestamp ?? clock.now());
   }
 }

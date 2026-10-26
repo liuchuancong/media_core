@@ -11,3 +11,4 @@ export 'package:media_core/src/models/quality/library.dart';
 export 'package:media_core/src/models/slot/library.dart';
 export 'package:media_core/src/models/source/library.dart';
 export 'package:media_core/src/models/timeline/library.dart';
+export 'package:media_core/src/models/visibility/library.dart';

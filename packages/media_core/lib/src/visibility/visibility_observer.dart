@@ -1,4 +1,4 @@
-import 'package:media_core/src/visibility/visibility_event.dart';
+import 'package:media_core/src/models/visibility/library.dart';
 
 /// Receives visibility changes.
 abstract interface class VisibilityObserver {

@@ -1,11 +1,8 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
-import 'package:media_core/src/visibility/visibility_event.dart';
-import 'package:media_core/src/visibility/visibility_metrics.dart';
+import 'package:media_core/src/models/visibility/library.dart';
 import 'package:media_core/src/visibility/visibility_observer.dart';
-import 'package:media_core/src/visibility/visibility_snapshot.dart';
-import 'package:media_core/src/visibility/visibility_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls player visibility state.
@@ -13,9 +10,9 @@ final class VisibilityController {
   /// Creates a controller starting from the default hidden state.
   VisibilityController();
 
-  VisibilityState _state = const VisibilityState();
+  VisibilityState _state = VisibilityState.of();
 
-  VisibilityMetrics _metrics = const VisibilityMetrics();
+  VisibilityMetrics _metrics = VisibilityMetrics.of();
 
   DateTime? _visibleStarted;
 
@@ -66,14 +63,14 @@ final class VisibilityController {
 
   /// Records whether the player is inside the viewport.
   void setViewport({required bool value}) {
-    _state = _state.copyWith(inViewport: value);
+    _state = _state.rebuild((builder) => builder..inViewport = value);
 
     _publish(VisibilityEventType.changed);
   }
 
   /// Records whether the player is covered by other content.
   void setOccluded({required bool value}) {
-    _state = _state.copyWith(occluded: value);
+    _state = _state.rebuild((builder) => builder..occluded = value);
 
     _publish(VisibilityEventType.changed);
   }
@@ -103,13 +100,17 @@ final class VisibilityController {
       _visibleStarted ??= now;
 
       if (_hiddenStarted != null) {
-        _metrics = _metrics.copyWith(hiddenDuration: _metrics.hiddenDuration + now.difference(_hiddenStarted!));
+        _metrics = _metrics.rebuild(
+          (builder) => builder..hiddenDuration = _metrics.hiddenDuration + now.difference(_hiddenStarted!),
+        );
 
         _hiddenStarted = null;
       }
     } else {
       if (_visibleStarted != null) {
-        _metrics = _metrics.copyWith(visibleDuration: _metrics.visibleDuration + now.difference(_visibleStarted!));
+        _metrics = _metrics.rebuild(
+          (builder) => builder..visibleDuration = _metrics.visibleDuration + now.difference(_visibleStarted!),
+        );
 
         _visibleStarted = null;
       }
@@ -119,11 +120,11 @@ final class VisibilityController {
       _hiddenStarted ??= now;
     }
 
-    _metrics = _metrics.copyWith(changeCount: _metrics.changeCount + 1);
+    _metrics = _metrics.rebuild((builder) => builder..changeCount = _metrics.changeCount + 1);
   }
 
   void _publish(VisibilityEventType type) {
-    final snapshot = VisibilitySnapshot(state: _state, updatedAt: clock.now());
+    final snapshot = VisibilitySnapshot.of(state: _state, updatedAt: clock.now());
 
     final event = VisibilityEvent.now(type, _state.visibility);
 

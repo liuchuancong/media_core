@@ -4,6 +4,10 @@
 ///
 /// PlayerIdentity visibility observation, state and management..
 ///
+/// The state, snapshot, event and metrics value objects live in
+/// `lib/src/models/visibility/`; what stays here is the controller that
+/// measures and the observer that receives.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/visibility/`.
 ///
@@ -18,8 +22,4 @@ export 'package:media_core/src/visibility/player_visibility_binding.dart';
 // ============================================================================
 
 export 'package:media_core/src/visibility/visibility_controller.dart';
-export 'package:media_core/src/visibility/visibility_event.dart';
-export 'package:media_core/src/visibility/visibility_metrics.dart';
 export 'package:media_core/src/visibility/visibility_observer.dart';
-export 'package:media_core/src/visibility/visibility_snapshot.dart';
-export 'package:media_core/src/visibility/visibility_state.dart';
