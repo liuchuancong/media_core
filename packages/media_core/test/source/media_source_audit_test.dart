@@ -6,13 +6,11 @@ import 'package:media_core/src/adapter/select/composite_support.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/identity/source_id.dart';
 import 'package:media_core/src/kernel/player_kernel.dart';
-import 'package:media_core/src/models/source/media_track.dart';
-import 'package:media_core/src/models/source/media_track_type.dart';
+import 'package:media_core/src/models/source/library.dart';
 import 'package:media_core/src/source/inspect/source_inspector_chain.dart';
 import 'package:media_core/src/source/model/media_source.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/resolve/source_resolve_context.dart';
-import 'package:media_core/src/source/resolve/source_resolved.dart';
 import 'package:media_core/src/source/resolve/source_resolver.dart';
 import 'package:media_core/src/source/resolve/source_resolver_chain.dart';
 import 'package:media_core/src/source/service/media_source_bridge.dart';
@@ -75,7 +73,7 @@ class _ReplacingResolver implements SourceResolver {
 
   @override
   Future<ResolvedSource> resolve(PlayerSource source, {SourceResolveContext? context}) async {
-    return ResolvedSource(
+    return ResolvedSource.of(
       sourceId: source.id,
       uri: source.uri,
       source: PlayerSource(id: source.id, uri: source.uri, title: 'replaced'),

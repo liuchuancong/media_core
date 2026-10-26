@@ -1,7 +1,7 @@
 import 'package:media_core/src/core/model/player_info.dart';
+import 'package:media_core/src/models/source/library.dart';
 import 'package:media_core/src/source/inspect/source_inspect_context.dart';
 import 'package:media_core/src/source/inspect/source_inspector.dart';
-import 'package:media_core/src/source/resolve/source_resolved.dart';
 
 /// Inspects a [ResolvedSource] by selecting the first compatible inspector.
 ///

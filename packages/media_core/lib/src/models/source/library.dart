@@ -12,3 +12,5 @@ export 'package:media_core/src/models/source/source_identity.dart';
 export 'package:media_core/src/models/source/source_location.dart';
 export 'package:media_core/src/models/source/source_location_type.dart';
 export 'package:media_core/src/models/source/source_metadata.dart';
+export 'package:media_core/src/models/source/source_request.dart';
+export 'package:media_core/src/models/source/source_resolved.dart';

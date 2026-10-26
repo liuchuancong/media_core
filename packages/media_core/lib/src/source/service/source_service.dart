@@ -1,9 +1,9 @@
 import 'package:media_core/src/core/model/player_info.dart';
+import 'package:media_core/src/models/source/library.dart';
 import 'package:media_core/src/source/inspect/source_inspect_context.dart';
 import 'package:media_core/src/source/inspect/source_inspector_chain.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/resolve/source_resolve_context.dart';
-import 'package:media_core/src/source/resolve/source_resolved.dart';
 import 'package:media_core/src/source/resolve/source_resolver_chain.dart';
 
 /// Provides the high-level source workflow.
