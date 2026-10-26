@@ -1,7 +1,7 @@
 import 'package:clock/clock.dart';
 
-import 'package:media_core/src/lifecycle/lifecycle_event.dart';
 import 'package:media_core/src/lifecycle/lifecycle_observer.dart';
+import 'package:media_core/src/models/lifecycle/library.dart';
 
 /// Recording [LifecycleObserver] for tests.
 ///
@@ -54,16 +54,16 @@ final class FakeLifecycleEvents {
 
   /// Builds an event of [type] stamped with the current `clock.now`.
   static LifecycleEvent of(LifecycleEventType type, {DateTime? timestamp}) {
-    return LifecycleEvent(type: type, timestamp: timestamp ?? clock.now());
+    return LifecycleEvent.of(type: type, timestamp: timestamp ?? clock.now());
   }
 
   /// A typical foreground sequence.
   static List<LifecycleEvent> foregroundSequence() {
     final now = clock.now();
     return [
-      LifecycleEvent(type: LifecycleEventType.created, timestamp: now),
-      LifecycleEvent(type: LifecycleEventType.initialized, timestamp: now),
-      LifecycleEvent(type: LifecycleEventType.activated, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.created, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.initialized, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.activated, timestamp: now),
     ];
   }
 
@@ -71,8 +71,8 @@ final class FakeLifecycleEvents {
   static List<LifecycleEvent> backgroundSequence() {
     final now = clock.now();
     return [
-      LifecycleEvent(type: LifecycleEventType.paused, timestamp: now),
-      LifecycleEvent(type: LifecycleEventType.inactive, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.paused, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.inactive, timestamp: now),
     ];
   }
 
@@ -80,10 +80,10 @@ final class FakeLifecycleEvents {
   static List<LifecycleEvent> disposeSequence() {
     final now = clock.now();
     return [
-      LifecycleEvent(type: LifecycleEventType.inactive, timestamp: now),
-      LifecycleEvent(type: LifecycleEventType.detached, timestamp: now),
-      LifecycleEvent(type: LifecycleEventType.disposing, timestamp: now),
-      LifecycleEvent(type: LifecycleEventType.disposed, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.inactive, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.detached, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.disposing, timestamp: now),
+      LifecycleEvent.of(type: LifecycleEventType.disposed, timestamp: now),
     ];
   }
 }

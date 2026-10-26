@@ -1,4 +1,4 @@
-import 'package:media_core/src/lifecycle/lifecycle_event.dart';
+import 'package:media_core/src/models/lifecycle/library.dart';
 
 /// Receives lifecycle events.
 abstract interface class LifecycleObserver {

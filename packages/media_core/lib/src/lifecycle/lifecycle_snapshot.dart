@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:media_core/src/lifecycle/lifecycle_state.dart';
+import 'package:media_core/src/models/lifecycle/library.dart';
 
 /// Immutable lifecycle snapshot.
 final class LifecycleSnapshot extends Equatable {
@@ -8,7 +8,7 @@ final class LifecycleSnapshot extends Equatable {
 
   /// The snapshot of a player that has not been created yet.
   factory LifecycleSnapshot.initial() {
-    return const LifecycleSnapshot(state: LifecycleState());
+    return LifecycleSnapshot(state: LifecycleState.of());
   }
 
   /// The lifecycle state captured by this snapshot.

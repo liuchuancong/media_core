@@ -4,6 +4,10 @@
 ///
 /// PlayerIdentity, page and application lifecycle management..
 ///
+/// The transition flags and the event recorded when one moves live in
+/// `lib/src/models/lifecycle/`; the drivers, controller, observer and
+/// snapshot stay here.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/lifecycle/`.
 ///
@@ -18,8 +22,6 @@ library;
 
 export 'package:media_core/src/lifecycle/app_lifecycle_driver.dart';
 export 'package:media_core/src/lifecycle/lifecycle_controller.dart';
-export 'package:media_core/src/lifecycle/lifecycle_event.dart';
 export 'package:media_core/src/lifecycle/lifecycle_observer.dart';
 export 'package:media_core/src/lifecycle/lifecycle_snapshot.dart';
-export 'package:media_core/src/lifecycle/lifecycle_state.dart';
 export 'package:media_core/src/lifecycle/player_lifecycle.dart';

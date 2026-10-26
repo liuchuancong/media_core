@@ -5,6 +5,7 @@
 /// read without opening the layer that happens to build it.
 library;
 
+export 'package:media_core/src/models/lifecycle/library.dart';
 export 'package:media_core/src/models/network/library.dart';
 export 'package:media_core/src/models/pool/library.dart';
 export 'package:media_core/src/models/preload/library.dart';

@@ -1,11 +1,10 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
-import 'package:media_core/src/lifecycle/lifecycle_event.dart';
 import 'package:media_core/src/lifecycle/lifecycle_observer.dart';
 import 'package:media_core/src/lifecycle/lifecycle_snapshot.dart';
-import 'package:media_core/src/lifecycle/lifecycle_state.dart';
 import 'package:media_core/src/lifecycle/player_lifecycle.dart';
+import 'package:media_core/src/models/lifecycle/library.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls player lifecycle.
@@ -13,7 +12,7 @@ final class LifecycleController implements PlayerLifecycle {
   /// Creates a controller seeded in the initial (not-yet-created) lifecycle state.
   LifecycleController();
 
-  LifecycleState _state = const LifecycleState();
+  LifecycleState _state = LifecycleState.of();
 
   final BehaviorSubject<LifecycleSnapshot> _snapshotSubject = BehaviorSubject.seeded(LifecycleSnapshot.initial());
 
