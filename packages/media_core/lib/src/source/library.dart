@@ -12,11 +12,7 @@
 /// removing or renaming files in this module.
 library;
 
-export 'package:media_core/src/source/descriptor/source_descriptor.dart';
 export 'package:media_core/src/source/descriptor/source_headers.dart';
-export 'package:media_core/src/source/descriptor/source_identity.dart';
-export 'package:media_core/src/source/descriptor/source_location.dart';
-export 'package:media_core/src/source/descriptor/source_metadata.dart';
 export 'package:media_core/src/source/inspect/source_inspect_context.dart';
 export 'package:media_core/src/source/inspect/source_inspector.dart';
 export 'package:media_core/src/source/inspect/source_inspector_chain.dart';

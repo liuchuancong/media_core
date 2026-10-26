@@ -83,6 +83,9 @@ export 'package:media_core/src/kernel/library.dart';
 /// PlayerIdentity, page and application lifecycle management..
 export 'package:media_core/src/lifecycle/library.dart';
 
+/// Immutable value objects the core passes around, grouped by what they describe.
+export 'package:media_core/src/models/library.dart';
+
 /// Network abstraction, monitoring, conditions and metrics..
 export 'package:media_core/src/network/library.dart';
 
