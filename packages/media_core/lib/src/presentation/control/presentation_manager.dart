@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:media_core/src/geometry/value/video_orientation.dart';
+import 'package:media_core/src/models/presentation/library.dart';
 import 'package:media_core/src/presentation/control/presentation_controller.dart';
 import 'package:media_core/src/presentation/descriptor/device_profile.dart';
 import 'package:media_core/src/presentation/descriptor/presentation_mode.dart';
@@ -8,7 +9,6 @@ import 'package:media_core/src/presentation/descriptor/presentation_request.dart
 import 'package:media_core/src/presentation/floating/floating_controller.dart';
 import 'package:media_core/src/presentation/fullscreen/fullscreen_controller.dart';
 import 'package:media_core/src/presentation/pip/pip_controller.dart';
-import 'package:media_core/src/presentation/state/presentation_snapshot.dart';
 import 'package:media_core/src/presentation/state/presentation_state.dart';
 
 /// High level presentation manager.
@@ -72,7 +72,7 @@ final class PresentationManager {
   PresentationSnapshot get snapshot {
     final state = _latestState;
 
-    return PresentationSnapshot(
+    return PresentationSnapshot.of(
       mode: state.mode,
       targetMode: state.targetMode,
       capabilities: state.capabilities,

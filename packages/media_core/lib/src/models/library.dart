@@ -18,6 +18,7 @@ export 'package:media_core/src/models/operation/library.dart';
 export 'package:media_core/src/models/platform/library.dart';
 export 'package:media_core/src/models/pool/library.dart';
 export 'package:media_core/src/models/preload/library.dart';
+export 'package:media_core/src/models/presentation/library.dart';
 export 'package:media_core/src/models/quality/library.dart';
 export 'package:media_core/src/models/reconciler/library.dart';
 export 'package:media_core/src/models/recording/library.dart';

@@ -38,5 +38,4 @@ export 'package:media_core/src/presentation/pip/pip_state.dart';
 export 'package:media_core/src/presentation/presentation.dart';
 export 'package:media_core/src/presentation/state/presentation_event.dart';
 export 'package:media_core/src/presentation/state/presentation_lifecycle.dart';
-export 'package:media_core/src/presentation/state/presentation_snapshot.dart';
 export 'package:media_core/src/presentation/state/presentation_state.dart';
