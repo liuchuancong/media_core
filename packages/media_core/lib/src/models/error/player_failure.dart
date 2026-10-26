@@ -1,9 +1,9 @@
 import 'package:built_value/built_value.dart';
 import 'package:media_core/src/error/error_classifier.dart';
-import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
 import 'package:media_core/src/error/player_exception.dart';
+import 'package:media_core/src/models/error/error_context.dart' show ErrorContext, ErrorContextBuilder;
 
 part 'player_failure.g.dart';
 
@@ -42,7 +42,7 @@ abstract class PlayerFailure implements Built<PlayerFailure, PlayerFailureBuilde
         ..message = message
         ..cause = cause
         ..stackTrace = stackTrace
-        ..context = context
+        ..context = context?.toBuilder()
         ..category = category,
     );
   }

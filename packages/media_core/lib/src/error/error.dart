@@ -1,5 +1,4 @@
 export 'package:media_core/src/error/error_classifier.dart';
-export 'package:media_core/src/error/error_context.dart';
 export 'package:media_core/src/error/error_formatter.dart';
 export 'package:media_core/src/error/error_policy.dart';
 export 'package:media_core/src/error/error_utils.dart';

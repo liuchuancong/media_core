@@ -1,6 +1,5 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/error/error_classifier.dart';
-import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
 import 'package:media_core/src/identity/generation_id.dart';
@@ -198,7 +197,7 @@ final class RecoveryFailure extends Equatable {
       cause: cause,
       stackTrace: stackTrace,
       category: category,
-      context: uri == null && backendId == null ? null : ErrorContext(uri: uri, backend: backendId, metadata: metadata),
+      context: uri == null && backendId == null ? null : ErrorContext.of(uri: uri, backend: backendId, metadata: metadata),
     );
   }
 

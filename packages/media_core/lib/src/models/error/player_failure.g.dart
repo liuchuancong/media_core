@@ -96,9 +96,9 @@ class PlayerFailureBuilder
   StackTrace? get stackTrace => _$this._stackTrace;
   set stackTrace(StackTrace? stackTrace) => _$this._stackTrace = stackTrace;
 
-  ErrorContext? _context;
-  ErrorContext? get context => _$this._context;
-  set context(ErrorContext? context) => _$this._context = context;
+  ErrorContextBuilder? _context;
+  ErrorContextBuilder get context => _$this._context ??= ErrorContextBuilder();
+  set context(ErrorContextBuilder? context) => _$this._context = context;
 
   PlayerErrorCategory? _category;
   PlayerErrorCategory? get category => _$this._category;
@@ -113,7 +113,7 @@ class PlayerFailureBuilder
       _message = $v.message;
       _cause = $v.cause;
       _stackTrace = $v.stackTrace;
-      _context = $v.context;
+      _context = $v.context?.toBuilder();
       _category = $v.category;
       _$v = null;
     }
@@ -134,20 +134,36 @@ class PlayerFailureBuilder
   PlayerFailure build() => _build();
 
   _$PlayerFailure _build() {
-    final _$result =
-        _$v ??
-        _$PlayerFailure._(
-          code: BuiltValueNullFieldError.checkNotNull(
-            code,
-            r'PlayerFailure',
-            'code',
-          ),
-          message: message,
-          cause: cause,
-          stackTrace: stackTrace,
-          context: context,
-          category: category,
+    _$PlayerFailure _$result;
+    try {
+      _$result =
+          _$v ??
+          _$PlayerFailure._(
+            code: BuiltValueNullFieldError.checkNotNull(
+              code,
+              r'PlayerFailure',
+              'code',
+            ),
+            message: message,
+            cause: cause,
+            stackTrace: stackTrace,
+            context: _context?.build(),
+            category: category,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'context';
+        _context?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'PlayerFailure',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

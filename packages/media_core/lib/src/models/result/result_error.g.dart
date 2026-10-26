@@ -101,9 +101,9 @@ class ResultErrorBuilder implements Builder<ResultError, ResultErrorBuilder> {
   StackTrace? get stackTrace => _$this._stackTrace;
   set stackTrace(StackTrace? stackTrace) => _$this._stackTrace = stackTrace;
 
-  ErrorContext? _context;
-  ErrorContext? get context => _$this._context;
-  set context(ErrorContext? context) => _$this._context = context;
+  ErrorContextBuilder? _context;
+  ErrorContextBuilder get context => _$this._context ??= ErrorContextBuilder();
+  set context(ErrorContextBuilder? context) => _$this._context = context;
 
   PlayerErrorCategory? _category;
   PlayerErrorCategory? get category => _$this._category;
@@ -123,7 +123,7 @@ class ResultErrorBuilder implements Builder<ResultError, ResultErrorBuilder> {
       _message = $v.message;
       _cause = $v.cause;
       _stackTrace = $v.stackTrace;
-      _context = $v.context;
+      _context = $v.context?.toBuilder();
       _category = $v.category;
       _failure = $v.failure?.toBuilder();
       _$v = null;
@@ -158,13 +158,16 @@ class ResultErrorBuilder implements Builder<ResultError, ResultErrorBuilder> {
             message: message,
             cause: cause,
             stackTrace: stackTrace,
-            context: context,
+            context: _context?.build(),
             category: category,
             failure: _failure?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
+        _$failedField = 'context';
+        _context?.build();
+
         _$failedField = 'failure';
         _failure?.build();
       } catch (e) {

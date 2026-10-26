@@ -1,5 +1,4 @@
 import 'package:equatable/equatable.dart';
-import 'package:media_core/src/error/error_context.dart' show ErrorContext;
 import 'package:media_core/src/identity/generation_id.dart';
 import 'package:media_core/src/identity/operation_id.dart';
 import 'package:media_core/src/identity/player_id.dart';
@@ -7,6 +6,7 @@ import 'package:media_core/src/identity/request_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/identity/slot_id.dart';
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/error/library.dart' show ErrorContext;
 
 /// Provides contextual information associated with an operation.
 ///

@@ -1,4 +1,3 @@
-import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_code.dart';
 import 'package:media_core/src/models/error/library.dart';
 
