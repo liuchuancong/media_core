@@ -1,7 +1,7 @@
 import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
-import 'package:media_core/src/error/player_failure.dart';
+import 'package:media_core/src/models/error/library.dart';
 
 /// Utility functions for working with player errors.
 ///
@@ -201,7 +201,7 @@ abstract final class ErrorUtils {
       return error;
     }
 
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: error,
@@ -213,7 +213,7 @@ abstract final class ErrorUtils {
 
   /// Creates an unknown failure from an arbitrary error.
   static PlayerFailure unknown(Object error, {String? message, StackTrace? stackTrace, ErrorContext? context}) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: PlayerErrorCode.unknown,
       message: message,
       cause: error,
@@ -225,7 +225,7 @@ abstract final class ErrorUtils {
 
   /// Creates an unsupported failure.
   static PlayerFailure unsupported({String? message, Object? cause, StackTrace? stackTrace, ErrorContext? context}) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: PlayerErrorCode.unsupported,
       message: message,
       cause: cause,
@@ -237,7 +237,7 @@ abstract final class ErrorUtils {
 
   /// Creates a cancellation failure.
   static PlayerFailure cancelled({String? message, Object? cause, StackTrace? stackTrace, ErrorContext? context}) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: PlayerErrorCode.cancelled,
       message: message,
       cause: cause,
@@ -249,7 +249,7 @@ abstract final class ErrorUtils {
 
   /// Creates a timeout failure.
   static PlayerFailure timeout({String? message, Object? cause, StackTrace? stackTrace, ErrorContext? context}) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: PlayerErrorCode.timeout,
       message: message,
       cause: cause,
@@ -267,7 +267,7 @@ abstract final class ErrorUtils {
     StackTrace? stackTrace,
     ErrorContext? context,
   }) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: cause,
@@ -285,7 +285,7 @@ abstract final class ErrorUtils {
     StackTrace? stackTrace,
     ErrorContext? context,
   }) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: cause,
@@ -303,7 +303,7 @@ abstract final class ErrorUtils {
     StackTrace? stackTrace,
     ErrorContext? context,
   }) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: cause,
@@ -321,7 +321,7 @@ abstract final class ErrorUtils {
     StackTrace? stackTrace,
     ErrorContext? context,
   }) {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: cause,

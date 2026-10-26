@@ -2,7 +2,7 @@ import 'package:built_value/built_value.dart';
 import 'package:media_core/src/error/error_context.dart' show ErrorContext;
 import 'package:media_core/src/error/player_error_category.dart' show PlayerErrorCategory;
 import 'package:media_core/src/error/player_error_code.dart' show PlayerErrorCode;
-import 'package:media_core/src/error/player_failure.dart' show PlayerFailure;
+import 'package:media_core/src/models/error/library.dart' show PlayerFailure, PlayerFailureBuilder;
 
 part 'result_error.g.dart';
 
@@ -40,7 +40,7 @@ abstract class ResultError implements Built<ResultError, ResultErrorBuilder> {
         ..stackTrace = stackTrace
         ..context = context
         ..category = category
-        ..failure = failure,
+        ..failure = failure?.toBuilder(),
     );
   }
 
@@ -153,7 +153,7 @@ abstract class ResultError implements Built<ResultError, ResultErrorBuilder> {
       return originalFailure;
     }
 
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: cause,

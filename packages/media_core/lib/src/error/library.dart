@@ -25,4 +25,3 @@ export 'package:media_core/src/error/error_utils.dart';
 export 'package:media_core/src/error/player_error_category.dart';
 export 'package:media_core/src/error/player_error_code.dart';
 export 'package:media_core/src/error/player_exception.dart';
-export 'package:media_core/src/error/player_failure.dart';

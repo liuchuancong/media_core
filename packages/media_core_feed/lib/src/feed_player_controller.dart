@@ -305,7 +305,7 @@ final class FeedPlayerController {
         _setItemState(FeedItemState.error);
 
         _errorController.add(
-          PlayerFailure(
+          PlayerFailure.of(
             code: PlayerErrorCode.noPlayableStream,
             message: 'Feed item $index failed to play: $error',
             cause: error,
@@ -369,7 +369,7 @@ final class FeedPlayerController {
       if (_index == index && !_disposed) {
         _setItemState(FeedItemState.error);
         _errorController.add(
-          PlayerFailure(
+          PlayerFailure.of(
             code: PlayerErrorCode.noPlayableStream,
             message: 'Feed item $index failed to play: $error',
             cause: error,

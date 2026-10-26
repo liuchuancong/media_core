@@ -5,3 +5,4 @@
 library;
 
 export 'package:media_core/src/models/error/player_error.dart';
+export 'package:media_core/src/models/error/player_failure.dart';

@@ -109,9 +109,10 @@ class ResultErrorBuilder implements Builder<ResultError, ResultErrorBuilder> {
   PlayerErrorCategory? get category => _$this._category;
   set category(PlayerErrorCategory? category) => _$this._category = category;
 
-  PlayerFailure? _failure;
-  PlayerFailure? get failure => _$this._failure;
-  set failure(PlayerFailure? failure) => _$this._failure = failure;
+  PlayerFailureBuilder? _failure;
+  PlayerFailureBuilder get failure =>
+      _$this._failure ??= PlayerFailureBuilder();
+  set failure(PlayerFailureBuilder? failure) => _$this._failure = failure;
 
   ResultErrorBuilder();
 
@@ -124,7 +125,7 @@ class ResultErrorBuilder implements Builder<ResultError, ResultErrorBuilder> {
       _stackTrace = $v.stackTrace;
       _context = $v.context;
       _category = $v.category;
-      _failure = $v.failure;
+      _failure = $v.failure?.toBuilder();
       _$v = null;
     }
     return this;
@@ -144,21 +145,37 @@ class ResultErrorBuilder implements Builder<ResultError, ResultErrorBuilder> {
   ResultError build() => _build();
 
   _$ResultError _build() {
-    final _$result =
-        _$v ??
-        _$ResultError._(
-          code: BuiltValueNullFieldError.checkNotNull(
-            code,
-            r'ResultError',
-            'code',
-          ),
-          message: message,
-          cause: cause,
-          stackTrace: stackTrace,
-          context: context,
-          category: category,
-          failure: failure,
+    _$ResultError _$result;
+    try {
+      _$result =
+          _$v ??
+          _$ResultError._(
+            code: BuiltValueNullFieldError.checkNotNull(
+              code,
+              r'ResultError',
+              'code',
+            ),
+            message: message,
+            cause: cause,
+            stackTrace: stackTrace,
+            context: context,
+            category: category,
+            failure: _failure?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'failure';
+        _failure?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'ResultError',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

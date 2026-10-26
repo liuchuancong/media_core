@@ -3,9 +3,9 @@ import 'package:media_core/src/error/error_classifier.dart';
 import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
-import 'package:media_core/src/error/player_failure.dart';
 import 'package:media_core/src/identity/generation_id.dart';
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/error/library.dart';
 import 'package:media_core/src/recovery/state/recovery_reason.dart';
 
 /// Describes which layer observed a failure.
@@ -192,7 +192,7 @@ final class RecoveryFailure extends Equatable {
   /// error module speaks its own vocabulary, and the ladder delegates
   /// the entry decision to `ErrorPolicy`. This is the bridge.
   PlayerFailure toFailure() {
-    return PlayerFailure(
+    return PlayerFailure.of(
       code: code,
       message: message,
       cause: cause,

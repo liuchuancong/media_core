@@ -1,6 +1,6 @@
 import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_code.dart';
-import 'package:media_core/src/error/player_failure.dart';
+import 'package:media_core/src/models/error/library.dart';
 
 /// Base exception type used by the media player core.
 ///
@@ -67,7 +67,7 @@ final class PlayerException implements Exception {
 
   /// Converts this exception into the structured player failure model.
   PlayerFailure toFailure() {
-    return PlayerFailure(code: code, message: message, cause: cause, stackTrace: stackTrace, context: context);
+    return PlayerFailure.of(code: code, message: message, cause: cause, stackTrace: stackTrace, context: context);
   }
 
   /// Creates a copy with selected fields replaced.

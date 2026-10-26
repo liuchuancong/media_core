@@ -540,7 +540,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     if (!_failureController.isClosed) {
       _failureController.add(
-        PlayerFailure(
+        PlayerFailure.of(
           code: PlayerErrorCode.noPlayableStream,
           message:
               '${room == null ? '' : '$room: '}'

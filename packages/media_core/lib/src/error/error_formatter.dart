@@ -1,7 +1,7 @@
 import 'package:media_core/src/error/error_context.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
-import 'package:media_core/src/error/player_failure.dart';
+import 'package:media_core/src/models/error/library.dart';
 
 /// Formats player errors into human-readable or diagnostic strings.
 ///
