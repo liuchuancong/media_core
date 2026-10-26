@@ -2,7 +2,10 @@
 
 /// Public library for the `network` module.
 ///
-/// Network abstraction, monitoring, conditions and metrics..
+/// Network abstraction, monitoring and transport execution..
+///
+/// The condition, state, metrics, request and response value objects
+/// live in `lib/src/models/network/`.
 ///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/network/`.
@@ -12,17 +15,10 @@
 /// removing or renaming files in this module.
 library;
 
-export 'package:media_core/src/network/model/network_condition.dart';
-export 'package:media_core/src/network/model/network_quality.dart';
-export 'package:media_core/src/network/model/network_state.dart';
-export 'package:media_core/src/network/model/network_type.dart';
 export 'package:media_core/src/network/monitor/network_manager.dart';
-export 'package:media_core/src/network/monitor/network_metrics.dart';
 export 'package:media_core/src/network/monitor/network_monitor.dart';
 // ============================================================================
 // Public exports
 // ============================================================================
 
 export 'package:media_core/src/network/transport/http_header_sanitizer.dart';
-export 'package:media_core/src/network/transport/network_request.dart';
-export 'package:media_core/src/network/transport/network_response.dart';

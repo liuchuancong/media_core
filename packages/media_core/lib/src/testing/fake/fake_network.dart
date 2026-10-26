@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:media_core/src/network/model/network_condition.dart';
-import 'package:media_core/src/network/model/network_state.dart';
-import 'package:media_core/src/network/monitor/network_metrics.dart';
+import 'package:media_core/src/models/network/library.dart';
 import 'package:media_core/src/network/monitor/network_monitor.dart';
 
 /// Scriptable [NetworkMonitor] for tests.
@@ -15,7 +13,7 @@ final class FakeNetworkMonitor implements NetworkMonitor {
   final StreamController<NetworkMetrics> _metricsController = StreamController<NetworkMetrics>.broadcast();
 
   NetworkState _state = NetworkState.initial();
-  NetworkMetrics _metrics = const NetworkMetrics();
+  NetworkMetrics _metrics = NetworkMetrics.empty();
   bool _started = false;
   bool _disposed = false;
 
@@ -82,6 +80,6 @@ final class FakeNetworkMonitor implements NetworkMonitor {
 extension on NetworkState {
   /// Derives a condition snapshot from the state.
   NetworkCondition toCondition() {
-    return NetworkCondition(connected: connected, type: type, quality: quality, metered: metered, expensive: expensive);
+    return NetworkCondition.of(connected: connected, type: type, quality: quality, metered: metered, expensive: expensive);
   }
 }
