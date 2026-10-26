@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:media_core/src/composition/schedule/composed_schedule.dart';
-import 'package:media_core/src/composition/schedule/playback_schedule.dart';
 import 'package:media_core/src/composition/schedule/schedule_navigator.dart';
 import 'package:media_core/src/composition/timeline/timeline_composer.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';

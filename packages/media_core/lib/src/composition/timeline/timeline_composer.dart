@@ -1,5 +1,3 @@
-import 'package:media_core/src/composition/schedule/composed_schedule.dart';
-import 'package:media_core/src/composition/schedule/playback_schedule.dart';
 import 'package:media_core/src/models/composition/library.dart';
 
 /// The pure placement engine of the composition layer.
@@ -44,7 +42,9 @@ final class TimelineComposer {
       if (clip.duration <= Duration.zero) {
         return;
       }
-      segments.add(ScheduledSegment(clip: clip, start: cursor, end: cursor + clip.duration, programTime: programTime));
+      segments.add(
+        ScheduledSegment.of(clip: clip, start: cursor, end: cursor + clip.duration, programTime: programTime),
+      );
       cursor += clip.duration;
     }
 
@@ -89,6 +89,6 @@ final class TimelineComposer {
     if (segments.isEmpty) {
       return ComposedSchedule.empty;
     }
-    return ComposedSchedule(segments: segments);
+    return ComposedSchedule.of(segments: segments);
   }
 }

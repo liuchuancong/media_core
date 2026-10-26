@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/composition/schedule/composed_schedule.dart';
-import 'package:media_core/src/composition/schedule/playback_schedule.dart';
 import 'package:media_core/src/composition/schedule/schedule_navigator.dart';
 import 'package:media_core/src/composition/timeline/media_break.dart';
 import 'package:media_core/src/composition/timeline/timeline_composer.dart';
@@ -32,7 +30,9 @@ MediaBreak pod(BreakPosition position, List<ScheduleClip> clips) => MediaBreak.o
 void main() {
   group('TimelineComposer placement', () {
     test('no breaks: the program is the whole timeline', () {
-      final composed = const TimelineComposer().compose(PlaybackSchedule(program: content('https://e.com/p.mp4', 100)));
+      final composed = const TimelineComposer().compose(
+        PlaybackSchedule.of(program: content('https://e.com/p.mp4', 100)),
+      );
 
       expect(composed.segments, hasLength(1));
       expect(composed.totalDuration, const Duration(seconds: 100));
@@ -41,7 +41,7 @@ void main() {
 
     test('pre-roll lands before the program and content keeps program time', () {
       final composed = const TimelineComposer().compose(
-        PlaybackSchedule(
+        PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 100),
           breaks: [
             pod(const PreRoll(), [ad('https://e.com/a1.mp4', 15)]),
@@ -60,7 +60,7 @@ void main() {
 
     test('mid-roll splits content into two pieces with exact program times', () {
       final composed = const TimelineComposer().compose(
-        PlaybackSchedule(
+        PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 100),
           breaks: [
             pod(AtProgramOffset(const Duration(seconds: 40)), [
@@ -84,7 +84,7 @@ void main() {
 
     test('post-roll follows the program tail, pre-roll precedes it', () {
       final composed = const TimelineComposer().compose(
-        PlaybackSchedule(
+        PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 100),
           breaks: [
             pod(AtProgramOffset(const Duration(seconds: 60)), [ad('mid', 5)]),
@@ -105,7 +105,7 @@ void main() {
 
     test('a zero-duration clip is dropped, not placed', () {
       final composed = const TimelineComposer().compose(
-        PlaybackSchedule(
+        PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 100),
           breaks: [
             pod(const PreRoll(), [ad('https://e.com/zero.mp4', 0)]),
@@ -119,7 +119,7 @@ void main() {
 
     test('programTimeAt maps combined time back to the program', () {
       final composed = const TimelineComposer().compose(
-        PlaybackSchedule(
+        PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 100),
           breaks: [
             pod(const PreRoll(), [ad('https://e.com/a1.mp4', 15)]),
@@ -137,7 +137,7 @@ void main() {
   group('PlaybackSchedule validation', () {
     test('a mid-roll past the program end is rejected at construction', () {
       expect(
-        () => PlaybackSchedule(
+        () => PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 30),
           breaks: [
             pod(AtProgramOffset(const Duration(seconds: 45)), [ad('late', 5)]),
@@ -149,7 +149,7 @@ void main() {
 
     test('content clips cannot be scheduled inside a break', () {
       expect(
-        () => PlaybackSchedule(
+        () => PlaybackSchedule.of(
           program: content('https://e.com/p.mp4', 100),
           breaks: [
             pod(const PreRoll(), [content('other', 10)]),
@@ -162,7 +162,7 @@ void main() {
 
   group('ScheduleNavigator', () {
     ComposedSchedule composed() => const TimelineComposer().compose(
-      PlaybackSchedule(
+      PlaybackSchedule.of(
         program: content('https://e.com/p.mp4', 100),
         breaks: [
           pod(const PreRoll(), [ad('https://e.com/a1.mp4', 15, skipAfter: const Duration(seconds: 5))]),

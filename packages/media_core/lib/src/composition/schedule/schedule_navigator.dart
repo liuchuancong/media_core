@@ -1,4 +1,3 @@
-import 'package:media_core/src/composition/schedule/composed_schedule.dart';
 import 'package:media_core/src/models/composition/library.dart';
 import 'package:meta/meta.dart';
 

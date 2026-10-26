@@ -1,7 +1,11 @@
-import 'package:equatable/equatable.dart';
-import 'package:media_core/src/composition/library.dart' show ScheduledSegment;
-import 'package:media_core/src/composition/timeline/media_break.dart';
-import 'package:media_core/src/models/composition/library.dart';
+import 'package:built_value/built_value.dart';
+import 'package:media_core/src/composition/timeline/media_break.dart'
+    show AtProgramOffset, BreakPosition, PostRoll, PreRoll;
+import 'package:media_core/src/models/composition/clip_kind.dart';
+import 'package:media_core/src/models/composition/media_break.dart';
+import 'package:media_core/src/models/composition/schedule_clip.dart';
+
+part 'playback_schedule.g.dart';
 
 /// The authoring shape of "this program, with these interruptions".
 ///
@@ -27,7 +31,10 @@ import 'package:media_core/src/models/composition/library.dart';
 ///
 /// - TimelineComposer
 /// - ScheduleNavigator
-final class PlaybackSchedule extends Equatable {
+abstract class PlaybackSchedule implements Built<PlaybackSchedule, PlaybackScheduleBuilder> {
+  /// Builds PlaybackSchedule from a [updates] callback — the codegen entry.
+  factory PlaybackSchedule([void Function(PlaybackScheduleBuilder)? updates]) = _$PlaybackSchedule;
+
   /// Creates a schedule for [program] with [breaks].
   ///
   /// The program must be a [ClipKind.content] clip; every break clip
@@ -36,25 +43,45 @@ final class PlaybackSchedule extends Equatable {
   /// putting content in a break is an authoring mistake this type
   /// refuses at construction, before it can produce a timeline with
   /// two competing definitions of "the program".
-  PlaybackSchedule({required this.program, this.breaks = const <MediaBreak>[]})
-    : assert(program.kind == ClipKind.content, 'A schedule program must be a content clip.'),
-      assert(
-        breaks.every((b) => b.clips.every((c) => c.kind != ClipKind.content)),
-        'A break cannot contain content clips; append to a playlist instead.',
-      ) {
-    _validateAgainstProgram();
+  factory PlaybackSchedule.of({required ScheduleClip program, List<MediaBreak> breaks = const <MediaBreak>[]}) {
+    return PlaybackSchedule(
+      (builder) => builder
+        ..program = program.toBuilder()
+        ..breaks = breaks,
+    );
   }
 
   /// A schedule with no breaks: the program alone.
   factory PlaybackSchedule.programOnly(ScheduleClip program) {
-    return PlaybackSchedule(program: program);
+    return PlaybackSchedule.of(program: program);
+  }
+
+  PlaybackSchedule._();
+
+  /// A schedule may authorise no interruptions at all, and then it schedules
+  /// the program alone.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(PlaybackScheduleBuilder builder) => builder..breaks = const <MediaBreak>[];
+
+  /// A schedule is only an interruption model if the interruptions are not
+  /// the program; content inside a break would give a timeline two
+  /// competing definitions of "the program".
+  @BuiltValueHook(finalizeBuilder: true)
+  static void _validate(PlaybackScheduleBuilder builder) {
+    final breaks = builder.breaks ?? const <MediaBreak>[];
+    assert(builder.program.kind == ClipKind.content, 'A schedule program must be a content clip.');
+    assert(
+      breaks.every((b) => b.clips.every((c) => c.kind != ClipKind.content)),
+      'A break cannot contain content clips; append to a playlist instead.',
+    );
+    _validateAgainstProgram(builder.program, breaks);
   }
 
   /// The program being scheduled.
-  final ScheduleClip program;
+  ScheduleClip get program;
 
   /// Breaks, in any authoring order — [sortedBreaks] answers.
-  final List<MediaBreak> breaks;
+  List<MediaBreak> get breaks;
 
   /// The program's length on its own clock.
   Duration get programDuration => program.duration;
@@ -82,7 +109,7 @@ final class PlaybackSchedule extends Equatable {
   /// Returns the same source and identity as [program], narrowed to
   /// one span so the composer can place slices of content between
   /// breaks. [from] is not baked into the clip: the entry point is
-  /// carried by the placed [ScheduledSegment.programTime] and applied
+  /// carried by the placed segment's `programTime` and applied
   /// as a seek when the navigator opens the segment, so a slice and
   /// the whole program stay the same schedule-visible clip and a
   /// resume after an ad is one coordinate lookup, not an identity
@@ -108,7 +135,11 @@ final class PlaybackSchedule extends Equatable {
     return program.rebuild((builder) => builder..duration = duration);
   }
 
-  void _validateAgainstProgram() {
+  static void _validateAgainstProgram(ScheduleClipBuilder program, List<MediaBreak> breaks) {
+    final programDuration = program.duration;
+    if (programDuration == null) {
+      return;
+    }
     for (final mediaBreak in breaks) {
       final offset = mediaBreak.position.programOffset;
       if (offset > programDuration) {
@@ -146,7 +177,4 @@ final class PlaybackSchedule extends Equatable {
     }
     return 2;
   }
-
-  @override
-  List<Object?> get props => <Object?>[program, breaks];
 }
