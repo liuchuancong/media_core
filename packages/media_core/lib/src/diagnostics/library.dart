@@ -16,7 +16,6 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/diagnostics/diagnostics_config.dart';
 export 'package:media_core/src/diagnostics/diagnostics_event.dart';
 export 'package:media_core/src/diagnostics/diagnostics_manager.dart';
 export 'package:media_core/src/diagnostics/network_diagnostics.dart';
