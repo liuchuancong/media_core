@@ -1,5 +1,5 @@
+import 'package:built_value/built_value.dart';
 import 'package:clock/clock.dart';
-import 'package:equatable/equatable.dart';
 import 'package:media_core/src/core/capability/media_capabilities.dart';
 import 'package:media_core/src/core/capability/player_capabilities.dart';
 import 'package:media_core/src/core/capability/player_media_type.dart';
@@ -12,6 +12,8 @@ import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/request_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/identity/source_id.dart';
+
+part 'player_snapshot.g.dart';
 
 /// Represents the complete immutable observable state of a player at a
 /// specific point in time.
@@ -32,26 +34,45 @@ import 'package:media_core/src/identity/source_id.dart';
 ///
 /// A snapshot never owns player resources and never executes backend
 /// operations.
-final class PlayerSnapshot extends Equatable {
+abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBuilder> {
+  /// Builds PlayerSnapshot from a [updates] callback — the codegen entry.
+  factory PlayerSnapshot([void Function(PlayerSnapshotBuilder)? updates]) = _$PlayerSnapshot;
+
   /// Creates an immutable player snapshot.
-  const PlayerSnapshot({
-    required this.playerId,
-    this.sessionId,
-    this.requestId,
-    this.generationId,
-    this.sourceId,
-    this.mediaType,
-    this.mediaCapabilities,
-    this.state = PlayerCoreState.idle,
-    this.options = PlayerOptions.defaults,
-    this.capabilities = PlayerCapabilities.basic,
-    this.metrics,
-    this.timestamp,
-  });
+  factory PlayerSnapshot.of({
+    required PlayerId playerId,
+    SessionId? sessionId,
+    RequestId? requestId,
+    GenerationId? generationId,
+    SourceId? sourceId,
+    PlayerMediaType? mediaType,
+    MediaCapabilities? mediaCapabilities,
+    PlayerCoreState state = PlayerCoreState.idle,
+    PlayerOptions options = PlayerOptions.defaults,
+    PlayerCapabilities capabilities = PlayerCapabilities.basic,
+    PlayerMetrics? metrics,
+    DateTime? timestamp,
+  }) {
+    return PlayerSnapshot(
+      (builder) => builder
+        ..playerId = playerId
+        ..sessionId = sessionId
+        ..requestId = requestId
+        ..generationId = generationId
+        ..sourceId = sourceId
+        ..mediaType = mediaType
+        ..mediaCapabilities = mediaCapabilities
+        ..state = state
+        ..options = options
+        ..capabilities = capabilities
+        ..metrics = metrics
+        ..timestamp = timestamp,
+    );
+  }
 
   /// Creates an empty snapshot for [playerId].
   factory PlayerSnapshot.empty(PlayerId playerId) {
-    return PlayerSnapshot(playerId: playerId, timestamp: clock.now());
+    return PlayerSnapshot.of(playerId: playerId, timestamp: clock.now());
   }
 
   /// Creates a snapshot for [playerId] using the supplied state.
@@ -69,7 +90,7 @@ final class PlayerSnapshot extends Equatable {
     PlayerMetrics? metrics,
     DateTime? timestamp,
   }) {
-    return PlayerSnapshot(
+    return PlayerSnapshot.of(
       playerId: playerId,
       sessionId: sessionId,
       requestId: requestId,
@@ -85,53 +106,64 @@ final class PlayerSnapshot extends Equatable {
     );
   }
 
+  PlayerSnapshot._();
+
+  /// A snapshot with no runtime associations describes an idle player running
+  /// the default options with the baseline capability set; everything else is
+  /// absent rather than empty.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(PlayerSnapshotBuilder builder) => builder
+    ..state = PlayerCoreState.idle
+    ..options = PlayerOptions.defaults
+    ..capabilities = PlayerCapabilities.basic;
+
   /// Unique stable identifier of the player.
-  final PlayerId playerId;
+  PlayerId get playerId;
 
   /// Identifier of the active runtime session.
   ///
   /// This is a runtime association and does not participate in player
   /// identity.
-  final SessionId? sessionId;
+  SessionId? get sessionId;
 
   /// Identifier of the operation request associated with this snapshot.
-  final RequestId? requestId;
+  RequestId? get requestId;
 
   /// Identifier of the current player generation.
   ///
   /// Generations distinguish different lifetimes of backend resources within
   /// the same player identity.
-  final GenerationId? generationId;
+  GenerationId? get generationId;
 
   /// Identifier of the current media source.
-  final SourceId? sourceId;
+  SourceId? get sourceId;
 
   /// Media type of the current source.
-  final PlayerMediaType? mediaType;
+  PlayerMediaType? get mediaType;
 
   /// Capabilities detected for the current media source.
   ///
   /// These describe the media itself and are distinct from
   /// [PlayerCapabilities], which describe what the player implementation can
   /// do.
-  final MediaCapabilities? mediaCapabilities;
+  MediaCapabilities? get mediaCapabilities;
 
   /// Complete semantic runtime state of the player.
-  final PlayerCoreState state;
+  PlayerCoreState get state;
 
   /// Current player options.
-  final PlayerOptions options;
+  PlayerOptions get options;
 
   /// Capabilities exposed by the player implementation.
   ///
   /// This describes player operations, not properties of the current media.
-  final PlayerCapabilities capabilities;
+  PlayerCapabilities get capabilities;
 
   /// Optional runtime metrics.
-  final PlayerMetrics? metrics;
+  PlayerMetrics? get metrics;
 
   /// Time at which this snapshot was produced.
-  final DateTime? timestamp;
+  DateTime? get timestamp;
 
   /// Whether a session is associated with this snapshot.
   bool get hasSession => sessionId != null;
@@ -350,113 +382,39 @@ final class PlayerSnapshot extends Equatable {
   /// Fallback execution belongs to the fallback layer.
   bool get canFallback => options.canFallback;
 
-  /// Returns a copy with the supplied values.
-  ///
-  /// Nullable fields use explicit [withoutSession], [withoutRequest],
-  /// [withoutGeneration], [withoutSource], [withoutMediaType],
-  /// [withoutMediaCapabilities], and [withoutMetrics] methods when they need
-  /// to be removed.
-  ///
-  /// A null passed to [copyWith] retains the existing value.
-  PlayerSnapshot copyWith({
-    PlayerId? playerId,
-    SessionId? sessionId,
-    RequestId? requestId,
-    GenerationId? generationId,
-    SourceId? sourceId,
-    PlayerMediaType? mediaType,
-    MediaCapabilities? mediaCapabilities,
-    PlayerCoreState? state,
-    PlayerOptions? options,
-    PlayerCapabilities? capabilities,
-    PlayerMetrics? metrics,
-    DateTime? timestamp,
-  }) {
-    return PlayerSnapshot(
-      playerId: playerId ?? this.playerId,
-      sessionId: sessionId ?? this.sessionId,
-      requestId: requestId ?? this.requestId,
-      generationId: generationId ?? this.generationId,
-      sourceId: sourceId ?? this.sourceId,
-      mediaType: mediaType ?? this.mediaType,
-      mediaCapabilities: mediaCapabilities ?? this.mediaCapabilities,
-      state: state ?? this.state,
-      options: options ?? this.options,
-      capabilities: capabilities ?? this.capabilities,
-      metrics: metrics ?? this.metrics,
-      timestamp: timestamp ?? this.timestamp,
-    );
-  }
-
   /// Returns a snapshot with a new session association.
   PlayerSnapshot withSession(SessionId value) {
-    return copyWith(sessionId: value);
+    return rebuild((builder) => builder..sessionId = value);
   }
 
   /// Returns a snapshot without a session association.
   PlayerSnapshot withoutSession() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
+    return rebuild((builder) => builder..sessionId = null);
   }
 
   /// Returns a snapshot with a new request association.
   PlayerSnapshot withRequest(RequestId value) {
-    return copyWith(requestId: value);
+    return rebuild((builder) => builder..requestId = value);
   }
 
   /// Returns a snapshot without a request association.
   PlayerSnapshot withoutRequest() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
+    return rebuild((builder) => builder..requestId = null);
   }
 
   /// Returns a snapshot with a new generation association.
   PlayerSnapshot withGeneration(GenerationId value) {
-    return copyWith(generationId: value);
+    return rebuild((builder) => builder..generationId = value);
   }
 
   /// Returns a snapshot without a generation association.
   PlayerSnapshot withoutGeneration() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
+    return rebuild((builder) => builder..generationId = null);
   }
 
   /// Returns a snapshot with a new source association.
   PlayerSnapshot withSource(SourceId value) {
-    return copyWith(sourceId: value);
+    return rebuild((builder) => builder..sourceId = value);
   }
 
   /// Returns a snapshot without a source association.
@@ -464,109 +422,68 @@ final class PlayerSnapshot extends Equatable {
   /// Source-dependent media information is cleared together with the source
   /// association.
   PlayerSnapshot withoutSource() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      state: state.withSource(value: false),
-      options: options.withoutSource(),
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
+    return rebuild(
+      (builder) => builder
+        ..sourceId = null
+        ..state = state.withSource(value: false)
+        ..options = options.withoutSource(),
     );
   }
 
   /// Returns a snapshot with the supplied media type.
   PlayerSnapshot withMediaType(PlayerMediaType value) {
-    return copyWith(mediaType: value);
+    return rebuild((builder) => builder..mediaType = value);
   }
 
   /// Returns a snapshot without media type information.
   PlayerSnapshot withoutMediaType() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
+    return rebuild((builder) => builder..mediaType = null);
   }
 
   /// Returns a snapshot with the supplied media capabilities.
   PlayerSnapshot withMediaCapabilities(MediaCapabilities value) {
-    return copyWith(mediaCapabilities: value);
+    return rebuild((builder) => builder..mediaCapabilities = value);
   }
 
   /// Returns a snapshot without media capability information.
   PlayerSnapshot withoutMediaCapabilities() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      state: state,
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
-    );
+    return rebuild((builder) => builder..mediaCapabilities = null);
   }
 
   /// Returns a snapshot with the supplied player state.
   PlayerSnapshot withState(PlayerCoreState value) {
-    return copyWith(state: value);
+    return rebuild((builder) => builder..state = value);
   }
 
   /// Returns a snapshot with the supplied player options.
   PlayerSnapshot withOptions(PlayerOptions value) {
-    return copyWith(options: value);
+    return rebuild((builder) => builder..options = value);
   }
 
   /// Returns a snapshot with the supplied player capabilities.
   PlayerSnapshot withCapabilities(PlayerCapabilities value) {
-    return copyWith(capabilities: value);
+    return rebuild((builder) => builder..capabilities = value);
   }
 
   /// Returns a snapshot with the supplied metrics.
   PlayerSnapshot withMetrics(PlayerMetrics value) {
-    return copyWith(metrics: value);
+    return rebuild((builder) => builder..metrics = value);
   }
 
   /// Returns a snapshot without runtime metrics.
   PlayerSnapshot withoutMetrics() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      sourceId: sourceId,
-      mediaType: mediaType,
-      mediaCapabilities: mediaCapabilities,
-      state: state,
-      options: options,
-      capabilities: capabilities,
-      timestamp: timestamp,
-    );
+    return rebuild((builder) => builder..metrics = null);
   }
 
   /// Returns a snapshot with a new timestamp.
   PlayerSnapshot withTimestamp(DateTime value) {
-    return copyWith(timestamp: value);
+    return rebuild((builder) => builder..timestamp = value);
   }
 
   /// Returns an idle snapshot while preserving player identity and
   /// configuration.
   PlayerSnapshot asIdle() {
-    return copyWith(state: PlayerCoreState.idle);
+    return rebuild((builder) => builder..state = PlayerCoreState.idle);
   }
 
   /// Returns a disposed snapshot.
@@ -574,16 +491,12 @@ final class PlayerSnapshot extends Equatable {
   /// PlayerIdentity identity and runtime associations are preserved so observers can
   /// associate the terminal state with the original player generation.
   PlayerSnapshot asDisposed() {
-    return PlayerSnapshot(
-      playerId: playerId,
-      sessionId: sessionId,
-      requestId: requestId,
-      generationId: generationId,
-      state: state.disposedState(),
-      options: options,
-      capabilities: capabilities,
-      metrics: metrics,
-      timestamp: timestamp,
+    return rebuild(
+      (builder) => builder
+        ..sourceId = null
+        ..mediaType = null
+        ..mediaCapabilities = null
+        ..state = state.disposedState(),
     );
   }
 
@@ -643,36 +556,5 @@ final class PlayerSnapshot extends Equatable {
     }
 
     return current.isBefore(previous);
-  }
-
-  @override
-  List<Object?> get props => <Object?>[
-    playerId,
-    sessionId,
-    requestId,
-    generationId,
-    sourceId,
-    mediaType,
-    mediaCapabilities,
-    state,
-    options,
-    capabilities,
-    metrics,
-    timestamp,
-  ];
-
-  @override
-  String toString() {
-    return 'PlayerSnapshot('
-        'playerId: $playerId, '
-        'sessionId: $sessionId, '
-        'requestId: $requestId, '
-        'generationId: $generationId, '
-        'sourceId: $sourceId, '
-        'playback: ${state.playback}, '
-        'lifecycle: ${state.lifecycle}, '
-        'hasError: $hasError, '
-        'isDisposed: $isDisposed'
-        ')';
   }
 }

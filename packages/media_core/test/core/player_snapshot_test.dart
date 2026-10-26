@@ -1,18 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/core/model/player_snapshot.dart';
 import 'package:media_core/src/core/state/player_core_state.dart';
 import 'package:media_core/src/core/state/player_status.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/models/core/library.dart';
 
 PlayerSnapshot snapshotFor(PlayerCoreState state) {
-  return PlayerSnapshot(playerId: PlayerId('p1'), state: state);
+  return PlayerSnapshot.of(playerId: PlayerId('p1'), state: state);
 }
 
 void main() {
   group('PlayerSnapshot', () {
     test('minimal snapshot has player id and idle status', () {
-      final snapshot = PlayerSnapshot(playerId: PlayerId('p1'));
+      final snapshot = PlayerSnapshot.of(playerId: PlayerId('p1'));
 
       expect(snapshot.hasSession, isFalse);
       expect(snapshot.hasSource, isFalse);
@@ -43,16 +43,16 @@ void main() {
       final snapshot = snapshotFor(PlayerCoreState.idle.playingState());
       expect(snapshot.isPlaying, isTrue);
 
-      final withSession = PlayerSnapshot(playerId: PlayerId('p1'), sessionId: SessionId('s1'));
+      final withSession = PlayerSnapshot.of(playerId: PlayerId('p1'), sessionId: SessionId('s1'));
       expect(withSession.hasSession, isTrue);
     });
 
     test('equality is value based', () {
-      final a = PlayerSnapshot(playerId: PlayerId('p1'));
-      final b = PlayerSnapshot(playerId: PlayerId('p1'));
+      final a = PlayerSnapshot.of(playerId: PlayerId('p1'));
+      final b = PlayerSnapshot.of(playerId: PlayerId('p1'));
       expect(a, b);
 
-      final c = PlayerSnapshot(playerId: PlayerId('p2'));
+      final c = PlayerSnapshot.of(playerId: PlayerId('p2'));
       expect(a, isNot(c));
     });
   });

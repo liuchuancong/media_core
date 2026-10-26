@@ -25,7 +25,6 @@ export 'package:media_core/src/core/config/player_options.dart';
 export 'package:media_core/src/core/model/player_identity.dart';
 export 'package:media_core/src/core/model/player_info.dart';
 export 'package:media_core/src/core/model/player_metrics.dart';
-export 'package:media_core/src/core/model/player_snapshot.dart';
 export 'package:media_core/src/core/state/player_core_state.dart';
 export 'package:media_core/src/core/state/player_lifecycle_state.dart';
 export 'package:media_core/src/core/state/player_playback_state.dart';

@@ -7,6 +7,7 @@ library;
 
 export 'package:media_core/src/models/audio/library.dart';
 export 'package:media_core/src/models/bug/library.dart';
+export 'package:media_core/src/models/core/library.dart';
 export 'package:media_core/src/models/error/library.dart';
 export 'package:media_core/src/models/event/library.dart';
 export 'package:media_core/src/models/lifecycle/library.dart';

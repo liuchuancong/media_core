@@ -1,5 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:media_core/src/core/library.dart' show PlayerCoreState, PlayerSnapshot;
+import 'package:media_core/src/core/library.dart' show PlayerCoreState;
+import 'package:media_core/src/models/core/library.dart' show PlayerSnapshot;
 
 part 'player_info.freezed.dart';
 part 'player_info.g.dart';
