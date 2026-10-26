@@ -1,9 +1,9 @@
 import 'package:media_core/src/identity/generation_id.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/models/session/library.dart';
 import 'package:media_core/src/policy/session/player_policy.dart';
 import 'package:media_core/src/session/control/player_session.dart';
-import 'package:media_core/src/session/model/session_context.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/testing/factory/test_source_factory.dart';
 
@@ -19,7 +19,7 @@ final class TestSessionFactory {
     PlayerPolicy policy = const PlayerPolicy(),
   }) {
     final source = TestSourceFactory.httpMp4();
-    return SessionContext(
+    return SessionContext.of(
       playerId: PlayerId(playerId),
       sessionId: SessionId(sessionId),
       generationId: GenerationId(generationId),
@@ -36,7 +36,7 @@ final class TestSessionFactory {
     String sessionId = 'test-session',
     String generationId = 'gen-1',
   }) {
-    return SessionContext(
+    return SessionContext.of(
       playerId: PlayerId(playerId),
       sessionId: SessionId(sessionId),
       generationId: GenerationId(generationId),

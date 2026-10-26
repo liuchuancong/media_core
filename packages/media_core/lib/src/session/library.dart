@@ -24,6 +24,5 @@ export 'package:media_core/src/session/control/player_session.dart';
 export 'package:media_core/src/session/control/session_controller.dart';
 export 'package:media_core/src/session/control/session_lifecycle.dart';
 export 'package:media_core/src/session/control/session_manager.dart';
-export 'package:media_core/src/session/model/session_context.dart';
 export 'package:media_core/src/session/model/session_snapshot.dart';
 export 'package:media_core/src/session/model/session_state.dart';

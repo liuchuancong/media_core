@@ -112,7 +112,7 @@ extension PlayerHandleLifecycle on PlayerHandle {
     // reporting a sourceId (and a source) that is no longer open, or every
     // snapshot contradicts its own `source: null` field.
     _runtime.session.updateContext(
-      SessionContext(
+      SessionContext.of(
         playerId: _player.id,
         sessionId: _runtime.session.context.sessionId,
         generationId: _runtime.sessionController.recreateGeneration(),
@@ -247,7 +247,7 @@ extension PlayerHandleLifecycle on PlayerHandle {
       final generationId = _runtime.sessionController.recreateGeneration();
 
       _runtime.session.updateContext(
-        SessionContext(
+        SessionContext.of(
           playerId: _player.id,
           sessionId: _runtime.session.context.sessionId,
           generationId: generationId,

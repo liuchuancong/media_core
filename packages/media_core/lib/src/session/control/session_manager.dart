@@ -1,7 +1,7 @@
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/models/session/library.dart';
 import 'package:media_core/src/session/control/player_session.dart';
-import 'package:media_core/src/session/model/session_context.dart';
 
 /// Manages player sessions.
 ///

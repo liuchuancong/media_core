@@ -125,7 +125,7 @@ extension PlayerHandlePlayback on PlayerHandle {
         final generationId = _runtime.sessionController.recreateGeneration();
 
         _runtime.session.updateContext(
-          SessionContext(
+          SessionContext.of(
             playerId: _player.id,
             sessionId: _runtime.session.context.sessionId,
             generationId: generationId,

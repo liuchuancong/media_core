@@ -27,6 +27,7 @@ import 'package:media_core/src/kernel/kernel_options.dart';
 import 'package:media_core/src/lifecycle/lifecycle_controller.dart';
 import 'package:media_core/src/lifecycle/lifecycle_snapshot.dart';
 import 'package:media_core/src/models/event/library.dart';
+import 'package:media_core/src/models/session/library.dart';
 import 'package:media_core/src/models/timeline/library.dart';
 import 'package:media_core/src/operation/operation.dart';
 import 'package:media_core/src/operation/operation_cancel_token.dart';
@@ -55,7 +56,6 @@ import 'package:media_core/src/screenshot/screenshot_options.dart';
 import 'package:media_core/src/screenshot/screenshot_surface.dart';
 import 'package:media_core/src/session/control/player_session.dart';
 import 'package:media_core/src/session/control/session_controller.dart';
-import 'package:media_core/src/session/model/session_context.dart';
 import 'package:media_core/src/session/model/session_snapshot.dart';
 import 'package:media_core/src/session/model/session_state.dart';
 import 'package:media_core/src/source/model/media_source.dart';
@@ -187,7 +187,7 @@ final class PlayerHandle implements RecoveryTarget {
        _runtime = PlayerRuntime(
          adapter: adapter,
          session: PlayerSession(
-           context: SessionContext(
+           context: SessionContext.of(
              playerId: player.id,
              sessionId: adapterContext.sessionId,
              generationId: GenerationId.generate(),
