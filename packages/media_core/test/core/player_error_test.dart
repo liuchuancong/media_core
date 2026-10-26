@@ -1,14 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/core/capability/player_error.dart';
 import 'package:media_core/src/error/player_error_category.dart';
 import 'package:media_core/src/error/player_error_code.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/models/error/library.dart';
 
 void main() {
   group('PlayerError', () {
     test('carries code, message and context', () {
-      final error = PlayerError(
+      final error = PlayerError.of(
         code: PlayerErrorCode.backendOpenFailed,
         message: 'open failed',
         playerId: PlayerId('p1'),
@@ -23,21 +23,21 @@ void main() {
     });
 
     test('empty error has no context', () {
-      const error = PlayerError(code: PlayerErrorCode.unknown, message: 'boom');
+      final error = PlayerError.of(code: PlayerErrorCode.unknown, message: 'boom');
       expect(error.hasContext, isFalse);
       expect(error.hasCause, isFalse);
       expect(error.hasMetadata, isFalse);
     });
 
     test('effectiveCategory falls back to classifier', () {
-      const error = PlayerError(code: PlayerErrorCode.networkTimeout, message: 'timeout');
+      final error = PlayerError.of(code: PlayerErrorCode.networkTimeout, message: 'timeout');
       expect(error.category, isNull);
       expect(error.effectiveCategory, PlayerErrorCategory.timeout);
       expect(error.isTimeout, isTrue);
     });
 
     test('explicit category overrides classification', () {
-      const error = PlayerError(
+      final error = PlayerError.of(
         code: PlayerErrorCode.unknown,
         message: 'custom',
         category: PlayerErrorCategory.network,
@@ -47,31 +47,31 @@ void main() {
     });
 
     test('relation helpers classify by code and category', () {
-      const network = PlayerError(code: PlayerErrorCode.networkUnavailable, message: 'offline');
+      final network = PlayerError.of(code: PlayerErrorCode.networkUnavailable, message: 'offline');
       expect(network.isNetworkRelated, isTrue);
 
-      const source = PlayerError(code: PlayerErrorCode.sourceInvalid, message: 'bad source');
+      final source = PlayerError.of(code: PlayerErrorCode.sourceInvalid, message: 'bad source');
       expect(source.isSourceRelated, isTrue);
 
-      const backend = PlayerError(code: PlayerErrorCode.backendFatal, message: 'fatal');
+      final backend = PlayerError.of(code: PlayerErrorCode.backendFatal, message: 'fatal');
       expect(backend.isBackendRelated, isTrue);
 
-      const cancelled = PlayerError(code: PlayerErrorCode.cancelled, message: 'cancelled');
+      final cancelled = PlayerError.of(code: PlayerErrorCode.cancelled, message: 'cancelled');
       expect(cancelled.isCancellation, isTrue);
       expect(cancelled.isUnknown, isFalse);
     });
 
     test('unknown code is unknown', () {
-      const error = PlayerError(code: PlayerErrorCode.unknown, message: '?');
+      final error = PlayerError.of(code: PlayerErrorCode.unknown, message: '?');
       expect(error.isUnknown, isTrue);
     });
 
     test('equality is value based', () {
-      const a = PlayerError(code: PlayerErrorCode.timeout, message: 't');
-      const b = PlayerError(code: PlayerErrorCode.timeout, message: 't');
+      final a = PlayerError.of(code: PlayerErrorCode.timeout, message: 't');
+      final b = PlayerError.of(code: PlayerErrorCode.timeout, message: 't');
       expect(a, b);
 
-      const c = PlayerError(code: PlayerErrorCode.timeout, message: 'other');
+      final c = PlayerError.of(code: PlayerErrorCode.timeout, message: 'other');
       expect(a, isNot(c));
     });
   });

@@ -18,7 +18,6 @@ library;
 
 export 'package:media_core/src/core/capability/media_capabilities.dart';
 export 'package:media_core/src/core/capability/player_capabilities.dart';
-export 'package:media_core/src/core/capability/player_error.dart';
 export 'package:media_core/src/core/capability/player_media_type.dart';
 export 'package:media_core/src/core/config/player_config.dart';
 export 'package:media_core/src/core/config/player_constants.dart';

@@ -10,9 +10,9 @@ import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/state/player_adapter_event.dart';
 import 'package:media_core/src/adapter/state/player_adapter_exception.dart';
 import 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
-import 'package:media_core/src/core/capability/player_error.dart';
 import 'package:media_core/src/core/state/player_core_state.dart';
 import 'package:media_core/src/error/player_error_code.dart';
+import 'package:media_core/src/models/error/library.dart';
 import 'package:media_core/src/playback/value/buffer_range.dart';
 import 'package:media_core/src/screenshot/screenshot_request.dart';
 import 'package:media_core/src/source/model/media_source.dart';
@@ -247,7 +247,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
       if (error is! PlayerAdapterOpenException) {
         _fail(
-          PlayerError(
+          PlayerError.of(
             code: PlayerErrorCode.backendOpenFailed,
             message: '$id open failed: $error',
             cause: error,
@@ -853,7 +853,7 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
 
     if (gatesSourceEvents && !_acceptSourceEvents) return;
 
-    final error = PlayerError(code: code, message: message, cause: cause, stackTrace: stackTrace);
+    final error = PlayerError.of(code: code, message: message, cause: cause, stackTrace: stackTrace);
 
     if (_sourceOpening && gatesSourceEvents) {
       _deferredEngineError = error;
