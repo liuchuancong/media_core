@@ -1,8 +1,8 @@
 import 'package:built_value/built_value.dart';
 import 'package:media_core/src/geometry/value/video_orientation.dart';
+import 'package:media_core/src/models/presentation/library.dart' show PresentationState;
 import 'package:media_core/src/presentation/descriptor/presentation_capabilities.dart';
 import 'package:media_core/src/presentation/descriptor/presentation_mode.dart';
-import 'package:media_core/src/presentation/state/presentation_state.dart' show PresentationState;
 
 part 'presentation_snapshot.g.dart';
 

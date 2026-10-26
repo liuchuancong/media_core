@@ -9,7 +9,6 @@ import 'package:media_core/src/presentation/descriptor/presentation_request.dart
 import 'package:media_core/src/presentation/floating/floating_controller.dart';
 import 'package:media_core/src/presentation/fullscreen/fullscreen_controller.dart';
 import 'package:media_core/src/presentation/pip/pip_controller.dart';
-import 'package:media_core/src/presentation/state/presentation_state.dart';
 
 /// High level presentation manager.
 ///

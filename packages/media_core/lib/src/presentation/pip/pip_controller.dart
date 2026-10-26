@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:media_core/src/presentation/pip/pip_state.dart';
+import 'package:media_core/src/models/presentation/library.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Controls picture-in-picture lifecycle.
@@ -58,6 +58,8 @@ final class PipController {
 
       final generation = ++_generation;
 
+// null keeps the current value here, exactly as under freezed.
+// ignore: avoid_redundant_argument_values
       _stateSubject.add(current.copyWith(transitioning: true, generation: generation, error: null));
     });
   }
@@ -76,6 +78,8 @@ final class PipController {
 
       final generation = ++_generation;
 
+// null keeps the current value here, exactly as under freezed.
+// ignore: avoid_redundant_argument_values
       _stateSubject.add(current.copyWith(transitioning: true, generation: generation, error: null));
     });
   }

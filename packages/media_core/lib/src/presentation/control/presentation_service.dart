@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:media_core/src/geometry/value/video_orientation.dart';
+import 'package:media_core/src/models/presentation/library.dart';
 import 'package:media_core/src/presentation/control/presentation_controller.dart';
 import 'package:media_core/src/presentation/descriptor/presentation_capabilities.dart';
 import 'package:media_core/src/presentation/descriptor/presentation_request.dart';
 import 'package:media_core/src/presentation/driver/presentation_adapter.dart';
 import 'package:media_core/src/presentation/state/presentation_event.dart';
-import 'package:media_core/src/presentation/state/presentation_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Application level presentation service.
