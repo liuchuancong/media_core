@@ -4,6 +4,10 @@
 ///
 /// Logical player slot ownership, assignment and state..
 ///
+/// The owner, assignment, state and snapshot value objects live in
+/// `lib/src/models/slot/`; what stays here is the mutable `PlayerSlot`
+/// resource and the manager that owns it.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/slot/`.
 ///
@@ -17,9 +21,4 @@ library;
 // ============================================================================
 
 export 'package:media_core/src/slot/player_slot.dart';
-export 'package:media_core/src/slot/player_slot_assignment.dart';
 export 'package:media_core/src/slot/player_slot_manager.dart';
-export 'package:media_core/src/slot/player_slot_owner.dart';
-export 'package:media_core/src/slot/player_slot_snapshot.dart';
-export 'package:media_core/src/slot/player_slot_state.dart';
-export 'package:media_core/src/slot/player_slot_status.dart';

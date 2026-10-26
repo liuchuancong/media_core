@@ -1,8 +1,7 @@
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/identity/slot_id.dart';
-import 'package:media_core/src/slot/player_slot_state.dart';
-import 'package:media_core/src/slot/player_slot_status.dart';
+import 'package:media_core/src/models/slot/library.dart';
 
 /// Represents a logical player slot.
 ///
@@ -92,7 +91,7 @@ final class PlayerSlot {
   ///
   /// Used by PlayerSlotManager.
   PlayerSlotState toState() {
-    return PlayerSlotState(slotId: id, status: status, playerId: playerId, sessionId: sessionId);
+    return PlayerSlotState.of(slotId: id, status: status, playerId: playerId, sessionId: sessionId);
   }
 
   @override
