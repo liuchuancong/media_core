@@ -28,4 +28,3 @@ export 'package:media_core/src/adapter/select/player_adapter_selector.dart';
 export 'package:media_core/src/adapter/state/player_adapter_event.dart';
 export 'package:media_core/src/adapter/state/player_adapter_exception.dart';
 export 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
-export 'package:media_core/src/adapter/state/player_adapter_state.dart';
