@@ -13,6 +13,7 @@ export 'package:media_core/src/models/error/library.dart';
 export 'package:media_core/src/models/event/library.dart';
 export 'package:media_core/src/models/lifecycle/library.dart';
 export 'package:media_core/src/models/network/library.dart';
+export 'package:media_core/src/models/operation/library.dart';
 export 'package:media_core/src/models/platform/library.dart';
 export 'package:media_core/src/models/pool/library.dart';
 export 'package:media_core/src/models/preload/library.dart';

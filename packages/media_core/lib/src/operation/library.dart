@@ -21,6 +21,5 @@ export 'package:media_core/src/operation/operation_cancel_token.dart';
 export 'package:media_core/src/operation/operation_context.dart';
 export 'package:media_core/src/operation/operation_registry.dart';
 export 'package:media_core/src/operation/operation_state.dart';
-export 'package:media_core/src/operation/operation_timeout.dart';
 export 'package:media_core/src/operation/operation_tracker.dart';
 export 'package:media_core/src/operation/operation_type.dart';
