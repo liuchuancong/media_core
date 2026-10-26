@@ -1,5 +1,6 @@
-import 'package:equatable/equatable.dart';
-import 'package:media_core/src/casting/media_cast_backend.dart' show MediaCastBackend;
+import 'package:built_value/built_value.dart';
+
+part 'cast_device.g.dart';
 
 /// A discovered render device a cast can be sent to.
 ///
@@ -7,7 +8,7 @@ import 'package:media_core/src/casting/media_cast_backend.dart' show MediaCastBa
 /// and a future AirPlay receiver all answer to the same shape — an
 /// identity, a human name, and an opaque [serviceEndpoints] map the
 /// backend that discovered the device understands. Nothing above the
-/// [MediaCastBackend] boundary inspects those endpoints, which is what
+/// backend boundary inspects those endpoints, which is what
 /// lets a UI list devices without importing a single protocol type.
 ///
 /// Responsibilities:
@@ -23,62 +24,74 @@ import 'package:media_core/src/casting/media_cast_backend.dart' show MediaCastBa
 ///
 /// - CastController
 /// - the backend that produced the device
-final class CastDevice extends Equatable {
+abstract class CastDevice implements Built<CastDevice, CastDeviceBuilder> {
+  /// Builds CastDevice from a [updates] callback — the codegen entry.
+  factory CastDevice([void Function(CastDeviceBuilder)? updates]) = _$CastDevice;
+
   /// Creates a discovered device.
-  const CastDevice({
-    required this.id,
-    required this.name,
-    required this.backendId,
-    this.typeName,
-    this.manufacturer,
-    this.modelName,
-    this.serviceEndpoints = const <String, String>{},
-    this.attributes = const <String, Object?>{},
-  });
+  factory CastDevice.of({
+    required String id,
+    required String name,
+    required String backendId,
+    String? typeName,
+    String? manufacturer,
+    String? modelName,
+    Map<String, String> serviceEndpoints = const <String, String>{},
+    Map<String, Object?> attributes = const <String, Object?>{},
+  }) {
+    return CastDevice(
+      (builder) => builder
+        ..id = id
+        ..name = name
+        ..backendId = backendId
+        ..typeName = typeName
+        ..manufacturer = manufacturer
+        ..modelName = modelName
+        ..serviceEndpoints = serviceEndpoints
+        ..attributes = attributes,
+    );
+  }
+
+  CastDevice._();
+
+  /// A discovered device is described by its three identities alone; the
+  /// protocol detail a backend knows but the core does not is left empty.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(CastDeviceBuilder builder) => builder
+    ..serviceEndpoints = const <String, String>{}
+    ..attributes = const <String, Object?>{};
 
   /// Stable identity within one discovery session, normally the
   /// protocol's own UDN/device id.
-  final String id;
+  String get id;
 
   /// The friendly name the device advertises; what a picker shows.
-  final String name;
+  String get name;
 
   /// Which backend discovered this device (`dlna`, `cast`, ...).
   ///
   /// Carried on the device because a controller may hold several
   /// backends at once and commands must go back to the one that
   /// found the target.
-  final String backendId;
+  String get backendId;
 
   /// Protocol type name (a DLNA `urn:schemas-upnp-org:device:...`),
   /// when the device reports one.
-  final String? typeName;
+  String? get typeName;
 
   /// Advertised manufacturer, when present.
-  final String? manufacturer;
+  String? get manufacturer;
 
   /// Advertised model name, when present.
-  final String? modelName;
+  String? get modelName;
 
   /// Control URLs or equivalent handles, keyed by service id.
   ///
   /// The map is opaque above the backend: keys and values mean
   /// whatever the discovering protocol says they mean, and the
   /// controller never reads them.
-  final Map<String, String> serviceEndpoints;
+  Map<String, String> get serviceEndpoints;
 
   /// Extra device facts (icons, features); opaque to media_core.
-  final Map<String, Object?> attributes;
-
-  @override
-  List<Object?> get props => <Object?>[
-    id,
-    name,
-    backendId,
-    typeName,
-    manufacturer,
-    modelName,
-    serviceEndpoints,
-    attributes,
-  ];
+  Map<String, Object?> get attributes;
 }

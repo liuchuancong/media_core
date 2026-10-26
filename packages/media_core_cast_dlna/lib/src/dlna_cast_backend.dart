@@ -227,7 +227,7 @@ class DlnaCastBackend implements MediaCastBackend {
     try {
       final xml = await _fetchDescription(location);
       final description = DlnaDeviceDescription.parse(xml, location: Uri.parse(location));
-      final device = CastDevice(
+      final device = CastDevice.of(
         id: description.udn,
         name: description.friendlyName,
         backendId: id,

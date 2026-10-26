@@ -233,7 +233,7 @@ void main() {
 
     test('a device with no AVTransport endpoint is refused', () async {
       await backend.startDiscovery();
-      const orphan = CastDevice(id: 'x', name: 'x', backendId: 'dlna');
+      final orphan = CastDevice.of(id: 'x', name: 'x', backendId: 'dlna');
 
       await expectLater(backend.play(orphan), throwsA(isA<CastException>()));
     });

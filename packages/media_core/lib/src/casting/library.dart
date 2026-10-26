@@ -19,7 +19,6 @@ library;
 // ============================================================================
 
 export 'package:media_core/src/casting/cast_controller.dart';
-export 'package:media_core/src/casting/cast_device.dart';
 export 'package:media_core/src/casting/cast_media.dart';
 export 'package:media_core/src/casting/cast_transport.dart';
 export 'package:media_core/src/casting/media_cast_backend.dart';

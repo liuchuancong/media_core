@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:media_core/src/casting/cast_device.dart';
 import 'package:media_core/src/casting/cast_media.dart';
 import 'package:media_core/src/casting/cast_transport.dart';
+import 'package:media_core/src/models/casting/library.dart';
 
 /// Something happened on the cast side that the app must learn about.
 ///

@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:media_core/src/casting/cast_device.dart';
 import 'package:media_core/src/casting/cast_media.dart';
 import 'package:media_core/src/casting/cast_transport.dart';
 import 'package:media_core/src/casting/media_cast_backend.dart';
+import 'package:media_core/src/models/casting/library.dart';
 
 /// The app-facing cast session over a [MediaCastBackend].
 ///
