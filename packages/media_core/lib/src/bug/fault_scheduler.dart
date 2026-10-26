@@ -1,9 +1,8 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
-import 'package:media_core/src/bug/fault_config.dart';
 import 'package:media_core/src/bug/fault_event.dart';
-import 'package:media_core/src/bug/fault_scenario.dart';
+import 'package:media_core/src/models/bug/library.dart';
 
 /// Callback used by [FaultScheduler] to perform the actual fault injection.
 ///
@@ -166,7 +165,7 @@ final class FaultScheduler {
 
       run++;
 
-      final runScenario = scenario.copyWith(id: '${scenario.id}_run_$run');
+      final runScenario = scenario.rebuild((builder) => builder..id = '${scenario.id}_run_$run');
 
       final runEvents = await scheduleScenario(runScenario);
 

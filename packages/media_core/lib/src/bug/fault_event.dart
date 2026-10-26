@@ -1,8 +1,8 @@
 import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
-import 'package:media_core/src/bug/fault_config.dart';
 import 'package:media_core/src/bug/fault_injector.dart' show FaultInjector;
 import 'package:media_core/src/bug/fault_type.dart';
+import 'package:media_core/src/models/bug/library.dart';
 
 /// Represents an actual fault injection event.
 ///

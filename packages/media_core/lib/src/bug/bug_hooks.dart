@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:media_core/src/bug/fault_config.dart';
 import 'package:media_core/src/bug/fault_event.dart' show FaultEvent;
+import 'package:media_core/src/models/bug/library.dart';
 
 /// Defines a module-level hook that can handle a fault injection.
 ///
