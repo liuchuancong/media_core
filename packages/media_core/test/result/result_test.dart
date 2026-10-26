@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/src/error/player_error_code.dart';
+import 'package:media_core/src/models/result/library.dart';
 import 'package:media_core/src/result/result.dart';
-import 'package:media_core/src/result/result_error.dart';
 
-ResultError sampleError() => const ResultError(code: PlayerErrorCode.unknown, message: 'boom');
+ResultError sampleError() => ResultError.of(code: PlayerErrorCode.unknown, message: 'boom');
 
 void main() {
   group('Result', () {
@@ -44,8 +44,8 @@ void main() {
     });
 
     test('mapError transforms failure errors', () {
-      const result = Result<int>.failure(ResultError(code: PlayerErrorCode.unknown, message: 'a'));
-      final mapped = result.mapError((error) => ResultError(code: error.code, message: 'b'));
+      final result = Result<int>.failure(ResultError.of(code: PlayerErrorCode.unknown, message: 'a'));
+      final mapped = result.mapError((error) => ResultError.of(code: error.code, message: 'b'));
       expect(mapped.error.message, 'b');
     });
 

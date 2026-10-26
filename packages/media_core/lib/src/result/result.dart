@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:media_core/src/result/result_error.dart';
+import 'package:media_core/src/models/result/library.dart';
 import 'package:media_core/src/result/result_status.dart';
 
 /// Represents the result of a completed operation.

@@ -19,5 +19,4 @@ library;
 export 'package:media_core/src/result/async_result.dart';
 export 'package:media_core/src/result/operation_result.dart';
 export 'package:media_core/src/result/result.dart';
-export 'package:media_core/src/result/result_error.dart';
 export 'package:media_core/src/result/result_status.dart';
