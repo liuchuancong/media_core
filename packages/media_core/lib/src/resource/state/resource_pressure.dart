@@ -1,4 +1,3 @@
-import 'package:equatable/equatable.dart';
 
 /// Represents resource pressure level.
 ///
@@ -152,53 +151,5 @@ enum ResourcePressure {
   @override
   String toString() {
     return label;
-  }
-}
-
-/// Immutable resource pressure snapshot.
-///
-/// Used when resource pressure needs
-/// to be passed between managers.
-///
-/// It does not:
-///
-/// - calculate pressure
-/// - update pressure
-/// - trigger actions
-final class ResourcePressureSnapshot extends Equatable {
-  /// Creates resource pressure snapshot.
-  const ResourcePressureSnapshot({required this.pressure, required this.timestamp});
-
-  /// Current pressure level.
-  final ResourcePressure pressure;
-
-  /// Snapshot timestamp.
-  final DateTime timestamp;
-
-  /// Whether pressure exists.
-  bool get hasPressure {
-    return pressure.hasPressure;
-  }
-
-  /// Whether emergency handling
-  /// is required.
-  bool get isEmergency {
-    return pressure == ResourcePressure.emergency;
-  }
-
-  /// Creates modified snapshot.
-  ResourcePressureSnapshot copyWith({ResourcePressure? pressure, DateTime? timestamp}) {
-    return ResourcePressureSnapshot(pressure: pressure ?? this.pressure, timestamp: timestamp ?? this.timestamp);
-  }
-
-  @override
-  List<Object?> get props => [pressure, timestamp];
-
-  @override
-  String toString() {
-    return 'ResourcePressureSnapshot('
-        'pressure=$pressure, '
-        'timestamp=$timestamp'
-        ')';
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
+import 'package:media_core/src/models/resource/library.dart';
 import 'package:media_core/src/policy/resource/resource_policy.dart';
 import 'package:media_core/src/resource/manager/bandwidth_manager.dart';
 import 'package:media_core/src/resource/manager/decoder_manager.dart';
@@ -8,7 +9,6 @@ import 'package:media_core/src/resource/manager/thermal_manager.dart';
 import 'package:media_core/src/resource/model/resource_metrics.dart';
 import 'package:media_core/src/resource/state/memory_pressure_bridge.dart';
 import 'package:media_core/src/resource/state/resource_pressure.dart';
-import 'package:media_core/src/resource/state/resource_snapshot.dart';
 import 'package:media_core/src/resource/state/resource_state.dart';
 import 'package:media_core_memory/media_core_memory.dart';
 

@@ -4,6 +4,10 @@
 ///
 /// Decoder, memory, bandwidth and thermal resource management..
 ///
+/// The bandwidth budget, pressure snapshot and observation snapshot
+/// records live in `lib/src/models/resource/`; the managers and the
+/// `ResourcePressure` scale stay here.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/resource/`.
 ///
@@ -20,13 +24,11 @@ export 'package:media_core/src/resource/manager/thermal_manager.dart';
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/resource/model/bandwidth_budget.dart';
 export 'package:media_core/src/resource/model/decoder_budget.dart';
 export 'package:media_core/src/resource/model/resource_metrics.dart';
 export 'package:media_core/src/resource/model/resource_priority.dart';
 export 'package:media_core/src/resource/state/memory_pressure_bridge.dart';
 export 'package:media_core/src/resource/state/resource_pressure.dart';
-export 'package:media_core/src/resource/state/resource_snapshot.dart';
 export 'package:media_core/src/resource/state/resource_state.dart';
 export 'package:media_core/src/resource/state/thermal_state.dart';
 // Memory accounting lives in its own package and is re-exported here so the

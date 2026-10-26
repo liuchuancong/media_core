@@ -1,4 +1,4 @@
-import 'package:media_core/src/resource/model/bandwidth_budget.dart';
+import 'package:media_core/src/models/resource/library.dart';
 import 'package:media_core/src/resource/state/resource_pressure.dart';
 
 /// Manages runtime network bandwidth usage.
