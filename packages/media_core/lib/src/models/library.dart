@@ -9,6 +9,7 @@ export 'package:media_core/src/models/adapter/library.dart';
 export 'package:media_core/src/models/audio/library.dart';
 export 'package:media_core/src/models/bug/library.dart';
 export 'package:media_core/src/models/casting/library.dart';
+export 'package:media_core/src/models/composition/library.dart';
 export 'package:media_core/src/models/core/library.dart';
 export 'package:media_core/src/models/diagnostics/library.dart';
 export 'package:media_core/src/models/error/library.dart';

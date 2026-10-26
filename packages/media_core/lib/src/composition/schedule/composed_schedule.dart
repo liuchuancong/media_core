@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/composition/schedule/playback_schedule.dart' show PlaybackSchedule;
-import 'package:media_core/src/composition/schedule/schedule_clip.dart';
+import 'package:media_core/src/models/composition/library.dart';
 import 'package:media_core/src/models/timeline/library.dart' show MediaSegment;
 
 /// One clip placed at an absolute position on the combined timeline.

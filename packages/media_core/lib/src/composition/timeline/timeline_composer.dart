@@ -1,6 +1,6 @@
 import 'package:media_core/src/composition/schedule/composed_schedule.dart';
 import 'package:media_core/src/composition/schedule/playback_schedule.dart';
-import 'package:media_core/src/composition/schedule/schedule_clip.dart';
+import 'package:media_core/src/models/composition/library.dart';
 
 /// The pure placement engine of the composition layer.
 ///

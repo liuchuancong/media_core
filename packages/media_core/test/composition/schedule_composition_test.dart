@@ -1,33 +1,33 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/src/composition/schedule/composed_schedule.dart';
 import 'package:media_core/src/composition/schedule/playback_schedule.dart';
-import 'package:media_core/src/composition/schedule/schedule_clip.dart';
 import 'package:media_core/src/composition/schedule/schedule_navigator.dart';
 import 'package:media_core/src/composition/timeline/media_break.dart';
 import 'package:media_core/src/composition/timeline/timeline_composer.dart';
+import 'package:media_core/src/models/composition/library.dart';
 import 'package:media_core/src/source/model/media_source.dart';
 
 MediaSource _source(String url) => ProgressiveMediaSource.url(Uri.parse(url));
 
-ScheduleClip content(String url, int seconds) => ScheduleClip(
+ScheduleClip content(String url, int seconds) => ScheduleClip.of(
   source: _source(url),
   duration: Duration(seconds: seconds),
 );
 
-ScheduleClip ad(String url, int seconds, {Duration? skipAfter}) => ScheduleClip(
+ScheduleClip ad(String url, int seconds, {Duration? skipAfter}) => ScheduleClip.of(
   source: _source(url),
   duration: Duration(seconds: seconds),
   kind: ClipKind.advertisement,
   skipAfter: skipAfter,
 );
 
-ScheduleClip filler(String url, int seconds) => ScheduleClip(
+ScheduleClip filler(String url, int seconds) => ScheduleClip.of(
   source: _source(url),
   duration: Duration(seconds: seconds),
   kind: ClipKind.filler,
 );
 
-MediaBreak pod(BreakPosition position, List<ScheduleClip> clips) => MediaBreak(position: position, clips: clips);
+MediaBreak pod(BreakPosition position, List<ScheduleClip> clips) => MediaBreak.of(position: position, clips: clips);
 
 void main() {
   group('TimelineComposer placement', () {

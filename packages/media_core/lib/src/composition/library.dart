@@ -22,7 +22,6 @@ library;
 
 export 'package:media_core/src/composition/schedule/composed_schedule.dart';
 export 'package:media_core/src/composition/schedule/playback_schedule.dart';
-export 'package:media_core/src/composition/schedule/schedule_clip.dart';
 export 'package:media_core/src/composition/schedule/schedule_navigator.dart';
 export 'package:media_core/src/composition/schedule/scheduled_playback.dart';
 export 'package:media_core/src/composition/timeline/media_break.dart';

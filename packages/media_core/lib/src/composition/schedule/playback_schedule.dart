@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/composition/library.dart' show ScheduledSegment;
-import 'package:media_core/src/composition/schedule/schedule_clip.dart';
 import 'package:media_core/src/composition/timeline/media_break.dart';
+import 'package:media_core/src/models/composition/library.dart';
 
 /// The authoring shape of "this program, with these interruptions".
 ///
@@ -105,7 +105,7 @@ final class PlaybackSchedule extends Equatable {
             'the program does not contain.',
       );
     }
-    return program.copyWith(duration: duration);
+    return program.rebuild((builder) => builder..duration = duration);
   }
 
   void _validateAgainstProgram() {

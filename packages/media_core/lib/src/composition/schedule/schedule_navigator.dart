@@ -1,5 +1,5 @@
 import 'package:media_core/src/composition/schedule/composed_schedule.dart';
-import 'package:media_core/src/composition/schedule/schedule_clip.dart';
+import 'package:media_core/src/models/composition/library.dart';
 import 'package:meta/meta.dart';
 
 /// Something the host must do to keep a composed schedule honest.
