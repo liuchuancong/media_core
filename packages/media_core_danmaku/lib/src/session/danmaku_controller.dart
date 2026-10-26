@@ -8,6 +8,7 @@ import 'package:media_core_danmaku/src/filter/danmaku_similarity_filter.dart';
 import 'package:media_core_danmaku/src/model/danmaku_config.dart';
 import 'package:media_core_danmaku/src/model/danmaku_failure.dart';
 import 'package:media_core_danmaku/src/model/danmaku_message.dart';
+import 'package:media_core_danmaku/src/model/danmaku_session_phase.dart';
 import 'package:media_core_danmaku/src/model/danmaku_session_state.dart';
 import 'package:media_core_danmaku/src/session/danmaku_transport.dart';
 import 'package:media_core_danmaku/src/sink/danmaku_sink.dart';
@@ -96,7 +97,7 @@ final class DanmakuController {
   final DanmakuSimilarityFilter _similarityFilter;
 
   final BehaviorSubject<DanmakuSessionState> _stateSubject = BehaviorSubject<DanmakuSessionState>.seeded(
-    const DanmakuSessionState(),
+    DanmakuSessionState.of(),
   );
   final PublishSubject<DanmakuFailure> _failureSubject = PublishSubject<DanmakuFailure>();
 

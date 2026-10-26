@@ -18,6 +18,7 @@ export 'package:media_core_danmaku/src/filter/danmaku_similarity_filter.dart';
 export 'package:media_core_danmaku/src/model/danmaku_config.dart';
 export 'package:media_core_danmaku/src/model/danmaku_failure.dart';
 export 'package:media_core_danmaku/src/model/danmaku_message.dart';
+export 'package:media_core_danmaku/src/model/danmaku_session_phase.dart';
 export 'package:media_core_danmaku/src/model/danmaku_session_state.dart';
 export 'package:media_core_danmaku/src/session/danmaku_controller.dart';
 export 'package:media_core_danmaku/src/session/danmaku_overlay_session.dart';

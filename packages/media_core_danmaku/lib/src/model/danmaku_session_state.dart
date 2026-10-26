@@ -1,27 +1,8 @@
-import 'package:equatable/equatable.dart';
-
+import 'package:built_value/built_value.dart';
 import 'package:media_core_danmaku/src/model/danmaku_failure.dart';
+import 'package:media_core_danmaku/src/model/danmaku_session_phase.dart';
 
-/// Lifecycle phase of one danmaku session.
-enum DanmakuSessionPhase {
-  /// No transport installed yet.
-  idle,
-
-  /// A handshake is in flight; the room is owned but not delivering.
-  connecting,
-
-  /// The transport is attached and delivering.
-  connected,
-
-  /// The transport lost the room and is repairing it.
-  reconnecting,
-
-  /// A previous session ended and nothing owns the room.
-  closed,
-
-  /// The last attempt failed; the room is not owned.
-  failed,
-}
+part 'danmaku_session_state.g.dart';
 
 /// Immutable snapshot of a danmaku session.
 ///
@@ -41,48 +22,73 @@ enum DanmakuSessionPhase {
 ///
 /// - DanmakuController
 /// - DanmakuTransport
-final class DanmakuSessionState extends Equatable {
+abstract class DanmakuSessionState implements Built<DanmakuSessionState, DanmakuSessionStateBuilder> {
+  /// Builds DanmakuSessionState from a [updates] callback — the codegen entry.
+  factory DanmakuSessionState([void Function(DanmakuSessionStateBuilder)? updates]) = _$DanmakuSessionState;
+
   /// A snapshot, defaulting to the idle phase with nothing installed.
-  const DanmakuSessionState({
-    this.phase = DanmakuSessionPhase.idle,
-    this.roomKey,
-    this.roomId,
-    this.platform,
-    this.transportId,
-    this.generation = 0,
-    this.failure,
-    this.installed = false,
-  });
+  factory DanmakuSessionState.of({
+    DanmakuSessionPhase phase = DanmakuSessionPhase.idle,
+    String? roomKey,
+    String? roomId,
+    String? platform,
+    String? transportId,
+    int generation = 0,
+    DanmakuFailure? failure,
+    bool installed = false,
+  }) {
+    return DanmakuSessionState(
+      (builder) => builder
+        ..phase = phase
+        ..roomKey = roomKey
+        ..roomId = roomId
+        ..platform = platform
+        ..transportId = transportId
+        ..generation = generation
+        ..failure = failure
+        ..installed = installed,
+    );
+  }
+
+  DanmakuSessionState._();
+
+  /// A session starts idle, at generation zero, with no room, no transport and
+  /// nothing installed yet.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(DanmakuSessionStateBuilder builder) => builder
+    ..phase = DanmakuSessionPhase.idle
+    ..generation = 0
+    ..installed = false;
 
   /// The lifecycle phase captured in this snapshot.
-  final DanmakuSessionPhase phase;
+  DanmakuSessionPhase get phase;
 
   /// Session key of the room this snapshot describes, when one is owned.
-  final String? roomKey;
+  String? get roomKey;
 
   /// Platform room id, when one is known. Not the local session key: hosts
   /// display this one.
-  final String? roomId;
+  String? get roomId;
 
   /// Platform identifier the room belongs to, when known.
-  final String? platform;
+  String? get platform;
 
   /// Transport identifier currently installed.
-  final String? transportId;
+  String? get transportId;
 
   /// Increments for every accepted session. Lets a host drop events that
   /// belong to a session it has already moved on from.
-  final int generation;
+  int get generation;
 
   /// Last failure, cleared when a new session is accepted.
-  final DanmakuFailure? failure;
+  DanmakuFailure? get failure;
 
   /// Whether a transport has been installed at all.
   ///
   /// A controller with no transport cannot connect, and a host must not treat
   /// that as an error: several platforms have no chat integration, and the
   /// caller simply never installs one.
-  final bool installed;
+  bool get installed;
 
   /// Whether the session's transport is attached and delivering.
   bool get isConnected => phase == DanmakuSessionPhase.connected;
@@ -93,8 +99,9 @@ final class DanmakuSessionState extends Equatable {
   /// Whether anything currently owns the room.
   bool get ownsRoom => roomKey != null && phase != DanmakuSessionPhase.closed && phase != DanmakuSessionPhase.failed;
 
-  /// A copy with the given fields replaced; [clearFailure] and [clearRoom]
-  /// drop those values instead of replacing them.
+  /// A copy with the given fields replaced; an omitted field keeps its current
+  /// value and [clearFailure] / [clearRoom] drop values instead of replacing
+  /// them, which is the reading every controller call site already relies on.
   DanmakuSessionState copyWith({
     DanmakuSessionPhase? phase,
     String? roomKey,
@@ -107,23 +114,25 @@ final class DanmakuSessionState extends Equatable {
     bool clearFailure = false,
     bool clearRoom = false,
   }) {
-    return DanmakuSessionState(
-      phase: phase ?? this.phase,
-      roomKey: clearRoom ? null : (roomKey ?? this.roomKey),
-      roomId: clearRoom ? null : (roomId ?? this.roomId),
-      platform: clearRoom ? null : (platform ?? this.platform),
-      transportId: transportId ?? this.transportId,
-      generation: generation ?? this.generation,
-      failure: clearFailure ? null : (failure ?? this.failure),
-      installed: installed ?? this.installed,
-    );
+    return rebuild((builder) {
+      builder
+        ..phase = phase ?? builder.phase
+        ..transportId = transportId ?? builder.transportId
+        ..generation = generation ?? builder.generation
+        ..installed = installed ?? builder.installed
+        ..failure = clearFailure ? null : (failure ?? builder.failure);
+
+      if (clearRoom) {
+        builder
+          ..roomKey = null
+          ..roomId = null
+          ..platform = null;
+      } else {
+        builder
+          ..roomKey = roomKey ?? builder.roomKey
+          ..roomId = roomId ?? builder.roomId
+          ..platform = platform ?? builder.platform;
+      }
+    });
   }
-
-  @override
-  List<Object?> get props => [phase, roomKey, roomId, platform, transportId, generation, failure, installed];
-
-  @override
-  String toString() =>
-      'DanmakuSessionState(${phase.name}${roomKey == null ? '' : ' $roomKey'}'
-      '${transportId == null ? '' : ' via $transportId'}, generation: $generation)';
 }

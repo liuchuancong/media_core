@@ -12,6 +12,8 @@ environment:
 
 dependencies:
   # Immutable session snapshot
+  built_value: ^8.13.0
+
   equatable: ^3.0.0
 
   flame_barrage: ^0.0.9
@@ -32,6 +34,10 @@ dependencies:
   rxdart: ^0.28.0
 
 dev_dependencies:
+  build_runner: ^2.7.0
+
+  built_value_generator: ^8.13.0
+
   flutter_lints: ^6.0.0
 
   flutter_test:
