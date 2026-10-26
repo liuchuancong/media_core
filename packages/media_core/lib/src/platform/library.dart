@@ -21,10 +21,4 @@ export 'package:media_core/src/platform/capability/platform_type.dart';
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/platform/service/platform_audio.dart';
-export 'package:media_core/src/platform/service/platform_lifecycle.dart';
-export 'package:media_core/src/platform/service/platform_network.dart';
-export 'package:media_core/src/platform/service/platform_pip.dart';
 export 'package:media_core/src/platform/service/platform_provider.dart';
-export 'package:media_core/src/platform/surface/platform_renderer.dart';
-export 'package:media_core/src/platform/surface/platform_surface.dart';
