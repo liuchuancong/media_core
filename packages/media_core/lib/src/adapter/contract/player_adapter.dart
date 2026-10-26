@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
-import 'package:media_core/src/adapter/contract/player_adapter_context.dart';
 import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/state/player_adapter_event.dart';
 import 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
 import 'package:media_core/src/core/state/player_core_state.dart';
+import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/models/screenshot/library.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 

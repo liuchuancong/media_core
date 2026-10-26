@@ -5,6 +5,7 @@
 /// read without opening the layer that happens to build it.
 library;
 
+export 'package:media_core/src/models/adapter/library.dart';
 export 'package:media_core/src/models/audio/library.dart';
 export 'package:media_core/src/models/bug/library.dart';
 export 'package:media_core/src/models/core/library.dart';

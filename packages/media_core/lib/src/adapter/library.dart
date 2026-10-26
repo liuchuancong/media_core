@@ -15,8 +15,6 @@ library;
 export 'package:media_core/src/adapter/contract/player_adapter.dart';
 export 'package:media_core/src/adapter/contract/player_adapter_base.dart';
 export 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
-export 'package:media_core/src/adapter/contract/player_adapter_config.dart';
-export 'package:media_core/src/adapter/contract/player_adapter_context.dart';
 export 'package:media_core/src/adapter/contract/player_video.dart';
 // ============================================================================
 // Public exports
@@ -27,7 +25,6 @@ export 'package:media_core/src/adapter/select/engine_option.dart';
 export 'package:media_core/src/adapter/select/player_adapter_factory.dart';
 export 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 export 'package:media_core/src/adapter/select/player_adapter_selector.dart';
-export 'package:media_core/src/adapter/state/player_adapter_error.dart';
 export 'package:media_core/src/adapter/state/player_adapter_event.dart';
 export 'package:media_core/src/adapter/state/player_adapter_exception.dart';
 export 'package:media_core/src/adapter/state/player_adapter_metrics.dart';

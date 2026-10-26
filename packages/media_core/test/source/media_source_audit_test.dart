@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_base.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
-import 'package:media_core/src/adapter/contract/player_adapter_context.dart';
 import 'package:media_core/src/adapter/select/composite_support.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/identity/source_id.dart';
 import 'package:media_core/src/kernel/player_kernel.dart';
+import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/models/source/library.dart';
 import 'package:media_core/src/source/inspect/source_inspector_chain.dart';
 import 'package:media_core/src/source/model/media_source.dart';

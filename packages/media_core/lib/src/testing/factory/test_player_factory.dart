@@ -1,8 +1,8 @@
-import 'package:media_core/src/adapter/contract/player_adapter_context.dart';
 import 'package:media_core/src/adapter/select/player_adapter_factory.dart';
 import 'package:media_core/src/core/model/player_identity.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/testing/fake/fake_player.dart';
 import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 

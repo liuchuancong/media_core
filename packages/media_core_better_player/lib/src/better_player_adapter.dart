@@ -361,7 +361,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     // Apply the context config once — nothing in better_player_plus
     // does this automatically.
-    final contextConfig = _context?.config ?? const PlayerAdapterConfig();
+    final contextConfig = _context?.config ?? PlayerAdapterConfig.of();
 
     if (contextConfig.volume != 1.0) {
       await controller.setVolume(contextConfig.volume);
@@ -381,7 +381,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // during source initialization. Otherwise the volume configured on
     // the adapter context is restored — an unconditional 1.0 used to
     // reset any non-default volume on every open.
-    final contextConfig = _context?.config ?? const PlayerAdapterConfig();
+    final contextConfig = _context?.config ?? PlayerAdapterConfig.of();
 
     await setVolume(audioOutputSuppressed ? 0.0 : contextConfig.volume);
 

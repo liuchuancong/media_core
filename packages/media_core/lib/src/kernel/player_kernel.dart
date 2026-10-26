@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart' show PlayerAdapterCapabilities;
-import 'package:media_core/src/adapter/contract/player_adapter_config.dart';
-import 'package:media_core/src/adapter/contract/player_adapter_context.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/adapter/select/player_adapter_selector.dart';
 import 'package:media_core/src/coordinator/global_player_coordinator.dart';
@@ -20,6 +18,7 @@ import 'package:media_core/src/kernel/driver/kernel_audio_driver.dart';
 import 'package:media_core/src/kernel/driver/kernel_presentation_driver.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/kernel_options.dart';
+import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/models/event/library.dart';
 import 'package:media_core/src/planning/default_media_source_planner.dart';
 import 'package:media_core/src/planning/media_source_plan.dart';
@@ -362,10 +361,10 @@ final class PlayerKernel with WidgetsBindingObserver {
     final adapter = registration.factory.create(registration.id);
     final platform = platformProvider;
 
-    final adapterContext = PlayerAdapterContext(
+    final adapterContext = PlayerAdapterContext.of(
       playerId: player.id,
       sessionId: sessionId,
-      config: PlayerAdapterConfig(
+      config: PlayerAdapterConfig.of(
         volume: config.volume,
         playbackRate: config.playbackRate,
         hardwareAcceleration: config.preferHardwareDecoding,
