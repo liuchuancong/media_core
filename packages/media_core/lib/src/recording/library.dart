@@ -18,10 +18,8 @@ library;
 
 export 'package:media_core/src/recording/recording_backend.dart';
 export 'package:media_core/src/recording/recording_config.dart';
-export 'package:media_core/src/recording/recording_error.dart';
 export 'package:media_core/src/recording/recording_format.dart';
 export 'package:media_core/src/recording/recording_manager.dart';
-export 'package:media_core/src/recording/recording_result.dart';
 export 'package:media_core/src/recording/recording_session.dart';
 export 'package:media_core/src/recording/recording_source.dart';
 export 'package:media_core/src/recording/recording_state.dart';

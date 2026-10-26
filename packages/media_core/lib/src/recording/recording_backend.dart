@@ -1,5 +1,5 @@
+import 'package:media_core/src/models/recording/library.dart';
 import 'package:media_core/src/recording/recording_config.dart';
-import 'package:media_core/src/recording/recording_result.dart';
 import 'package:media_core/src/recording/recording_source.dart';
 import 'package:media_core/src/recording/recording_state.dart';
 

@@ -1,8 +1,7 @@
 import 'package:clock/clock.dart';
+import 'package:media_core/src/models/recording/library.dart';
 import 'package:media_core/src/recording/recording_backend.dart';
 import 'package:media_core/src/recording/recording_config.dart';
-import 'package:media_core/src/recording/recording_error.dart';
-import 'package:media_core/src/recording/recording_result.dart';
 import 'package:media_core/src/recording/recording_source.dart';
 import 'package:media_core/src/recording/recording_state.dart';
 import 'package:rxdart/rxdart.dart';
@@ -89,7 +88,7 @@ final class RecordingSession {
     }
 
     if (!_backend.isAvailable) {
-      const error = RecordingError.backendUnavailable(message: 'The recording backend is unavailable.');
+      final error = RecordingError.backendUnavailable(message: 'The recording backend is unavailable.');
 
       _setState(_state.copyWith(status: RecordingStatus.error, error: error));
 

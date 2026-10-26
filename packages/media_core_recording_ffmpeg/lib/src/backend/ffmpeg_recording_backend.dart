@@ -540,7 +540,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   Future<RecordingResult> stop() async {
     _ensureNotDisposed();
     if (_journalPaths.isEmpty) {
-      return RecordingResult(success: false, outputPath: _activeDirectory, error: StateError('No recording to stop.'));
+      return RecordingResult.of(success: false, outputPath: _activeDirectory, error: StateError('No recording to stop.'));
     }
 
     // The intent must be set before the process ends, or the exit watcher sees
@@ -599,7 +599,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _reportOutcome(success: failure == null, bytesWritten: bytesWritten, error: failure);
 
-    return RecordingResult(
+    return RecordingResult.of(
       success: failure == null,
       outputPath: _activeDirectory,
       duration: _recordedMediaTime,
