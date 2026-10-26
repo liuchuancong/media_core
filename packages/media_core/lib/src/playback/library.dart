@@ -4,6 +4,8 @@
 ///
 /// Playback commands, state, position, duration and options..
 ///
+/// The scrubber preview records live in `lib/src/models/thumbnail/`.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/playback/`.
 ///
@@ -12,8 +14,6 @@
 /// removing or renaming files in this module.
 library;
 
-export 'package:media_core/src/playback/thumbnail/thumbnail_slice.dart';
-export 'package:media_core/src/playback/thumbnail/thumbnail_track.dart';
 export 'package:media_core/src/playback/transport/playback_command.dart';
 export 'package:media_core/src/playback/transport/playback_command_type.dart';
 export 'package:media_core/src/playback/transport/playback_controller.dart';

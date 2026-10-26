@@ -1,4 +1,6 @@
-import 'package:equatable/equatable.dart';
+import 'package:built_value/built_value.dart';
+
+part 'thumbnail_slice.g.dart';
 
 /// A rectangle inside a thumbnail sprite image.
 ///
@@ -8,9 +10,22 @@ import 'package:equatable/equatable.dart';
 /// more. The UI crops with it — media_core has no image decoder here,
 /// and a slice is the whole contract between a data track and a
 /// renderer.
-final class ThumbnailSlice extends Equatable {
+abstract class ThumbnailSlice implements Built<ThumbnailSlice, ThumbnailSliceBuilder> {
+  /// Builds a slice from a [updates] callback — the codegen entry.
+  factory ThumbnailSlice([void Function(ThumbnailSliceBuilder)? updates]) = _$ThumbnailSlice;
+
   /// Creates a slice at ([x], [y]) of size [width] by [height].
-  const ThumbnailSlice({required this.x, required this.y, required this.width, required this.height});
+  factory ThumbnailSlice.of({required int x, required int y, required int width, required int height}) {
+    return ThumbnailSlice(
+      (builder) => builder
+        ..x = x
+        ..y = y
+        ..width = width
+        ..height = height,
+    );
+  }
+
+  ThumbnailSlice._();
 
   /// Parses the value of an `xywh` URI fragment, e.g. `160,0,160,90`.
   ///
@@ -32,24 +47,18 @@ final class ThumbnailSlice extends Equatable {
       }
       values.add(value);
     }
-    return ThumbnailSlice(x: values[0], y: values[1], width: values[2], height: values[3]);
+    return ThumbnailSlice.of(x: values[0], y: values[1], width: values[2], height: values[3]);
   }
 
   /// Horizontal offset inside the sprite, in pixels.
-  final int x;
+  int get x;
 
   /// Vertical offset inside the sprite, in pixels.
-  final int y;
+  int get y;
 
   /// Width of the frame inside the sprite, in pixels.
-  final int width;
+  int get width;
 
   /// Height of the frame inside the sprite, in pixels.
-  final int height;
-
-  @override
-  List<Object?> get props => <Object?>[x, y, width, height];
-
-  @override
-  String toString() => 'ThumbnailSlice($x,$y,$width,$height)';
+  int get height;
 }

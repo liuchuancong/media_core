@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:media_core/src/playback/thumbnail/thumbnail_slice.dart';
-import 'package:media_core/src/playback/thumbnail/thumbnail_track.dart';
+import 'package:media_core/src/models/thumbnail/library.dart';
 
 const _spriteVtt = '''
 WEBVTT
@@ -23,7 +22,7 @@ void main() {
     test('parses four integers', () {
       final slice = ThumbnailSlice.tryParse('160,0,160,90');
 
-      expect(slice, const ThumbnailSlice(x: 160, y: 0, width: 160, height: 90));
+      expect(slice, ThumbnailSlice.of(x: 160, y: 0, width: 160, height: 90));
     });
 
     test('rejects shapes the thumbnail profile does not use', () {
@@ -42,7 +41,7 @@ void main() {
 
       final second = track.thumbnails[1];
       expect(second.imageUrl.toString(), 'thumbs.jpg');
-      expect(second.slice, const ThumbnailSlice(x: 160, y: 0, width: 160, height: 90));
+      expect(second.slice, ThumbnailSlice.of(x: 160, y: 0, width: 160, height: 90));
       expect(second.start, const Duration(seconds: 10));
       expect(second.end, const Duration(seconds: 20));
     });
@@ -94,7 +93,7 @@ thumbs.jpg#xywh=80,0,80,45
       final track = ThumbnailTrack.parseWebVtt(broken);
 
       expect(track.thumbnails, hasLength(1));
-      expect(track.thumbnails.single.slice, const ThumbnailSlice(x: 80, y: 0, width: 80, height: 45));
+      expect(track.thumbnails.single.slice, ThumbnailSlice.of(x: 80, y: 0, width: 80, height: 45));
     });
 
     test('hour-less timestamps and settings suffixes parse', () {

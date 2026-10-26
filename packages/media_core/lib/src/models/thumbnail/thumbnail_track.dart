@@ -1,36 +1,9 @@
-import 'package:equatable/equatable.dart';
-import 'package:media_core/src/playback/thumbnail/thumbnail_slice.dart';
+import 'package:built_value/built_value.dart';
+import 'package:media_core/src/models/thumbnail/thumbnail.dart';
+import 'package:media_core/src/models/thumbnail/thumbnail_slice.dart';
 import 'package:media_core/src/source/descriptor/source_headers.dart' show SourceHeaders;
 
-/// One preview frame of a scrub track.
-///
-/// [start] and [end] are the cue window on the media timeline the
-/// frame represents — the time a scrubber is hovering, not a playback
-/// range. [imageUrl] is either the sprite page (with [slice]) or a
-/// standalone image.
-final class Thumbnail extends Equatable {
-  /// Creates one cue of a thumbnail track.
-  const Thumbnail({required this.start, required this.end, required this.imageUrl, this.slice});
-
-  /// Media time this frame begins representing.
-  final Duration start;
-
-  /// Media time this frame stops representing.
-  final Duration end;
-
-  /// The image, sprite page included, as reported by the cue.
-  final Uri imageUrl;
-
-  /// The crop inside a sprite page; null when the cue is a single
-  /// image with no fragment.
-  final ThumbnailSlice? slice;
-
-  /// Whether [time] falls inside this cue, end-exclusive.
-  bool covers(Duration time) => time >= start && time < end;
-
-  @override
-  List<Object?> get props => <Object?>[start, end, imageUrl, slice];
-}
+part 'thumbnail_track.g.dart';
 
 /// A parsed WebVTT thumbnail track.
 ///
@@ -54,9 +27,18 @@ final class Thumbnail extends Equatable {
 ///
 /// - the host (HTTP with the same [SourceHeaders] as the media)
 /// - the widget layer
-final class ThumbnailTrack extends Equatable {
+abstract class ThumbnailTrack implements Built<ThumbnailTrack, ThumbnailTrackBuilder> {
+  /// Builds a track from a [updates] callback — the codegen entry.
+  factory ThumbnailTrack([void Function(ThumbnailTrackBuilder)? updates]) = _$ThumbnailTrack;
+
   /// Creates a track from parsed [thumbnails].
-  const ThumbnailTrack({required this.thumbnails});
+  factory ThumbnailTrack.of({required List<Thumbnail> thumbnails}) {
+    return ThumbnailTrack(
+      (builder) => builder..thumbnails = thumbnails,
+    );
+  }
+
+  ThumbnailTrack._();
 
   /// Parses WebVTT text containing cue blocks whose cue text is an
   /// image URL, optionally with an `#xywh=x,y,w,h` fragment.
@@ -127,16 +109,21 @@ final class ThumbnailTrack extends Equatable {
         image = Uri.parse(hash < 0 ? text : text.substring(0, hash));
       }
 
-      thumbnails.add(Thumbnail(start: pendingStart, end: pendingEnd, imageUrl: image, slice: slice));
+      thumbnails.add(Thumbnail.of(start: pendingStart, end: pendingEnd, imageUrl: image, slice: slice));
       pendingStart = null;
       pendingEnd = null;
     }
 
-    return ThumbnailTrack(thumbnails: List<Thumbnail>.unmodifiable(thumbnails));
+    return ThumbnailTrack.of(thumbnails: List<Thumbnail>.unmodifiable(thumbnails));
   }
 
+  /// An empty track is what a caption file parses to, so it must be
+  /// constructible without the caller naming a list.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(ThumbnailTrackBuilder builder) => builder..thumbnails = const <Thumbnail>[];
+
   /// Parsed cues, in document order.
-  final List<Thumbnail> thumbnails;
+  List<Thumbnail> get thumbnails;
 
   /// The frame representing [time], or null when the track has none.
   ///
@@ -223,9 +210,6 @@ final class ThumbnailTrack extends Equatable {
 
     return Duration(hours: hours, minutes: minutes, seconds: seconds, milliseconds: millis);
   }
-
-  @override
-  List<Object?> get props => <Object?>[thumbnails];
 }
 
 class _Timing {
