@@ -6,7 +6,7 @@ import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/state/player_adapter_event.dart';
 import 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
 import 'package:media_core/src/core/state/player_core_state.dart';
-import 'package:media_core/src/screenshot/screenshot_request.dart';
+import 'package:media_core/src/models/screenshot/library.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 
 /// Abstract media player backend adapter.

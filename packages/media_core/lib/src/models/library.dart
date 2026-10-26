@@ -21,6 +21,7 @@ export 'package:media_core/src/models/reconciler/library.dart';
 export 'package:media_core/src/models/recording/library.dart';
 export 'package:media_core/src/models/resource/library.dart';
 export 'package:media_core/src/models/result/library.dart';
+export 'package:media_core/src/models/screenshot/library.dart';
 export 'package:media_core/src/models/session/library.dart';
 export 'package:media_core/src/models/slot/library.dart';
 export 'package:media_core/src/models/source/library.dart';

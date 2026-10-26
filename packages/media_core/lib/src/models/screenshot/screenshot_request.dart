@@ -1,6 +1,7 @@
-import 'package:equatable/equatable.dart';
+import 'package:built_value/built_value.dart';
+import 'package:media_core/src/screenshot/screenshot_format.dart' show ScreenshotFormat;
 
-import 'package:media_core/src/screenshot/screenshot_format.dart';
+part 'screenshot_request.g.dart';
 
 /// Frame-capture request handed to a backend adapter.
 ///
@@ -25,22 +26,44 @@ import 'package:media_core/src/screenshot/screenshot_format.dart';
 /// - PlayerAdapter.captureFrame
 /// - PlayerScreenshot
 /// - ScreenshotManager
-final class ScreenshotRequest extends Equatable {
+abstract class ScreenshotRequest implements Built<ScreenshotRequest, ScreenshotRequestBuilder> {
+  /// Builds ScreenshotRequest from a [updates] callback — the codegen entry.
+  factory ScreenshotRequest([void Function(ScreenshotRequestBuilder)? updates]) = _$ScreenshotRequest;
+
   /// Creates a capture request.
-  const ScreenshotRequest({required this.format, this.quality = 90, this.includeSubtitles = false});
+  factory ScreenshotRequest.of({
+    required ScreenshotFormat format,
+    int quality = 90,
+    bool includeSubtitles = false,
+  }) {
+    return ScreenshotRequest(
+      (builder) => builder
+        ..format = format
+        ..quality = quality
+        ..includeSubtitles = includeSubtitles,
+    );
+  }
+
+  ScreenshotRequest._();
+
+  /// A request nobody qualified wants a medium-quality JPEG without subtitles.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(ScreenshotRequestBuilder builder) => builder
+    ..quality = 90
+    ..includeSubtitles = false;
 
   /// Requested image format.
   ///
   /// An implementation that cannot encode it must return null rather than
   /// mislabel bytes: the caller falls back to a surface capture, which does
   /// produce a different format and says so.
-  final ScreenshotFormat format;
+  ScreenshotFormat get format;
 
   /// JPEG quality in the 1–100 range; ignored for PNG.
-  final int quality;
+  int get quality;
 
   /// Whether subtitles rendered by the engine should be included.
-  final bool includeSubtitles;
+  bool get includeSubtitles;
 
   /// [format] as the MIME string engines are given.
   String get mimeType => format.mimeType;
@@ -50,16 +73,4 @@ final class ScreenshotRequest extends Equatable {
 
   /// Whether this request asks for a lossy encoding.
   bool get isLossy => format.isLossy;
-
-  @override
-  List<Object?> get props => [format, quality, includeSubtitles];
-
-  @override
-  String toString() {
-    return 'ScreenshotRequest('
-        'format: ${format.name}, '
-        'quality: $quality, '
-        'includeSubtitles: $includeSubtitles'
-        ')';
-  }
 }

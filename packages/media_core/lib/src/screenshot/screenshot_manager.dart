@@ -3,11 +3,11 @@ import 'dart:collection';
 import 'dart:typed_data';
 import 'package:clock/clock.dart';
 import 'package:media_core/src/identity/player_id.dart';
+import 'package:media_core/src/models/screenshot/library.dart';
 import 'package:media_core/src/screenshot/player_screenshot.dart';
 import 'package:media_core/src/screenshot/screenshot_config.dart';
 import 'package:media_core/src/screenshot/screenshot_format.dart';
 import 'package:media_core/src/screenshot/screenshot_options.dart';
-import 'package:media_core/src/screenshot/screenshot_request.dart';
 import 'package:media_core/src/screenshot/screenshot_surface.dart';
 import 'package:media_core/src/screenshot/screenshot_writer.dart' show ScreenshotWriter;
 import 'package:media_core_logging/media_core_logging.dart';
@@ -273,7 +273,7 @@ final class ScreenshotManager {
   Future<_CapturedFrame?> _captureFromEngine(ScreenshotOptions options) async {
     try {
       final bytes = await _context.captureFromEngine(
-        ScreenshotRequest(
+        ScreenshotRequest.of(
           format: options.format,
           quality: options.effectiveQuality,
           includeSubtitles: options.includeSubtitles,

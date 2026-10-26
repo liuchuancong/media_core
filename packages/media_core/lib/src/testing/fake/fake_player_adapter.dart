@@ -10,7 +10,7 @@ import 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
 import 'package:media_core/src/core/state/player_core_state.dart';
 import 'package:media_core/src/core/state/player_lifecycle_state.dart';
 import 'package:media_core/src/core/state/player_playback_state.dart';
-import 'package:media_core/src/screenshot/screenshot_request.dart';
+import 'package:media_core/src/models/screenshot/library.dart';
 import 'package:media_core/src/source/model/player_source.dart';
 
 /// Sentinel used by [PlayerAdapterStateMirror.copyWith] to distinguish

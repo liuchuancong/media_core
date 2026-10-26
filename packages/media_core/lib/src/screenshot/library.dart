@@ -22,6 +22,5 @@ export 'package:media_core/src/screenshot/screenshot_config.dart';
 export 'package:media_core/src/screenshot/screenshot_format.dart';
 export 'package:media_core/src/screenshot/screenshot_manager.dart';
 export 'package:media_core/src/screenshot/screenshot_options.dart';
-export 'package:media_core/src/screenshot/screenshot_request.dart';
 export 'package:media_core/src/screenshot/screenshot_surface.dart';
 export 'package:media_core/src/screenshot/screenshot_writer.dart';
