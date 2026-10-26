@@ -4,6 +4,10 @@
 ///
 /// Desired-state to actual-state reconciliation..
 ///
+/// The action, plan, result and state records live in
+/// `lib/src/models/reconciler/`; the reconciler, queue and scheduler
+/// stay here.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/reconciler/`.
 ///
@@ -17,10 +21,6 @@ library;
 // ============================================================================
 
 export 'package:media_core/src/reconciler/player_reconciler.dart';
-export 'package:media_core/src/reconciler/reconcile_action.dart';
 export 'package:media_core/src/reconciler/reconcile_context.dart';
-export 'package:media_core/src/reconciler/reconcile_plan.dart';
 export 'package:media_core/src/reconciler/reconcile_queue.dart';
-export 'package:media_core/src/reconciler/reconcile_result.dart';
 export 'package:media_core/src/reconciler/reconcile_scheduler.dart';
-export 'package:media_core/src/reconciler/reconcile_state.dart';

@@ -1,4 +1,4 @@
-import 'package:media_core/src/reconciler/reconcile_plan.dart';
+import 'package:media_core/src/models/reconciler/library.dart';
 
 /// Queue of reconcile plans.
 final class ReconcileQueue {

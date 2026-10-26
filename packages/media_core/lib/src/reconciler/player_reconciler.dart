@@ -1,10 +1,8 @@
 import 'package:media_core/src/core/state/player_core_state.dart';
 import 'package:media_core/src/core/state/player_playback_state.dart';
 import 'package:media_core/src/core/state/player_status.dart';
-import 'package:media_core/src/reconciler/reconcile_action.dart';
+import 'package:media_core/src/models/reconciler/library.dart';
 import 'package:media_core/src/reconciler/reconcile_context.dart';
-import 'package:media_core/src/reconciler/reconcile_plan.dart';
-import 'package:media_core/src/reconciler/reconcile_result.dart';
 
 /// Reconciles desired player state with current player state.
 ///
@@ -34,7 +32,7 @@ final class PlayerReconciler {
       actions.add(ReconcileAction.changeState(from: currentStatus, to: desiredStatus));
     }
 
-    return ReconcilePlan(actions: actions);
+    return ReconcilePlan.of(actions: actions);
   }
 
   /// Whether [current] and [desired] differ enough to require reconciliation.

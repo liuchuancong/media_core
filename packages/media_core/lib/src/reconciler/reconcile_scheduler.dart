@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'package:media_core/src/reconciler/reconcile_plan.dart';
+import 'package:media_core/src/models/reconciler/library.dart';
 import 'package:media_core/src/reconciler/reconcile_queue.dart';
-import 'package:media_core/src/reconciler/reconcile_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Schedules reconciliation plans.
@@ -35,7 +34,7 @@ final class ReconcileScheduler {
 
   final ReconcileQueue _queue = ReconcileQueue();
 
-  final BehaviorSubject<ReconcileState> _stateSubject = BehaviorSubject<ReconcileState>.seeded(const ReconcileState());
+  final BehaviorSubject<ReconcileState> _stateSubject = BehaviorSubject<ReconcileState>.seeded(ReconcileState.of());
 
   /// Current scheduler state stream.
   ///
@@ -70,7 +69,7 @@ final class ReconcileScheduler {
 
     _queue.add(plan);
 
-    _update(currentState.copyWith(pendingActions: _queue.length));
+    _update(currentState.rebuild((builder) => builder..pendingActions = _queue.length));
   }
 
   /// Takes the next reconciliation plan from the queue.
@@ -79,7 +78,7 @@ final class ReconcileScheduler {
   ReconcilePlan? next() {
     final plan = _queue.poll();
 
-    _update(currentState.copyWith(pendingActions: _queue.length));
+    _update(currentState.rebuild((builder) => builder..pendingActions = _queue.length));
 
     return plan;
   }
@@ -105,7 +104,7 @@ final class ReconcileScheduler {
   void clear() {
     _queue.clear();
 
-    _update(const ReconcileState());
+    _update(ReconcileState.of());
   }
 
   /// Updates the scheduler state.
