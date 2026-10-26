@@ -18,11 +18,8 @@ library;
 
 export 'package:media_core/src/audio/audio_coordinator.dart';
 export 'package:media_core/src/audio/audio_focus.dart';
-export 'package:media_core/src/audio/audio_focus_state.dart';
 export 'package:media_core/src/audio/audio_manager.dart';
 export 'package:media_core/src/audio/audio_mute.dart';
-export 'package:media_core/src/audio/audio_route.dart';
 export 'package:media_core/src/audio/audio_session.dart';
-export 'package:media_core/src/audio/audio_session_state.dart';
 export 'package:media_core/src/audio/audio_volume.dart';
 export 'package:media_core/src/audio/global_audio_coordinator.dart';

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:media_core/src/audio/audio_focus.dart';
-import 'package:media_core/src/audio/audio_focus_state.dart';
 import 'package:media_core/src/audio/audio_manager.dart' show AudioManager;
 import 'package:media_core/src/audio/audio_session.dart';
-import 'package:media_core/src/audio/audio_session_state.dart';
+import 'package:media_core/src/models/audio/audio_focus_state.dart';
+import 'package:media_core/src/models/audio/audio_session_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Coordinates the relationship between an audio session and audio focus.
@@ -38,11 +38,11 @@ final class AudioCoordinator {
   int _generation = 0;
 
   final BehaviorSubject<AudioFocusState> _focusStateSubject = BehaviorSubject<AudioFocusState>.seeded(
-    const AudioFocusState.idle(),
+    AudioFocusState.idle(),
   );
 
   final BehaviorSubject<AudioSessionState> _sessionStateSubject = BehaviorSubject<AudioSessionState>.seeded(
-    const AudioSessionState.inactive(),
+    AudioSessionState.inactive(),
   );
 
   /// Current audio-focus state.
