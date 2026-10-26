@@ -4,9 +4,10 @@ import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/event/player_event_bus.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/kernel_options.dart';
+import 'package:media_core/src/models/quality/quality_candidate.dart';
+import 'package:media_core/src/models/quality/quality_switch_result.dart';
 import 'package:media_core/src/models/source/media_track.dart';
 import 'package:media_core/src/models/source/media_track_type.dart';
-import 'package:media_core/src/quality/quality_candidate.dart';
 import 'package:media_core/src/quality/quality_switch_controller.dart';
 import 'package:media_core/src/source/model/media_source.dart';
 import 'package:media_core/src/testing/factory/test_player_factory.dart';
@@ -32,13 +33,13 @@ PlayerHandle _handle(FakePlayerAdapter adapter) {
 }
 
 void main() {
-  final low = QualityCandidate(
+  final low = QualityCandidate.of(
     label: '480P',
     source: ProgressiveMediaSource(
       track: MediaTrack.of(uri: Uri.parse('https://example.com/low.mp4'), kind: MediaTrackType.video),
     ),
   );
-  final high = QualityCandidate(
+  final high = QualityCandidate.of(
     label: '1080P',
     source: ProgressiveMediaSource(
       track: MediaTrack.of(uri: Uri.parse('https://example.com/high.mp4'), kind: MediaTrackType.video),

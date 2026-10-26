@@ -19,5 +19,4 @@ library;
 // Public exports
 // ============================================================================
 
-export 'package:media_core/src/quality/quality_candidate.dart';
 export 'package:media_core/src/quality/quality_switch_controller.dart';

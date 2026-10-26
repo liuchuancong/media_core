@@ -1,66 +1,7 @@
-import 'package:equatable/equatable.dart';
 import 'package:media_core/src/fallback/quality_fallback.dart' show QualityFallback;
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/player_kernel.dart' show PlayerKernel;
-import 'package:media_core/src/quality/quality_candidate.dart';
-
-/// Result of one quality switch.
-enum QualitySwitchResult {
-  /// The new source is open and the playhead landed back on it.
-  applied,
-
-  /// Nothing changed: the requested candidate is already the open
-  /// one. Reported rather than silently returning success, because a
-  /// host that logged "switched to 1080p" when no switch happened
-  /// would be writing fiction into its own analytics.
-  alreadyCurrent,
-
-  /// The switch failed mid-flight.
-  ///
-  /// [QualitySwitchOutcome.restored] says whether the handle was
-  /// rolled back to the previous source; when rollback itself
-  /// failed, the handle is on whatever the last open left it on, and
-  /// only the host's error surface can decide what to show.
-  failed,
-}
-
-/// One quality switch's outcome, including where the playhead landed.
-final class QualitySwitchOutcome extends Equatable {
-  /// Creates an outcome.
-  const QualitySwitchOutcome({
-    required this.result,
-    required this.from,
-    required this.to,
-    this.resumedAt,
-    this.error,
-    this.restored = false,
-  });
-
-  /// What happened.
-  final QualitySwitchResult result;
-
-  /// The candidate that was current when the switch began, null if
-  /// none was.
-  final QualityCandidate? from;
-
-  /// The candidate that was requested.
-  final QualityCandidate to;
-
-  /// Media time the playhead landed at, when a resume happened.
-  final Duration? resumedAt;
-
-  /// The failure, when [result] is [QualitySwitchResult.failed].
-  final Object? error;
-
-  /// Whether the previous source was re-opened after a failure.
-  final bool restored;
-
-  /// Whether playback is now on [to].
-  bool get applied => result == QualitySwitchResult.applied;
-
-  @override
-  List<Object?> get props => <Object?>[result, from, to, resumedAt, error, restored];
-}
+import 'package:media_core/src/models/quality/library.dart';
 
 /// Switches a live [PlayerHandle] between quality candidates without
 /// losing the viewer's position.
@@ -131,7 +72,7 @@ final class QualitySwitchController {
     final previous = current;
 
     if (previous != null && previous.source == candidate.source) {
-      return QualitySwitchOutcome(
+      return QualitySwitchOutcome.of(
         result: QualitySwitchResult.alreadyCurrent,
         from: previous,
         to: candidate,
@@ -147,7 +88,7 @@ final class QualitySwitchController {
     try {
       await _apply(candidate, resumeAt, wasPlaying, volume, rate);
       current = candidate;
-      return QualitySwitchOutcome(
+      return QualitySwitchOutcome.of(
         result: QualitySwitchResult.applied,
         from: previous,
         to: candidate,
@@ -165,7 +106,7 @@ final class QualitySwitchController {
           // truth of that.
         }
       }
-      return QualitySwitchOutcome(
+      return QualitySwitchOutcome.of(
         result: QualitySwitchResult.failed,
         from: previous,
         to: candidate,

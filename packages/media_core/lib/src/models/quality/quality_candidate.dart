@@ -1,6 +1,8 @@
-import 'package:equatable/equatable.dart';
+import 'package:built_value/built_value.dart';
 import 'package:media_core/src/models/source/media_track.dart';
 import 'package:media_core/src/source/model/media_source.dart';
+
+part 'quality_candidate.g.dart';
 
 /// One selectable playback quality.
 ///
@@ -24,15 +26,34 @@ import 'package:media_core/src/source/model/media_source.dart';
 ///
 /// - QualitySwitchController
 /// - PlayerHandle
-final class QualityCandidate extends Equatable {
+abstract class QualityCandidate implements Built<QualityCandidate, QualityCandidateBuilder> {
+  /// Builds a candidate from a [updates] callback — the codegen entry.
+  factory QualityCandidate([void Function(QualityCandidateBuilder)? updates]) = _$QualityCandidate;
+
   /// Creates a quality candidate.
-  const QualityCandidate({
-    required this.label,
-    required this.source,
-    this.bitrate,
-    this.id,
-    this.attributes = const <String, Object?>{},
-  });
+  factory QualityCandidate.of({
+    required String label,
+    required MediaSource source,
+    int? bitrate,
+    String? id,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  }) {
+    return QualityCandidate(
+      (builder) => builder
+        ..label = label
+        ..source = source
+        ..bitrate = bitrate
+        ..id = id
+        ..attributes = attributes,
+    );
+  }
+
+  QualityCandidate._();
+
+  /// An unset attribute bag stays empty rather than null; bitrate and
+  /// provider id are genuinely absent until the host states them.
+  @BuiltValueHook(initializeBuilder: true)
+  static void _initialize(QualityCandidateBuilder builder) => builder..attributes = const <String, Object?>{};
 
   /// Builds candidates from progressive sources.
   ///
@@ -47,7 +68,7 @@ final class QualityCandidate extends Equatable {
   }) {
     return sources
         .map((source) {
-          return QualityCandidate(
+          return QualityCandidate.of(
             label: labelOf?.call(source) ?? _defaultLabel(source),
             source: source,
             bitrate: bitrateOf?.call(source),
@@ -77,7 +98,7 @@ final class QualityCandidate extends Equatable {
   }) {
     return videoTracks
         .map((track) {
-          return QualityCandidate(
+          return QualityCandidate.of(
             label: labelOf?.call(track) ?? '${track.bitrate ?? 0} bps',
             source: CompositeMediaSource(
               videoTracks: [track],
@@ -107,21 +128,18 @@ final class QualityCandidate extends Equatable {
   }
 
   /// Human-readable choice label ("1080P", "4K", "Auto").
-  final String label;
+  String get label;
 
   /// The media to open when this quality is chosen.
-  final MediaSource source;
+  MediaSource get source;
 
   /// Optional declared bitrate in bits per second, for ordering and
   /// for the auto-select comparison the host runs against bandwidth.
-  final int? bitrate;
+  int? get bitrate;
 
   /// Optional stable id (a provider quality code).
-  final String? id;
+  String? get id;
 
   /// Provider attributes; opaque to media_core.
-  final Map<String, Object?> attributes;
-
-  @override
-  List<Object?> get props => <Object?>[label, source, bitrate, id, attributes];
+  Map<String, Object?> get attributes;
 }

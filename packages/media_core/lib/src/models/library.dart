@@ -5,4 +5,5 @@
 /// read without opening the layer that happens to build it.
 library;
 
+export 'package:media_core/src/models/quality/library.dart';
 export 'package:media_core/src/models/source/library.dart';
