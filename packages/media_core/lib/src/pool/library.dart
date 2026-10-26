@@ -4,6 +4,10 @@
 ///
 /// PlayerIdentity instance pooling, allocation and recycling..
 ///
+/// The metrics, state and snapshot value objects the pool publishes
+/// live in `lib/src/models/pool/`; the pool's own `PlayerPoolConfig`
+/// stays here because callers pass it as a const default argument.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/pool/`.
 ///
@@ -23,6 +27,3 @@ export 'package:media_core/src/pool/control/playback_pool_orchestrator.dart';
 export 'package:media_core/src/pool/control/player_pool.dart';
 export 'package:media_core/src/pool/control/player_pool_manager.dart';
 export 'package:media_core/src/pool/model/player_pool_config.dart';
-export 'package:media_core/src/pool/model/player_pool_metrics.dart';
-export 'package:media_core/src/pool/model/player_pool_snapshot.dart';
-export 'package:media_core/src/pool/model/player_pool_state.dart';

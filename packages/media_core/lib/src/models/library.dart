@@ -6,6 +6,7 @@
 library;
 
 export 'package:media_core/src/models/network/library.dart';
+export 'package:media_core/src/models/pool/library.dart';
 export 'package:media_core/src/models/quality/library.dart';
 export 'package:media_core/src/models/source/library.dart';
 export 'package:media_core/src/models/timeline/library.dart';

@@ -3,12 +3,10 @@ import 'dart:async';
 import 'package:clock/clock.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
+import 'package:media_core/src/models/pool/library.dart';
 import 'package:media_core/src/pool/alloc/player_pool_allocator.dart';
 import 'package:media_core/src/pool/alloc/player_pool_recycler.dart';
 import 'package:media_core/src/pool/model/player_pool_config.dart';
-import 'package:media_core/src/pool/model/player_pool_metrics.dart';
-import 'package:media_core/src/pool/model/player_pool_snapshot.dart';
-import 'package:media_core/src/pool/model/player_pool_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Manages player pool runtime.
@@ -57,7 +55,7 @@ final class PlayerPoolManager {
   /// rounding, and so it survives a metrics rebuild.
   Duration _allocationTimeTotal = Duration.zero;
 
-  final BehaviorSubject<PlayerPoolState> _stateSubject = BehaviorSubject.seeded(const PlayerPoolState());
+  final BehaviorSubject<PlayerPoolState> _stateSubject = BehaviorSubject.seeded(PlayerPoolState.of());
 
   /// Current state stream.
   Stream<PlayerPoolState> get states {
@@ -71,7 +69,7 @@ final class PlayerPoolManager {
 
   /// Current snapshot.
   PlayerPoolSnapshot get snapshot {
-    return PlayerPoolSnapshot(state: state, metrics: _metrics, createdAt: clock.now());
+    return PlayerPoolSnapshot.of(state: state, metrics: _metrics, createdAt: clock.now());
   }
 
   /// Adds player into pool.
@@ -91,7 +89,7 @@ final class PlayerPoolManager {
     _sessions.remove(playerId);
 
     if (removed) {
-      _metrics = _metrics.copyWith(destroyedCount: _metrics.destroyedCount + 1);
+      _metrics = _metrics.rebuild((builder) => builder..destroyedCount = _metrics.destroyedCount + 1);
 
       _syncCounts();
 
@@ -110,7 +108,7 @@ final class PlayerPoolManager {
     stopwatch.stop();
 
     if (player == null) {
-      _metrics = _metrics.copyWith(allocationFailureCount: _metrics.allocationFailureCount + 1);
+      _metrics = _metrics.rebuild((builder) => builder..allocationFailureCount = _metrics.allocationFailureCount + 1);
 
       _syncCounts();
 
@@ -122,7 +120,7 @@ final class PlayerPoolManager {
 
     _allocationTimeTotal += stopwatch.elapsed;
 
-    _metrics = _metrics.copyWith(allocationCount: _metrics.allocationCount + 1);
+    _metrics = _metrics.rebuild((builder) => builder..allocationCount = _metrics.allocationCount + 1);
 
     _syncCounts();
 
@@ -155,7 +153,7 @@ final class PlayerPoolManager {
   /// Releases player back to pool.
   bool release(PlayerId playerId) {
     if (!_active.contains(playerId)) {
-      _metrics = _metrics.copyWith(recycleFailureCount: _metrics.recycleFailureCount + 1);
+      _metrics = _metrics.rebuild((builder) => builder..recycleFailureCount = _metrics.recycleFailureCount + 1);
 
       return false;
     }
@@ -163,7 +161,7 @@ final class PlayerPoolManager {
     _active.remove(playerId);
     _sessions.remove(playerId);
 
-    _metrics = _metrics.copyWith(recycleCount: _metrics.recycleCount + 1);
+    _metrics = _metrics.rebuild((builder) => builder..recycleCount = _metrics.recycleCount + 1);
 
     _syncCounts();
 
@@ -180,14 +178,18 @@ final class PlayerPoolManager {
   void _syncCounts() {
     final allocated = _active.length;
 
-    _metrics = _metrics.copyWith(
-      allocatedCount: allocated,
-      idleCount: _availablePlayers.length,
-      peakCount: allocated > _metrics.peakCount ? allocated : _metrics.peakCount,
-      averageAllocationTime: _metrics.allocationCount == 0
-          ? null
-          : Duration(microseconds: _allocationTimeTotal.inMicroseconds ~/ _metrics.allocationCount),
-      updatedAt: clock.now(),
+    _metrics = _metrics.rebuild(
+      (builder) => builder
+        ..allocatedCount = allocated
+        ..idleCount = _availablePlayers.length
+        ..peakCount = allocated > _metrics.peakCount ? allocated : _metrics.peakCount
+        // A null copyWith argument meant "leave unchanged", so the
+        // no-allocations case has to carry the previous average;
+        // assigning null here would silently clear it.
+        ..averageAllocationTime = _metrics.allocationCount == 0
+            ? _metrics.averageAllocationTime
+            : Duration(microseconds: _allocationTimeTotal.inMicroseconds ~/ _metrics.allocationCount)
+        ..updatedAt = clock.now(),
     );
   }
 
@@ -202,7 +204,7 @@ final class PlayerPoolManager {
 
   void _publish() {
     _stateSubject.add(
-      PlayerPoolState(
+      PlayerPoolState.of(
         totalPlayers: _players.length,
         idlePlayers: _availablePlayers.length,
         activePlayers: _active.length,
