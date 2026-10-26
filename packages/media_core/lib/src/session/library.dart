@@ -4,6 +4,10 @@
 ///
 /// PlayerIdentity session lifecycle, context, state and operations..
 ///
+/// The generation, operation and event records live in
+/// `lib/src/models/session/`; the session's own state wrapper and
+/// context stay here.
+///
 /// This library is generated automatically from the Dart files
 /// physically contained in `lib/src/session/`.
 ///
@@ -21,8 +25,5 @@ export 'package:media_core/src/session/control/session_controller.dart';
 export 'package:media_core/src/session/control/session_lifecycle.dart';
 export 'package:media_core/src/session/control/session_manager.dart';
 export 'package:media_core/src/session/model/session_context.dart';
-export 'package:media_core/src/session/model/session_event.dart';
-export 'package:media_core/src/session/model/session_generation.dart';
-export 'package:media_core/src/session/model/session_operation.dart';
 export 'package:media_core/src/session/model/session_snapshot.dart';
 export 'package:media_core/src/session/model/session_state.dart';

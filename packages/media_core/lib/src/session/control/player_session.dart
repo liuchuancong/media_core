@@ -1,7 +1,7 @@
 import 'package:clock/clock.dart';
 import 'package:media_core/src/identity/generation_id.dart';
+import 'package:media_core/src/models/session/library.dart';
 import 'package:media_core/src/session/model/session_context.dart';
-import 'package:media_core/src/session/model/session_generation.dart';
 import 'package:media_core/src/session/model/session_snapshot.dart';
 import 'package:media_core/src/session/model/session_state.dart';
 import 'package:rxdart/rxdart.dart';
