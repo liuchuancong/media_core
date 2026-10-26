@@ -141,6 +141,13 @@ final class LivePlaybackController {
 
   LiveSourceRequest? _request;
 
+  /// Engine options every staged engine receives before it opens a source.
+  ///
+  /// Kept beside the request so [updateEngineOptions] can move a live change
+  /// (a proxy, for example) into the next line, engine or recovery without
+  /// restarting the stream that is already on screen.
+  List<EngineOption> _engineOptions = const <EngineOption>[];
+
   /// Ledger of the candidate lines and engines this sweep holds.
   ///
   /// The player being watched is counted by the kernel, not here: what this
@@ -242,6 +249,7 @@ final class LivePlaybackController {
   Future<void> play(LiveSourceRequest request, {String? preferredBackend}) {
     _request = request;
     _sources = request.sources;
+    _engineOptions = request.engineOptions;
     _reportMemory();
     _preferredBackend = preferredBackend;
     _engineFallbackAllowed = request.allowEngineFallback ?? true;
@@ -258,6 +266,24 @@ final class LivePlaybackController {
     _supersedeQueued('superseded by play');
 
     return _enqueue(TaskType.open, (_) => _startPlayback());
+  }
+
+  /// Changes the engine options applied before every future open.
+  ///
+  /// The running handle receives them now (a proxy property can be written
+  /// live), while the next line, engine fallback or recovery gets them on its
+  /// staged engine before the connection is opened. This is the seam a host
+  /// uses for a settings change that must also reach a stream it has not
+  /// requested yet.
+  Future<void> updateEngineOptions(List<EngineOption> options) async {
+    _engineOptions = List<EngineOption>.unmodifiable(options);
+    final handle = _handle;
+    if (handle == null || handle.disposed) return;
+    try {
+      await handle.applyEngineOptions(_engineOptions);
+    } on Object {
+      // A refused option is not a playback failure.
+    }
   }
 
   /// Switches to the source at [index].

@@ -105,6 +105,8 @@ Rect pipResolvePlacement({
   required Rect primaryWorkArea,
   Rect? savedBounds,
   double placementMargin = 20,
+  double minWidth = 140,
+  double minHeight = 90,
 }) {
   final areas = workAreas.where((area) => !area.isEmpty && area.isFinite).toList(growable: false);
   final fallbackArea = primaryWorkArea.isEmpty ? const Rect.fromLTWH(0, 0, 1280, 720) : primaryWorkArea;
@@ -128,10 +130,10 @@ Rect pipResolvePlacement({
   }
 
   final requested = validSaved?.size ?? requestedSize;
-  final minWidth = target.width < 140 ? target.width : 140.0;
-  final minHeight = target.height < 90 ? target.height : 90.0;
-  final width = requested.width.clamp(minWidth, target.width);
-  final height = requested.height.clamp(minHeight, target.height);
+  final floorWidth = target.width < minWidth ? target.width : minWidth;
+  final floorHeight = target.height < minHeight ? target.height : minHeight;
+  final width = requested.width.clamp(floorWidth, target.width);
+  final height = requested.height.clamp(floorHeight, target.height);
   final defaultLeft = target.right - width - placementMargin;
   final defaultTop = target.bottom - height - placementMargin;
   final left = (validSaved?.left ?? defaultLeft).clamp(target.left, target.right - width);
@@ -165,11 +167,17 @@ final class DisplayAwarePipWindow implements PipWindow {
     this.readSavedBounds,
     this.writeSavedBounds,
     bool Function()? alwaysOnTop,
+    Size Function(double aspectRatio)? smallWindowSize,
+    double Function()? minWidth,
+    double Function()? minHeight,
     this.normalMinSize = Size.zero,
     this.defaultSize = const Size(1280, 720),
     this.placementMargin = 20,
   }) : _windowBuilder = windowBuilder ?? defaultDesktopPipWindow,
-       _alwaysOnTop = alwaysOnTop;
+       _alwaysOnTop = alwaysOnTop,
+       _smallWindowSize = smallWindowSize,
+       _minWidth = minWidth,
+       _minHeight = minHeight;
 
   final PipWindow Function() _windowBuilder;
 
@@ -184,6 +192,14 @@ final class DisplayAwarePipWindow implements PipWindow {
   /// Records the geometry for the next entry.
   final PipSavedBoundsWriter? writeSavedBounds;
   final bool Function()? _alwaysOnTop;
+
+  /// The host's initial compact size for a video shape. Null keeps the
+  /// feature's own small-window policy.
+  final Size Function(double aspectRatio)? _smallWindowSize;
+
+  /// The host's resize floors; null keeps 140×90.
+  final double Function()? _minWidth;
+  final double Function()? _minHeight;
 
   /// The host's own window minimum, re-applied when leaving the small window so
   /// the normal window keeps its floor.
@@ -280,6 +296,8 @@ final class DisplayAwarePipWindow implements PipWindow {
     // unlocked: the remembered bounds and the default size are expressed as a
     // long side plus the video's aspect.
     final aspectRatio = shapeAspectRatio ?? requestedSize.width / requestedSize.height;
+    final minWidth = _minWidth?.call() ?? 140.0;
+    final minHeight = _minHeight?.call() ?? 90.0;
 
     final displays = await _workAreas();
     final currentId = pipDisplayIdForPosition(displays, normal.bounds.topLeft);
@@ -307,22 +325,20 @@ final class DisplayAwarePipWindow implements PipWindow {
       final scale = saved.bounds.width > saved.bounds.height ? saved.bounds.width : saved.bounds.height;
       // The floors are aspect-exact: when one side bottoms out the other
       // follows down, so a smaller pick still yields a video-shaped window.
-      const minWidthFloor = 140.0;
-      const minHeightFloor = 90.0;
       final Size followed;
       if (aspectRatio >= 1.0) {
-        var width = scale.clamp(minWidthFloor, double.infinity);
+        var width = scale.clamp(minWidth, double.infinity);
         var height = width / aspectRatio;
-        if (height < minHeightFloor) {
-          height = minHeightFloor;
+        if (height < minHeight) {
+          height = minHeight;
           width = height * aspectRatio;
         }
         followed = Size(width, height);
       } else {
-        var height = scale.clamp(minHeightFloor, double.infinity);
+        var height = scale.clamp(minHeight, double.infinity);
         var width = height * aspectRatio;
-        if (width < minWidthFloor) {
-          width = minWidthFloor;
+        if (width < minWidth) {
+          width = minWidth;
           height = width / aspectRatio;
         }
         followed = Size(width, height);
@@ -333,11 +349,13 @@ final class DisplayAwarePipWindow implements PipWindow {
       );
     }
     final placement = pipResolvePlacement(
-      requestedSize: pipSmallWindowSize(aspectRatio),
+      requestedSize: _smallWindowSize?.call(aspectRatio) ?? pipSmallWindowSize(aspectRatio),
       workAreas: [for (final display in displays) display.area],
       primaryWorkArea: current.area,
       savedBounds: matchedSaved?.bounds,
       placementMargin: placementMargin,
+      minWidth: minWidth,
+      minHeight: minHeight,
     );
 
     final pinOnTop = _alwaysOnTop?.call() ?? alwaysOnTopOverride;

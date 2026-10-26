@@ -15,15 +15,32 @@ import 'package:media_core_win32/media_core_win32.dart';
 /// monitor the window is on with one `SetWindowPos(FRAMECHANGED)`, and on
 /// exit restore the snapshot followed by a forced re-layout.
 final class Win32FullscreenWindow implements FullscreenWindow {
-  static int? _hwnd;
+  /// Creates the backend.
+  ///
+  /// [windowHandle] pins the top-level window to drive. A
+  /// desktop_multi_window clone engine cannot use the process-wide lookup:
+  /// it finds the runner's first window (the primary), so the clone would
+  /// take the main window fullscreen instead of its own. The primary leaves
+  /// this null and keeps the lookup.
+  Win32FullscreenWindow({int? windowHandle}) : _hwnd = windowHandle;
+
+  int? _hwnd;
+
+  bool get _pinned => _hwnd != null;
 
   Win32WindowSnapshot? _snapshot;
 
   int get _windowHandle {
-    if (_hwnd == null || _hwnd == 0) {
-      _hwnd = Win32WindowFfi.mainWindowHandle();
+    final pinned = _hwnd;
+    // A pinned zero means "this engine has no window to drive": answer 0 and
+    // let every user32 call degrade, rather than falling back to the
+    // process's first window — which belongs to the primary.
+    if (pinned != null) {
+      return pinned;
     }
-    return _hwnd ?? 0;
+    final found = Win32WindowFfi.mainWindowHandle();
+    _hwnd = found;
+    return found ?? 0;
   }
 
   @override
@@ -34,6 +51,12 @@ final class Win32FullscreenWindow implements FullscreenWindow {
 
   @override
   Future<void> setFullscreen({required bool value, Rect? restoreBounds}) async {
+    if (_windowHandle == 0 && _pinned) {
+      // A clone whose handle could not be read reaches here pinned to zero.
+      // Failing keeps the host's presentation state truthful instead of
+      // reporting a fullscreen window that never moved.
+      throw StateError('The window to take fullscreen could not be found.');
+    }
     if (value) {
       _snapshot = Win32WindowFfi.capture(_windowHandle);
       Win32WindowFfi.setScreenFullscreen(_windowHandle, fullscreen: true, snapshot: _snapshot);

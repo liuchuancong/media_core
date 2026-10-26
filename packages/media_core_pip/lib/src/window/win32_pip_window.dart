@@ -33,7 +33,16 @@ import 'package:window_manager/window_manager.dart';
 /// drag settles — the contained picture never gains black bars. There is no
 /// native minimum-size concept, so [setMinimumSize] is a documented no-op.
 final class Win32PipWindow implements PipWindow {
-  static int? _hwnd;
+  /// Creates the backend.
+  ///
+  /// [windowHandle] pins the top-level window to shrink. A
+  /// desktop_multi_window clone engine cannot use the process-wide lookup:
+  /// it finds the runner's first window (the primary), so the clone would
+  /// shrink the main window and leave its own untouched. The primary leaves
+  /// this null and keeps the lookup.
+  Win32PipWindow({int? windowHandle}) : _hwnd = windowHandle;
+
+  int? _hwnd;
 
   Timer? _snapTimer;
   Size _lastSeenBounds = Size.zero;
@@ -45,16 +54,29 @@ final class Win32PipWindow implements PipWindow {
   /// keep free-shaped, so "unknown" has to stay "no snap".
   double? _aspectRatio;
 
+  bool get _pinned => _hwnd != null;
+
   int get _windowHandle {
-    if (_hwnd == null || _hwnd == 0) {
-      _hwnd = Win32WindowFfi.mainWindowHandle();
+    final pinned = _hwnd;
+    // A pinned zero means "this engine has no window to shrink": answer 0 and
+    // let every user32 call degrade, rather than falling back to the
+    // process's first window — which belongs to the primary.
+    if (pinned != null) {
+      return pinned;
     }
-    return _hwnd ?? 0;
+    final found = Win32WindowFfi.mainWindowHandle();
+    _hwnd = found;
+    return found ?? 0;
   }
 
   @override
   Future<PipWindowSnapshot> capture() async {
     final hwnd = _windowHandle;
+    if (hwnd == 0 && _pinned) {
+      // A clone whose handle could not be read reaches here pinned to zero.
+      // Failing keeps PiP from claiming a compact window that never shrank.
+      throw StateError('The window to shrink could not be found.');
+    }
     final native = Win32WindowFfi.capture(hwnd);
     final bounds = Win32WindowFfi.bounds(hwnd) ?? Rect.zero;
 
@@ -234,7 +256,11 @@ final class Win32PipWindow implements PipWindow {
     // Zero handle means no runner window to constrain, which is the same
     // degradation contract every other call here follows — and a nativeapi
     // FFI call without a native library throws, so the guard stays.
-    if (_windowHandle == 0) return;
+    // A pinned window belongs to a secondary engine, and nativeapi's
+    // WindowManager resolves the process's main window: setting a minimum
+    // through it would clamp the primary while the compact clone keeps its
+    // size. The clone's small window is already sized by applySmallWindow.
+    if (_windowHandle == 0 || _pinned) return;
     final window = WindowManager.instance.getCurrent();
     if (window != null) {
       window.minimumSize = size.toNative();

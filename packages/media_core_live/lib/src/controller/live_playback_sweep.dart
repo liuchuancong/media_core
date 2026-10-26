@@ -353,6 +353,18 @@ extension _LivePlaybackSweep on LivePlaybackController {
         ..recoveryEnabled = false
         ..playIntent = true;
 
+      // Options that must reach the engine before the first request (the
+      // player proxy) are written here, while the attempt is still staged:
+      // the handle is only committed after open/verify, so consumers cannot
+      // apply them in time through `onHandleChanged`.
+      if (_engineOptions.isNotEmpty) {
+        try {
+          await staged.applyEngineOptions(_engineOptions);
+        } on Object {
+          // An option the engine refused must not turn into a failed stream.
+        }
+      }
+
       if (_audioOnly) {
         await staged.setAudioOnly(audioOnly: true);
       }

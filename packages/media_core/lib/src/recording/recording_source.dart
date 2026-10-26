@@ -27,7 +27,7 @@ import 'package:equatable/equatable.dart';
 /// - RecordingBackend
 final class RecordingSource extends Equatable {
   /// Creates a recording source.
-  const RecordingSource({required this.type, required this.value, this.id, this.title});
+  const RecordingSource({required this.type, required this.value, this.id, this.title, this.headers = const {}});
 
   /// Creates a local file recording source.
   const RecordingSource.file(String path, {String? id, String? title})
@@ -76,6 +76,15 @@ final class RecordingSource extends Equatable {
     return id != null && id!.isNotEmpty;
   }
 
+  /// Request headers the address needs, when it is a network source.
+  ///
+  /// A live room's address is rarely open on its own: the platform answers 403
+  /// unless the request carries its referer (and sometimes its user agent).
+  /// The host that resolved the address knows those headers and hands them to
+  /// the recording here; a backend that cannot send them — or a source whose
+  /// headers are empty — records exactly as before.
+  final Map<String, String> headers;
+
   /// Whether a non-blank [title] was given.
   bool get hasTitle {
     final label = title;
@@ -89,7 +98,7 @@ final class RecordingSource extends Equatable {
   }
 
   @override
-  List<Object?> get props => [type, value, id, title];
+  List<Object?> get props => [type, value, id, title, headers];
 
   @override
   String toString() {
@@ -98,6 +107,7 @@ final class RecordingSource extends Equatable {
         'value: $value, '
         'id: $id'
         '${title == null ? '' : ', title: $title'}'
+        '${headers.isEmpty ? '' : ', headers: ${headers.length}'}'
         ')';
   }
 }

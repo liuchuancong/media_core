@@ -393,6 +393,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       outputDirectory: directory,
       segmentPattern: segmentPattern,
       journalPath: journalPath,
+      headers: _activeSource.headers,
       filePrefix: prefix,
     );
 

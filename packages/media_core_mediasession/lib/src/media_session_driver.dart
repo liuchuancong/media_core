@@ -10,6 +10,32 @@ import 'package:media_core_mediasession/src/media_session_config.dart';
 import 'package:media_core_mediasession/src/media_session_handler.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
+/// A transport owned by another engine or isolate that this driver presents.
+///
+/// The platform owns exactly one media surface per app, so a host with several
+/// windows still has one place to publish. The window that owns the surface
+/// hands the driver these four verbs; the driver never reaches into another
+/// engine itself.
+abstract interface class MediaSessionRemoteTarget {
+  /// Whether the platform should offer the seek pair for this session.
+  ///
+  /// A live stream has no timeline to scrub; a button that does nothing is
+  /// worse than one the surface never shows.
+  bool get canSeek;
+
+  /// Resumes playback.
+  Future<void> play();
+
+  /// Pauses playback.
+  Future<void> pause();
+
+  /// Stops playback.
+  Future<void> stop();
+
+  /// Moves the playhead.
+  Future<void> seek(Duration position);
+}
+
 /// System media surfaces for the media_core kernel.
 ///
 /// Implements [KernelAudioDriver], so the kernel hands it the active player —
@@ -73,6 +99,13 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
   MediaSessionHandler? _handler;
   PlayerHandle? _active;
+
+  /// A session owned by another engine, presented through this driver's one
+  /// platform surface. While set, the transport buttons go to that engine's
+  /// target and the local player's stream stops publishing.
+  MediaSessionRemoteTarget? _remoteTarget;
+  MediaSessionItem? _remoteItem;
+  MediaSessionState? _remoteState;
 
   /// The session that holds the platform's media surface, or null.
   ///
@@ -166,16 +199,16 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       started = await asvc.AudioService.init(
         builder: () => MediaSessionHandler(
           onPlay: () async {
-            await _active?.play();
+            await _transportPlay();
           },
           onPause: () async {
-            await _active?.pause();
+            await _transportPause();
           },
           onSeek: (position) async {
-            await _active?.seek(position);
+            await _transportSeek(position);
           },
           onStop: () async {
-            await _active?.stop();
+            await _transportStop();
           },
           onNext: skipToNextHandler == null
               ? null
@@ -218,6 +251,31 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
     _handler = started;
 
+    // A player or a remote window may have claimed the surface while
+    // audio_service was initializing. Publish what was remembered now that
+    // there is a handler to receive it.
+    final remoteItem = _remoteItem;
+    final remoteState = _remoteState;
+    final active = _active;
+    if (remoteItem != null && remoteState != null) {
+      _published = null;
+      started.publishMediaItem(remoteItem);
+      _publishState(remoteState);
+    } else if (active != null) {
+      _surfaceOwner = _sessionIdFor(active);
+      started.publishMediaItem(_itemFor(active));
+      _publishCurrent(active);
+      _playbackSub ??= active.playbackStream.listen(
+        (_) => _publishCurrent(active),
+        onError: (_) {},
+        onDone: () {
+          if (identical(_active, active)) {
+            setActive(null);
+          }
+        },
+      );
+    }
+
     if (!_supportsAudioSession) {
       return;
     }
@@ -232,7 +290,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       }
 
       if (config.pauseOnBecomingNoisy) {
-        _noisySub = session.becomingNoisyEventStream.listen((_) => _active?.pause(), onError: (_) {});
+        _noisySub = session.becomingNoisyEventStream.listen((_) => _pauseTransport(), onError: (_) {});
       }
     } on Object catch (_) {
       // A platform without a functional audio_session implementation. Playback
@@ -262,6 +320,9 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     // control bar for a session that no longer exists.
     await _handler?.releaseSurface();
     _surfaceOwner = null;
+    _remoteTarget = null;
+    _remoteItem = null;
+    _remoteState = null;
 
     _active = null;
     _handler = null;
@@ -293,12 +354,25 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// exists, so a host that opens a player while `AudioService.init` is still
   /// running does not end up with a silent notification.
   void setActive(PlayerHandle? handle) {
-    if (_disposed || identical(handle, _active)) {
+    if (_disposed || (identical(handle, _active) && _remoteTarget == null)) {
+      return;
+    }
+
+    if (handle == null && _remoteTarget != null) {
+      // The local player stopped while another window held the surface: the
+      // remote presentation stays, and its target still owns the buttons.
+      _active = null;
       return;
     }
 
     unawaited(_playbackSub?.cancel());
     _playbackSub = null;
+
+    // A local player that becomes active is the newest transport in the
+    // process; it takes the surface back from a remote presentation.
+    _remoteTarget = null;
+    _remoteItem = null;
+    _remoteState = null;
 
     _active = handle;
     _ducked = false;
@@ -339,6 +413,171 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   }
 
   // ---------------------------------------------------------------------------
+  // Remote sessions
+  // ---------------------------------------------------------------------------
+
+  /// Presents a session that plays in another engine.
+  ///
+  /// The platform has one media surface, so a host with several windows
+  /// publishes the window that currently owns it through this door. The
+  /// driver keeps its local [setActive] player for the moment the remote
+  /// session ends, but stops publishing that player while the remote one is
+  /// up. [target] receives the transport buttons; a target whose window is
+  /// gone should make these calls no-ops, not throw into the platform.
+  void presentRemote({
+    required String sessionId,
+    required MediaSessionItem item,
+    required MediaSessionState state,
+    required MediaSessionRemoteTarget target,
+  }) {
+    if (_disposed) {
+      return;
+    }
+
+    // The local player's stream must not overwrite a remote session while it
+    // is shown. Its handle stays bound for the fallback in [clearRemote].
+    unawaited(_playbackSub?.cancel());
+    _playbackSub = null;
+
+    _surfaceOwner = sessionId;
+    _remoteTarget = target;
+    _remoteItem = item;
+    _remoteState = state;
+
+    final handler = _handler;
+    if (handler == null) {
+      return;
+    }
+
+    _published = null;
+    handler.publishMediaItem(item);
+    _publishState(state);
+  }
+
+  /// Replaces the remote session's metadata, when it still owns the surface.
+  void updateRemoteItem(MediaSessionItem item) {
+    if (_disposed || _remoteTarget == null || _surfaceOwner == null) {
+      return;
+    }
+    _remoteItem = item;
+    _handler?.publishMediaItem(item);
+  }
+
+  /// Replaces the remote session's playback state, when it still owns the
+  /// surface.
+  void updateRemoteState(MediaSessionState state) {
+    if (_disposed || _remoteTarget == null || _surfaceOwner == null) {
+      return;
+    }
+    _remoteState = state;
+    _publishState(state);
+  }
+
+  /// Ends the remote presentation.
+  ///
+  /// A local player that was bound before the remote session takes the
+  /// surface back; otherwise the surface goes idle instead of describing a
+  /// window that is gone.
+  void clearRemote() {
+    if (_remoteTarget == null && _remoteItem == null) {
+      return;
+    }
+
+    _remoteTarget = null;
+    _remoteItem = null;
+    _remoteState = null;
+
+    final handler = _handler;
+    if (handler == null) {
+      return;
+    }
+
+    final active = _active;
+    if (active != null) {
+      _surfaceOwner = _sessionIdFor(active);
+      _published = null;
+      handler.publishMediaItem(_itemFor(active));
+      _publishCurrent(active);
+      _playbackSub ??= active.playbackStream.listen(
+        (_) => _publishCurrent(active),
+        onError: (_) {},
+        onDone: () {
+          if (identical(_active, active)) {
+            setActive(null);
+          }
+        },
+      );
+      return;
+    }
+
+    _surfaceOwner = null;
+    _published = null;
+    handler
+      ..publishIdle()
+      ..clearMediaItem();
+  }
+
+  /// Whether a remote session currently owns the surface.
+  bool get hasRemoteSession => _remoteTarget != null;
+
+  Future<void> _transportPlay() async {
+    final remote = _remoteTarget;
+    if (remote != null) {
+      await remote.play();
+      return;
+    }
+    await _active?.play();
+  }
+
+  Future<void> _transportPause() async {
+    final remote = _remoteTarget;
+    if (remote != null) {
+      await remote.pause();
+      return;
+    }
+    await _active?.pause();
+  }
+
+  Future<void> _transportStop() async {
+    final remote = _remoteTarget;
+    if (remote != null) {
+      await remote.stop();
+      return;
+    }
+    await _active?.stop();
+  }
+
+  Future<void> _transportSeek(Duration position) async {
+    final remote = _remoteTarget;
+    if (remote != null) {
+      await remote.seek(position);
+      return;
+    }
+    await _active?.seek(position);
+  }
+
+  /// Pauses whichever transport owns the surface, for the platform's own
+  /// interruption paths (unplugged headphones, a call).
+  Future<void> _pauseTransport() async {
+    final remote = _remoteTarget;
+    if (remote != null) {
+      await remote.pause();
+      return;
+    }
+    await _active?.pause();
+  }
+
+  /// Resumes whichever transport owns the surface after an interruption.
+  Future<void> _resumeTransport() async {
+    final remote = _remoteTarget;
+    if (remote != null) {
+      await remote.play();
+      return;
+    }
+    await _active?.play();
+  }
+
+  // ---------------------------------------------------------------------------
   // MediaBackgroundSession
   // ---------------------------------------------------------------------------
 
@@ -367,6 +606,12 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
     _surfaceOwner = sessionId;
 
+    // An explicit named activation is a new owner: it takes the buttons back
+    // from a remote window. Its own state is published below.
+    _remoteTarget = null;
+    _remoteItem = null;
+    _remoteState = null;
+
     final active = _active;
 
     if (active == null) {
@@ -382,7 +627,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
             speed: 1,
             phase: MediaSurfacePhase.idle,
           ),
-          controls: _buildControls(false),
+          controls: _currentControls(false),
         );
 
       return MediaSessionActivation.held(previousOwnerSessionId: previous);
@@ -404,6 +649,13 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       return;
     }
 
+    final remote = _remoteItem;
+    if (remote != null) {
+      _remoteItem = remote.copyWith(title: title);
+      handler.publishMediaItem(_remoteItem!);
+      return;
+    }
+
     final active = _active;
 
     handler.publishMediaItem(
@@ -420,6 +672,9 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     }
 
     _surfaceOwner = null;
+    _remoteTarget = null;
+    _remoteItem = null;
+    _remoteState = null;
     await handler.releaseSurface();
   }
 
@@ -429,10 +684,22 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// the platform was starting, and by a host whose player began playing a
   /// different source on the same handle.
   void refresh() {
-    final handle = _active;
     final handler = _handler;
+    if (handler == null) {
+      return;
+    }
 
-    if (handle == null || handler == null) {
+    final remoteItem = _remoteItem;
+    final remoteState = _remoteState;
+    if (remoteItem != null && remoteState != null) {
+      _published = null;
+      handler.publishMediaItem(remoteItem);
+      _publishState(remoteState);
+      return;
+    }
+
+    final handle = _active;
+    if (handle == null) {
       return;
     }
 
@@ -455,15 +722,21 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   // ---------------------------------------------------------------------------
 
   void _onInterruption(asession.AudioInterruptionEvent event) {
+    final remote = _remoteTarget;
     final active = _active;
 
-    if (active == null) {
+    if (active == null && remote == null) {
       return;
     }
 
     if (event.begin) {
       switch (event.type) {
         case asession.AudioInterruptionType.duck:
+          // A remote window's volume is not on this side of the bridge; the
+          // interruption still pauses the session through the pause branch.
+          if (active == null) {
+            return;
+          }
           if (!_ducked) {
             _ducked = true;
             _volumeBeforeDuck = active.playback.volume;
@@ -472,21 +745,22 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
         case asession.AudioInterruptionType.pause:
         case asession.AudioInterruptionType.unknown:
-          _resumeOnInterruptionEnd = config.resumeAfterInterruption && active.playback.isPlaying;
-          unawaited(active.pause());
+          _resumeOnInterruptionEnd = config.resumeAfterInterruption &&
+              (remote != null ? (_remoteState?.playing ?? false) : active!.playback.isPlaying);
+          unawaited(_pauseTransport());
       }
 
       return;
     }
 
-    if (_ducked) {
+    if (_ducked && active != null) {
       _ducked = false;
       unawaited(active.setVolume(_volumeBeforeDuck));
     }
 
     if (_resumeOnInterruptionEnd) {
       _resumeOnInterruptionEnd = false;
-      unawaited(active.play());
+      unawaited(_resumeTransport());
     }
   }
 
@@ -522,7 +796,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// player therefore gets play/pause, ±[MediaSessionConfig.seekStep] and stop,
   /// while a queue player gets skip-previous/next in the same slots — which is
   /// what each platform's users expect from that kind of app.
-  List<asvc.MediaControl> _buildControls(bool playing) {
+  List<asvc.MediaControl> _buildControls(bool playing, {bool seekable = true}) {
     if (!config.showControls) {
       return const <asvc.MediaControl>[];
     }
@@ -530,7 +804,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     return <asvc.MediaControl>[
       if (skipToPreviousHandler != null)
         asvc.MediaControl(androidIcon: config.previousIcon, label: 'Previous', action: asvc.MediaAction.skipToPrevious)
-      else if (config.showSeekButtons)
+      else if (config.showSeekButtons && seekable)
         asvc.MediaControl(
           androidIcon: config.rewindIcon,
           label: 'Back ${config.seekStep.inSeconds}s',
@@ -543,7 +817,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       ),
       if (skipToNextHandler != null)
         asvc.MediaControl(androidIcon: config.nextIcon, label: 'Next', action: asvc.MediaAction.skipToNext)
-      else if (config.showSeekButtons)
+      else if (config.showSeekButtons && seekable)
         asvc.MediaControl(
           androidIcon: config.fastForwardIcon,
           label: 'Forward ${config.seekStep.inSeconds}s',
@@ -551,6 +825,12 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
         ),
       asvc.MediaControl(androidIcon: config.stopIcon, label: 'Stop', action: asvc.MediaAction.stop),
     ];
+  }
+
+  /// Controls for the current owner: a live remote session gets no seek
+  /// buttons, a local handle keeps the configured pair.
+  List<asvc.MediaControl> _currentControls(bool playing) {
+    return _buildControls(playing, seekable: _remoteTarget?.canSeek ?? true);
   }
 
   /// What the surfaces were last told, so a position-only tick can be skipped.
@@ -594,14 +874,19 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
   void _publishCurrent(PlayerHandle handle) {
     final playback = handle.playback;
-    final next = MediaSessionState(
-      playing: playback.isPlaying,
-      position: playback.position,
-      duration: playback.duration,
-      speed: playback.rate,
-      phase: _phaseOf(playback),
+    _publishState(
+      MediaSessionState(
+        playing: playback.isPlaying,
+        position: playback.position,
+        duration: playback.duration,
+        speed: playback.rate,
+        phase: _phaseOf(playback),
+      ),
     );
+  }
 
+  /// Publishes [next] unless the surface already shows the same state.
+  void _publishState(MediaSessionState next) {
     final previous = _published;
     if (previous != null &&
         next.playing == previous.playing &&
@@ -618,7 +903,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     }
 
     _published = next;
-    _handler?.publishState(next, controls: _buildControls(next.playing));
+    _handler?.publishState(next, controls: _currentControls(next.playing));
   }
 
   /// Whether [sessionId] is what the surfaces are showing.

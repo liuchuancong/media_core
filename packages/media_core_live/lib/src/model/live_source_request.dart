@@ -28,8 +28,13 @@ final class LiveSourceRequest {
   ///
   /// The list is copied into an unmodifiable one, so the sweep cannot see a
   /// caller mutating it mid-fallback.
-  LiveSourceRequest({required List<PlayerSource> sources, this.title, this.allowEngineFallback})
-    : sources = List<PlayerSource>.unmodifiable(sources);
+  LiveSourceRequest({
+    required List<PlayerSource> sources,
+    this.title,
+    this.allowEngineFallback,
+    List<EngineOption> engineOptions = const <EngineOption>[],
+  }) : sources = List<PlayerSource>.unmodifiable(sources),
+       engineOptions = List<EngineOption>.unmodifiable(engineOptions);
 
   /// Wraps raw URLs into sources, applying [headers] to every line.
   ///
@@ -41,6 +46,7 @@ final class LiveSourceRequest {
     Map<String, String> headers = const <String, String>{},
     String? title,
     bool? allowEngineFallback,
+    List<EngineOption> engineOptions = const <EngineOption>[],
   }) {
     return LiveSourceRequest(
       sources: urls
@@ -60,11 +66,20 @@ final class LiveSourceRequest {
           .toList(growable: false),
       title: title,
       allowEngineFallback: allowEngineFallback,
+      engineOptions: engineOptions,
     );
   }
 
   /// Candidate sources, best first. [sources].first is opened first.
   final List<PlayerSource> sources;
+
+  /// Engine options applied to every staged engine before it opens a source.
+  ///
+  /// A proxy or an output choice has to reach the engine before the first
+  /// request; applying it after the handle is committed is too late for a
+  /// connection that has already opened. The same options ride every line,
+  /// engine and recovery attempt of this request.
+  final List<EngineOption> engineOptions;
 
   /// What to call this playback in the lines the caller reads.
   ///
