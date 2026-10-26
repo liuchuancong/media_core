@@ -23,4 +23,3 @@ export 'package:media_core/src/event/event_priority.dart';
 export 'package:media_core/src/event/event_subscription.dart';
 export 'package:media_core/src/event/player_event.dart';
 export 'package:media_core/src/event/player_event_bus.dart';
-export 'package:media_core/src/event/player_event_type.dart';

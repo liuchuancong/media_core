@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/event/event_context.dart';
 import 'package:media_core/src/event/event_priority.dart';
-import 'package:media_core/src/event/player_event_type.dart';
+import 'package:media_core/src/models/event/library.dart';
 
 /// Base type for all events emitted by the media core.
 ///

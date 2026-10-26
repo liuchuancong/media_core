@@ -6,6 +6,7 @@
 library;
 
 export 'package:media_core/src/models/audio/library.dart';
+export 'package:media_core/src/models/event/library.dart';
 export 'package:media_core/src/models/lifecycle/library.dart';
 export 'package:media_core/src/models/network/library.dart';
 export 'package:media_core/src/models/platform/library.dart';

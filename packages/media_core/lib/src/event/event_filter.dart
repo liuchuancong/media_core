@@ -1,6 +1,6 @@
 import 'package:media_core/src/event/event_priority.dart';
 import 'package:media_core/src/event/player_event.dart';
-import 'package:media_core/src/event/player_event_type.dart';
+import 'package:media_core/src/models/event/library.dart';
 
 /// Predicate used to decide whether an event should be delivered.
 ///
