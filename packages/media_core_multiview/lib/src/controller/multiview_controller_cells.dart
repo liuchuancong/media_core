@@ -59,7 +59,18 @@ extension MultiviewControllerCells on MultiviewController {
     _ensureNotDisposed();
     final limit = sources.length < _config.effectiveMaxCells ? sources.length : _config.effectiveMaxCells;
     for (var index = 0; index < limit; index++) {
-      await assign(index, sources[index]);
+      // One dead room must not blank the rest of the wall: a cell that fails
+      // to open already carries its own failure state, so the fill goes on
+      // with the rooms that are live.
+      try {
+        await assign(index, sources[index]);
+      } on Object catch (error) {
+        _log.warning(
+          'wall fill skipped a failing cell',
+          error: error,
+          fields: <String, Object?>{'index': index, 'roomId': sources[index].roomId},
+        );
+      }
     }
   }
 

@@ -156,7 +156,12 @@ final class DownloadManager {
 
   static const Duration _progressInterval = Duration(milliseconds: 200);
 
-  DateTime _lastTick = DateTime.fromMillisecondsSinceEpoch(0);
+  /// Per-task speed sample points: one shared tick would divide every task's
+  /// byte delta by whichever task happened to sample last, and concurrent
+  /// downloads would flicker between inflated and understated rates.
+  final Map<String, DateTime> _lastSpeedAt = <String, DateTime>{};
+
+  final Map<String, int> _lastSpeedReceived = <String, int>{};
 
   /// Task type every download registers under.
   static final TaskType downloadTaskType = TaskType.custom('download');
@@ -224,6 +229,8 @@ final class DownloadManager {
     _queue.remove(TaskId(id));
     final task = _tasks.remove(id);
     _lastProgressAt.remove(id);
+    _lastSpeedAt.remove(id);
+    _lastSpeedReceived.remove(id);
     _leaseNotifiedAt.remove(id);
     _startsAnnounced.remove(id);
     if (task != null && deleteFile) {
@@ -331,6 +338,8 @@ final class DownloadManager {
       // The download view is keyed by the id value; the queue is keyed by the id.
       _tasks.remove(task.id.value);
       _lastProgressAt.remove(task.id.value);
+      _lastSpeedAt.remove(task.id.value);
+      _lastSpeedReceived.remove(task.id.value);
       _startsAnnounced.remove(task.id.value);
       _queue.remove(task.id);
     }
@@ -705,15 +714,17 @@ final class DownloadManager {
     _lastProgressAt[key] = now;
 
     _reportMemory();
-    final lastReceived = current.progress.receivedBytes;
-    final elapsed = now.difference(_lastTick);
+    final lastSpeedAt = _lastSpeedAt[key];
+    final lastReceived = _lastSpeedReceived[key] ?? current.progress.receivedBytes;
     var speed = current.progress.speedBytesPerSecond;
-    if (elapsed.inMilliseconds >= 200) {
+    final speedElapsed = lastSpeedAt == null ? _progressInterval : now.difference(lastSpeedAt);
+    if (speedElapsed.inMilliseconds >= 200) {
       // Measured from the last speed sample, not from this publish: a suppressed
       // chunk leaves `lastReceived` at the previous emitted figure, so the rate
       // covers the whole window it describes.
-      speed = ((received - lastReceived) * 1000 / elapsed.inMilliseconds).round().clamp(0, 1 << 40);
-      _lastTick = now;
+      speed = ((received - lastReceived) * 1000 / speedElapsed.inMilliseconds).round().clamp(0, 1 << 40);
+      _lastSpeedAt[key] = now;
+      _lastSpeedReceived[key] = received;
     }
     final progress = DownloadProgress(
       receivedBytes: received,

@@ -445,15 +445,17 @@ final class PlayerControlsController extends ChangeNotifier {
     revealControls();
 
     final current = rate;
-    var index = rates.indexWhere((value) => (value - current).abs() < 0.001);
+    final exact = rates.indexWhere((value) => (value - current).abs() < 0.001);
 
-    if (index < 0) {
-      index = rates.indexWhere((value) => value > current);
+    if (exact < 0) {
+      // A rate the list does not contain (a host preset, a restored value)
+      // snaps to the first step above it - not past it.
+      final above = rates.indexWhere((value) => value > current);
+
+      return setRate(above < 0 ? rates.first : rates[above]);
     }
 
-    final next = index < 0 ? rates.first : rates[(index + 1) % rates.length];
-
-    return setRate(next);
+    return setRate(rates[(exact + 1) % rates.length]);
   }
 
   /// Sets an explicit playback rate.

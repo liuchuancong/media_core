@@ -260,24 +260,27 @@ final class FeedPlayerController {
       return;
     }
 
-    if (_handle == null || _handle!.disposed) {
-      _handle = await kernel.create();
-    }
-    if (_disposed || _index != index) {
-      // The player was built while the viewer was still moving: the newest
-      // request owns it now.
-      return;
-    }
-    _reattachTransport();
-
-    final handle = _handle!;
     final source = _items[index];
 
     _setItemState(FeedItemState.opening);
 
     try {
-      await handle.open(source, autoPlay: true);
+      // Created inside the try on purpose: a creation failure (no engine
+      // registered, pool exhausted) is an attach failure like any other and
+      // must land in the same error state instead of escaping the chain.
+      if (_handle == null || _handle!.disposed) {
+        _handle = await kernel.create();
+      }
+      if (_disposed || _index != index) {
+        // The player was built while the viewer was still moving: the newest
+        // request owns it now.
+        return;
+      }
+      _reattachTransport();
 
+      final handle = _handle!;
+
+      await handle.open(source, autoPlay: true);
       if (_disposed || _index != index) {
         // The user kept swiping while this page was opening.
         _log.debug(

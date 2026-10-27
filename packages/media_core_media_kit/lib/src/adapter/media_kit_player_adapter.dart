@@ -407,8 +407,13 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
       await opener(player, recipe);
     } else {
+      // `play: false` because media_kit's open() plays by default and the
+      // kernel owns that decision: it issues the explicit play() when the
+      // caller asked for autoPlay, so an open(autoPlay: false) must stay
+      // paused instead of audibly starting on its own.
       await player.open(
         mk.Media(source.uri.toString(), httpHeaders: source.hasHeaders ? source.headers!.values : null),
+        play: false,
       );
       // A composite (Bilibili DASH: video.m4s + audio.m4s) arrives here with
       // the primary video URI flattened by [MediaSourceBridge] and the full

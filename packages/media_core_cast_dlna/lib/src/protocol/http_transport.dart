@@ -40,7 +40,7 @@ class HttpSoapTransport {
     request.add(utf8.encode(body));
 
     final response = await request.close().timeout(_timeout);
-    final text = await readBoundedBody(response);
+    final text = await readBoundedBody(response, timeout: _timeout);
     return SoapResponse(statusCode: response.statusCode, body: text);
   }
 
@@ -88,7 +88,7 @@ class HttpDescriptionFetcher {
       throw FormatException('device description at $url answered ${response.statusCode}', url);
     }
 
-    return await readBoundedBody(response);
+    return await readBoundedBody(response, timeout: _timeout);
   }
 
   /// Closes pooled sockets.
@@ -106,17 +106,24 @@ const int maxCastResponseBodyBytes = 1 << 20;
 /// [maxCastResponseBodyBytes].
 ///
 /// Throws [FormatException] when the bound is exceeded — the caller is
-/// parsing a document, and a truncated one is not a document.
-Future<String> readBoundedBody(HttpClientResponse response) async {
-  final builder = BytesBuilder(copy: false);
+/// parsing a document, and a truncated one is not a document. [timeout] is a
+/// budget for the whole read: a renderer that accepts the request and then
+/// trickles bytes would otherwise stall the future forever, and a position
+/// poll that never answers is worse than one that throws.
+Future<String> readBoundedBody(HttpClientResponse response, {Duration? timeout}) {
+  final read = () async {
+    final builder = BytesBuilder(copy: false);
 
-  await for (final chunk in response) {
-    builder.add(chunk);
-    if (builder.length > maxCastResponseBodyBytes) {
-      await response.drain<void>();
-      throw const FormatException('response body exceeded the cast response size limit');
+    await for (final chunk in response) {
+      builder.add(chunk);
+      if (builder.length > maxCastResponseBodyBytes) {
+        await response.drain<void>();
+        throw const FormatException('response body exceeded the cast response size limit');
+      }
     }
-  }
 
-  return utf8.decode(builder.toBytes(), allowMalformed: true);
+    return utf8.decode(builder.toBytes(), allowMalformed: true);
+  }();
+
+  return timeout == null ? read : read.timeout(timeout);
 }

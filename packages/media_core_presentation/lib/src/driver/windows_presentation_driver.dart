@@ -228,9 +228,13 @@ final class WindowManagerPresentationDriver implements KernelPresentationDriver 
 
     final window = WindowManager.instance.getCurrent();
     if (window != null) {
+      // Zero in the cascade releases the aspect lock the PiP enter path may
+      // have set; without it the restored main window keeps the lock and
+      // cannot be resized freely.
       window
         ..isAlwaysOnTop = _wasAlwaysOnTop
-        ..isResizable = _wasResizable;
+        ..isResizable = _wasResizable
+        ..aspectRatio = 0;
       if (config.pipSkipTaskbar) {
         window.isVisibleInTaskbar = !_wasSkipTaskbar;
       }

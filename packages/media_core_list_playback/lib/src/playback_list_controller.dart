@@ -319,6 +319,13 @@ final class PlaybackListController {
       return;
     }
 
+    // The index was validated against an older items list; a shrink that
+    // landed while the open chain was queued makes it stale, and indexing
+    // first would turn that into a RangeError nobody signed up for.
+    if (index >= _items.length) {
+      return;
+    }
+
     final item = _items[index];
     _log.debug(
       'opening a list item',
@@ -403,7 +410,10 @@ final class PlaybackListController {
   Future<void> savePosition() async {
     _ensureNotDisposed();
     final item = _state.item;
-    if (item == null || !config.resumeEnabled) {
+    // Pool mode binds no player until the first successful open, so a state
+    // that already carries an item can still have nothing to read a position
+    // from - skipping keeps "next before anything opened" from throwing.
+    if (item == null || !config.resumeEnabled || _player == null) {
       return;
     }
     await _store.save(item.id, player.position);
