@@ -25,11 +25,9 @@ export 'package:media_core/src/resource/manager/thermal_manager.dart';
 // ============================================================================
 
 export 'package:media_core/src/resource/model/decoder_budget.dart';
-export 'package:media_core/src/resource/model/resource_metrics.dart';
 export 'package:media_core/src/resource/model/resource_priority.dart';
 export 'package:media_core/src/resource/state/memory_pressure_bridge.dart';
 export 'package:media_core/src/resource/state/resource_pressure.dart';
-export 'package:media_core/src/resource/state/resource_state.dart';
 export 'package:media_core/src/resource/state/thermal_state.dart';
 // Memory accounting lives in its own package and is re-exported here so the
 // resource layer keeps one import surface.

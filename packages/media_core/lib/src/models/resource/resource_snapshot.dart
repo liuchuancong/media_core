@@ -1,8 +1,8 @@
 import 'package:built_value/built_value.dart';
 import 'package:clock/clock.dart';
-import 'package:media_core/src/resource/model/resource_metrics.dart';
+import 'package:media_core/src/models/resource/resource_metrics.dart';
+import 'package:media_core/src/models/resource/resource_state.dart';
 import 'package:media_core/src/resource/state/resource_pressure.dart';
-import 'package:media_core/src/resource/state/resource_state.dart';
 
 part 'resource_snapshot.g.dart';
 
@@ -54,7 +54,7 @@ abstract class ResourceSnapshot implements Built<ResourceSnapshot, ResourceSnaps
   factory ResourceSnapshot.of({required ResourceState state, required DateTime createdAt}) {
     return ResourceSnapshot(
       (builder) => builder
-        ..state = state
+        ..state = state.toBuilder()
         ..createdAt = createdAt,
     );
   }

@@ -56,9 +56,9 @@ class ResourceSnapshotBuilder
     implements Builder<ResourceSnapshot, ResourceSnapshotBuilder> {
   _$ResourceSnapshot? _$v;
 
-  ResourceState? _state;
-  ResourceState? get state => _$this._state;
-  set state(ResourceState? state) => _$this._state = state;
+  ResourceStateBuilder? _state;
+  ResourceStateBuilder get state => _$this._state ??= ResourceStateBuilder();
+  set state(ResourceStateBuilder? state) => _$this._state = state;
 
   DateTime? _createdAt;
   DateTime? get createdAt => _$this._createdAt;
@@ -69,7 +69,7 @@ class ResourceSnapshotBuilder
   ResourceSnapshotBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
-      _state = $v.state;
+      _state = $v.state.toBuilder();
       _createdAt = $v.createdAt;
       _$v = null;
     }
@@ -90,20 +90,32 @@ class ResourceSnapshotBuilder
   ResourceSnapshot build() => _build();
 
   _$ResourceSnapshot _build() {
-    final _$result =
-        _$v ??
-        _$ResourceSnapshot._(
-          state: BuiltValueNullFieldError.checkNotNull(
-            state,
-            r'ResourceSnapshot',
-            'state',
-          ),
-          createdAt: BuiltValueNullFieldError.checkNotNull(
-            createdAt,
-            r'ResourceSnapshot',
-            'createdAt',
-          ),
+    _$ResourceSnapshot _$result;
+    try {
+      _$result =
+          _$v ??
+          _$ResourceSnapshot._(
+            state: state.build(),
+            createdAt: BuiltValueNullFieldError.checkNotNull(
+              createdAt,
+              r'ResourceSnapshot',
+              'createdAt',
+            ),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'state';
+        state.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'ResourceSnapshot',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }
