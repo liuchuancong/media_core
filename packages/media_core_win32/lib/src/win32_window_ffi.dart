@@ -392,9 +392,17 @@ abstract final class Win32WindowFfi {
   ///
   /// No style bits are touched: the host's chrome state (a custom-drawn title
   /// bar) is exactly what it already is. `SWP_FRAMECHANGED` keeps the frame
-  /// state and the bounds consistent in a single update.
+  /// state and the bounds consistent in a single update. A non-topmost move
+  /// carries `SWP_NOZORDER`/`SWP_NOACTIVATE`: an insert-after of zero is
+  /// `HWND_TOP`, not "leave the z-order alone", so without the flag every
+  /// bounds move would silently raise the window.
   static bool applyBounds(int hwnd, Rect rect, {required bool topmost}) {
     if (hwnd == 0) return false;
+
+    final flags = topmost
+        ? _swpShowWindow | _swpFrameChanged
+        : _swpShowWindow | _swpFrameChanged | _swpNoZorder | _swpNoActivate;
+
     return _setWindowPos(
           hwnd,
           topmost ? _hwndTopmost : _hwndNoZorderChange,
@@ -402,7 +410,7 @@ abstract final class Win32WindowFfi {
           rect.top.round(),
           rect.width.round(),
           rect.height.round(),
-          _swpShowWindow | _swpFrameChanged,
+          flags,
         ) !=
         0;
   }
@@ -449,15 +457,10 @@ abstract final class Win32WindowFfi {
     if (hwnd == 0) return false;
 
     if (fullscreen) {
-      if (snapshot != null) {
-        _setWindowLongPtr(hwnd, _gwlStyle, snapshot._style & ~(_wsCaption | _wsThickframe | _wsMaximize));
-        _setWindowLongPtr(
-          hwnd,
-          _gwlExStyle,
-          (snapshot._exStyle | _wsExTopmost) &
-              ~(_wsExDlgModalFrame | _wsExWindowEdge | _wsExClientEdge | _wsExStaticEdge),
-        );
-      }
+      // The monitor geometry is validated before any style is stripped: a
+      // failed lookup returning false with the caption and frame already
+      // removed would hand the caller a frameless, topmost, wrongly-sized
+      // window and no rollback.
       final monitor = _monitorFromWindow(hwnd, _monitorDefaultToNearest);
       final infoPtr = calloc<_MonitorInfo>();
       try {
@@ -465,6 +468,17 @@ abstract final class Win32WindowFfi {
         if (monitor == 0 || _getMonitorInfo(monitor, infoPtr) == 0) {
           return false;
         }
+
+        if (snapshot != null) {
+          _setWindowLongPtr(hwnd, _gwlStyle, snapshot._style & ~(_wsCaption | _wsThickframe | _wsMaximize));
+          _setWindowLongPtr(
+            hwnd,
+            _gwlExStyle,
+            (snapshot._exStyle | _wsExTopmost) &
+                ~(_wsExDlgModalFrame | _wsExWindowEdge | _wsExClientEdge | _wsExStaticEdge),
+          );
+        }
+
         return _setWindowPos(
               hwnd,
               _hwndTopmost,

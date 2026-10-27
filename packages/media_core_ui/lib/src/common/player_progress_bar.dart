@@ -133,12 +133,19 @@ final class _PlayerProgressBarState extends State<PlayerProgressBar> {
   }
 
   /// Track geometry for a pointer position inside the bar.
+  ///
+  /// The gesture detector wraps the padded track, so a local x includes
+  /// [PlayerProgressBar.padding]; dividing it by the padded width would ride
+  /// the thumb offset from the pointer and never let a tap reach the very
+  /// ends. The fraction is computed over the track box only.
   double _fractionFor(Offset localPosition, double width) {
-    if (width <= 0) {
+    final horizontal = widget.padding.horizontal;
+
+    if (width - horizontal <= 0) {
       return 0;
     }
 
-    return (localPosition.dx / width).clamp(0.0, 1.0);
+    return ((localPosition.dx - widget.padding.left) / (width - horizontal)).clamp(0.0, 1.0);
   }
 
   Duration _positionFor(double fraction) {

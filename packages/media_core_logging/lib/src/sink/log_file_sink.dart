@@ -59,12 +59,18 @@ final class LogFileSink implements LogSink {
   DateTime? _lastFlush;
   bool _closed = false;
 
-  /// Lines written so far, including buffered ones.
-  int get writtenLines => _flushedBytes >= 0 ? _lineCount : 0;
+  /// Lines handed to the file (written or buffered).
   int _lineCount = 0;
 
-  /// Bytes buffered but not yet on disk.
-  int get bufferedBytes => _buffer.fold(0, (total, line) => total + line.length);
+  /// Code units buffered but not yet on disk - maintained as a running total,
+  /// not a fold over the buffer on every record.
+  int _bufferedChars = 0;
+
+  /// Lines written so far, including buffered ones.
+  int get writtenLines => _lineCount;
+
+  /// Buffered amount, in the same code-unit unit the flush trigger compares.
+  int get bufferedBytes => _bufferedChars;
 
   /// Whether the sink has been closed.
   bool get isClosed => _closed;
@@ -74,12 +80,14 @@ final class LogFileSink implements LogSink {
     if (_closed) {
       return;
     }
-    _buffer.add(formatter.format(record));
+    final line = formatter.format(record);
+    _buffer.add(line);
     _lineCount++;
+    _bufferedChars += line.length;
 
     final now = _clock();
     final due = _lastFlush == null || now.difference(_lastFlush!) >= flushInterval;
-    if (due || bufferedBytes >= 64 * 1024) {
+    if (due || _bufferedChars >= 64 * 1024) {
       unawaited(flush());
     }
   }
@@ -107,6 +115,7 @@ final class LogFileSink implements LogSink {
 
     final lines = _buffer.join('\n');
     _buffer.clear();
+    _bufferedChars = 0;
     _lastFlush = _clock();
 
     try {
@@ -130,7 +139,11 @@ final class LogFileSink implements LogSink {
     if (_closed) {
       return;
     }
-    await flush();
+    // Records that raced in while the final write was in flight must not be
+    // dropped by the flag below: drain until the buffer stays empty.
+    while (_buffer.isNotEmpty) {
+      await flush();
+    }
     _closed = true;
   }
 

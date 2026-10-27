@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:developer' as developer;
 
 import 'package:media_core_logging/src/logger/media_core_log.dart' show MediaCoreLog;
@@ -75,11 +76,13 @@ final class MemoryLogSink implements LogSink {
     }
     _records.add(record);
     while (_records.length > capacity) {
-      _records.removeAt(0);
+      // Queue removal, not list-head removal: shifting the whole buffer per
+      // record is the exact cost a ring exists to avoid.
+      _records.removeFirst();
     }
   }
 
-  final List<PlayerLogRecord> _records = <PlayerLogRecord>[];
+  final Queue<PlayerLogRecord> _records = Queue<PlayerLogRecord>();
 
   /// Retained records, oldest first.
   List<PlayerLogRecord> get records => List<PlayerLogRecord>.unmodifiable(_records);

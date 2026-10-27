@@ -84,7 +84,9 @@ HlsManifestKind classifyHlsManifest(String body) {
     relative++;
   }
 
-  for (final line in const LineSplitter().convert(body)) {
+  // A UTF-8 BOM would hide the `#EXTM3U` header from the first-line checks.
+  final bomless = body.startsWith('\uFEFF') ? body.substring(1) : body;
+  for (final line in const LineSplitter().convert(bomless)) {
     final trimmed = line.trim();
     if (trimmed.isEmpty) continue;
     if (trimmed.startsWith('#')) {

@@ -199,8 +199,11 @@ class DlnaCastBackend implements MediaCastBackend {
     if (rendering == null) {
       throw CastException('device exposes no RenderingControl service', deviceId: device.id);
     }
+    // UPnP defines the volume channel as 0..100; out-of-range values are a
+    // device fault on most firmwares rather than a clamp.
+    final desired = percent.clamp(0, 100);
     final service = SoapServiceRef(type: rendering.type, controlUrl: rendering.controlUrl);
-    await _call(device, service, Soap.setVolume(service: service, desiredVolume: percent));
+    await _call(device, service, Soap.setVolume(service: service, desiredVolume: desired));
   }
 
   void _onMessage(SsdpMessage message) {

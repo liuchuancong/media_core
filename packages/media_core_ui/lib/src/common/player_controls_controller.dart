@@ -263,7 +263,16 @@ final class PlayerControlsController extends ChangeNotifier {
       _controlsVisible = true;
 
       notifyListeners();
-    } else if (!restartTimer) {
+    }
+
+    if (!restartTimer) {
+      // "Keep them up" disarms the countdown too: a pause whose engine
+      // confirmation is still in flight would otherwise let the deadline
+      // fire against the not-yet-paused state and hide the chrome for a
+      // player that then sits paused.
+      _hideTimer?.cancel();
+      _hideTimer = null;
+
       return;
     }
 
@@ -430,14 +439,19 @@ final class PlayerControlsController extends ChangeNotifier {
   Future<void> toggleMute() {
     revealControls();
 
-    return handle.setMute(muted: !isMuted);
+    // The engine reports a mute as a volume change (or as nothing at all when
+    // the volume already was zero), so the bars are told here: a speaker icon
+    // must not wait for an unrelated structural event.
+    return handle.setMute(muted: !isMuted).then((_) => notifyListeners());
   }
 
   /// Turns looping on or off.
   Future<void> toggleLoop() {
     revealControls();
 
-    return handle.setLoop(loop: !isLooping);
+    // setLoop emits no transport event; without this the loop pad stays in its
+    // old state until something unrelated rebuilds the bar.
+    return handle.setLoop(loop: !isLooping).then((_) => notifyListeners());
   }
 
   /// Moves to the next rate in [rates], wrapping around.
@@ -469,7 +483,8 @@ final class PlayerControlsController extends ChangeNotifier {
   Future<void> setAudioOnly({required bool value}) {
     revealControls();
 
-    return handle.setAudioOnly(audioOnly: value);
+    // setAudioOnly emits no transport event either; the icon follows here.
+    return handle.setAudioOnly(audioOnly: value).then((_) => notifyListeners());
   }
 
   /// Whether playback is restricted to the audio track.
@@ -549,10 +564,14 @@ final class PlayerControlsController extends ChangeNotifier {
 
     final wasPlaying = _playback.value.isPlaying;
     final wasVolume = _playback.value.volume;
+    final wasRate = _playback.value.rate;
 
     _playback.value = state;
 
-    final structural = wasPlaying != state.isPlaying || wasVolume != state.volume;
+    // Rate is structural like playing and volume: the transport mirror is
+    // the only place a rate chip reads it from, so a rate-only tick must
+    // rebuild the bars too.
+    final structural = wasPlaying != state.isPlaying || wasVolume != state.volume || wasRate != state.rate;
 
     if (structural) {
       _scheduleHide();

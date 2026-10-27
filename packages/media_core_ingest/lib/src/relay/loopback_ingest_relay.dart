@@ -217,7 +217,10 @@ final class LoopbackIngestRelay {
   String _rewrite(String body, Uri manifest) {
     final hadTrailingNewline = body.endsWith('\n');
     final output = <String>[];
-    for (final rawLine in const LineSplitter().convert(body)) {
+    // A UTF-8 BOM survives into the first line, where it would hide the
+    // `#EXTM3U` header and register it as a bogus child.
+    final bomless = body.startsWith('\uFEFF') ? body.substring(1) : body;
+    for (final rawLine in const LineSplitter().convert(bomless)) {
       final line = rawLine.endsWith('\r') ? rawLine.substring(0, rawLine.length - 1) : rawLine;
       final trimmed = line.trim();
       if (trimmed.isEmpty) {
@@ -351,7 +354,10 @@ final class LoopbackIngestRelay {
     if (range != null && range.isNotEmpty) {
       request.headers.set(HttpHeaders.rangeHeader, range);
     }
-    final cookie = _cookies?.headerFor(upstream);
+    // The caller's own cookie (a login session) merges with what the origin
+    // handed out: replacing it wholesale lets rolling CDN tokens evict the
+    // session cookie, and child requests start failing 403 mid-stream.
+    final cookie = _cookies?.headerFor(upstream, initialHeader: _headers[HttpHeaders.cookieHeader]);
     if (cookie != null) {
       request.headers.set(HttpHeaders.cookieHeader, cookie);
     }
