@@ -266,6 +266,12 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     if (_autoPlay) {
       await _player.start();
+    } else {
+      // setDataSource alone stops at `initialized`: without prepareAsync the
+      // paused open produces no metadata, no duration, nothing to render,
+      // and the first play() pays the whole prepare latency. Starting from
+      // `prepared` is legal, so a paused open prepares and stays paused.
+      await _player.prepareAsync();
     }
 
     MediaCoreLog.info(

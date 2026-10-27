@@ -181,6 +181,13 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       _hasOpened = false;
       _openFailed = true;
 
+      // A failed open must not leave a latched spinner behind: later engine
+      // statuses are gated out by the open window, so nothing else clears it.
+      if (_bufferingNow) {
+        _bufferingNow = false;
+        emitBuffering(buffering: false, resumePlaying: false);
+      }
+
       // Reported inside the open window, so the base turns it into a failed
       // open: the controller then escalates to the next line or engine instead
       // of leaving the user with audio and no picture.
@@ -544,6 +551,12 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       // [engineReportsOpenFailure].
       _openFailed = true;
 
+      if (_bufferingNow) {
+        // The open dies here; no bufferingEnd status will follow it.
+        _bufferingNow = false;
+        emitBuffering(buffering: false, resumePlaying: false);
+      }
+
       reportEngineError(message: 'fvp: invalid or unsupported media');
       return;
     }
@@ -772,6 +785,11 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       _sizeNotifier.value = size;
 
       emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
+    } on Object catch (error) {
+      // The attach runs unawaited from the open path and the media-status
+      // stream; an engine error escaping here would surface as an unhandled
+      // async error instead of an open failure.
+      MediaCoreLog.warning(LogCategory.renderer, 'attaching the video texture failed', error: error);
     } finally {
       _attachingTexture = false;
     }
@@ -801,7 +819,9 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     if (isDisposed || _player != player || result < 0) return;
 
-    player.state = mdk.PlaybackState.playing;
+    // Same intent rule as the open path: the geometry retry must not force
+    // audible playback on an open that asked to stay paused.
+    player.state = _autoPlay ? mdk.PlaybackState.playing : mdk.PlaybackState.paused;
 
     await _attachTexture(player);
   }
@@ -823,6 +843,10 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       await player.updateTexture(width: -1).timeout(_geometryTimeout);
     } on TimeoutException {
       MediaCoreLog.warning(LogCategory.renderer, 'releasing the video texture timed out');
+    } on Object catch (error) {
+      // A throwing release must not skip the dispose chain behind it - the
+      // engine would leak and the base's dispose() would never complete.
+      MediaCoreLog.warning(LogCategory.renderer, 'releasing the video texture failed', error: error);
     }
   }
 

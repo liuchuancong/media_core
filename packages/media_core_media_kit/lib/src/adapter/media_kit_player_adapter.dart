@@ -688,12 +688,13 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   Future<void> setAudioOutputSuppressed({required bool suppressed}) async {
     _audioOutputSuppressed = suppressed;
 
-    if (suppressed) {
-      try {
-        await player.setAudioTrack(mk.AudioTrack.no());
-      } on Object catch (_) {
-        // Best-effort; some builds reject track selection before open.
-      }
+    try {
+      // Both directions apply at once: suppression selects "no track", and
+      // un-suppressing an already-open player restores an audible track -
+      // without it the player stays silent until the next open.
+      await player.setAudioTrack(suppressed ? mk.AudioTrack.no() : mk.AudioTrack.auto());
+    } on Object catch (_) {
+      // Best-effort; some builds reject track selection before open.
     }
   }
 

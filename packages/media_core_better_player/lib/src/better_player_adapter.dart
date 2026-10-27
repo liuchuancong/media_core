@@ -187,6 +187,11 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// change. Mirrors the guard in `MediaKitPlayerAdapter`.
   bool _playingNow = false;
 
+  /// Buffering latch: an engine that reports bufferingStart and then fails
+  /// never sends the matching end, and a latched spinner would survive into
+  /// the next source.
+  bool _bufferingNow = false;
+
   /// The underlying [BetterPlayerController].
   ///
   /// Throws [StateError] before [onInitialize].
@@ -286,6 +291,13 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // A new source starts a new error reporting scope.
     _lastReportedError = null;
     _liveSource = source.isLive;
+    // The engine reuses one controller across sources, and the play event is
+    // posted from the single native transition: a latch left true by the
+    // previous source swallows the new source's first play event.
+    _playingNow = false;
+    // Same for the buffering latch - a bufferingEnd that never arrives must
+    // not carry a spinner into the next source.
+    _bufferingNow = false;
 
     // A controller can be reused for multiple sources. Make sure the
     // value listener is registered exactly once for the current source.
@@ -439,7 +451,13 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   Future<void> onSetVolume(double volume) => controller.setVolume(volume.clamp(0.0, 1.0));
 
   @override
-  Future<void> onSetRate(double rate) => controller.setSpeed(rate);
+  Future<void> onSetRate(double rate) {
+    // Live broadcasts have no meaningful playback speed; the sibling adapters
+    // refuse the change for the same reason.
+    if (_liveSource) return Future<void>.value();
+
+    return controller.setSpeed(rate);
+  }
 
   @override
   Future<void> onClose() async {
@@ -480,8 +498,14 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     if (controller != null) {
       controller
         ..videoPlayerController?.removeListener(_onValueChange)
-        ..removeEventsListener(_onEngineEvent)
-        ..dispose(forceDispose: true);
+        ..removeEventsListener(_onEngineEvent);
+
+      // An injected controller belongs to the host that injected it; a forced
+      // dispose would tear down its native decoder and surface while its
+      // owner still intends to reuse them.
+      if (_injectedController == null) {
+        controller.dispose(forceDispose: true);
+      }
     }
 
     _context = null;
@@ -575,9 +599,11 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         emitPaused();
 
       case BetterPlayerEventType.bufferingStart:
+        _bufferingNow = true;
         emitBuffering(buffering: true);
 
       case BetterPlayerEventType.bufferingEnd:
+        _bufferingNow = false;
         emitBuffering(buffering: false, resumePlaying: state.playing);
 
       case BetterPlayerEventType.finished:
@@ -592,6 +618,13 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         if (_lastReportedError == message) return;
 
         _lastReportedError = message;
+
+        if (_bufferingNow) {
+          // The attempt died mid-buffer; no bufferingEnd will follow it.
+          _bufferingNow = false;
+          emitBuffering(buffering: false, resumePlaying: false);
+        }
+
         reportEngineError(message: message);
 
       // BetterPlayerEventType may carry members this adapter intentionally

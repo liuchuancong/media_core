@@ -15,7 +15,14 @@ abstract final class FijkHelper {
   /// here rather than rewritten into something the site never issued.
   static Map<String, Object> sourceHeaderOptions(Map<String, String> headers) {
     final sanitized = HttpHeaderSanitizer.sanitize(headers);
-    final userAgent = sanitized.remove('user-agent');
+
+    // Case-insensitive: a `User-Agent` spelling must not stay inside the
+    // header blob while the engine's dedicated user_agent option goes unset.
+    final userAgent = sanitized.entries
+        .where((entry) => entry.key.toLowerCase() == 'user-agent')
+        .map((entry) => entry.value)
+        .firstOrNull;
+    sanitized.removeWhere((name, _) => name.toLowerCase() == 'user-agent');
 
     final buffer = StringBuffer();
     sanitized.forEach((name, value) => buffer.write('$name:$value\r\n'));
