@@ -17,11 +17,9 @@ library;
 // ============================================================================
 
 export 'package:media_core/src/core/capability/media_capabilities.dart';
-export 'package:media_core/src/core/capability/player_capabilities.dart';
 export 'package:media_core/src/core/capability/player_media_type.dart';
 export 'package:media_core/src/core/config/player_config.dart';
 export 'package:media_core/src/core/config/player_constants.dart';
-export 'package:media_core/src/core/config/player_options.dart';
 export 'package:media_core/src/core/model/player_identity.dart';
 export 'package:media_core/src/core/model/player_info.dart';
 export 'package:media_core/src/core/model/player_metrics.dart';

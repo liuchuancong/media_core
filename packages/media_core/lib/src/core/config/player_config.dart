@@ -2,8 +2,9 @@ import 'package:equatable/equatable.dart';
 import 'package:media_core/src/core/capability/media_capabilities.dart';
 import 'package:media_core/src/core/capability/player_media_type.dart';
 import 'package:media_core/src/core/config/player_constants.dart';
-import 'package:media_core/src/core/library.dart' show PlayerCapabilities, PlayerCoreState;
+import 'package:media_core/src/core/library.dart' show PlayerCoreState;
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/core/library.dart' show PlayerCapabilities;
 
 /// Defines the immutable configuration of a player.
 ///

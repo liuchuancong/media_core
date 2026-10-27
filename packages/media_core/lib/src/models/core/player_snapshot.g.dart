@@ -150,13 +150,15 @@ class PlayerSnapshotBuilder
   PlayerCoreState? get state => _$this._state;
   set state(PlayerCoreState? state) => _$this._state = state;
 
-  PlayerOptions? _options;
-  PlayerOptions? get options => _$this._options;
-  set options(PlayerOptions? options) => _$this._options = options;
+  PlayerOptionsBuilder? _options;
+  PlayerOptionsBuilder get options =>
+      _$this._options ??= PlayerOptionsBuilder();
+  set options(PlayerOptionsBuilder? options) => _$this._options = options;
 
-  PlayerCapabilities? _capabilities;
-  PlayerCapabilities? get capabilities => _$this._capabilities;
-  set capabilities(PlayerCapabilities? capabilities) =>
+  PlayerCapabilitiesBuilder? _capabilities;
+  PlayerCapabilitiesBuilder get capabilities =>
+      _$this._capabilities ??= PlayerCapabilitiesBuilder();
+  set capabilities(PlayerCapabilitiesBuilder? capabilities) =>
       _$this._capabilities = capabilities;
 
   PlayerMetrics? _metrics;
@@ -182,8 +184,8 @@ class PlayerSnapshotBuilder
       _mediaType = $v.mediaType;
       _mediaCapabilities = $v.mediaCapabilities;
       _state = $v.state;
-      _options = $v.options;
-      _capabilities = $v.capabilities;
+      _options = $v.options.toBuilder();
+      _capabilities = $v.capabilities.toBuilder();
       _metrics = $v.metrics;
       _timestamp = $v.timestamp;
       _$v = null;
@@ -205,38 +207,48 @@ class PlayerSnapshotBuilder
   PlayerSnapshot build() => _build();
 
   _$PlayerSnapshot _build() {
-    final _$result =
-        _$v ??
-        _$PlayerSnapshot._(
-          playerId: BuiltValueNullFieldError.checkNotNull(
-            playerId,
-            r'PlayerSnapshot',
-            'playerId',
-          ),
-          sessionId: sessionId,
-          requestId: requestId,
-          generationId: generationId,
-          sourceId: sourceId,
-          mediaType: mediaType,
-          mediaCapabilities: mediaCapabilities,
-          state: BuiltValueNullFieldError.checkNotNull(
-            state,
-            r'PlayerSnapshot',
-            'state',
-          ),
-          options: BuiltValueNullFieldError.checkNotNull(
-            options,
-            r'PlayerSnapshot',
-            'options',
-          ),
-          capabilities: BuiltValueNullFieldError.checkNotNull(
-            capabilities,
-            r'PlayerSnapshot',
-            'capabilities',
-          ),
-          metrics: metrics,
-          timestamp: timestamp,
+    _$PlayerSnapshot _$result;
+    try {
+      _$result =
+          _$v ??
+          _$PlayerSnapshot._(
+            playerId: BuiltValueNullFieldError.checkNotNull(
+              playerId,
+              r'PlayerSnapshot',
+              'playerId',
+            ),
+            sessionId: sessionId,
+            requestId: requestId,
+            generationId: generationId,
+            sourceId: sourceId,
+            mediaType: mediaType,
+            mediaCapabilities: mediaCapabilities,
+            state: BuiltValueNullFieldError.checkNotNull(
+              state,
+              r'PlayerSnapshot',
+              'state',
+            ),
+            options: options.build(),
+            capabilities: capabilities.build(),
+            metrics: metrics,
+            timestamp: timestamp,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'options';
+        options.build();
+        _$failedField = 'capabilities';
+        capabilities.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'PlayerSnapshot',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

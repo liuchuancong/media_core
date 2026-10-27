@@ -1,9 +1,7 @@
 import 'package:built_value/built_value.dart';
 import 'package:clock/clock.dart';
 import 'package:media_core/src/core/capability/media_capabilities.dart';
-import 'package:media_core/src/core/capability/player_capabilities.dart';
 import 'package:media_core/src/core/capability/player_media_type.dart';
-import 'package:media_core/src/core/config/player_options.dart';
 import 'package:media_core/src/core/model/player_metrics.dart';
 import 'package:media_core/src/core/state/player_core_state.dart';
 import 'package:media_core/src/core/state/player_status.dart';
@@ -12,6 +10,8 @@ import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/request_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/core/player_capabilities.dart';
+import 'package:media_core/src/models/core/player_options.dart';
 
 part 'player_snapshot.g.dart';
 
@@ -48,13 +48,13 @@ abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBui
     PlayerMediaType? mediaType,
     MediaCapabilities? mediaCapabilities,
     PlayerCoreState state = PlayerCoreState.idle,
-    PlayerOptions options = PlayerOptions.defaults,
-    PlayerCapabilities capabilities = PlayerCapabilities.basic,
+    PlayerOptions? options,
+    PlayerCapabilities? capabilities,
     PlayerMetrics? metrics,
     DateTime? timestamp,
   }) {
-    return PlayerSnapshot(
-      (builder) => builder
+    return PlayerSnapshot((builder) {
+      builder
         ..playerId = playerId
         ..sessionId = sessionId
         ..requestId = requestId
@@ -63,11 +63,16 @@ abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBui
         ..mediaType = mediaType
         ..mediaCapabilities = mediaCapabilities
         ..state = state
-        ..options = options
-        ..capabilities = capabilities
         ..metrics = metrics
-        ..timestamp = timestamp,
-    );
+        ..timestamp = timestamp;
+
+      if (options != null) {
+        builder.options = options.toBuilder();
+      }
+      if (capabilities != null) {
+        builder.capabilities = capabilities.toBuilder();
+      }
+    });
   }
 
   /// Creates an empty snapshot for [playerId].
@@ -85,8 +90,8 @@ abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBui
     SourceId? sourceId,
     PlayerMediaType? mediaType,
     MediaCapabilities? mediaCapabilities,
-    PlayerOptions options = PlayerOptions.defaults,
-    PlayerCapabilities capabilities = PlayerCapabilities.basic,
+    PlayerOptions? options,
+    PlayerCapabilities? capabilities,
     PlayerMetrics? metrics,
     DateTime? timestamp,
   }) {
@@ -114,8 +119,8 @@ abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBui
   @BuiltValueHook(initializeBuilder: true)
   static void _initialize(PlayerSnapshotBuilder builder) => builder
     ..state = PlayerCoreState.idle
-    ..options = PlayerOptions.defaults
-    ..capabilities = PlayerCapabilities.basic;
+    ..options = PlayerOptions.defaults.toBuilder()
+    ..capabilities = PlayerCapabilities.basic.toBuilder();
 
   /// Unique stable identifier of the player.
   PlayerId get playerId;
@@ -426,7 +431,7 @@ abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBui
       (builder) => builder
         ..sourceId = null
         ..state = state.withSource(value: false)
-        ..options = options.withoutSource(),
+        ..options = options.withoutSource().toBuilder(),
     );
   }
 
@@ -457,12 +462,12 @@ abstract class PlayerSnapshot implements Built<PlayerSnapshot, PlayerSnapshotBui
 
   /// Returns a snapshot with the supplied player options.
   PlayerSnapshot withOptions(PlayerOptions value) {
-    return rebuild((builder) => builder..options = value);
+    return rebuild((builder) => builder..options = value.toBuilder());
   }
 
   /// Returns a snapshot with the supplied player capabilities.
   PlayerSnapshot withCapabilities(PlayerCapabilities value) {
-    return rebuild((builder) => builder..capabilities = value);
+    return rebuild((builder) => builder..capabilities = value.toBuilder());
   }
 
   /// Returns a snapshot with the supplied metrics.

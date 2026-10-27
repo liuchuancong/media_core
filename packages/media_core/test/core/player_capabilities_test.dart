@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_core/src/core/capability/player_capabilities.dart';
+import 'package:media_core/src/models/core/library.dart';
 
 void main() {
   group('PlayerCapabilities', () {
     test('basic enables core controls only', () {
-      const caps = PlayerCapabilities.basic;
+      final caps = PlayerCapabilities.basic;
       expect(caps.play, isTrue);
       expect(caps.pause, isTrue);
       expect(caps.seek, isTrue);
@@ -13,7 +13,7 @@ void main() {
     });
 
     test('none disables everything', () {
-      const caps = PlayerCapabilities.none;
+      final caps = PlayerCapabilities.none;
       expect(caps.play, isFalse);
       expect(caps.pause, isFalse);
       expect(caps.setVolume, isFalse);
@@ -21,7 +21,7 @@ void main() {
     });
 
     test('full adds extended features', () {
-      const caps = PlayerCapabilities.full;
+      final caps = PlayerCapabilities.full;
       expect(caps.play, isTrue);
       expect(caps.fullscreen, isTrue);
       expect(caps.pictureInPicture, isTrue);
@@ -31,7 +31,7 @@ void main() {
     });
 
     test('copyWith changes selected fields', () {
-      const base = PlayerCapabilities.basic;
+      final base = PlayerCapabilities.basic;
       final updated = base.copyWith(fullscreen: true, seek: false);
       expect(updated.fullscreen, isTrue);
       expect(updated.seek, isFalse);
