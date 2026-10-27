@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show FlutterError, TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
+import 'package:media_core/media_core.dart' show LogCategory, LogModule, MediaCoreLog;
+
+final LogModule _log = MediaCoreLog.of(LogCategory.lifecycle);
 
 /// Channel a background-execution session is requested on.
 ///
@@ -366,24 +369,43 @@ final class BackgroundExecution {
       });
 
       if (id == null) {
+        _log.warning(
+          'background execution refused',
+          fields: <String, Object?>{'reason': BackgroundExecutionRefusal.serviceRefused.name},
+        );
         return (session: null, refusal: BackgroundExecutionRefusal.serviceRefused);
       }
 
       return (session: BackgroundExecutionSession._(id), refusal: null);
-    } on PlatformException {
+    } on PlatformException catch (error) {
       // The native side refused: no service, no declaration, a platform that
       // declares support and then does not deliver it. The job still runs.
+      _log.warning(
+        'background execution refused',
+        error: error,
+        fields: <String, Object?>{'reason': BackgroundExecutionRefusal.serviceRefused.name},
+      );
       return (session: null, refusal: BackgroundExecutionRefusal.serviceRefused);
-    } on MissingPluginException {
+    } on MissingPluginException catch (error) {
+      _log.warning(
+        'background execution refused',
+        error: error,
+        fields: <String, Object?>{'reason': BackgroundExecutionRefusal.pluginMissing.name},
+      );
       return (session: null, refusal: BackgroundExecutionRefusal.pluginMissing);
     }
     // FlutterError is reached only when there is no platform binding (a
     // pure-Dart test, a CLI, an isolate); it is caught deliberately so the job
     // degrades to no-op instead of crashing, even though it is an Error.
     // ignore: avoid_catching_errors
-    on FlutterError {
+    on FlutterError catch (error) {
       // Reached without a platform binding: a pure-Dart test, a CLI, an
       // isolate. There is no notification to post and nothing to report.
+      _log.warning(
+        'background execution refused',
+        error: error,
+        fields: <String, Object?>{'reason': BackgroundExecutionRefusal.noPlatformBinding.name},
+      );
       return (session: null, refusal: BackgroundExecutionRefusal.noPlatformBinding);
     }
   }
@@ -408,9 +430,11 @@ final class BackgroundExecution {
 
     try {
       return await _channel.invokeMethod<bool>('keepAlive/acquire') ?? false;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _log.warning('keep-alive acquire refused', error: error);
       return false;
-    } on MissingPluginException {
+    } on MissingPluginException catch (error) {
+      _log.warning('keep-alive acquire refused', error: error);
       return false;
     }
   }
@@ -424,10 +448,12 @@ final class BackgroundExecution {
 
     try {
       await _channel.invokeMethod<void>('keepAlive/release');
-    } on PlatformException {
+    } on PlatformException catch (error) {
       // Nothing on the platform side to stop; the keep-alive never started.
-    } on MissingPluginException {
+      _log.warning('keep-alive release failed', error: error);
+    } on MissingPluginException catch (error) {
       // Same answer as above, from a host without the plugin.
+      _log.warning('keep-alive release failed', error: error);
     }
   }
 

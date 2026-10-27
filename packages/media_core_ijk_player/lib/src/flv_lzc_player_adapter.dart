@@ -115,6 +115,11 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   bool _sourceBuffering = false;
 
+  /// The caller's autoPlay intent, read from the adapter context at
+  /// initialization; ijkplayer has no paused open, so the adapter decides
+  /// whether the final start() runs.
+  bool _autoPlay = true;
+
   /// Whether the current source is live. Rate changes and seeks are
   /// ignored for live streams — there is no rewindable timeline and no
   /// meaningful playback speed for a broadcast.
@@ -194,6 +199,11 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // host's logging configuration (see [FijkHelper.syncLogLevel]).
     FijkHelper.syncLogLevel();
 
+    // ijkplayer has no paused open; the final start() below is skipped when
+    // the caller did not ask for autoPlay, and the kernel's explicit play()
+    // starts the stream instead.
+    _autoPlay = context.playerConfig?.autoPlay ?? true;
+
     _player.addListener(_onPlayerValue);
     _positionSubscription = _player.onCurrentPosUpdate.listen(_onPositionChanged);
 
@@ -254,7 +264,15 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     await _player.setDataSource(source.uri.toString());
     if (isDisposed) return;
 
-    await _player.start();
+    if (_autoPlay) {
+      await _player.start();
+    }
+
+    MediaCoreLog.info(
+      LogCategory.renderer,
+      'opened source',
+      fields: <String, Object?>{'uri': source.uri.toString(), 'live': _liveSource, 'autoPlay': _autoPlay},
+    );
   }
 
   @override
@@ -319,11 +337,18 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     _fitNotifier.dispose();
 
+    // An injected player belongs to the host that injected it; releasing it
+    // here would kill an engine its owner intended to reuse.
+    if (_injectedPlayer != null) {
+      return;
+    }
+
     try {
       await _player.release();
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Release races surface here on some devices; disposal
       // continues regardless.
+      MediaCoreLog.warning(LogCategory.renderer, 'release failed: $error', error: error);
     }
   }
 

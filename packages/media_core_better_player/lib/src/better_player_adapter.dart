@@ -6,6 +6,8 @@ import 'package:media_core_better_player/media_core_better_player.dart';
 // The package barrel carries the engine too (`better_player_plus` is
 // re-exported from it), so this file does not import the engine directly.
 
+final LogModule _log = MediaCoreLog.of(LogCategory.player);
+
 /// Rewrites the data source a [BetterPlayerAdapter] is about to set up.
 ///
 /// Receives the framework [PlayerSource] and the data source the adapter
@@ -322,6 +324,11 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     await controller.setupDataSource(resolvedDataSource);
 
+    _log.info(
+      'opened source',
+      fields: <String, Object?>{'uri': resolvedDataSource.url, 'live': _liveSource},
+    );
+
     if (isDisposed) return;
 
     // Attach the value listener only after setupDataSource so the first
@@ -397,7 +404,10 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   }
 
   @override
-  Future<void> onPlay() => controller.play();
+  Future<void> onPlay() {
+    _log.debug('play');
+    return controller.play();
+  }
 
   @override
   Future<void> onPause() => controller.pause();
@@ -420,7 +430,10 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   }
 
   @override
-  Future<void> onSeek(Duration position) => controller.seekTo(position);
+  Future<void> onSeek(Duration position) {
+    _log.debug('seek', fields: <String, Object?>{'positionMs': position.inMilliseconds});
+    return controller.seekTo(position);
+  }
 
   @override
   Future<void> onSetVolume(double volume) => controller.setVolume(volume.clamp(0.0, 1.0));
@@ -448,8 +461,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // a best-effort cleanup operation.
     try {
       await controller.seekTo(Duration.zero);
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Best-effort cleanup.
+      _log.warning('seek failed', error: error);
     }
   }
 

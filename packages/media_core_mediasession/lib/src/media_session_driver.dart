@@ -10,6 +10,8 @@ import 'package:media_core_mediasession/src/media_session_config.dart';
 import 'package:media_core_mediasession/src/media_session_handler.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
+final LogModule _log = MediaCoreLog.of(LogCategory.session);
+
 /// A transport owned by another engine or isolate that this driver presents.
 ///
 /// The platform owns exactly one media surface per app, so a host with several
@@ -210,26 +212,23 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
           onStop: () async {
             await _transportStop();
           },
-          onNext: skipToNextHandler == null
-              ? null
-              : () async {
-                  await skipToNextHandler!.call();
-                },
-          onPrevious: skipToPreviousHandler == null
-              ? null
-              : () async {
-                  await skipToPreviousHandler!.call();
-                },
-          onSkipToQueueItem: skipToQueueItemHandler == null
-              ? null
-              : (index) async {
-                  await skipToQueueItemHandler!.call(index);
-                },
-          onSetSpeed: setSpeedHandler == null
-              ? null
-              : (rate) async {
-                  await setSpeedHandler!.call(rate);
-                },
+          // These wrappers read the mutable handler fields at invocation time:
+          // the driver is created once at startup while the player that owns a
+          // queue appears later, so a null check baked in here would leave the
+          // notification's skip buttons permanently dead for a host that
+          // installs handlers after initialize().
+          onNext: () async {
+            await skipToNextHandler?.call();
+          },
+          onPrevious: () async {
+            await skipToPreviousHandler?.call();
+          },
+          onSkipToQueueItem: (index) async {
+            await skipToQueueItemHandler?.call(index);
+          },
+          onSetSpeed: (rate) async {
+            await setSpeedHandler?.call(rate);
+          },
           controlsBuilder: _buildControls,
           stopOnTaskRemoved: config.androidStopOnRemoveTask,
         ),
@@ -240,11 +239,12 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
           androidStopForegroundOnPause: !config.androidNotificationOngoing,
         ),
       );
-    } on Object {
+    } on Object catch (error, stackTrace) {
       // Remembered, then rethrown: `enable` still fails the way its own doc says it
       // does, but a host that caught that and kept using the driver gets an honest
       // answer from `activate` — there is no surface here, rather than "not yet,
       // keep waiting".
+      _log.error('audio service init failed; no media surface', error: error, stackTrace: stackTrace);
       _noSurface = true;
       rethrow;
     }
@@ -292,9 +292,10 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       if (config.pauseOnBecomingNoisy) {
         _noisySub = session.becomingNoisyEventStream.listen((_) => _pauseTransport(), onError: (_) {});
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A platform without a functional audio_session implementation. Playback
       // still works; focus handling is simply unavailable.
+      _log.warning('audio focus handling unavailable', error: error);
     }
   }
 
@@ -361,6 +362,11 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     if (handle == null && _remoteTarget != null) {
       // The local player stopped while another window held the surface: the
       // remote presentation stays, and its target still owns the buttons.
+      // Its playback subscription goes too - left alive, every tick of the
+      // detached player would keep overwriting the remote window's state on
+      // the platform surface.
+      unawaited(_playbackSub?.cancel());
+      _playbackSub = null;
       _active = null;
       return;
     }
@@ -740,6 +746,10 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
           if (!_ducked) {
             _ducked = true;
             _volumeBeforeDuck = active.playback.volume;
+            _log.info(
+              'ducking for interruption',
+              fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
+            );
             unawaited(active.setVolume(_volumeBeforeDuck * config.duckFactor));
           }
 
@@ -747,6 +757,10 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
         case asession.AudioInterruptionType.unknown:
           _resumeOnInterruptionEnd = config.resumeAfterInterruption &&
               (remote != null ? (_remoteState?.playing ?? false) : active!.playback.isPlaying);
+          _log.info(
+            'pausing for interruption',
+            fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
+          );
           unawaited(_pauseTransport());
       }
 
@@ -755,11 +769,19 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
     if (_ducked && active != null) {
       _ducked = false;
+      _log.info(
+        'restoring volume after interruption',
+        fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
+      );
       unawaited(active.setVolume(_volumeBeforeDuck));
     }
 
     if (_resumeOnInterruptionEnd) {
       _resumeOnInterruptionEnd = false;
+      _log.info(
+        'resuming after interruption',
+        fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
+      );
       unawaited(_resumeTransport());
     }
   }
@@ -783,9 +805,10 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       } else if (Platform.isLinux) {
         ampris.AudioServiceMpris.registerWith();
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Registration is best-effort: audio_service falls back to its default
       // platform implementation when this fails.
+      _log.debug('platform implementation registration failed', fields: <String, Object?>{'error': error.toString()});
     }
   }
 

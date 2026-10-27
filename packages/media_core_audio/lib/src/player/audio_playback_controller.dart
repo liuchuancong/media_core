@@ -12,6 +12,8 @@ import 'package:media_core_audio/src/track/music_quality.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
 import 'package:media_core_audio/src/track/track_source.dart';
 
+final LogModule _log = MediaCoreLog.of(LogCategory.audio);
+
 /// decides how that looks.
 final class AudioPlaybackController {
   /// Creates a controller.
@@ -243,6 +245,7 @@ final class AudioPlaybackController {
   /// Pauses playback.
   Future<void> pause() async {
     await _handle?.pause();
+    _log.debug('pause');
     _publish(playing: false);
   }
 
@@ -252,6 +255,7 @@ final class AudioPlaybackController {
   /// Seeks within the current track.
   Future<void> seek(Duration position) async {
     await _handle?.seek(position);
+    _log.debug('seek', fields: <String, Object?>{'positionMs': position.inMilliseconds});
     _publish(position: position);
   }
 
@@ -461,6 +465,11 @@ final class AudioPlaybackController {
     );
 
     _publish(quality: source.quality, duration: source.duration ?? track.duration ?? Duration.zero);
+
+    _log.info(
+      'track opened',
+      fields: <String, Object?>{'track': track.displayName, 'index': queue.index, 'quality': source.quality?.id},
+    );
   }
 
   void _onAdapterEvent(PlayerAdapterEvent event) {
@@ -634,8 +643,9 @@ final class AudioPlaybackController {
     if (_resolved[key] == null || _resolved[key]!.isExpired()) {
       try {
         _resolved[key] = await _registry.resolveTrackSource(nextTrack, quality: _quality);
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Prefetch is best-effort; the real attempt reports the failure.
+        _log.debug('prefetch resolve failed', fields: <String, Object?>{'error': error.toString()});
       }
     }
 

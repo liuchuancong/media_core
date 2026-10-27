@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:media_core_ingest/src/relay/ingest_ffmpeg.dart';
+import 'package:media_core_logging/media_core_logging.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.network);
 
 /// Remuxes an upstream with FFmpeg into a rolling loopback HLS tree.
 ///
@@ -67,12 +70,23 @@ final class FfmpegIngestRelay {
           relay
             .._exited = true
             .._exitCode = code;
+          _log.info('ingest FFmpeg exited', fields: <String, Object?>{'source': source, 'exitCode': code});
         }),
       );
-      server.listen(relay._handle, onError: (Object _) {}, cancelOnError: false);
+      server.listen(relay._handle, onError: (Object error) {
+        _log.warning('ingest loopback server error', error: error, fields: <String, Object?>{'source': source});
+      }, cancelOnError: false);
       await relay._awaitPlaylist(File(playlistPath), startupTimeout);
+      _log.info('ingest relay started', fields: <String, Object?>{
+        'source': source,
+        'port': server.port,
+        'directory': directory.path,
+      });
       return relay;
-    } catch (_) {
+    } on Object catch (error) {
+      _log.error('ingest relay failed to start', error: error, stackTrace: StackTrace.current, fields: <String, Object?>{
+        'source': source,
+      });
       await execution?.stop();
       await server.close(force: true);
       await _deleteQuietly(directory);
@@ -126,12 +140,25 @@ final class FfmpegIngestRelay {
           relay
             .._exited = true
             .._exitCode = code;
+          _log.info('ingest FFmpeg exited', fields: <String, Object?>{'videoSource': videoSource, 'exitCode': code});
         }),
       );
-      server.listen(relay._handle, onError: (Object _) {}, cancelOnError: false);
+      server.listen(relay._handle, onError: (Object error) {
+        _log.warning('ingest loopback server error', error: error, fields: <String, Object?>{'videoSource': videoSource});
+      }, cancelOnError: false);
       await relay._awaitPlaylist(File(playlistPath), startupTimeout);
+      _log.info('DASH merge relay started', fields: <String, Object?>{
+        'videoSource': videoSource,
+        'audioSource': audioSource,
+        'port': server.port,
+        'directory': directory.path,
+      });
       return relay;
-    } catch (_) {
+    } on Object catch (error) {
+      _log.error('DASH merge relay failed to start', error: error, stackTrace: StackTrace.current, fields: <String, Object?>{
+        'videoSource': videoSource,
+        'audioSource': audioSource,
+      });
       await execution?.stop();
       await server.close(force: true);
       await _deleteQuietly(directory);

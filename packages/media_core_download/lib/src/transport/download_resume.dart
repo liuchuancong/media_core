@@ -1,4 +1,7 @@
+import 'package:media_core/media_core.dart' show LogCategory, LogModule, MediaCoreLog;
 import 'package:media_core_download/src/core/download_config.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.download);
 
 /// What should happen to a partially downloaded file.
 enum DownloadResumeDecision {
@@ -73,6 +76,10 @@ final class DownloadResumePlanner {
         );
       }
       if (localBytes > remoteBytes) {
+        _log.warning(
+          'resume rejected, restarting',
+          fields: <String, Object?>{'localBytes': localBytes, 'remoteBytes': remoteBytes},
+        );
         return const DownloadResumePlan(
           decision: DownloadResumeDecision.restart,
           reason: 'the local file is larger than the remote one, so it belongs to something else',
@@ -81,6 +88,7 @@ final class DownloadResumePlanner {
     }
 
     if (!serverAcceptsRanges && !config.forceResume) {
+      _log.warning('resume rejected, restarting', fields: <String, Object?>{'localBytes': localBytes, 'reason': 'no byte ranges'});
       return const DownloadResumePlan(
         decision: DownloadResumeDecision.restart,
         reason: 'the server did not offer byte ranges',
@@ -90,6 +98,10 @@ final class DownloadResumePlanner {
     final verify = config.verifyTailBytes;
     if (verify <= 0 || localBytes < verify) {
       // Too little on disk to verify: restarting costs less than one bad file.
+      _log.warning(
+        'resume rejected, restarting',
+        fields: <String, Object?>{'localBytes': localBytes, 'verifyBytes': verify},
+      );
       return DownloadResumePlan(
         decision: DownloadResumeDecision.restart,
         reason: verify <= 0
@@ -98,12 +110,17 @@ final class DownloadResumePlanner {
       );
     }
 
-    return DownloadResumePlan(
+    final plan = DownloadResumePlan(
       decision: DownloadResumeDecision.resume,
       startByte: localBytes - verify,
       verifyBytes: verify,
       reason: 'verifying the last $verify bytes before continuing',
     );
+    _log.info(
+      'resuming at byte ${plan.startByte}',
+      fields: <String, Object?>{'localBytes': localBytes, 'verifyBytes': verify},
+    );
+    return plan;
   }
 
   /// Whether the bytes at the resume offset still match what is on disk.

@@ -13,6 +13,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # Levelled, categorised logging
+  media_core_logging:
+    path: ../media_core_logging
   # No FFmpeg runtime here on purpose: hosts inject their own through
   # [IngestFfmpegStarter], so adding this package never links a second copy.
 

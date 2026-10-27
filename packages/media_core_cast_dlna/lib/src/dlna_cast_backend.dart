@@ -9,6 +9,8 @@ import 'package:media_core_cast_dlna/src/protocol/dlna_device_description.dart';
 import 'package:media_core_cast_dlna/src/protocol/http_transport.dart';
 import 'package:media_core_cast_dlna/src/protocol/soap.dart';
 
+final LogModule _log = MediaCoreLog.of(LogCategory.network);
+
 /// [MediaCastBackend] over DLNA/UPnP: SSDP to find, HTTP+SOAP to
 /// drive.
 ///
@@ -77,6 +79,18 @@ class DlnaCastBackend implements MediaCastBackend {
   /// dead TV in the picker until its cache ages out.
   final Map<String, String> _usnToUdn = <String, String>{};
 
+  /// SSDP usn -> when its description fetch last failed.
+  ///
+  /// A device that announces on every cache cycle but serves a broken or
+  /// unfetchable description would otherwise be re-fetched on every alive
+  /// message - one HTTP GET per announcement per device, forever. The entry
+  /// is a backoff, not a ban: after it expires the device gets one more
+  /// chance, because a TV rebooting mid-fetch is not a broken TV.
+  final Map<String, DateTime> _failedDescriptions = <String, DateTime>{};
+
+  /// How long a failed description keeps its device out of the picker.
+  static const Duration _descriptionRetryBackoff = Duration(seconds: 60);
+
   StreamSubscription<SsdpMessage>? _subscription;
   bool _started = false;
   bool _closed = false;
@@ -98,6 +112,7 @@ class DlnaCastBackend implements MediaCastBackend {
     _started = true;
     _subscription = _discovery.messages.listen(_onMessage);
     await _discovery.start();
+    _log.info('SSDP discovery started');
   }
 
   @override
@@ -106,12 +121,14 @@ class DlnaCastBackend implements MediaCastBackend {
       return;
     }
     _closed = true;
+    _log.info('SSDP discovery stopping', fields: <String, Object?>{'devices': _devices.length});
     await _subscription?.cancel();
     _subscription = null;
     await _discovery.stop();
     _devices.clear();
     _descriptions.clear();
     _usnToUdn.clear();
+    _failedDescriptions.clear();
     _fetching.clear();
     // Only the transports this backend created are its to close; a
     // caller-supplied function brings its own lifecycle.
@@ -122,6 +139,7 @@ class DlnaCastBackend implements MediaCastBackend {
 
   @override
   Future<void> setMedia(CastDevice device, CastMedia media) async {
+    _log.info('casting media to device', fields: <String, Object?>{'device': device.id, 'url': media.url});
     final service = _transportOf(device);
     await _call(device, service, Soap.setUri(service: service, didl: DidlLite.build(media), url: media.url));
   }
@@ -169,7 +187,8 @@ class DlnaCastBackend implements MediaCastBackend {
         return const CastPosition.unknown();
       }
       return CastPosition(position: relTime ?? Duration.zero, duration: trackDuration ?? Duration.zero);
-    } on Object {
+    } on Object catch (error) {
+      _log.warning('position poll failed', error: error, fields: <String, Object?>{'device': device.id});
       return const CastPosition.unknown();
     }
   }
@@ -199,6 +218,7 @@ class DlnaCastBackend implements MediaCastBackend {
       _descriptions.remove(canonical);
       _usnToUdn.remove(id);
       if (gone != null) {
+        _log.info('device lost', fields: <String, Object?>{'device': gone.id});
         _events.add(DeviceLost(gone.id));
       }
       return;
@@ -215,6 +235,14 @@ class DlnaCastBackend implements MediaCastBackend {
       // would hammer the LAN, and a device that actually changed its
       // description re-announces with a byebye first.
       return;
+    }
+
+    final failedAt = _failedDescriptions[id];
+    if (failedAt != null) {
+      if (DateTime.now().difference(failedAt) < _descriptionRetryBackoff) {
+        return;
+      }
+      _failedDescriptions.remove(id);
     }
 
     unawaited(_resolve(id, location));
@@ -241,12 +269,16 @@ class DlnaCastBackend implements MediaCastBackend {
       _devices[device.id] = device;
       _descriptions[device.id] = description;
       _usnToUdn[usn] = device.id;
+      _failedDescriptions.remove(usn);
+      _log.info('device found', fields: <String, Object?>{'device': device.id, 'name': device.name});
       _events.add(DeviceFound(device));
     } on Object catch (error) {
       // A description that cannot be fetched or parsed is not a
       // castable device; report the fault on the event stream where a
       // host can log or ignore it, instead of throwing inside a
       // listen callback and killing the subscription.
+      _failedDescriptions[usn] = DateTime.now();
+      _log.warning('device description failed', error: error, fields: <String, Object?>{'usn': usn, 'location': location});
       _events.add(CastFault(deviceId: usn, message: 'device description failed', error: error));
     } finally {
       _fetching.remove(usn);
@@ -266,18 +298,27 @@ class DlnaCastBackend implements MediaCastBackend {
       throw const CastException('backend is disposed');
     }
 
+    _log.debug('control call', fields: <String, Object?>{'device': device.id, 'action': request.action});
+
     final SoapResponse response;
     try {
       response = await _post(service.controlUrl, request.action, request.headers, request.body);
     } on Object catch (error) {
+      _log.warning('control request failed', error: error, fields: <String, Object?>{'device': device.id, 'action': request.action});
       throw CastException('control request failed', deviceId: device.id, cause: error);
     }
 
     final fault = Soap.parseFault(response.body);
     if (fault != null) {
+      _log.warning('device refused action', fields: <String, Object?>{'device': device.id, 'action': request.action, 'fault': fault});
       throw CastException('device refused ${request.action}: $fault', deviceId: device.id, cause: fault);
     }
     if (response.statusCode ~/ 100 != 2) {
+      _log.warning('device answered non-2xx', fields: <String, Object?>{
+        'device': device.id,
+        'action': request.action,
+        'status': response.statusCode,
+      });
       throw CastException('device answered ${response.statusCode} to ${request.action}', deviceId: device.id);
     }
   }

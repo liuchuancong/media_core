@@ -8,11 +8,14 @@ library;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:media_core/media_core.dart' show LogCategory, LogModule, MediaCoreLog;
 import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 
 import 'package:media_core_notify/src/client/notification_client.dart';
 import 'package:media_core_notify/src/client/notify_event.dart';
 import 'package:media_core_notify/src/jobs/foreground_jobs.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.general);
 
 /// The client backed by `flutter_local_notifications`.
 final class FlutterLocalNotificationsClient implements LocalNotificationClient {
@@ -180,17 +183,29 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
   Future<void> post(NotifyEvent event) async {
     final id = event.id ?? _nextId++;
 
-    await _plugin.show(
-      id: id,
-      title: event.title,
-      body: event.body,
-      payload: event.payload,
-      notificationDetails: detailsFor(event.copyWith(id: id), ongoing: false),
-    );
+    try {
+      await _plugin.show(
+        id: id,
+        title: event.title,
+        body: event.body,
+        payload: event.payload,
+        notificationDetails: detailsFor(event.copyWith(id: id), ongoing: false),
+      );
+    } on Object catch (error) {
+      _log.warning('notification show failed', error: error);
+      rethrow;
+    }
   }
 
   @override
-  Future<void> dismiss(int id) => _plugin.cancel(id: id);
+  Future<void> dismiss(int id) async {
+    try {
+      await _plugin.cancel(id: id);
+    } on Object catch (error) {
+      _log.warning('notification dismiss failed', error: error);
+      rethrow;
+    }
+  }
 
   @override
   Future<void> showRunningLine(NotifyEvent event) async {
@@ -199,17 +214,29 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
     // under it.
     final ongoing = event.copyWith(id: event.id ?? kRunningLineNotificationId, tone: NotifyTone.progress);
 
-    await _plugin.show(
-      id: ongoing.id!,
-      title: ongoing.title,
-      body: ongoing.body,
-      payload: ongoing.payload,
-      notificationDetails: detailsFor(ongoing, ongoing: true),
-    );
+    try {
+      await _plugin.show(
+        id: ongoing.id!,
+        title: ongoing.title,
+        body: ongoing.body,
+        payload: ongoing.payload,
+        notificationDetails: detailsFor(ongoing, ongoing: true),
+      );
+    } on Object catch (error) {
+      _log.warning('notification show failed', error: error);
+      rethrow;
+    }
   }
 
   @override
-  Future<void> clearRunningLine({required int id}) => _plugin.cancel(id: id);
+  Future<void> clearRunningLine({required int id}) async {
+    try {
+      await _plugin.cancel(id: id);
+    } on Object catch (error) {
+      _log.warning('notification dismiss failed', error: error);
+      rethrow;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Tone mapping

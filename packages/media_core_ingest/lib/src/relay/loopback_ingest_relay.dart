@@ -5,6 +5,9 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:media_core_ingest/src/hls/hls_session_cookies.dart';
+import 'package:media_core_logging/media_core_logging.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.network);
 
 /// Rewrites an HLS manifest tree so every child is an absolute loopback URL.
 ///
@@ -160,9 +163,13 @@ final class LoopbackIngestRelay {
       } else {
         await _proxyChild(request, child.uri);
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A failed child is the player's error to report: closing the response
       // with a status keeps it from waiting forever.
+      _log.warning('child fetch failed', error: error, fields: <String, Object?>{
+        'child': name,
+        'upstream': child.uri,
+      });
       await _fail(request, HttpStatus.badGateway);
     }
   }
@@ -247,6 +254,9 @@ final class LoopbackIngestRelay {
       name = '$id${isManifest ? '.m3u8' : _extensionOf(resolved)}';
       _children[name] = _Child(uri: resolved, manifest: isManifest);
       _byUpstream[key] = name;
+      if (!isManifest) {
+        _pruneChildren();
+      }
     }
     return Uri(
       scheme: 'http',
@@ -254,6 +264,35 @@ final class LoopbackIngestRelay {
       port: _server.port,
       path: '/$_secret/$name',
     ).toString();
+  }
+
+  /// How many non-manifest children stay registered.
+  ///
+  /// A live relay otherwise registers every segment URL it has ever seen:
+  /// tens of thousands of entries over a multi-hour stream, none of which the
+  /// player reads again once the live window moved past them. Segments are
+  /// immutable, so evicting the oldest only costs a seek far behind the live
+  /// window.
+  static const int _maximumSegmentEntries = 512;
+
+  /// Drops the oldest non-manifest children once they exceed the cap.
+  void _pruneChildren() {
+    var excess = _byUpstream.length - _maximumSegmentEntries;
+    if (excess <= 0) {
+      return;
+    }
+    for (final entry in _byUpstream.entries.toList()) {
+      if (excess <= 0) {
+        break;
+      }
+      final child = _children[entry.value];
+      if (child != null && !child.manifest) {
+        _children.remove(entry.value);
+        _byUpstream.remove(entry.key);
+        _servedBodies.remove(entry.value);
+        excess--;
+      }
+    }
   }
 
   static String _extensionOf(Uri uri) {

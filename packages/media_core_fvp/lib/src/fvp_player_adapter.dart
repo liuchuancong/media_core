@@ -7,6 +7,8 @@ import 'package:fvp/mdk.dart' as mdk;
 import 'package:media_core/media_core.dart';
 import 'package:media_core_fvp/media_core_fvp.dart';
 
+final LogModule _log = MediaCoreLog.of(LogCategory.player);
+
 /// [PlayerAdapter] implementation backed by fvp's `libmdk` player.
 ///
 /// The engine ships a current FFmpeg and prefers the platform hardware decoder
@@ -79,6 +81,11 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   bool _hasOpened = false;
   bool _openFailed = false;
 
+  /// The caller's autoPlay intent, read from the adapter context at
+  /// initialization: libmdk has no paused open, so the engine state has to be
+  /// seeded manually and must not force playback the caller did not ask for.
+  bool _autoPlay = true;
+
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _audioOutputSuppressed = false;
@@ -133,6 +140,7 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     // The engine is created per source: libmdk fixes the render target size for
     // the lifetime of a player, so reusing one across sources would paint the
     // second stream into the first stream's geometry.
+    _autoPlay = context.playerConfig?.autoPlay ?? true;
   }
 
   @override
@@ -180,7 +188,15 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       return;
     }
 
-    player.state = mdk.PlaybackState.playing;
+    // Seeded from the caller's autoPlay intent: the kernel issues the play()
+    // itself when it wants playback, so forcing `playing` here would start
+    // audio on an open that asked to stay paused.
+    player.state = _autoPlay ? mdk.PlaybackState.playing : mdk.PlaybackState.paused;
+
+    _log.info(
+      'opened source',
+      fields: <String, Object?>{'uri': url, 'live': _liveSource, 'autoPlay': _autoPlay},
+    );
 
     _startPositionPolling(player);
   }
@@ -209,6 +225,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     final player = _player;
 
     if (player == null) return;
+
+    _log.debug('play');
 
     player.state = mdk.PlaybackState.playing;
 
@@ -242,6 +260,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     final player = _player;
 
     if (player == null) return;
+
+    _log.debug('seek', fields: <String, Object?>{'positionMs': position.inMilliseconds});
 
     await player.seek(position: position.inMilliseconds);
   }
@@ -382,7 +402,12 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
         _applyEngineOption(player, option);
 
         outcomes.add(EngineOptionOutcome.appliedLive);
-      } on Object catch (_) {
+      } on Object catch (error) {
+        _log.warning(
+          'engine option apply failed; staged for next open',
+          error: error,
+          fields: <String, Object?>{'key': option.key},
+        );
         outcomes.add(EngineOptionOutcome.stagedForNextOpen);
       }
     }
@@ -606,7 +631,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       final milliseconds = player.mediaInfo.duration;
 
       return milliseconds > 0 ? Duration(milliseconds: milliseconds) : Duration.zero;
-    } on Object catch (_) {
+    } on Object catch (error) {
+      _log.warning('duration read failed', error: error);
       return Duration.zero;
     }
   }
@@ -698,6 +724,12 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     _videoConfig = _videoConfig.copyWith(fit: fit);
   }
 
+  /// Whether an [_attachTexture] run is between its guard checks and its
+  /// publish: open and media-status can both fire it while the geometry await
+  /// is pending, and a second concurrent run would create a second native
+  /// render target and orphan the first texture id.
+  bool _attachingTexture = false;
+
   /// Creates the texture for [player] and publishes its geometry.
   ///
   /// Idempotent for one engine instance: the media-status stream and the open
@@ -705,38 +737,44 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   Future<void> _attachTexture(mdk.Player player) async {
     if (isDisposed || _player != player || audioOnly) return;
     if (_textureNotifier.value != null) return;
+    if (_attachingTexture) return;
+    _attachingTexture = true;
 
-    // Bounded: a source whose geometry never arrives must not hold the texture
-    // path open forever. A later media-status transition retries.
-    final size = await player.textureSize.timeout(_geometryTimeout, onTimeout: () => null);
+    try {
+      // Bounded: a source whose geometry never arrives must not hold the texture
+      // path open forever. A later media-status transition retries.
+      final size = await player.textureSize.timeout(_geometryTimeout, onTimeout: () => null);
 
-    if (isDisposed || _player != player) return;
+      if (isDisposed || _player != player) return;
 
-    // A source without a video stream: the engine still plays audio, and there
-    // is nothing to paint.
-    if (size == null || size.width <= 0 || size.height <= 0) {
-      if (size == null) await _retryGeometryOnce(player);
-      return;
+      // A source without a video stream: the engine still plays audio, and there
+      // is nothing to paint.
+      if (size == null || size.width <= 0 || size.height <= 0) {
+        if (size == null) await _retryGeometryOnce(player);
+        return;
+      }
+
+      final textureId = await player.updateTexture(
+        width: _videoConfig.maxWidth,
+        height: _videoConfig.maxHeight,
+        tunnel: _videoConfig.tunnel,
+        fit: _videoConfig.fitMaxSize,
+      );
+
+      if (isDisposed || _player != player) return;
+
+      if (textureId < 0) {
+        reportEngineError(message: 'fvp: video texture could not be created');
+        return;
+      }
+
+      _textureNotifier.value = textureId;
+      _sizeNotifier.value = size;
+
+      emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
+    } finally {
+      _attachingTexture = false;
     }
-
-    final textureId = await player.updateTexture(
-      width: _videoConfig.maxWidth,
-      height: _videoConfig.maxHeight,
-      tunnel: _videoConfig.tunnel,
-      fit: _videoConfig.fitMaxSize,
-    );
-
-    if (isDisposed || _player != player) return;
-
-    if (textureId < 0) {
-      reportEngineError(message: 'fvp: video texture could not be created');
-      return;
-    }
-
-    _textureNotifier.value = textureId;
-    _sizeNotifier.value = size;
-
-    emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
   }
 
   /// Re-prepares the current source once when the engine settled its geometry as

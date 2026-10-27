@@ -41,11 +41,16 @@ import 'package:media_core/media_core.dart'
         BackgroundRuntime,
         BackgroundRuntimeOwners,
         BackgroundRuntimes,
-        BackgroundServiceOwner;
+        BackgroundServiceOwner,
+        LogCategory,
+        LogModule,
+        MediaCoreLog;
 import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/src/client/notification_client.dart' show runningLineIdFor;
 import 'package:media_core_notify/src/client/notify_event.dart';
 import 'package:media_core_notify/src/media_core_notify.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.general);
 
 /// The running lines, one per feature.
 abstract final class ForegroundJobs {
@@ -341,10 +346,11 @@ abstract final class ForegroundJobs {
     // escaping here would cancel the subscription and take every feature's line
     // down with it. One failed repost is a retry; a dead projector is silent
     // notifications for the rest of the process.
-    on Object catch (_) {
+    on Object catch (error) {
       // Nothing is on the shade, so the line is not shown — and it stays dirty, so
       // the end of this repost window tries again rather than the projector
       // settling for a notification that was never drawn.
+      _log.warning('notification show failed', error: error);
       line
         ..showing = false
         ..dirty = true;
@@ -366,8 +372,9 @@ abstract final class ForegroundJobs {
     // the projector, and the retry-on-next-change behaviour of a *shown* line does
     // not apply here — an id still on the shade is cleared again by the next
     // repaint that finds its feature empty.
-    on Object catch (_) {
+    on Object catch (error) {
       // Nothing to do about a notification that could not be taken away.
+      _log.warning('notification clear failed', error: error);
     }
   }
 
