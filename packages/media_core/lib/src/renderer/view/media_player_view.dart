@@ -184,7 +184,17 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
   bool _surfaceSyncScheduled = false;
 
   /// Zoom state, owned by this view when the host did not supply one.
-  late VideoZoomController _zoom = widget.zoom ?? VideoZoomController();
+  late VideoZoomController _zoom = widget.zoom ?? _createdZoom();
+
+  /// Whether the current [_zoom] was created by this view (and is therefore
+  /// this view's to dispose on swap).
+  bool _zoomCreatedByView = false;
+
+  VideoZoomController _createdZoom() {
+    _zoomCreatedByView = true;
+
+    return VideoZoomController();
+  }
 
   /// Scale at the start of the running pinch, so the reported cumulative scale
   /// is applied as a ratio instead of being multiplied in every frame.
@@ -208,7 +218,7 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
       // in; only the one this view created is its to dispose.
       _releaseOwnedZoom();
 
-      _zoom = widget.zoom ?? VideoZoomController();
+      _zoom = widget.zoom ?? _createdZoom();
     }
 
     if (!identical(oldWidget.handle, widget.handle)) {
@@ -545,13 +555,14 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
 
   /// Drops the zoom controller this view created, if it created one.
   ///
-  /// A controller handed in by the host is the host's to dispose: it may
-  /// outlive this widget on purpose (a feed remembering an item's zoom).
+  /// Ownership follows the *previous* widget configuration: a controller
+  /// handed in by the host is the host's to dispose (it may outlive this
+  /// widget on purpose - a feed remembering an item's zoom), and the one this
+  /// view created must not outlive the swap.
   void _releaseOwnedZoom() {
-    if (widget.zoom != null) {
-      return;
+    if (_zoomCreatedByView) {
+      _zoom.dispose();
     }
-
-    _zoom.dispose();
+    _zoomCreatedByView = false;
   }
 }

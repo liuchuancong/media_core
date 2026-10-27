@@ -110,22 +110,36 @@ final class CastController extends ChangeNotifier {
   Future<void> cast(CastDevice target, CastMedia media) async {
     _ensureActive();
 
-    if (_device != null && _device!.id != target.id) {
-      await _stopQuietly(_device!);
+    final previous = _device;
+    if (previous != null && previous.id != target.id) {
+      await _stopQuietly(previous);
     }
-    _device = target;
-    _media = media;
 
-    await backend.setMedia(target, media);
-    _state = CastTransportState.stopped;
-    notifyListeners();
+    try {
+      await backend.setMedia(target, media);
+      _device = target;
+      _media = media;
+      _state = CastTransportState.stopped;
+      notifyListeners();
 
-    await backend.play(target);
-    _state = CastTransportState.playing;
-    notifyListeners();
+      await backend.play(target);
+      _state = CastTransportState.playing;
+      notifyListeners();
 
-    await refresh();
-    _startTicker();
+      await refresh();
+      _startTicker();
+    } on Object {
+      // A device that refused the media is not casting: leaving the fields
+      // set would report an active session (and stopCasting might later stop
+      // a device that never loaded anything) for a transport state that
+      // exists only in this controller.
+      _device = null;
+      _media = null;
+      _state = CastTransportState.stopped;
+      notifyListeners();
+
+      rethrow;
+    }
   }
 
   /// Pauses the receiver.

@@ -19,6 +19,11 @@ final class PreloadScheduler {
     _sort();
   }
 
+  /// Drops a queued task; returns whether it was still waiting.
+  bool remove(PreloadTask task) {
+    return _tasks.remove(task);
+  }
+
   /// Removes and returns the highest-priority task, or `null` when empty.
   PreloadTask? next() {
     if (_tasks.isEmpty) {

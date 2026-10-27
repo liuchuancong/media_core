@@ -51,6 +51,10 @@ extension TaskManagerCancellation on TaskManager {
 
     if (task.isQueued) {
       _scheduler.unschedule(id);
+      // Nothing will ever run this task, so its token outlives its purpose;
+      // a running task's token is disposed by the executor when the handler
+      // returns.
+      _disposeToken(id);
     }
 
     final cancelledTask = task.cancel(error: reason);
@@ -98,6 +102,8 @@ extension TaskManagerCancellation on TaskManager {
       final cancelledTask = task.cancel(error: reason);
 
       _tasks[task.id] = cancelledTask;
+      // Queued tasks never execute, so their tokens are disposed here.
+      _disposeToken(task.id);
       cancelled.add(cancelledTask);
     }
 

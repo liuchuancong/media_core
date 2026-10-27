@@ -41,11 +41,22 @@ final class PreloadManager {
   void add(PreloadRequest request) {
     final task = PreloadTask(sourceId: request.sourceId, priority: request.priority);
 
+    // Re-adding a source replaces its task rather than queueing a second one:
+    // both would run, double the memory estimate, and the orphan could not be
+    // forgotten (removal is identity-based).
+    final existing = _tasks[request.sourceId.value];
+    var total = currentMetrics.total + 1;
+
+    if (existing != null) {
+      _scheduler.remove(existing);
+      total = currentMetrics.total;
+    }
+
     _tasks[request.sourceId.value] = task;
 
     _scheduler.add(task);
 
-    _updateMetrics(total: currentMetrics.total + 1);
+    _updateMetrics(total: total);
 
     _reportMemory();
   }

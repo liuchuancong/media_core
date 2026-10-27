@@ -480,13 +480,16 @@ final class PlayerKernel with WidgetsBindingObserver {
   ///
   /// Returns `null` when the pool has no reusable player. The
   /// returned handle is recycled: fresh generation, no source.
-  Future<PlayerHandle?> acquire({Duration timeout = const Duration(seconds: 2)}) async {
+  ///
+  /// The recycle goes through the handle's serial operation queue, so it
+  /// cannot be cut short — a caller that must not wait should decide before
+  /// calling this, which is why there is no timeout parameter.
+  Future<PlayerHandle?> acquire() async {
     if (!options.enablePool) {
       return null;
     }
 
-    final sessionId = SessionId.generate();
-    final pooledId = _pool.allocate(sessionId: sessionId);
+    final pooledId = _pool.allocate(sessionId: SessionId.generate());
     if (pooledId == null) {
       return null;
     }
@@ -502,6 +505,10 @@ final class PlayerKernel with WidgetsBindingObserver {
 
     await handle.recycle();
     _coordinator.player.attachSession(playerId: pooledId, session: handle.session);
+    // The allocate above booked a throwaway session id, but the recycled
+    // handle keeps the session it was created with; rebind the pool row so
+    // its bookkeeping names a session that actually exists.
+    _pool.reserve(pooledId, sessionId: handle.session.context.sessionId);
     return handle;
   }
 

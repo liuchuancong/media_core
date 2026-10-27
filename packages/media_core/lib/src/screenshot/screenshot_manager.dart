@@ -228,10 +228,12 @@ final class ScreenshotManager {
       return;
     }
 
-    _disposed = true;
-
+    // Before the flag: clearHistory refuses once disposed, and the captured
+    // bytes the history subject holds must not stay reachable past dispose.
     _surfaces.clear();
-    clearHistory();
+    _history.add(const <PlayerScreenshot>[]);
+
+    _disposed = true;
 
     await _captures.close();
     await _history.close();

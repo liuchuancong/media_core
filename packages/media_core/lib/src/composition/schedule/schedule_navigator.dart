@@ -127,6 +127,11 @@ final class ScheduleNavigator {
 
   ScheduledSegment? _opened;
 
+  /// Whether the current pass already emitted [ScheduleComplete]; the tick
+  /// feed calls [observe] per position event, and one pass past the end is
+  /// one completion, not one per tick.
+  bool _completed = false;
+
   /// The clip currently believed to be the open one, if any.
   ScheduledSegment? get openedSegment => _opened;
 
@@ -138,6 +143,11 @@ final class ScheduleNavigator {
   /// [ScheduleComplete] once past the end.
   ScheduleObservation observe(Duration time) {
     if (schedule.segments.isEmpty) {
+      if (_completed) {
+        return const ScheduleObservation(position: null, actions: <ScheduleAction>[]);
+      }
+      _completed = true;
+
       return const ScheduleObservation(position: null, actions: <ScheduleAction>[ScheduleComplete()]);
     }
 
@@ -161,8 +171,14 @@ final class ScheduleNavigator {
         position.localTime >= segment.clip.skipAfter!;
 
     if (atEnd) {
-      actions.add(const ScheduleComplete());
+      if (!_completed) {
+        actions.add(const ScheduleComplete());
+        _completed = true;
+      }
       _opened = null;
+    } else {
+      // A seek back into the schedule arms the next completion.
+      _completed = false;
     }
 
     return ScheduleObservation(position: position, actions: actions, skipAvailable: skip);

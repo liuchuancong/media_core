@@ -243,8 +243,15 @@ final class VideoZoomController extends ChangeNotifier {
   /// Clamps [translation] so the scaled picture still covers the view.
   ///
   /// The picture spans `[t, t + scale * size]`; covering `[0, size]` requires
-  /// `(1 - scale) * size <= t <= 0` on each axis.
+  /// `(1 - scale) * size <= t <= 0` on each axis. Below scale 1 the covering
+  /// interval is empty - the rubber-band configuration explicitly allows
+  /// pinching under natural size - so translation snaps to zero rather than
+  /// clamping against an inverted range.
   Offset _clamp(Offset translation, double scale, Size viewSize) {
+    if (scale <= 1) {
+      return Offset.zero;
+    }
+
     final minX = (1 - scale) * viewSize.width;
     final minY = (1 - scale) * viewSize.height;
 

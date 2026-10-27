@@ -46,9 +46,16 @@ final class VisibilityController {
 
   /// Updates visibility ratio.
   ///
-  /// The ratio is clamped to the 0.0 - 1.0 range before it is applied.
+  /// The ratio is clamped to the 0.0 - 1.0 range before it is applied. A
+  /// scroll listener calling this at frame rate produces one publish per
+  /// actual change, not one per call: the snapshot, the broadcast event and
+  /// the change counter describe changes, not ticks.
   void update(double ratio) {
     final clamped = ratio.clamp(0.0, 1.0);
+
+    if (clamped == _state.visibility) {
+      return;
+    }
 
     final oldVisible = _state.visible;
 
