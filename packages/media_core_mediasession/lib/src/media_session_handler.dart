@@ -119,6 +119,8 @@ final class MediaSessionHandler extends BaseAudioHandler {
     Future<void> Function()? onPrevious,
     Future<void> Function(int index)? onSkipToQueueItem,
     Future<void> Function(double rate)? onSetSpeed,
+    Future<void> Function()? onRewind,
+    Future<void> Function()? onFastForward,
     this.controlsBuilder,
     this.stopOnTaskRemoved = false,
   }) : _onPlay = onPlay,
@@ -128,7 +130,9 @@ final class MediaSessionHandler extends BaseAudioHandler {
        _onNext = onNext,
        _onPrevious = onPrevious,
        _onSkipToQueueItem = onSkipToQueueItem,
-       _onSetSpeed = onSetSpeed;
+       _onSetSpeed = onSetSpeed,
+       _onRewind = onRewind,
+       _onFastForward = onFastForward;
 
   final Future<void> Function() _onPlay;
   final Future<void> Function() _onPause;
@@ -138,6 +142,8 @@ final class MediaSessionHandler extends BaseAudioHandler {
   final Future<void> Function()? _onPrevious;
   final Future<void> Function(int index)? _onSkipToQueueItem;
   final Future<void> Function(double rate)? _onSetSpeed;
+  final Future<void> Function()? _onRewind;
+  final Future<void> Function()? _onFastForward;
 
   /// Whether the platform may offer skip-next.
   bool get canSkipToNext => _onNext != null;
@@ -177,7 +183,10 @@ final class MediaSessionHandler extends BaseAudioHandler {
   void publishState(MediaSessionState state, {List<MediaControl>? controls}) {
     playbackState.add(
       PlaybackState(
-        controls: controls ?? const <MediaControl>[],
+        // Explicit controls win; otherwise the builder is the default a
+        // second publisher (a music binding ticking per state change) would
+        // otherwise erase by passing none.
+        controls: controls ?? controlsBuilder?.call(state.playing) ?? const <MediaControl>[],
         processingState: switch (state.phase) {
           MediaSurfacePhase.idle => AudioProcessingState.idle,
           MediaSurfacePhase.loading => AudioProcessingState.loading,
@@ -286,6 +295,32 @@ final class MediaSessionHandler extends BaseAudioHandler {
     }
 
     await next();
+  }
+
+  /// Relative seeks. The notification advertises rewind/fast-forward buttons
+  /// whenever a driver config asks for them; without these overrides the
+  /// presses fall through to [BaseAudioHandler]'s empty no-ops, which is a
+  /// button that looks alive and does nothing.
+  @override
+  Future<void> rewind() async {
+    final rewind = _onRewind;
+
+    if (rewind == null) {
+      return await super.rewind();
+    }
+
+    await rewind();
+  }
+
+  @override
+  Future<void> fastForward() async {
+    final fastForward = _onFastForward;
+
+    if (fastForward == null) {
+      return await super.fastForward();
+    }
+
+    await fastForward();
   }
 
   @override

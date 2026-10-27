@@ -190,9 +190,11 @@ abstract final class MediaCoreNotify {
       await action();
 
       return true;
-    } on Exception {
+    } on Object {
       // No plugin registered on this platform, the channel refused, the service
-      // was not declared. The job the notification was describing is unaffected.
+      // was not declared. Errors (not just exceptions) land here too: the
+      // client rethrows after logging, and this facade promises callers that
+      // trying to be informative never throws at them.
       return false;
     }
   }
@@ -200,7 +202,7 @@ abstract final class MediaCoreNotify {
   static Future<R> _ask<R>(Future<R> Function() action, {required R fallback}) async {
     try {
       return await action();
-    } on Exception {
+    } on Object {
       return fallback;
     }
   }

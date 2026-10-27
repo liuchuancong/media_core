@@ -212,6 +212,15 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
           onStop: () async {
             await _transportStop();
           },
+          // The notification's ±seekStep buttons, clamped to the start of the
+          // stream; without a handler here the presses hit BaseAudioHandler's
+          // empty no-ops - buttons that look alive and do nothing.
+          onRewind: () async {
+            await _seekTransportBy(-config.seekStep);
+          },
+          onFastForward: () async {
+            await _seekTransportBy(config.seekStep);
+          },
           // These wrappers read the mutable handler fields at invocation time:
           // the driver is created once at startup while the player that owns a
           // queue appears later, so a null check baked in here would leave the
@@ -246,6 +255,10 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       // keep waiting".
       _log.error('audio service init failed; no media surface', error: error, stackTrace: stackTrace);
       _noSurface = true;
+      // A failed init stays retryable: `_initialized` was set optimistically
+      // at the top, and leaving it set turns a later attempt into a silent
+      // no-op on a permanently dead driver.
+      _initialized = false;
       rethrow;
     }
 
@@ -562,6 +575,27 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     await _active?.seek(position);
   }
 
+  /// Relative seek for the notification's rewind/fast-forward buttons.
+  Future<void> _seekTransportBy(Duration offset) async {
+    final remote = _remoteTarget;
+
+    if (remote != null) {
+      final remotePosition = _remoteState?.position ?? Duration.zero;
+      final remoteTarget = remotePosition + offset;
+      await remote.seek(remoteTarget < Duration.zero ? Duration.zero : remoteTarget);
+      return;
+    }
+
+    final active = _active;
+
+    if (active == null) {
+      return;
+    }
+
+    final target = active.playback.position + offset;
+    await _transportSeek(target < Duration.zero ? Duration.zero : target);
+  }
+
   /// Pauses whichever transport owns the surface, for the platform's own
   /// interruption paths (unplugged headphones, a call).
   Future<void> _pauseTransport() async {
@@ -681,6 +715,13 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     _remoteTarget = null;
     _remoteItem = null;
     _remoteState = null;
+
+    // The released surface must stop being written to: a bound player's
+    // playback tick would otherwise republish state (and re-advertise
+    // controls) onto a surface nobody owns any more.
+    unawaited(_playbackSub?.cancel());
+    _playbackSub = null;
+
     await handler.releaseSurface();
   }
 

@@ -129,7 +129,18 @@ abstract final class ForegroundJobs {
     final chosen = runtime ?? BackgroundRuntimes.current;
 
     _waiting ??= BackgroundRuntimes.changes.listen((next) {
-      if (next != null && !identical(next, _runtime)) {
+      if (next == null) {
+        // The runtime was deposed entirely; watching its corpse would keep
+        // every line armed for sessions that no longer report.
+        unawaited(_watch?.cancel());
+        _watch = null;
+        _runtime = null;
+        _detach().forEach(unawaited);
+
+        return;
+      }
+
+      if (!identical(next, _runtime)) {
         watch(runtime: next);
       }
     });
@@ -162,6 +173,11 @@ abstract final class ForegroundJobs {
   static Future<void> hide() async {
     unawaited(_waiting?.cancel());
     _waiting = null;
+    unawaited(_watch?.cancel());
+    _watch = null;
+    // Hidden means not armed: a later idempotent watch() must re-attach and
+    // repaint, not short-circuit on the runtime the host silenced.
+    _runtime = null;
 
     await Future.wait(_detach());
   }
@@ -187,6 +203,7 @@ abstract final class ForegroundJobs {
       _closeGap(line);
       line
         ..showing = false
+        ..dismissed = true
         ..gap = null
         ..dirty = false;
     }
@@ -260,6 +277,14 @@ abstract final class ForegroundJobs {
     BackgroundServiceOwner.jobOwners.forEach(_repaintOne);
   }
 
+  /// Whole-percent aggregate progress of [owner]'s sessions, or null when
+  /// none carries a fraction.
+  static int? _fractionPercentFor(BackgroundServiceOwner owner) {
+    final aggregate = _aggregateProgress(sessionsFor(owner));
+
+    return aggregate == null ? null : ((aggregate.fraction ?? 0) * 100).round();
+  }
+
   static void _repaintOne(BackgroundServiceOwner owner) {
     final line = _lineFor(owner);
     final title = titleFor(owner);
@@ -280,12 +305,31 @@ abstract final class ForegroundJobs {
       return;
     }
 
-    if (line.showing && line.title == title && line.body == body) {
-      // Another feature's change woke this projector, and this line says the same
-      // thing it already says. Reposting it would re-alert a notification nobody
-      // asked to move.
+    if ((line.showing || line.dismissed) && line.title == title && line.body == body) {
+      final drawn = line.fractionPercent;
+      final current = _fractionPercentFor(owner);
+
+      if (line.dismissed || drawn == current) {
+        // Same words and the same (or absent) bar: another feature's change
+        // woke this projector, and this line says exactly what it already
+        // says - or the exact thing the viewer swiped away. Reposting it
+        // would re-alert a notification nobody asked to move.
+        return;
+      }
+
+      // Text identical but the bar moved: a host whose description is static
+      // while its fraction advances would otherwise freeze the drawn progress
+      // forever. Whole percents only - that is what the platform draws.
+      line.fractionPercent = current;
+      unawaited(_flush(owner, line, title, body));
+      line.gap?.cancel();
+      line.gap = Timer(postGap, () => _onDeadline(owner, line));
+
       return;
     }
+
+    // Different text: the dismissal belongs to the old words, not the line.
+    line.dismissed = false;
 
     if (line.gap != null) {
       line.dirty = true;
@@ -353,6 +397,7 @@ abstract final class ForegroundJobs {
       _log.warning('notification show failed', error: error);
       line
         ..showing = false
+        ..fractionPercent = null
         ..dirty = true;
 
       return;
@@ -361,7 +406,8 @@ abstract final class ForegroundJobs {
     line
       ..showing = true
       ..title = title
-      ..body = body;
+      ..body = body
+      ..fractionPercent = aggregate == null ? null : ((aggregate.fraction ?? 0) * 100).round();
   }
 
   static Future<void> _clear(int id) async {
@@ -439,6 +485,13 @@ final class _Line {
 
   bool showing = false;
   bool dirty = false;
+
+  /// The viewer swiped this line away; it must not come back until its own
+  /// text actually moves, which is what the dismissal asked for.
+  bool dismissed = false;
+
+  /// Last-drawn aggregate progress in whole percents, for the bar-only move.
+  int? fractionPercent;
   Timer? gap;
   String? title;
   String? body;

@@ -85,16 +85,34 @@ final class MediaSessionBootstrap {
       return existing;
     }
 
+    // Concurrent callers share one enable: two `initialize()`s would both run
+    // the platform handshake, and the second `AudioService.init` is what the
+    // platform asserts against. A failure clears the pending future so a
+    // retry is possible at all.
+    final pending = _pending;
+
+    if (pending != null) {
+      return await pending;
+    }
+
     final session =
         driver ??
         MediaSessionDriver(config: config, artUriResolver: artUriResolver, sessionConfiguration: sessionConfiguration);
 
-    await session.initialize();
+    final initializing = session.initialize().then((_) => session);
+    _pending = initializing;
 
-    install(session);
+    try {
+      final ready = await initializing;
+      install(ready);
 
-    return session;
+      return ready;
+    } finally {
+      _pending = null;
+    }
   }
+
+  static Future<MediaSessionDriver>? _pending;
 
   /// Installs an already-initialized driver as the process-wide one.
   ///
