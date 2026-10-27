@@ -116,6 +116,16 @@ final class DownloadManager {
   /// while a new one starts (pause, then resume), and the old attempt's cleanup
   /// must not unregister the new one.
   final Map<TaskId, Object> _inFlight = <TaskId, Object>{};
+
+  /// Task → completers that finish when each attempt has fully wound down.
+  ///
+  /// [_inFlight] is the abandon signal a transfer polls between chunks; this
+  /// map is the drain handle for callers that touch the file underneath - a
+  /// paused attempt's last chunk append can still be in flight, and deleting
+  /// (or truncating) the file during it throws on Windows or resurrects a
+  /// partial file.
+  final Map<TaskId, List<Completer<void>>> _windDowns = <TaskId, List<Completer<void>>>{};
+
   final Map<String, Timer> _retryTimers = <String, Timer>{};
 
   /// Task ids whose beginning the notification layer was already told about.
@@ -234,6 +244,16 @@ final class DownloadManager {
     _leaseNotifiedAt.remove(id);
     _startsAnnounced.remove(id);
     if (task != null && deleteFile) {
+      // The pause above only marks the attempt abandoned; it observes that at
+      // its next chunk boundary, so one append can still be in flight. Bound
+      // the wait: an attempt stuck past it is deleted under anyway, which is
+      // no worse than what remove did before.
+      final windingDown = _windDowns[task.id]?.toList() ?? const <Completer<void>>[];
+      if (windingDown.isNotEmpty) {
+        await Future.wait(<Future<void>>[for (final completer in windingDown) completer.future])
+            .timeout(const Duration(seconds: 5))
+            .catchError((Object _) => <void>[]);
+      }
       await _files.delete(task.filePath);
     }
     if (task != null && !_taskController.isClosed) {
@@ -492,6 +512,15 @@ final class DownloadManager {
 
         final attempt = Object();
         _inFlight[task.id] = attempt;
+        final windDown = Completer<void>();
+        _windDowns.putIfAbsent(task.id, () => <Completer<void>>[]).add(windDown);
+
+        // Predecessors only (own completer excluded): a previous attempt that
+        // was paused, retried or restarted may still be appending its last
+        // chunk, and a truncate underneath that append corrupts the file in a
+        // way the single verification pass cannot catch.
+        await _awaitWindDown(task.id, except: windDown);
+
         await _holdLease(task);
         _log.debug(
           'transfer started',
@@ -526,6 +555,12 @@ final class DownloadManager {
           if (identical(_inFlight[task.id], attempt)) {
             _inFlight.remove(task.id);
           }
+          final pending = _windDowns[task.id];
+          pending?.remove(windDown);
+          if (pending != null && pending.isEmpty) {
+            _windDowns.remove(task.id);
+          }
+          windDown.complete();
         }
       });
     } on TaskExecutionFailure catch (failure) {
@@ -555,9 +590,24 @@ final class DownloadManager {
   /// from the in-flight set — and the caller must not treat the file on disk as
   /// complete. This is the difference between "the stream ended" and "nobody is
   /// listening any more", and conflating them marked paused downloads completed.
-  Future<bool> _transfer(DownloadTask task) async {
-    await _files.ensureParentDirectory(task.filePath);
+  /// Bounds a wait for the task's in-flight attempt(s) to fully wind down.
+  ///
+  /// [except] excludes an attempt's own completer, so an attempt can wait for
+  /// its predecessors without waiting on itself.
+  Future<void> _awaitWindDown(TaskId id, {Completer<void>? except}) {
+    final windingDown = _windDowns[id]?.where((completer) => !identical(completer, except)).toList() ??
+        const <Completer<void>>[];
 
+    if (windingDown.isEmpty) {
+      return Future<void>.value();
+    }
+
+    return Future.wait(<Future<void>>[for (final completer in windingDown) completer.future])
+        .timeout(const Duration(seconds: 5))
+        .catchError((Object _) => <void>[]);
+  }
+
+  Future<bool> _transfer(DownloadTask task) async {
     var resumable = await _files.length(task.filePath) > 0;
     if (resumable) {
       _log.debug(
@@ -607,7 +657,24 @@ final class DownloadManager {
       return false;
     }
 
-    var response = await _transport.fetch(_requestFor(task, startByte));
+    DownloadResponse response;
+    try {
+      response = await _transport.fetch(_requestFor(task, startByte));
+    } on DownloadHttpException catch (error) {
+      if (error.statusCode != 416 || startByte == 0) {
+        rethrow;
+      }
+      // The remote no longer has the range that was asked for - it shrank or
+      // was replaced. Retrying the same range burns the whole attempt budget
+      // on a server that has already answered; restart from zero instead.
+      _log.warning(
+        'the remote no longer honours the resume range; restarting from zero',
+        fields: <String, Object?>{'id': task.id.value, 'startByte': startByte},
+      );
+      await _files.truncate(task.filePath, 0);
+      startByte = 0;
+      response = await _transport.fetch(_requestFor(task, 0));
+    }
     remoteBytes = response.resolvedTotalBytes;
 
     // A server that ignores Range answers 200 with the whole body: appending it
@@ -677,7 +744,27 @@ final class DownloadManager {
       throw StateError('Transfer ended at $received of $total bytes.');
     }
 
-    _tasks[task.id.value] = _tasks[task.id.value]!.copyWith(
+    // A 206 whose Content-Range carried no usable total cannot be checked
+    // against the remote size; the response's own content length is the one
+    // remaining completeness witness, and a proxy-truncated stream would
+    // otherwise mark a short file complete.
+    if (startByte > 0 && total == null && response.isPartial && response.contentLength > 0) {
+      final expected = startByte + response.contentLength;
+
+      if (received < expected) {
+        throw StateError('Partial transfer ended at $received of $expected bytes.');
+      }
+    }
+
+    final existing = _tasks[task.id.value];
+
+    if (existing == null) {
+      // remove() landed while the byte stream was draining; there is no task
+      // left to record the finished progress on.
+      return false;
+    }
+
+    _tasks[task.id.value] = existing.copyWith(
       progress: DownloadProgress(
         receivedBytes: received,
         totalBytes: total ?? received,
@@ -783,6 +870,16 @@ final class DownloadManager {
     final result = await runtime.acquire(request);
 
     if (result case BackgroundAcquireSuccess(:final lease)) {
+      // A pause/cancel/remove that landed while the acquire was in flight has
+      // already dropped this task's lease slot; storing this one would hold
+      // the platform session (foreground service, sleep assertion) with
+      // nobody left who would ever release it.
+      if (!_inFlight.containsKey(task.id)) {
+        unawaited(lease.release());
+
+        return;
+      }
+
       // The line is not stamped here: the first progress tick is allowed to move
       // it straight away, and a file that finished inside its own first second
       // would otherwise have shown "0 B" the whole time it ran.
@@ -958,9 +1055,23 @@ final class DownloadManager {
       }
       _emit(current.copyWith(status: DownloadStatus.queued));
       // A fresh core task: the previous one is terminal, and a terminal core
-      // task cannot be queued again.
-      unawaited(_register(current));
-      unawaited(_pump());
+      // task cannot be queued again. A re-registration that gives up (a slot
+      // stuck past its own retry window) must fail the task here, or the
+      // timer's unawaited future turns into an unhandled async error and the
+      // entry sits "queued" forever.
+      unawaited(
+        _register(current).catchError((Object error) {
+          _log.error(
+            'download retry could not re-register',
+            error: error,
+            fields: <String, Object?>{'id': id},
+          );
+          unawaited(_dropLease(id));
+          _queue.fail(TaskId(id), error);
+          _emit(current.copyWith(status: DownloadStatus.failed, error: error));
+          _reportOutcome(current, success: false, error: error);
+        }).then((_) => _pump()),
+      );
     });
   }
 
