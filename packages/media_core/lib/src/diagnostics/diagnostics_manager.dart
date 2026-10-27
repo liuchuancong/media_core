@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:media_core/src/diagnostics/network_diagnostics.dart';
 import 'package:media_core/src/diagnostics/performance_monitor.dart';
 import 'package:media_core/src/diagnostics/player_debug_snapshot.dart';
@@ -63,7 +64,7 @@ final class DiagnosticsManager {
     _ensureNotDisposed();
 
     return PlayerDebugSnapshot(
-      timestamp: DateTime.now(),
+      timestamp: clock.now(),
       memory: memory.snapshot,
       network: network.snapshot,
       performanceSamples: performance.samples,

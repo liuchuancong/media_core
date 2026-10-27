@@ -299,7 +299,7 @@ final class RecoveryLadder {
 
       final currentSourceId = session.source?.id.value;
 
-      var triedSources = <String>{?currentSourceId};
+      final triedSources = <String>{?currentSourceId};
       final triedBackends = <String>{?session.backendId};
 
       var reopenSpent = false;
@@ -341,16 +341,14 @@ final class RecoveryLadder {
 
         if (backendStep != null) {
           if (await _runStep(backendStep, session, generation)) {
-            triedSources = <String>{?session.source?.id.value};
-            reopenSpent = false;
+            // The swap step already initialized, opened, seeked, played and
+            // verified the stream on the new engine, so the run is over:
+            // sweeping again would execute rung 1 and tear down a stream that
+            // verifiably plays. A later failure on the new engine reports a
+            // fresh failure and starts a fresh run.
+            _finishCompleted(generation, backendStep, failure);
 
-            MediaCoreLog.info(
-              LogCategory.fallback,
-              'engine failed out — sweeping again on ${backendStep.backendId}',
-              fields: <String, Object?>{'enginesTried': triedBackends.length},
-            );
-
-            continue;
+            return;
           }
 
           continue;

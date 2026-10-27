@@ -402,7 +402,16 @@ final class PlayerKernel with WidgetsBindingObserver {
 
     handle.engineFallbackEnabled = options.enableFallback && config.enableFallback;
 
-    await handle.initialize();
+    try {
+      await handle.initialize();
+    } on Object {
+      // The caller never received the handle, so nothing outside this method
+      // can release it; a failed initialize must tear down the adapter and
+      // the handle's own listeners itself instead of leaking both.
+      await handle.dispose();
+
+      rethrow;
+    }
 
     _registerEverywhere(handle);
 

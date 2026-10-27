@@ -32,6 +32,14 @@ final class SessionController {
   /// Managed session.
   final PlayerSession session;
 
+  /// The status the session had when buffering began.
+  ///
+  /// Engines keep buffering while paused, so ending a buffering stretch by
+  /// restoring `playing` unconditionally would overwrite a viewer's pause -
+  /// and recovery, which derives `wasPlaying` from this state, would resume
+  /// a stream the viewer deliberately paused.
+  SessionStatus? _statusBeforeBuffering;
+
   /// Current session state.
   SessionState get state {
     return session.state;
@@ -116,6 +124,9 @@ final class SessionController {
   void setBuffering({required bool buffering}) {
     if (buffering) {
       if (session.state.active && session.state.status != SessionStatus.disposed) {
+        if (session.state.status != SessionStatus.buffering) {
+          _statusBeforeBuffering = session.state.status;
+        }
         session.updateState(const SessionState.buffering());
       }
 
@@ -126,7 +137,9 @@ final class SessionController {
       return;
     }
 
-    session.updateState(const SessionState.playing());
+    final restored = _statusBeforeBuffering;
+    _statusBeforeBuffering = null;
+    session.updateState(restored == SessionStatus.paused ? const SessionState.paused() : const SessionState.playing());
   }
 
   /// Marks session as completed.

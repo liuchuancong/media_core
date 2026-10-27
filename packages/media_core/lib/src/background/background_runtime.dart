@@ -293,7 +293,7 @@ final class BackgroundLeaseRegistry implements BackgroundRuntime {
           );
         }
 
-        lease.statusChanges.listen(
+        session.backendStatusSub = lease.statusChanges.listen(
           session.applyBackendStatus,
           onError: session.reportBackendFailure,
           cancelOnError: false,
@@ -432,6 +432,9 @@ final class BackgroundLeaseRegistry implements BackgroundRuntime {
     try {
       await backend.release();
     } finally {
+      unawaited(session.backendStatusSub?.cancel());
+      session.backendStatusSub = null;
+
       if (session.status != BackgroundSessionStatus.failed) {
         session.status = BackgroundSessionStatus.stopped;
 
@@ -506,6 +509,11 @@ class _Session {
   bool pendingUpdate = false;
   Future<void>? releasing;
 
+  /// The backend's status feed, kept so a released session can stop listening:
+  /// a backend that never closes its stream would otherwise keep delivering
+  /// into a closed controller for the lifetime of the process.
+  StreamSubscription<BackgroundSessionStatus>? backendStatusSub;
+
   /// A status the platform noticed on its own.
   ///
   /// A service the system tore down leaves the registry with it: a capability
@@ -518,6 +526,8 @@ class _Session {
       case BackgroundSessionStatus.protectionLost:
         registry._forget(this);
         this.status = status;
+        unawaited(backendStatusSub?.cancel());
+        backendStatusSub = null;
 
         // A release that already closed this controller has no listener left to
         // tell; the platform tearing the session down afterwards is not a new

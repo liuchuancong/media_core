@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:media_core/media_core.dart' show MediaPlayerView, PlayerKernel;
 import 'package:media_core/src/adapter/contract/player_adapter.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';

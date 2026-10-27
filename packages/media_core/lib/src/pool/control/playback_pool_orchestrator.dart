@@ -295,18 +295,20 @@ final class PlaybackPoolOrchestrator {
   /// Releases every player the pool holds.
   Future<PlaybackPoolPlan> releaseAll() {
     _ensureNotDisposed();
-    return _enqueue(() async {
-      final released = <int>{};
-      for (final assignment in _assignments.values.toList()) {
-        released.add(assignment.index);
-        await _releaseAssignment(assignment);
-      }
-      _activeIndex = null;
-      _lastActiveIndex = null;
-      _reportMemory();
-      _log.debug('released every pooled player', fields: <String, Object?>{'released': released.length});
-      return _buildPlan(const <int>{}, const <int>{}, released);
-    });
+    return _enqueue(_releaseAllLocked);
+  }
+
+  Future<PlaybackPoolPlan> _releaseAllLocked() async {
+    final released = <int>{};
+    for (final assignment in _assignments.values.toList()) {
+      released.add(assignment.index);
+      await _releaseAssignment(assignment);
+    }
+    _activeIndex = null;
+    _lastActiveIndex = null;
+    _reportMemory();
+    _log.debug('released every pooled player', fields: <String, Object?>{'released': released.length});
+    return _buildPlan(const <int>{}, const <int>{}, released);
   }
 
   /// Used by hosts that want to observe the plan without triggering it.
@@ -317,14 +319,18 @@ final class PlaybackPoolOrchestrator {
     if (_disposed) {
       return;
     }
+    // The flag goes up before anything is awaited: a visibility change that
+    // arrives while the release drains enqueues a reconcile behind it, and
+    // that reconcile must see a disposed orchestrator instead of re-opening
+    // players nothing will own.
+    _disposed = true;
     try {
-      await releaseAll();
+      await _enqueue(_releaseAllLocked);
     } on Object catch (_) {
       // A pool that cannot hand its players back is still disposed: the caller
       // has no recovery for a kernel that refuses to release, and leaving the
       // orchestrator usable would only repeat the failure.
     }
-    _disposed = true;
     _memory.withdraw(_memoryKey);
   }
 
@@ -540,7 +546,21 @@ final class PlaybackPoolOrchestrator {
       'opening the active item',
       fields: <String, Object?>{'index': index, 'playerId': handle.id, 'uri': _sources[index].uri},
     );
-    await handle.open(_sources[index], autoPlay: true);
+    try {
+      await handle.open(_sources[index], autoPlay: true);
+    } on Object catch (error) {
+      // An active open that fails must still give the taken handle back;
+      // otherwise it stays "active" in the pool's bookkeeping and is never
+      // recycled.
+      _log.warning(
+        'active open failed; the player goes back',
+        error: error,
+        fields: <String, Object?>{'index': index, 'playerId': handle.id},
+      );
+      await _host.release(handle);
+
+      rethrow;
+    }
     _assign(handle, index, PooledItemRole.active).openedSource = _sources[index];
     playing.add(index);
   }
@@ -594,6 +614,17 @@ final class PlaybackPoolOrchestrator {
         _log.warning(
           'warm open timed out; the player goes back',
           fields: <String, Object?>{'index': index, 'playerId': handle.id, 'timeoutMs': timeout?.inMilliseconds},
+        );
+        await _host.release(handle);
+        continue;
+      } on Object catch (error) {
+        // Any other open failure (unsupported source, 403, backend error)
+        // releases the handle the same way; a warm item is not worth aborting
+        // the reconcile over, so the loop goes on without it.
+        _log.warning(
+          'warm open failed; the player goes back',
+          error: error,
+          fields: <String, Object?>{'index': index, 'playerId': handle.id},
         );
         await _host.release(handle);
         continue;

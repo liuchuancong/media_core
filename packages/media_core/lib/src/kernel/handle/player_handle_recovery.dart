@@ -132,9 +132,9 @@ extension PlayerHandleRecovery on PlayerHandle {
 
     const grace = Duration(seconds: 8);
     var last = _runtime.playback.current.position;
-    final until = DateTime.now().add(grace);
+    final until = clock.now().add(grace);
 
-    while (DateTime.now().isBefore(until)) {
+    while (clock.now().isBefore(until)) {
       if (_disposed) {
         throw StateError('Recovery step ${step.label} was interrupted by disposal.');
       }
