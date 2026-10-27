@@ -16,7 +16,7 @@ dependencies:
 
   equatable: ^3.0.0
 
-  flame_barrage: ^0.0.9
+  flame_barrage: ^0.0.10
 
   flutter:
     sdk: flutter

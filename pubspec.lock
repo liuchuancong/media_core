@@ -390,10 +390,10 @@ packages:
     dependency: "direct overridden"
     description:
       name: flame_barrage
-      sha256: "15541ff9c2b9afc003b3a607754a8dbcce8679b6868e9c1da83927f6389b9bc5"
+      sha256: "60413ec23c49d163d2cf33aaf2060fff304a56f4527fa885c8e09bfbd3792ac9"
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.9"
+    version: "0.0.10"
   flutter:
     dependency: transitive
     description: flutter
