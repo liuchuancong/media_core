@@ -81,9 +81,16 @@ final class MusicDownloader {
       return Future<void>.value();
     }
 
-    return _initializing ??= FFmpegKitExtended.initialize().then((_) {
-      _ffmpegInitialized = true;
-    });
+    // A failed initialization is not cached: a transient first failure would
+    // otherwise poison every later download for the process lifetime.
+    return _initializing ??=
+        FFmpegKitExtended.initialize().then((_) {
+          _ffmpegInitialized = true;
+        }).catchError((Object error, StackTrace stackTrace) {
+          _initializing = null;
+
+          Error.throwWithStackTrace(error, stackTrace);
+        });
   }
 
   /// Builds the ffmpeg arguments for [request].
@@ -177,15 +184,19 @@ final class MusicDownloader {
       }
     });
 
+    // The live snapshot the terminal copy is derived from: without it the
+    // completed/failed task restarts from `running`'s zeros and the UI bar
+    // snaps from ~100% back to nothing at the moment of completion.
+    var latest = running;
+
     session.setStatisticsCallback((statistics) {
-      onUpdate?.call(
-        running.copyWith(
-          processed: Duration(milliseconds: statistics.time),
-          speed: statistics.speed > 0 ? statistics.speed : 0,
-          bytesWritten: statistics.size,
-          sessionId: session.sessionId.toString(),
-        ),
+      latest = running.copyWith(
+        processed: Duration(milliseconds: statistics.time),
+        speed: statistics.speed > 0 ? statistics.speed : 0,
+        bytesWritten: statistics.size,
+        sessionId: session.sessionId.toString(),
       );
+      onUpdate?.call(latest);
     });
 
     session.setCompleteCallback((completed) {
@@ -199,7 +210,7 @@ final class MusicDownloader {
         _cancelled.remove(task.id);
 
         if (!completer.isCompleted) {
-          completer.complete(running.copyWith(status: MusicDownloadStatus.cancelled, finishedAt: finishedAt));
+          completer.complete(latest.copyWith(status: MusicDownloadStatus.cancelled, finishedAt: finishedAt));
         }
 
         return;
@@ -209,7 +220,7 @@ final class MusicDownloader {
       // cancel, SIGTERM from the OS) and anything positive is an ffmpeg error.
       if (code == 0) {
         if (!completer.isCompleted) {
-          completer.complete(running.copyWith(status: MusicDownloadStatus.completed, finishedAt: finishedAt));
+          completer.complete(latest.copyWith(status: MusicDownloadStatus.completed, finishedAt: finishedAt));
         }
 
         return;
@@ -225,7 +236,7 @@ final class MusicDownloader {
       );
 
       if (!completer.isCompleted) {
-        completer.complete(running.copyWith(status: MusicDownloadStatus.failed, error: reason, finishedAt: finishedAt));
+        completer.complete(latest.copyWith(status: MusicDownloadStatus.failed, error: reason, finishedAt: finishedAt));
       }
     });
 

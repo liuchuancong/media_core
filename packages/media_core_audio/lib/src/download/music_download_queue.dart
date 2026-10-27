@@ -159,7 +159,21 @@ final class MusicDownloadQueue {
     var task = queued;
 
     while (!_disposed && !task.isTerminal) {
-      final finished = await _downloader.run(task, onUpdate: _emit);
+      final MusicDownloadTask finished;
+
+      try {
+        finished = await _downloader.run(task, onUpdate: _emit);
+      } on Object catch (error) {
+        // A throwing downloader (poisoned plugin, lost engine) must fail the
+        // task, not escape the unguarded loop as an unhandled async error
+        // that strands the entry as "queued" forever.
+        final failed = task.copyWith(status: MusicDownloadStatus.failed, error: error.toString());
+
+        _tasks[taskId] = failed;
+        _emit(failed);
+
+        return;
+      }
 
       _emit(finished);
 

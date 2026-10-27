@@ -24,12 +24,29 @@ final class AudioPlaybackController {
     LyricLoader? lyrics,
     AudioPlaybackConfig config = const AudioPlaybackConfig(),
     PlayerConfig? playerConfig,
-  }) : config = config,
-       _quality = config.initialQuality,
+  }) : this._(
+          kernel,
+          queue: queue,
+          registry: registry ?? MusicSourceRegistry(),
+          lyrics: lyrics,
+          config: config,
+          playerConfig: playerConfig,
+        );
+
+  AudioPlaybackController._(
+    this._kernel, {
+    required MusicSourceRegistry registry,
+    required this.config,
+    PlayQueue? queue,
+    LyricLoader? lyrics,
+    PlayerConfig? playerConfig,
+  }) : _quality = config.initialQuality,
        _playerConfig = playerConfig,
-       _kernel = kernel,
-       _registry = registry ?? MusicSourceRegistry(),
+       _registry = registry,
        queue = queue ?? PlayQueue(),
+       // One registry backs both resolution and lyrics: constructing the
+       // loader from the raw (possibly null) parameter left it on its own
+       // registry, and sources a host registered later never served lyrics.
        lyrics = lyrics ?? LyricLoader(registry: registry);
 
   /// Tuning.
@@ -97,9 +114,14 @@ final class AudioPlaybackController {
   /// Replaces the queue and starts at [startIndex].
   Future<void> setQueue(Iterable<MusicTrack> tracks, {int startIndex = 0, bool autoPlay = true}) async {
     queue.setTracks(tracks, startIndex: startIndex);
-    _publish(queueLength: queue.length, index: queue.index, ended: false);
+    _publish(queueLength: queue.length, index: queue.index, ended: false, mode: queue.mode);
 
     if (!autoPlay || queue.current == null) {
+      if (!autoPlay) {
+        // The engine would keep playing the replaced queue's track while the
+        // published state already names the new current one.
+        await stop();
+      }
       _publish(track: queue.current, clearTrack: queue.current == null);
 
       return;
@@ -364,6 +386,11 @@ final class AudioPlaybackController {
 
   /// Stops playback, keeping the queue.
   Future<void> stop() async {
+    // An open that is still resolving must not land afterwards: bumping the
+    // operation fails its guard, and an armed load timer would otherwise
+    // restart audio through playAt once the current resolve gives up.
+    _operation++;
+    _clearLoadTimeout();
     await _handle?.stop();
     _publish(playing: false, position: Duration.zero);
   }
@@ -388,13 +415,22 @@ final class AudioPlaybackController {
   // ---------------------------------------------------------------------------
 
   /// Creates and binds the engine handle on first use.
-  Future<PlayerHandle?> _ensureHandle() async {
+  Future<PlayerHandle?> _ensureHandle() {
     final existing = _handle;
 
     if (existing != null && !existing.disposed) {
-      return existing;
+      return Future<PlayerHandle?>.value(existing);
     }
 
+    // Memoized: two rapid playAt calls both seeing no handle must share one
+    // creation, or the second bind overwrites - and orphans - the first
+    // engine player for the rest of the session.
+    return _creating ??= _createHandle().whenComplete(() => _creating = null);
+  }
+
+  Future<PlayerHandle?>? _creating;
+
+  Future<PlayerHandle?> _createHandle() async {
     try {
       final handle = _playerConfig == null ? await _kernel.create() : await _kernel.create(config: _playerConfig);
 
@@ -431,12 +467,16 @@ final class AudioPlaybackController {
     required MusicQuality quality,
     required int operation,
   }) async {
-    final key = _keyOf(track);
-    final cached = _resolved[key];
+    final trackKey = _keyOf(track);
+    // The cache key carries the requested quality: an entry resolved at one
+    // tier must not be served for another, or setQuality is silently ignored
+    // on every replay or prefetched advance.
+    final resolvedKey = _resolvedKey(track, quality);
+    final cached = _resolved[resolvedKey];
 
     final TrackSource source;
 
-    if (cached != null && !cached.isExpired() && !_failed.contains(key)) {
+    if (cached != null && !cached.isExpired() && !_failed.contains(trackKey)) {
       source = cached;
     } else {
       // Local files never expire and never fail to resolve, so they are not
@@ -445,10 +485,14 @@ final class AudioPlaybackController {
       source = await _registry.resolveTrackSource(track, quality: quality);
 
       if (!track.isLocal) {
-        _resolved[key] = source;
+        // The other tiers' entries for this track are stale the moment a
+        // fresh resolution exists; dropping them keeps the cache bounded by
+        // the queue rather than by quality switches.
+        _resolved.removeWhere((key, _) => key.startsWith('$trackKey\u0000'));
+        _resolved[resolvedKey] = source;
       }
 
-      _failed.remove(key);
+      _failed.remove(trackKey);
     }
 
     if (_disposed || operation != _operation) {
@@ -549,7 +593,7 @@ final class AudioPlaybackController {
 
     if (config.refreshSourceOnError && !_refreshed.contains(key)) {
       _refreshed.add(key);
-      _resolved.remove(key);
+      _dropResolved(track);
 
       await playAt(queue.index, resetRetry: false);
 
@@ -572,7 +616,7 @@ final class AudioPlaybackController {
 
     _clearLoadTimeout();
     _failed.add(_keyOf(track));
-    _resolved.remove(_keyOf(track));
+    _dropResolved(track);
 
     _publish(loading: false, playing: false, buffering: false, error: error.toString());
 
@@ -604,7 +648,7 @@ final class AudioPlaybackController {
       // nodes go cold). Re-resolve once; a second timeout is a real failure.
       if (config.refreshSourceOnError && !alreadyRefreshed) {
         _refreshed.add(key);
-        _resolved.remove(key);
+        _dropResolved(track);
 
         unawaited(playAt(queue.index, resetRetry: false));
 
@@ -638,7 +682,7 @@ final class AudioPlaybackController {
       return;
     }
 
-    final key = _keyOf(nextTrack);
+    final key = _resolvedKey(nextTrack, _quality);
 
     if (_resolved[key] == null || _resolved[key]!.isExpired()) {
       try {
@@ -659,6 +703,13 @@ final class AudioPlaybackController {
   }
 
   String _keyOf(MusicTrack track) => '${track.sourceId}\u0000${track.id}';
+
+  String _resolvedKey(MusicTrack track, MusicQuality quality) => '${_keyOf(track)}\u0000${quality.id}';
+
+  void _dropResolved(MusicTrack track) {
+    final prefix = '${_keyOf(track)}\u0000';
+    _resolved.removeWhere((key, _) => key.startsWith(prefix));
+  }
 
   void _publish({
     MusicTrack? track,

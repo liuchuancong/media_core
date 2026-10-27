@@ -137,7 +137,12 @@ final class PlayQueue {
 
     _tracks.insert(position, track);
 
-    if (position <= _index) {
+    if (_index < 0) {
+      // The first track into an empty (or cleared) queue becomes the current
+      // one, the way append already behaves - otherwise the queue reports a
+      // length with no cursor, and consumers reading `current` see null.
+      _index = 0;
+    } else if (position <= _index) {
       _index++;
     }
 
@@ -160,7 +165,6 @@ final class PlayQueue {
     final removed = _tracks.removeAt(at);
 
     _shuffleOrder.remove(at);
-    _shuffleOrder.removeWhere((index) => index == at);
     for (var i = 0; i < _shuffleOrder.length; i++) {
       if (_shuffleOrder[i] > at) {
         _shuffleOrder[i] = _shuffleOrder[i] - 1;
@@ -196,11 +200,14 @@ final class PlayQueue {
     }
 
     final target = to.clamp(0, _tracks.length - 1);
+    // Captured before the removal: after it, the stale index names whatever
+    // track slid into the old slot, and rebinding the cursor from `current`
+    // would follow that stranger instead of the track that is playing.
+    final playing = _index >= 0 && _index < _tracks.length ? _tracks[_index] : null;
     final track = _tracks.removeAt(from);
 
     _tracks.insert(target, track);
 
-    final playing = current;
     _index = playing == null ? -1 : _tracks.indexOf(playing);
 
     if (_mode.shuffled) {

@@ -255,10 +255,14 @@ final class DesktopLyricController {
   }
 
   Future<void> _reloadLyric({bool force = false}) async {
+    // Captured so a slow load for a track the viewer already left cannot
+    // overwrite the newer track's lyric with the previous song's words.
+    final track = _lyricTrack;
+
     try {
       final document = await player.loadCurrentLyric(force: force);
 
-      if (_disposed) {
+      if (_disposed || !identical(track, _lyricTrack)) {
         return;
       }
 

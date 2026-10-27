@@ -61,6 +61,10 @@ final class MusicBackgroundBinding {
   /// surface this binding took may be released by it.
   PlayerHandle? _published;
 
+  /// Signature of the last queue handed to the platform, so position ticks
+  /// do not re-send an unchanged queue.
+  String? _publishedQueueSignature;
+
   bool _attached = false;
   bool _disposed = false;
 
@@ -167,10 +171,18 @@ final class MusicBackgroundBinding {
     handler.publishMediaItem(_itemFor(track, state));
 
     if (state.queueLength > 0) {
-      handler.publishQueue(
-        player.queue.tracks.map((item) => _itemFor(item, state)).toList(growable: false),
-        index: state.index,
-      );
+      // The queue reaches the platform only when it actually changed: the
+      // state stream emits per position tick, and re-mapping a thousand-track
+      // queue plus a platform-channel update several times a second is pure
+      // churn.
+      final signature = '${state.queueLength}:${state.index}:${track.id}';
+      if (signature != _publishedQueueSignature) {
+        _publishedQueueSignature = signature;
+        handler.publishQueue(
+          player.queue.tracks.map((item) => _itemFor(item, state)).toList(growable: false),
+          index: state.index,
+        );
+      }
     }
 
     // No explicit controls: the handler builds them from the transports that
