@@ -431,6 +431,17 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     await _exitWatcher?.cancel();
 
     final execution = await _executorOf().start(arguments: arguments, onStatistics: _handleStatistics);
+
+    // A stop/cancel/dispose that ran while the process was being built leaves
+    // this execution owned by nobody: the exit watcher only reacts to exits,
+    // and installing it would both leak an unsupervised process and brick
+    // every later start with "already running". End it and install nothing.
+    if (_intent != _StopIntent.none) {
+      await execution.cancel();
+
+      return;
+    }
+
     _execution = execution;
     _emit(_state.copyWith(status: RecordingStatus.recording));
     _log.info(
@@ -543,6 +554,15 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       return RecordingResult.of(success: false, outputPath: _activeDirectory, error: StateError('No recording to stop.'));
     }
 
+    // Terminal means terminal: a second stop - or a stop after the recording
+    // ended on its own, or after a cancel - must not re-verify and re-emit,
+    // which would flip a cancelled recording into a "completed" one.
+    final settled = _lastResult;
+
+    if (settled != null || _state.status.isTerminal) {
+      return settled ?? RecordingResult.of(success: false, outputPath: _activeDirectory, error: StateError('The recording already ended.'));
+    }
+
     // The intent must be set before the process ends, or the exit watcher sees
     // an unexplained 255 and reports an error for a recording the user ended.
     _intent = _StopIntent.stop;
@@ -599,14 +619,21 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _reportOutcome(success: failure == null, bytesWritten: bytesWritten, error: failure);
 
-    return RecordingResult.of(
+    final result = RecordingResult.of(
       success: failure == null,
       outputPath: _activeDirectory,
       duration: _recordedMediaTime,
       bytesWritten: bytesWritten,
       error: failure,
     );
+    _lastResult = result;
+
+    return result;
   }
+
+  /// The verdict the first terminal path produced, so a re-entrant stop
+  /// returns the outcome that stands instead of manufacturing a second one.
+  RecordingResult? _lastResult;
 
   /// Hands this recording's verdict to the notification layer, at most once.
   ///
@@ -658,6 +685,10 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     await _releaseKeepAlive();
     _emit(_state.copyWith(status: RecordingStatus.cancelled));
+
+    // The start line was posted for this job; without an outcome it stays on
+    // the shade describing a recording the viewer just cancelled.
+    _reportOutcome(success: false, bytesWritten: _lastBytes);
   }
 
   @override
@@ -1199,7 +1230,18 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
   Future<int?> _awaitExit(FfmpegExecution execution) async {
     try {
-      return await execution.exitCode;
+      // Bounded: the plugin's completion callback can be dropped by an app
+      // suspend or a wedged native side, and an unbounded wait here hangs
+      // stop(), cancel() and dispose() while the process keeps recording.
+      return await execution.exitCode.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      _log.warning(
+        'the recording process did not report its exit in time',
+        fields: <String, Object?>{'session': identityHashCode(execution)},
+      );
+      unawaited(execution.cancel());
+
+      return null;
     } on Object catch (_) {
       // A process that cannot be reaped is still gone; the caller's intent
       // already decided the outcome.

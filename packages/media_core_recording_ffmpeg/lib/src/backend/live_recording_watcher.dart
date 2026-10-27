@@ -361,6 +361,11 @@ class FfmpegLiveRecordingWatcher {
           error: error,
           fields: <String, Object?>{'failures': _probeFailures, 'room': source.value},
         );
+
+        // The session must end with the watch: leaving it "live" keeps
+        // consumers waiting for an end that never comes, and the state
+        // subscription alive until dispose.
+        _endSession();
       }
 
       return;
