@@ -204,10 +204,10 @@ abstract class PresentationState implements Built<PresentationState, Presentatio
   bool get canRequestChange => enabled && available && !transitioning && !hasError;
 
   /// A copy with the given fields replaced; an omitted field keeps its current
-  /// value. That is freezed's reading, kept deliberately: the reducer and the
-  /// controllers below pass `error: null` and `targetMode: null` meaning to
-  /// clear, and today those arguments are ignored — so this method mirrors that
-  /// rather than silently changing what a completed transition reports.
+  /// value. That is freezed's reading, kept because callers rely on it — the
+  /// places that meant to *clear* `error` or `targetMode` now say so with an
+  /// explicit `rebuild`, instead of passing a null this method could not tell
+  /// apart from an omission.
   PresentationState copyWith({
     PresentationMode? mode,
     PresentationMode? targetMode,
@@ -235,11 +235,15 @@ abstract class PresentationState implements Built<PresentationState, Presentatio
   ///
   /// The current [mode] is intentionally preserved.
   ///
-  /// Only [targetMode] and transition status change.
+  /// Only [targetMode] and transition status change, and the error the last
+  /// attempt left behind is dropped: a new attempt starts clean.
   PresentationState transitioningTo(PresentationMode target) {
-// null keeps the current value here, exactly as under freezed.
-// ignore: avoid_redundant_argument_values
-    return copyWith(targetMode: target, transitioning: true, error: null);
+    return rebuild(
+      (builder) => builder
+        ..targetMode = target
+        ..transitioning = true
+        ..error = null,
+    );
   }
 
   /// Creates a state representing a successfully
@@ -248,18 +252,26 @@ abstract class PresentationState implements Built<PresentationState, Presentatio
   /// The new mode becomes the current active mode and
   /// the pending target is cleared.
   PresentationState completed(PresentationMode newMode) {
-// null keeps the current value here, exactly as under freezed.
-// ignore: avoid_redundant_argument_values
-    return copyWith(mode: newMode, targetMode: null, transitioning: false, error: null);
+    return rebuild(
+      (builder) => builder
+        ..mode = newMode
+        ..targetMode = null
+        ..transitioning = false
+        ..error = null,
+    );
   }
 
   /// Creates a state representing a failed transition.
   ///
   /// The current active mode is preserved because the
-  /// requested transition did not complete successfully.
+  /// requested transition did not complete successfully, and the pending
+  /// target is cleared with it.
   PresentationState failed(String message) {
-// null keeps the current value here, exactly as under freezed.
-// ignore: avoid_redundant_argument_values
-    return copyWith(targetMode: null, transitioning: false, error: message);
+    return rebuild(
+      (builder) => builder
+        ..targetMode = null
+        ..transitioning = false
+        ..error = message,
+    );
   }
 }

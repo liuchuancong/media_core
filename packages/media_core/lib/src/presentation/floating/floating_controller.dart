@@ -61,9 +61,14 @@ final class FloatingController {
 
       final generation = ++_generation;
 
-// null keeps the current value here, exactly as under freezed.
-// ignore: avoid_redundant_argument_values
-      _stateSubject.add(current.copyWith(transitioning: true, generation: generation, error: null));
+      _stateSubject.add(
+        current.rebuild(
+          (builder) => builder
+            ..transitioning = true
+            ..generation = generation
+            ..error = null,
+        ),
+      );
     });
   }
 
@@ -78,9 +83,14 @@ final class FloatingController {
 
       final generation = ++_generation;
 
-// null keeps the current value here, exactly as under freezed.
-// ignore: avoid_redundant_argument_values
-      _stateSubject.add(current.copyWith(transitioning: true, generation: generation, error: null));
+      _stateSubject.add(
+        current.rebuild(
+          (builder) => builder
+            ..transitioning = true
+            ..generation = generation
+            ..error = null,
+        ),
+      );
     });
   }
 

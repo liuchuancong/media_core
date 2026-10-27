@@ -45,74 +45,65 @@ final class PresentationReducer {
 
     final generation = event.generation > state.generation ? event.generation : state.generation;
 
-    return switch (event) {
-      //
-      // Transition started.
-      //
-      final PresentationStarted event => state.copyWith(
-        targetMode: event.mode,
-        transitioning: true,
-        generation: generation,
-        // Deliberately redundant: copyWith keeps the current value when an
-        // argument is omitted, which is what this did under freezed.
-        // ignore: avoid_redundant_argument_values
-        error: null,
-      ),
-
-      //
-      // Transition completed.
-      //
-      final PresentationCompleted event => state.copyWith(
-        mode: event.mode,
-        // Deliberately redundant: copyWith keeps the current value when an
-        // argument is omitted, which is what this did under freezed.
-        // ignore: avoid_redundant_argument_values
-        targetMode: null,
-        transitioning: false,
-        generation: generation,
-        // Deliberately redundant: copyWith keeps the current value when an
-        // argument is omitted, which is what this did under freezed.
-        // ignore: avoid_redundant_argument_values
-        error: null,
-      ),
-
-      //
-      // Transition failed.
-      //
-      final PresentationFailed event => state.copyWith(
-        // Deliberately redundant: copyWith keeps the current value when an
-        // argument is omitted, which is what this did under freezed.
-        // ignore: avoid_redundant_argument_values
-        targetMode: null,
-        transitioning: false,
-        generation: generation,
-        error: event.error,
-      ),
-
-      //
-      // Platform changed state externally.
-      //
-      final PresentationChanged event => state.copyWith(
-        mode: event.mode,
-        // Deliberately redundant: copyWith keeps the current value when an
-        // argument is omitted, which is what this did under freezed.
-        // ignore: avoid_redundant_argument_values
-        targetMode: null,
-        transitioning: false,
-        generation: generation,
-        // Deliberately redundant: copyWith keeps the current value when an
-        // argument is omitted, which is what this did under freezed.
-        // ignore: avoid_redundant_argument_values
-        error: null,
-      ),
-
-      //
-      // Controller disposed.
-      //
-      // Deliberately redundant: copyWith keeps the current value when an
-      // argument is omitted, which is what this did under freezed.
-      // ignore: avoid_redundant_argument_values
-      PresentationDisposed _ => state.copyWith(targetMode: null, transitioning: false, generation: generation),
-    };
+    return switch (event) {
+      //
+      // Transition started.
+      //
+      final PresentationStarted event => state.rebuild(
+        (builder) => builder
+          ..targetMode = event.mode
+          ..transitioning = true
+          ..generation = generation
+          ..error = null,
+      ),
+
+      //
+      // Transition completed.
+      //
+      final PresentationCompleted event => state.rebuild(
+        (builder) => builder
+          ..mode = event.mode
+          ..targetMode = null
+          ..transitioning = false
+          ..generation = generation
+          ..error = null,
+      ),
+
+      //
+      // Transition failed.
+      //
+      // The failure's own message replaces whatever error the state carried,
+      // and the pending target goes with it: the attempt is over either way.
+      //
+      final PresentationFailed event => state.rebuild(
+        (builder) => builder
+          ..targetMode = null
+          ..transitioning = false
+          ..generation = generation
+          ..error = event.error,
+      ),
+
+      //
+      // Platform changed state externally.
+      //
+      final PresentationChanged event => state.rebuild(
+        (builder) => builder
+          ..mode = event.mode
+          ..targetMode = null
+          ..transitioning = false
+          ..generation = generation
+          ..error = null,
+      ),
+
+      //
+      // Controller disposed.
+      //
+      PresentationDisposed _ => state.rebuild(
+        (builder) => builder
+          ..targetMode = null
+          ..transitioning = false
+          ..generation = generation,
+      ),
+    };
   }
 }

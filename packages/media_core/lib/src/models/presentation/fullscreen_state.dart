@@ -82,10 +82,10 @@ abstract class FullscreenState implements Built<FullscreenState, FullscreenState
   bool get canExit => available && active && !transitioning;
 
   /// A copy with the given fields replaced; an omitted field keeps its current
-  /// value. That is freezed's reading, kept deliberately: controllers call
-  /// `copyWith(error: null)` meaning to clear, and today that argument is
-  /// ignored, so switching to "null clears" here would change behaviour rather
-  /// than migrate it.
+  /// value. That is freezed's reading, kept because callers rely on it — the
+  /// places that meant to clear the error now say so with an explicit
+  /// `rebuild`, instead of passing a null this method could not tell apart
+  /// from an omission.
   FullscreenState copyWith({bool? active, bool? transitioning, bool? available, int? generation, String? error}) {
     return rebuild((builder) => builder
       ..active = active ?? builder.active
