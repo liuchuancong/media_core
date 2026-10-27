@@ -181,6 +181,8 @@ final class DanmakuController {
   /// transport is asynchronous — it has to tear the old session down first —
   /// and is reported through [onStateChanged] and [onFailure].
   void installTransport(DanmakuTransport transport) {
+    if (_disposed) return;
+
     final current = _transport;
     if (current == null) {
       _transport = transport;
@@ -300,6 +302,7 @@ final class DanmakuController {
           _connectingKey = null;
           _connectingRoom = null;
           _sessionKey = null;
+          _sessionReady = false;
           _sink.onRoomChanged(null);
           _emit(state.copyWith(phase: DanmakuSessionPhase.failed, clearRoom: true, generation: token));
         }
@@ -311,7 +314,15 @@ final class DanmakuController {
       if (request != _requestEpoch || !_accepts(transport, key, token)) {
         // A newer transition won while the handshake was in flight. The socket
         // this operation opened is nobody's now, so it is released here rather
-        // than left running behind the new session's back.
+        // than left running behind the new session's back. The token is bumped
+        // and the keys cleared too: the transport's farewell callbacks capture
+        // them, and without this a late onTransportClosed lands as a spurious
+        // failure right after an intentional stop.
+        _sessionToken++;
+        _connectingKey = null;
+        _connectingRoom = null;
+        _sessionKey = null;
+        _sessionReady = false;
         await _stopTransport(transport);
       }
     });
@@ -589,10 +600,13 @@ final class DanmakuController {
   /// hard-coded this to one platform inside the session.
   void _reportMaskedNameOnce(DanmakuMessage message) {
     if (_maskedNameNoticed) return;
-    if (!RegExp(r'\*{2,}|＊{2,}').hasMatch(message.userName)) return;
+    if (!_maskedNamePattern.hasMatch(message.userName)) return;
     _maskedNameNoticed = true;
     _notice(DanmakuNotice.maskedUserName);
   }
+
+  /// Compiled once: this runs against every accepted chat message.
+  static final RegExp _maskedNamePattern = RegExp(r'\*{2,}|＊{2,}');
 
   /// Emits a notice, collapsing an immediate repeat.
   ///

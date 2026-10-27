@@ -121,11 +121,12 @@ abstract interface class DanmakuTransportListener {
 
 /// One platform's danmaku connection.
 ///
-/// A transport is single-room and single-use: it is created for one [start]
-/// and released by [stop]. Reusing one instance across rooms would let a late
-/// packet from the previous socket be attributed to the new room, which is
-/// exactly what the session's token guard exists to prevent — so the contract
-/// does not allow it.
+/// A transport is single-room and restartable: it is created for one [start],
+/// released by [stop], and may be [start]ed again afterwards - the session
+/// reconnects a room through the same instance (a forced same-room recovery,
+/// a room switch that found no replacement installed). Reusing one instance
+/// *across rooms* without a stop in between is what the session's token guard
+/// exists to prevent, and the contract does not allow that.
 ///
 /// A transport does not decide when to reconnect, when to stop retrying or
 /// which room to attach to; the session owns those decisions and the transport

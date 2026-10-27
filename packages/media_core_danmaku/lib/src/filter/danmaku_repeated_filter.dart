@@ -30,6 +30,9 @@ final class DanmakuRepeatedFilter {
   /// Upper bound on remembered texts. Bounds memory in a busy room.
   final int maxEntries;
 
+  /// Compiled once: this runs on every chat message.
+  static final RegExp _whitespace = RegExp(r'\s+');
+
   /// Insertion-ordered so the oldest text can be evicted in O(1).
   final LinkedHashMap<String, DateTime> _lastSeen = LinkedHashMap<String, DateTime>();
 
@@ -46,7 +49,8 @@ final class DanmakuRepeatedFilter {
 
     // Whitespace is collapsed for comparison only: "666" and "6 6 6" are the
     // same spam, while the rendered text keeps whatever the platform sent.
-    final normalized = message.text.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    // Compiled once: this runs on every chat message.
+    final normalized = message.text.trim().replaceAll(_whitespace, ' ').toLowerCase();
     if (normalized.isEmpty) return true;
 
     final receivedAt = now ?? DateTime.now();

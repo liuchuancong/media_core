@@ -108,6 +108,16 @@ final class DanmakuSimilarityFilter {
         continue;
       }
       final cached = entry.value;
+
+      // Length pre-filter: partialRatio is quadratic in the text length, and
+      // a pair whose lengths already differ by more than the threshold can
+      // never reach it - 100 * lengthDiff / maxLength is the ratio ceiling.
+      final maxLength = cached.text.length > normalized.length ? cached.text.length : normalized.length;
+
+      if (maxLength > 0 && 100 - (100 * (cached.text.length - normalized.length).abs() / maxLength) < _similarityThreshold) {
+        continue;
+      }
+
       _lastComparisonCount++;
       if (partialRatio(cached.text, normalized) >= _similarityThreshold) {
         cached.count++;

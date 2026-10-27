@@ -235,6 +235,12 @@ final class DanmakuOverlaySession {
     final at = now ?? DateTime.now();
     final item = _buildItem(message, surfaceWidth: surfaceWidth, at: at);
 
+    // A cap of zero means the overlay shows nothing at all - without the
+    // guard the eviction loop still always admitted one item.
+    if (_config.maxVisibleCount <= 0) {
+      return false;
+    }
+
     // Evicting the oldest is deliberate: on a small surface the newest message
     // is the one the viewer can still act on, and a full queue means the
     // overlay is behind, not that the incoming message is unwanted.
