@@ -79,7 +79,7 @@ final class _UiStylesDemoPageState extends State<UiStylesDemoPage> {
       await previous.dispose();
     }
 
-    final source = PlayerSource(
+    final source = PlayerSource.of(
       id: SourceId.generate(),
       uri: Uri.parse(_url.text.trim()),
       title: _url.text.trim().split('/').last,

@@ -66,7 +66,7 @@ final class _PresentationDemoPageState extends State<PresentationDemoPage> {
   }
 
   Future<void> _open() async {
-    final source = PlayerSource(
+    final source = PlayerSource.of(
       id: SourceId('presentation_${_url.text.hashCode}'),
       uri: Uri.parse(_url.text.trim()),
       type: SourceType.remote,

@@ -67,7 +67,7 @@ final class _FeedDemoPageState extends State<FeedDemoPage> {
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .map(
-          (url) => PlayerSource(
+          (url) => PlayerSource.of(
             id: SourceId('feed_${url.hashCode}'),
             uri: Uri.parse(url),
             type: SourceType.remote,

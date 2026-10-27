@@ -178,7 +178,7 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
     }
 
     final url = _url.text.trim();
-    final source = PlayerSource(id: SourceId.generate(), uri: Uri.parse(url), title: url.split('/').last);
+    final source = PlayerSource.of(id: SourceId.generate(), uri: Uri.parse(url), title: url.split('/').last);
 
     final handle = await _kernel.create(source: source, config: const PlayerConfig(autoPlay: true));
 

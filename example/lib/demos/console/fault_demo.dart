@@ -56,8 +56,8 @@ class FaultDemo extends ModuleDemo {
   String get snippet => '''
 final injector = FaultInjector(modeController: mode);
 
-if (injector.canInject(FaultConfig(type: FaultType.networkTimeout, probability: 0.5))) {
-  await injector.inject(FaultConfig(type: FaultType.networkTimeout));
+if (injector.canInject(FaultConfig.of(type: FaultType.networkTimeout, probability: 0.5))) {
+  await injector.inject(FaultConfig.of(type: FaultType.networkTimeout));
 }
 
 final policy = ErrorPolicy.defaults();
@@ -126,10 +126,10 @@ if (policy.isRetryable(PlayerErrorCode.networkTimeout)) {
       ..writeln('BugModeConfig.aggressive (disruptive + stress + random; not chaos), one hook registered:')
       ..writeln(
         '  the hook supports network faults: '
-        '${hooks.canInject(const FaultConfig(type: FaultType.networkTimeout))}',
+        '${hooks.canInject(FaultConfig.of(type: FaultType.networkTimeout))}',
       );
 
-    const config = FaultConfig(type: FaultType.networkTimeout, delay: Duration(milliseconds: 50));
+    final config = FaultConfig.of(type: FaultType.networkTimeout, delay: const Duration(milliseconds: 50));
 
     if (injector.canInject(config)) {
       final pending = injector.inject(config, source: 'live', target: 'line-2');

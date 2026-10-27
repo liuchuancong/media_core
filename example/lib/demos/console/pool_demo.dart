@@ -83,7 +83,7 @@ if (pool.handleFor(3) != null) {
   List<PlayerSource> _sources() {
     return <PlayerSource>[
       for (var index = 0; index < 8; index++)
-        PlayerSource(
+        PlayerSource.of(
           id: SourceId('room-$index'),
           uri: Uri.parse('https://example.com/live/$index.m3u8'),
           type: SourceType.remote,

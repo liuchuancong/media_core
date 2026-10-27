@@ -79,7 +79,7 @@ await list.next();                        // saves, then opens index 3
         PlaybackListItem(
           id: episode,
           title: episode,
-          source: PlayerSource(id: SourceId(episode), uri: Uri.parse('https://example.com/$episode.mp4')),
+          source: PlayerSource.of(id: SourceId(episode), uri: Uri.parse('https://example.com/$episode.mp4')),
         ),
     ];
 

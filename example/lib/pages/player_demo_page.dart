@@ -99,7 +99,7 @@ final class _PlayerDemoPageState extends State<PlayerDemoPage> {
       await previous.dispose();
     }
 
-    final source = PlayerSource(
+    final source = PlayerSource.of(
       id: SourceId('demo_${url.hashCode}'),
       uri: Uri.parse(url),
       type: SourceType.remote,

@@ -94,7 +94,7 @@ final class _MultiviewDemoPageState extends State<MultiviewDemoPage> {
       roomId: room,
       title: room,
       qualityLabel: index == _wall.focusedIndex ? '1080p' : '480p',
-      source: PlayerSource(
+      source: PlayerSource.of(
         id: SourceId('room-$index'),
         uri: Uri.parse('https://example.com/live/$room.m3u8'),
         type: SourceType.remote,
