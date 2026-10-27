@@ -250,17 +250,26 @@ final class PlaybackListController {
   void updateItems(List<PlaybackListItem> items) {
     _ensureNotDisposed();
     _items = List<PlaybackListItem>.unmodifiable(items);
-    _poolItemsSync = _syncPoolItems();
+    _poolItemsSync = _syncPoolItems().catchError((Object _) {});
 
     final currentId = _state.item?.id;
     if (currentId != null) {
       final index = _items.indexWhere((item) => item.id == currentId);
       if (index >= 0) {
         _index = index;
-        _emit(_state.copyWith(index: index, count: _items.length));
+        // `copyWith` preserves `opening: true` from an in-flight leg that may
+        // never settle against the new coordinates; the row shown is the
+        // current one and it is not opening. The stand-down coordinate follows
+        // the re-pointed index - the old coordinate now names a different item.
+        _lastOpenedIndex = index;
+        _emit(_state.copyWith(index: index, count: _items.length, opening: false));
         return;
       }
     }
+
+    // The current item did not survive: the old stand-down coordinate names a
+    // stranger in the new list.
+    _lastOpenedIndex = null;
 
     _emit(
       PlaybackListState(
@@ -302,6 +311,15 @@ final class PlaybackListController {
           break;
         }
         _openTarget = null;
+
+        // A fling back to the row the in-flight leg already settled must not
+        // re-open it: that is a full restart (and a second resume seek) for a
+        // row that is already playing. A failure path never sets the marker,
+        // so retrying a failed row still works.
+        if (target == _lastOpenedIndex && _index == target) {
+          continue;
+        }
+
         await _openAt(target);
       }
     } finally {
@@ -350,6 +368,14 @@ final class PlaybackListController {
         return;
       }
       await _openItem(item, index);
+
+      // Checked here, not later: a superseded (or post-dispose) leg must not
+      // stand down the previous row, mark this one opened, or seek it - all
+      // of which act on a row nobody is looking at any more.
+      if (_disposed || _index != index) {
+        return;
+      }
+
       if (previousIndex != null && previousIndex != index) {
         // The outgoing item is no longer visible; the pool keeps it warm or
         // releases it according to its own configuration.
@@ -378,9 +404,13 @@ final class PlaybackListController {
   }
 
   /// Moves to the next item. A no-op at the end of the list.
+  ///
+  /// Guarded on the live cursor, not the last emitted state: an open chain in
+  /// flight can leave the emitted index behind the live one, and computing
+  /// from the stale one walks past the list's end.
   Future<void> next() {
     _ensureNotDisposed();
-    if (!_state.hasNext) {
+    if (_index + 1 >= _items.length) {
       return Future<void>.value();
     }
     return _switchTo(_index + 1);
@@ -389,7 +419,7 @@ final class PlaybackListController {
   /// Moves to the previous item. A no-op at the start of the list.
   Future<void> previous() {
     _ensureNotDisposed();
-    if (!_state.hasPrevious) {
+    if (_index <= 0) {
       return Future<void>.value();
     }
     return _switchTo(_index - 1);
@@ -409,10 +439,10 @@ final class PlaybackListController {
   /// Call when the viewer leaves the list, so returning later resumes here.
   Future<void> savePosition() async {
     _ensureNotDisposed();
-    final item = _state.item;
-    // Pool mode binds no player until the first successful open, so a state
-    // that already carries an item can still have nothing to read a position
-    // from - skipping keeps "next before anything opened" from throwing.
+    // The pairing, not the emitted state: mid-switch the state already names
+    // the incoming item while the bound player still sits on the outgoing
+    // one, and saving under the wrong id overwrites real remembered progress.
+    final item = _boundItem;
     if (item == null || !config.resumeEnabled || _player == null) {
       return;
     }
@@ -462,12 +492,22 @@ final class PlaybackListController {
     final activePool = pool;
     if (activePool == null) {
       await player.open(item.source);
+      _boundItem = item;
       return;
     }
 
     final handle = await _openThroughPool(item, index, activePool);
     _player = poolPlayerFactory!(handle);
+    // Paired with the player bind: `savePosition` must attribute what it
+    // reads to the item the bound player is actually playing, not to
+    // whatever the emitted state last named.
+    _boundItem = item;
   }
+
+  /// The item the currently bound player belongs to; lags the emitted state
+  /// by exactly the duration of an open, which is the pairing the progress
+  /// store needs.
+  PlaybackListItem? _boundItem;
 
   Future<PoolPlayerHandle> _openThroughPool(
     PlaybackListItem item,

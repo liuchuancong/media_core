@@ -87,7 +87,10 @@ extension MultiviewControllerCells on MultiviewController {
       return false;
     }
 
-    final position = playlist.indexWhere((candidate) => candidate.roomId == current.roomId);
+    // Located by identity, not by roomId: roomIds are nullable (and can be
+    // duplicated by a careless source list), and matching null against null
+    // would always find entry 0 - advancing forever onto the same room.
+    final position = playlist.indexWhere((candidate) => identical(candidate, current) || candidate == current);
     final next = playlist[(position + 1) % playlist.length];
     _log.debug(
       'advancing to the next room in the playlist',

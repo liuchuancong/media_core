@@ -246,8 +246,19 @@ final class OverlayPipSystemPip implements SystemPip {
       enableDrag: overlayEnableDrag,
       title: overlayTitle,
     );
-    _link = OverlayPipLink(_overlayWindow)..onEvent = _onOverlayEvent;
-    await _link!.open(OverlayPipMessages.media(url: media.url, position: media.position, title: overlayTitle));
+
+    try {
+      // The previous link's window-messages subscription is replaced, not
+      // leaked; a re-enable drops the old listener here.
+      await _link?.dispose();
+      _link = OverlayPipLink(_overlayWindow)..onEvent = _onOverlayEvent;
+      await _link!.open(OverlayPipMessages.media(url: media.url, position: media.position, title: overlayTitle));
+    } on Object {
+      // The overlay is on screen but nothing will ever drive it; without
+      // closing it here the window outlives its controller with no way back.
+      await _overlayWindow.closeOverlay();
+      rethrow;
+    }
 
     _statuses.add(SystemPipStatus.enabled);
     return SystemPipStatus.enabled;

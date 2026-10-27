@@ -334,7 +334,25 @@ extension _LivePlaybackSweep on LivePlaybackController {
       await retireeSub.cancel();
     }
 
-    final staged = await kernel.create(preferredBackend: engine);
+    final PlayerHandle staged;
+
+    try {
+      staged = await kernel.create(preferredBackend: engine);
+    } on Object catch (_) {
+      // Creation runs after the retiree's subscription was detached, and the
+      // restore path lives in the staging try below - which was never
+      // entered. Without restoring here, the still-playing engine loses
+      // stall detection and error recovery for good.
+      if (previous != null && !previous.disposed && identical(_handle, previous) && _adapterSub == null) {
+        _adapterSub = previous.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
+
+        watchdogs.updateCapabilities(previous.adapter.capabilities);
+        watchdogs.setVideoExpected(expected: !_audioOnly);
+        watchdogs.onPlayingChanged(playing: _playbackRequested, fromUserIntent: false);
+      }
+
+      rethrow;
+    }
 
     // A staged attempt owns no subscription until it commits, so an engine
     // that fails *while opening* — a playlist that 404s, a refused connection

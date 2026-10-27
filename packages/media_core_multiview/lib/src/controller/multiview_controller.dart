@@ -117,6 +117,16 @@ final class MultiviewController {
   /// Cell index → a host-set manual volume that overrides the audio-mode one.
   final Map<int, double> _cellVolumes = <int, double>{};
 
+  /// Cell index → when a failed cell last auto-advanced to its playlist's
+  /// next entry. A dead URL that rejects in milliseconds would otherwise
+  /// cycle assign → fail → advance with no delay at all, hammering the
+  /// resolver and the pool.
+  final Map<int, DateTime> _lastAdvanceAt = <int, DateTime>{};
+
+  /// Cell index → when its current restart budget was spent. A cell that
+  /// plays cleanly for a stall window afterwards earns the budget back.
+  final Map<int, DateTime> _restartedAt = <int, DateTime>{};
+
   final StreamController<MultiviewSnapshot> _snapshotController = StreamController<MultiviewSnapshot>.broadcast();
 
   Timer? _tick;

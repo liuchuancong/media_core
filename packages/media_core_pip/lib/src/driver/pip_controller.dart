@@ -232,11 +232,15 @@ final class PipSessionController {
     );
 
     _playerId = playerId;
-    _emit(PipSession(playerId: playerId, active: true, reason: reason));
 
     _driver.onVideoSize(player.videoWidth, player.videoHeight);
     await _driver.initialize();
     await _driver.apply(playerId, PresentationRequest.pip());
+
+    // Emitted after a successful apply: announcing the window first would
+    // leave listeners rendering pip chrome for a window that never opened
+    // when apply throws, with no compensating event.
+    _emit(PipSession(playerId: playerId, active: true, reason: reason));
 
     _reportMemory(active: _driver.isPip, playerId: playerId);
     _log.debug('pip window applied', fields: <String, Object?>{'active': _driver.isPip});

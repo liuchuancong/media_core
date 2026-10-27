@@ -202,7 +202,12 @@ final class FeedPlayerController {
       return;
     }
     if (index == _index && (_attachTarget == null || index == _attachTarget)) {
-      return;
+      // Except for the retry the class doc promises: an errored item's
+      // "showIndex(current)" must re-open, and the guard above would make it
+      // a silent no-op.
+      if (_itemState != FeedItemState.error) {
+        return;
+      }
     }
 
     _index = index;
@@ -269,7 +274,18 @@ final class FeedPlayerController {
       // registered, pool exhausted) is an attach failure like any other and
       // must land in the same error state instead of escaping the chain.
       if (_handle == null || _handle!.disposed) {
-        _handle = await kernel.create();
+        final created = await kernel.create();
+
+        if (_disposed) {
+          // dispose() ran during the creation and released the handle it
+          // could see - which was not this one. Give it back here, or the
+          // player leaks with nothing left referencing it.
+          unawaited(kernel.release(created.id));
+
+          return;
+        }
+
+        _handle = created;
       }
       if (_disposed || _index != index) {
         // The player was built while the viewer was still moving: the newest
@@ -291,7 +307,7 @@ final class FeedPlayerController {
       }
 
       _attachedIndex = index;
-      _setItemState(FeedItemState.playing);
+      _applyPendingPauseOrPlay();
 
       if (preloadAhead && index + 1 < _items.length) {
         kernel.preload(_items[index + 1]);
@@ -360,7 +376,7 @@ final class FeedPlayerController {
       _handle = pooled is KernelPoolPlayerHandle ? pooled.handle : null;
       _reattachTransport();
       _attachedIndex = index;
-      _setItemState(FeedItemState.playing);
+      _applyPendingPauseOrPlay();
     } on Object catch (error) {
       MediaCoreLog.error(
         LogCategory.recovery,
@@ -390,9 +406,31 @@ final class FeedPlayerController {
 
   /// Pauses the visible item.
   Future<void> pause() async {
+    if (_itemState == FeedItemState.opening) {
+      // The open completing would otherwise publish `playing` over this and
+      // audibly start the page the viewer just paused.
+      _pauseDuringOpen = true;
+    }
     _setItemState(FeedItemState.paused);
 
     await (_handle?.pause() ?? _pooledPlayer?.pause());
+  }
+
+  /// A pause issued while an open was still in flight.
+  bool _pauseDuringOpen = false;
+
+  /// Publishes the state an open finished into, honouring a pause that was
+  /// issued while the open was running.
+  void _applyPendingPauseOrPlay() {
+    if (_pauseDuringOpen) {
+      _pauseDuringOpen = false;
+      _setItemState(FeedItemState.paused);
+      unawaited(_handle?.pause() ?? _pooledPlayer?.pause() ?? Future<void>.value());
+
+      return;
+    }
+
+    _setItemState(FeedItemState.playing);
   }
 
   /// Resumes the visible item.

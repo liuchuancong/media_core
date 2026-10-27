@@ -58,7 +58,11 @@ final class Win32FullscreenWindow implements FullscreenWindow {
       throw StateError('The window to take fullscreen could not be found.');
     }
     if (value) {
-      _snapshot = Win32WindowFfi.capture(_windowHandle);
+      // Idempotent enter: a second fullscreen request must not overwrite the
+      // pre-fullscreen snapshot with fullscreen-era bounds, or the exit would
+      // restore the window to a fullscreen-sized rect.
+      _snapshot ??= Win32WindowFfi.capture(_windowHandle);
+
       Win32WindowFfi.setScreenFullscreen(_windowHandle, fullscreen: true, snapshot: _snapshot);
       return;
     }

@@ -201,11 +201,11 @@ final class FullscreenDriver implements KernelPresentationDriver {
   }
 
   @override
-  Future<void> apply(PlayerId playerId, PresentationRequest request) async {
-    if (_disposed) {
-      throw StateError('FullscreenDriver has been disposed.');
-    }
-
+  Future<void> apply(PlayerId playerId, PresentationRequest request) {
+    return _serialize(() async {
+      if (_disposed) {
+        throw StateError('FullscreenDriver has been disposed.');
+      }
     _lastPlayerId = playerId;
     final wasAnyFullscreen = isAnyFullscreen;
 
@@ -256,6 +256,21 @@ final class FullscreenDriver implements KernelPresentationDriver {
     }
 
     _notifyIfChanged(wasAnyFullscreen);
+    });
+  }
+
+  /// Tail-serialized transitions: an exit that arrives while an enter is
+  /// between its platform calls would read half-set flags and no-op - or a
+  /// double-enter re-captures bounds and double-fires hooks - so each
+  /// transition observes the settled state of the last.
+  Future<void> _transition = Future<void>.value();
+
+  Future<void> _serialize(Future<void> Function() action) {
+    final next = _transition.then((_) => action());
+    // The chain itself never fails; the caller's future keeps the error.
+    _transition = next.then((_) {}, onError: (Object _) {});
+
+    return next;
   }
 
   @override
@@ -266,10 +281,16 @@ final class FullscreenDriver implements KernelPresentationDriver {
     _disposed = true;
 
     // Leaving the platform state behind on dispose would strand a desktop
-    // window in fullscreen after the host has torn the player down.
+    // window in fullscreen after the host has torn the player down. The
+    // stream still closes when the restore throws - a leaked broadcast
+    // controller is worse than an un-restored window.
     final wasAnyFullscreen = isAnyFullscreen;
-    if (_isSystemFullscreen) {
-      await _leaveSystemFullscreen();
+    try {
+      if (_isSystemFullscreen) {
+        await _leaveSystemFullscreen();
+      }
+    } on Object catch (error) {
+      _log.warning('dispose could not restore the window', error: error);
     }
     _isWindowFullscreen = false;
     _notifyIfChanged(wasAnyFullscreen);
@@ -284,14 +305,16 @@ final class FullscreenDriver implements KernelPresentationDriver {
   /// back gesture, a fullscreen button that only knows "leave" — should not
   /// have to synthesize a request and a player id for that. No-op when no
   /// fullscreen variant is active.
-  Future<void> exitFullscreen() async {
-    if (_disposed) {
-      throw StateError('FullscreenDriver has been disposed.');
-    }
+  Future<void> exitFullscreen() {
+    return _serialize(() async {
+      if (_disposed) {
+        throw StateError('FullscreenDriver has been disposed.');
+      }
 
-    final wasAnyFullscreen = isAnyFullscreen;
-    await _leaveWithLifecycle(_lastPlayerId ?? _togglePlayerId, wasAnyFullscreen);
-    _notifyIfChanged(wasAnyFullscreen);
+      final wasAnyFullscreen = isAnyFullscreen;
+      await _leaveWithLifecycle(_lastPlayerId ?? _togglePlayerId, wasAnyFullscreen);
+      _notifyIfChanged(wasAnyFullscreen);
+    });
   }
 
   /// Enters system fullscreen when no fullscreen is active, leaves otherwise.
@@ -317,10 +340,11 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   Future<void> _enterSystemFullscreen() async {
     // The two variants are mutually exclusive, and this driver owns both, so
-    // the hand-off happens here rather than in the chain.
-    if (_isWindowFullscreen) {
-      _setWindowFullscreen(false);
-    }
+    // the hand-off happens here rather than in the chain. The window flag is
+    // only cleared once the system enter has succeeded (at the bottom): a
+    // throw from the platform calls would otherwise leave both flags false
+    // while the window is still fullscreen, with no exit path that
+    // recognises it.
     if (_isSystemFullscreen) {
       return;
     }
@@ -329,11 +353,17 @@ final class FullscreenDriver implements KernelPresentationDriver {
       case FullscreenPlatform.desktop:
         final window = _desktopWindow ??= WindowManagerFullscreenWindow();
         if (config.restorePreviousBounds) {
-          _preFullscreenBounds = await window.captureBounds();
-          _log.debug(
-            'captured pre-fullscreen bounds',
-            fields: <String, Object?>{'bounds': _preFullscreenBounds?.toString()},
-          );
+          final bounds = await window.captureBounds();
+          // A momentarily unavailable window reads as zero; restoring that
+          // later would collapse the window, so nothing is captured and the
+          // exit simply skips the restore.
+          if (bounds != Rect.zero) {
+            _preFullscreenBounds = bounds;
+            _log.debug(
+              'captured pre-fullscreen bounds',
+              fields: <String, Object?>{'bounds': _preFullscreenBounds?.toString()},
+            );
+          }
         }
         await window.setFullscreen(value: true);
       case FullscreenPlatform.mobile:
@@ -351,6 +381,7 @@ final class FullscreenDriver implements KernelPresentationDriver {
         throw UnsupportedError('System fullscreen is not supported on this platform.');
     }
 
+    _setWindowFullscreen(false);
     _setSystemFullscreen(true);
   }
 
@@ -442,6 +473,11 @@ final class FullscreenDriver implements KernelPresentationDriver {
       _preFullscreenOrientation = null;
       if (orientation != null) {
         await SystemChrome.setPreferredOrientations(orientation);
+      } else if (config.restoreMobileOrientation) {
+        // The enter captured nothing (no view yet), but a lock the host set
+        // during fullscreen is still in force - release it outright rather
+        // than leave the device pinned to the fullscreen orientation.
+        await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
       }
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     }

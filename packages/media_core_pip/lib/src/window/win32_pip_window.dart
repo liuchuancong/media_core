@@ -174,6 +174,15 @@ final class Win32PipWindow implements PipWindow {
     _stableTicks = 0;
   }
 
+  /// Stops the snap monitor for good.
+  ///
+  /// The window interface has no dispose of its own; the driver calls this
+  /// when it tears down, or the 150 ms bounds poll would keep ticking past
+  /// the death of everything that cared about its result.
+  Future<void> dispose() async {
+    _stopSnapMonitor();
+  }
+
   void _snapTick() {
     final hwnd = _windowHandle;
     final bounds = Win32WindowFfi.bounds(hwnd);

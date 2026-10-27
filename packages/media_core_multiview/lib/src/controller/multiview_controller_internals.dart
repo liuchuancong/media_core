@@ -45,9 +45,33 @@ extension _MultiviewControllerInternals on MultiviewController {
 
     try {
       await _renewSourceIfExpired(cell);
+      if (_disposed) {
+        return;
+      }
       final resolved = await _resolveForCell(cell);
+      if (_disposed) {
+        return;
+      }
       final handle = await _handleFor(cell.index);
+
+      // A dispose that lands while this open was parked must not leave the
+      // acquired player attached: nothing will ever watch it, and the pool
+      // would hand the recycled player - with its live subscription - to the
+      // next cell.
+      if (_disposed) {
+        await _releaseCell(cell.index);
+
+        return;
+      }
+
       await handle.open(resolved.source, autoPlay: true);
+
+      if (_disposed) {
+        await _releaseCell(cell.index);
+
+        return;
+      }
+
       cell
         ..status = MultiviewCellStatus.playing
         ..qualityLabel = resolved.qualityLabel;
@@ -76,8 +100,16 @@ extension _MultiviewControllerInternals on MultiviewController {
       );
       // A cell that cannot open might still have somewhere to go: a playlist
       // moves on, which is what turns a dead room into the next live one.
+      // Rate-limited, or a playlist whose entries all fail cycles forever.
       if (_playlists.containsKey(cell.index)) {
-        unawaited(advanceCell(cell.index));
+        final last = _lastAdvanceAt[cell.index];
+        final now = DateTime.now();
+
+        if (last == null || now.difference(last) >= config.cellStallTimeout) {
+          _lastAdvanceAt[cell.index] = now;
+          unawaited(advanceCell(cell.index));
+        }
+
         return;
       }
       Error.throwWithStackTrace(error, stackTrace);
@@ -136,12 +168,23 @@ extension _MultiviewControllerInternals on MultiviewController {
     await subscription?.cancel();
     _progress.remove(index);
     _cellVolumes.remove(index);
+    _lastAdvanceAt.remove(index);
+    _restartedAt.remove(index);
     final handle = _handles.remove(index);
     if (handle == null) {
       return;
     }
-    _cells[index].playerId = null;
-    await handle.pause();
+    // A shrink may already have dropped this index from _cells; indexing the
+    // shorter list would throw inside the unawaited release and strand the
+    // player - the leak the bounds check exists to prevent.
+    if (index < _cells.length) {
+      _cells[index].playerId = null;
+    }
+    try {
+      await handle.pause();
+    } on Object catch (_) {
+      // A player that refuses to pause still goes back to the pool.
+    }
     await handle.recycle();
     // Back to the host, which may return it from the kernel's instance pool: a
     // wall that keeps switching rooms must not pay for a cold player each time.
@@ -152,18 +195,42 @@ extension _MultiviewControllerInternals on MultiviewController {
     unawaited(_progressSubscriptions.remove(index)?.cancel());
     _progress[index] = (position: Duration.zero, at: _clock());
     _progressSubscriptions[index] = handle.playbackStream.listen(
-      (state) => _noteProgress(index, state.position),
+      (state) => _noteProgress(index, state.position, alive: state.buffering || state.isPlaying),
       onError: (_) {},
     );
   }
 
-  void _noteProgress(int index, Duration position) {
+  void _noteProgress(int index, Duration position, {bool alive = false}) {
     final previous = _progress[index];
     if (previous == null) {
       return;
     }
+
     if (position != previous.position) {
       _progress[index] = (position: position, at: _clock());
+
+      // Stability retires the restart budget: a cell that has played cleanly
+      // for a stall window since its last restart is not "one hiccup away
+      // from permanent dark" any more.
+      final restartedAt = _restartedAt[index];
+
+      if (restartedAt != null && _clock().difference(restartedAt) >= _config.cellStallTimeout) {
+        _restartedAt.remove(index);
+        final cell = index < _cells.length ? _cells[index] : null;
+
+        if (cell != null && cell.restarts > 0) {
+          cell.restarts = 0;
+        }
+      }
+
+      return;
+    }
+
+    if (alive) {
+      // A position that has not moved while the engine reports buffering or
+      // playing is a re-buffering cell, not a dead one: the liveness clock
+      // refreshes so the stall detector does not restart it mid-recovery.
+      _progress[index] = (position: previous.position, at: _clock());
     }
   }
 
@@ -253,6 +320,10 @@ extension _MultiviewControllerInternals on MultiviewController {
     _sweeping = true;
     try {
       await _sweepCells();
+    } on Object catch (error) {
+      // The timer fires this unawaited; a throwing sweep (a disposed pool, a
+      // shrunken wall mid-iteration) must land in the log, not the zone.
+      _log.warning('cell sweep failed', error: error);
     } finally {
       _sweeping = false;
     }
@@ -309,14 +380,23 @@ extension _MultiviewControllerInternals on MultiviewController {
       _emit();
       // Out of restarts: a playlist cell moves on, which is the difference
       // between a wall that watches and one that stares at a frozen frame.
+      // Rate-limited like the open-failure path, or a playlist of dead rooms
+      // cycles the wall forever.
       if (_playlists.containsKey(cell.index)) {
-        await advanceCell(cell.index);
+        final last = _lastAdvanceAt[cell.index];
+        final advanceNow = _clock();
+
+        if (last == null || advanceNow.difference(last) >= _config.cellStallTimeout) {
+          _lastAdvanceAt[cell.index] = advanceNow;
+          await advanceCell(cell.index);
+        }
       }
       return;
     }
 
     cell.restarts++;
     cell.status = MultiviewCellStatus.recovering;
+    _restartedAt[cell.index] = _clock();
     _log.info(
       'restarting a stalled cell',
       fields: <String, Object?>{'index': cell.index, 'roomId': cell.source?.roomId, 'attempt': cell.restarts},

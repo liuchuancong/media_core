@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:media_core/media_core.dart';
 import 'package:media_core_pip/src/driver/overlay_pip_system_pip.dart';
@@ -8,6 +8,7 @@ import 'package:media_core_pip/src/driver/pip_config.dart';
 import 'package:media_core_pip/src/driver/system_pip.dart';
 import 'package:media_core_pip/src/window/desktop_pip_window.dart';
 import 'package:media_core_pip/src/window/pip_window.dart';
+import 'package:media_core_pip/src/window/win32_pip_window.dart';
 
 /// Records which platform path ran and why a request was refused.
 ///
@@ -276,6 +277,13 @@ final class PipDriver implements KernelPresentationDriver {
 
     await _systemPip?.dispose();
 
+    // The win32 backend owns a periodic snap timer the window interface has
+    // no dispose for; it must not outlive this driver.
+    final desktop = _desktopWindow;
+    if (desktop is Win32PipWindow) {
+      await desktop.dispose();
+    }
+
     _isPip = false;
     await DisposeUtils.close(_pipChanges);
   }
@@ -323,14 +331,28 @@ final class PipDriver implements KernelPresentationDriver {
     }
     await _fire(PresentationLifecyclePhase.beforeEnter, playerId);
 
-    switch (platform) {
-      case PipPlatform.desktop:
-        await _enterDesktopPip();
-      case PipPlatform.mobile:
-        await _enterMobilePip(playerId);
-      case PipPlatform.unsupported:
-        _log.error('pip is not supported on this platform', fields: <String, Object?>{'platform': platform.name});
-        throw UnsupportedError('Picture-in-picture is not supported on this platform.');
+    try {
+      switch (platform) {
+        case PipPlatform.desktop:
+          await _enterDesktopPip();
+        case PipPlatform.mobile:
+          await _enterMobilePip(playerId);
+        case PipPlatform.unsupported:
+          _log.error('pip is not supported on this platform', fields: <String, Object?>{'platform': platform.name});
+          throw UnsupportedError('Picture-in-picture is not supported on this platform.');
+      }
+    } on Object catch (error) {
+      // `beforeEnter`'s documented contract pauses the host engine for the
+      // handoff; an entry that fails after it must compensate, or playback
+      // stays paused for a window that never appeared.
+      _log.warning(
+        'pip entry failed; compensating the before-enter pause',
+        error: error,
+        fields: <String, Object?>{'playerId': playerId.value},
+      );
+      await _fire(PresentationLifecyclePhase.afterExit, playerId);
+
+      rethrow;
     }
   }
 
@@ -345,10 +367,19 @@ final class PipDriver implements KernelPresentationDriver {
       // change anything.
       await _fire(PresentationLifecyclePhase.beforeExit, playerId);
       final snapshot = _desktopSnapshot;
-      if (snapshot != null && config.restoreWindowOnExit) {
-        await _desktopWindow?.restore(snapshot);
-      }
       _desktopSnapshot = null;
+
+      try {
+        if (snapshot != null && config.restoreWindowOnExit) {
+          await _desktopWindow?.restore(snapshot);
+        }
+      } on Object catch (error) {
+        // A backend that cannot restore still ends the pip state here: a
+        // wedged `_isPip` would make every later enter a silent no-op with
+        // no exit lifecycle, whatever the window actually looks like now.
+        _log.warning('restoring the desktop window on pip exit failed', error: error);
+      }
+
       if (_setPip(false)) {
         await _fire(PresentationLifecyclePhase.afterExit, playerId);
       }
@@ -371,7 +402,6 @@ final class PipDriver implements KernelPresentationDriver {
     final window = _desktopWindow ??= defaultDesktopPipWindow();
 
     final snapshot = await window.capture();
-    _desktopSnapshot = snapshot;
 
     final size = _smallWindowSize();
     final anchor = snapshot.bounds;
@@ -407,6 +437,11 @@ final class PipDriver implements KernelPresentationDriver {
       skipTaskbar: config.skipTaskbar,
       title: config.title,
     );
+
+    // Committed only after a successful apply: a stored phantom snapshot
+    // with `_isPip` false would make the next exit "restore" a window that
+    // never shrank.
+    _desktopSnapshot = snapshot;
 
     if (_setPip(true)) {
       await _fire(PresentationLifecyclePhase.afterEnter, _lastPlayerId ?? _systemPlayerId);
@@ -461,10 +496,13 @@ final class PipDriver implements KernelPresentationDriver {
 
     // A handoff backend renders from its own engine, not from this app's
     // surface: ask the host what the overlay engine can open, and refuse the
-    // transition rather than open a window with nothing in it.
+    // transition rather than open a window with nothing in it. Android only -
+    // iOS keeps this app's own engine playing and never consumes the media,
+    // so a host that cannot name an overlay-openable URL must not lose PiP
+    // over there.
     SystemPipMedia? media;
     final resolver = pipMediaResolver;
-    if (resolver != null) {
+    if (resolver != null && defaultTargetPlatform == TargetPlatform.android) {
       media = await resolver(playerId);
       if (media == null) {
         _log.warning(
