@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:media_core/media_core.dart' show TimeUtils;
 import 'package:media_core_audio/src/lyric/lyric_document.dart';
 import 'package:media_core_audio/src/lyric/lyric_line.dart';
 
@@ -95,7 +96,7 @@ final class LyricTimeline {
 
     final last = _lastEmit;
 
-    return last == null || DateTime.now().difference(last) >= minimumUpdateInterval;
+    return last == null || TimeUtils.elapsed(last, minimumUpdateInterval);
   }
 
   /// Releases the change stream.

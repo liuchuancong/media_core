@@ -2,6 +2,7 @@ import 'package:clock/clock.dart';
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/playback/transport/playback_command.dart';
 import 'package:media_core/src/playback/value/playback_buffer.dart';
+import 'package:media_core/src/util/collection/math_utils.dart';
 
 /// Current playback runtime state.
 ///
@@ -141,7 +142,7 @@ final class PlayerTransportState extends Equatable {
       return 0;
     }
 
-    return position.inMilliseconds / duration.inMilliseconds;
+    return MathUtils.percent(position.inMilliseconds, duration.inMilliseconds);
   }
 
   // ---------------------------------------------------------------------------

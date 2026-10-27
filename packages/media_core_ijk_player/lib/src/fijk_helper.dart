@@ -75,13 +75,7 @@ abstract final class FijkHelper {
   static String formatDuration(Duration duration) {
     if (duration.inMilliseconds < 0) return '-: negative';
 
-    String two(int n) => n.toString().padLeft(2, '0');
-
-    final minutes = two(duration.inMinutes.remainder(60));
-    final seconds = two(duration.inSeconds.remainder(60));
-    final hours = duration.inHours;
-
-    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+    return DurationUtils.formatClock(duration);
   }
 
   /// Maps a Flutter [BoxFit] to the closest [FijkFit] the engine understands.

@@ -1,5 +1,6 @@
 import 'dart:convert' show utf8;
 
+import 'package:media_core/media_core.dart' show DurationUtils;
 import 'package:xml/xml.dart';
 
 /// A UPnP service description used when building a SOAP action.
@@ -130,12 +131,9 @@ abstract final class Soap {
     );
   }
 
-  /// `H:MM:SS.mmm` as DLNA clock strings expect.
+  /// `H:MM:SS` as DLNA clock strings expect.
   static String formatClock(Duration value) {
-    final hours = value.inHours.toString().padLeft(2, '0');
-    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$hours:$minutes:$seconds';
+    return DurationUtils.formatHms(value);
   }
 
   /// Parses `H:MM:SS` (with optional fraction). Null when malformed —

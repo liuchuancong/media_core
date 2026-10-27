@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:media_core/media_core.dart' show IdGenerator;
 import 'package:media_core_audio/src/download/music_download_request.dart';
 import 'package:media_core_audio/src/download/music_download_task.dart';
 import 'package:media_core_audio/src/download/music_downloader.dart';
@@ -44,7 +45,6 @@ final class MusicDownloadQueue {
   /// Per-task URL resolvers, used by retries to obtain a fresh URL.
   final Map<String, Future<MusicDownloadRequest> Function()> _resolvers = {};
 
-  int _sequence = 0;
   bool _disposed = false;
 
   /// Task updates: progress ticks and status changes.
@@ -75,7 +75,7 @@ final class MusicDownloadQueue {
     String? id,
     Future<MusicDownloadRequest> Function()? resolve,
   }) {
-    final taskId = id ?? 'dl_${DateTime.now().microsecondsSinceEpoch}_${_sequence++}';
+    final taskId = id ?? 'dl_${IdGenerator.timestamped()}';
     final task = MusicDownloadTask(id: taskId, request: request);
 
     _tasks[taskId] = task;

@@ -231,6 +231,25 @@ abstract final class DurationUtils {
     return negative ? '-$result' : result;
   }
 
+  /// Formats as a player clock: `MM:SS`, growing to `H:MM:SS` once hours
+  /// exist.
+  ///
+  /// [alwaysShowHours] keeps the hour field for short durations too, the way
+  /// timelines that line columns up want it. A negative duration keeps its
+  /// sign in front of the whole clock.
+  static String formatClock(Duration duration, {bool alwaysShowHours = false}) {
+    final negative = duration.isNegative;
+    final value = duration.abs();
+
+    final hours = value.inHours;
+    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+
+    final clock = alwaysShowHours || hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+
+    return negative ? '-$clock' : clock;
+  }
+
   static void _validateUnit(Duration unit) {
     if (unit <= Duration.zero) {
       throw ArgumentError.value(unit, 'unit', 'Unit must be greater than zero.');

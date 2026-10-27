@@ -1,4 +1,5 @@
 import 'package:built_value/built_value.dart';
+import 'package:media_core/src/util/collection/math_utils.dart';
 
 part 'resource_metrics.g.dart';
 
@@ -153,7 +154,7 @@ abstract class ResourceMetrics implements Built<ResourceMetrics, ResourceMetrics
 
   /// Memory usage in megabytes.
   double get memoryMB {
-    return memoryBytes / 1024 / 1024;
+    return MathUtils.bytesToMb(memoryBytes);
   }
 
   /// Whether hardware decoding is active.

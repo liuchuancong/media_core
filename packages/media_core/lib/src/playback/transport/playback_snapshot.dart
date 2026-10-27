@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/playback/transport/playback_command.dart';
 import 'package:media_core/src/playback/transport/player_transport_state.dart';
+import 'package:media_core/src/util/collection/math_utils.dart';
 
 /// Immutable playback snapshot.
 ///
@@ -97,21 +98,7 @@ final class PlaybackSnapshot extends Equatable {
 
   /// Progress 0-1.
   double get progress {
-    if (duration <= Duration.zero) {
-      return 0;
-    }
-
-    final value = position.inMilliseconds / duration.inMilliseconds;
-
-    if (value < 0) {
-      return 0;
-    }
-
-    if (value > 1) {
-      return 1;
-    }
-
-    return value;
+    return MathUtils.clampDouble(MathUtils.percent(position.inMilliseconds, duration.inMilliseconds), 0, 1);
   }
 
   /// Remaining duration.

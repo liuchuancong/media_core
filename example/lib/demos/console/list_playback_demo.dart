@@ -1,5 +1,5 @@
 import 'package:example/demos/module_demo.dart';
-import 'package:media_core/media_core.dart' show PlayerSource, SourceId;
+import 'package:media_core/media_core.dart' show DurationUtils, PlayerSource, SourceId;
 import 'package:media_core_list_playback/media_core_list_playback.dart';
 
 /// List playback: switching items and remembering where the viewer was.
@@ -168,9 +168,7 @@ await list.next();                        // saves, then opens index 3
   }
 
   static String _mmss(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
-    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+    return DurationUtils.formatClock(duration);
   }
 }
 
@@ -207,7 +205,5 @@ final class _FakeListPlayer implements PlaybackListPlayer {
   @override
   Duration get duration => _duration;
 
-  static String _mmss(Duration duration) =>
-      '${duration.inMinutes}:'
-      '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
+  static String _mmss(Duration duration) => DurationUtils.formatClock(duration);
 }

@@ -423,10 +423,7 @@ final class _MusicDemoPageState extends State<MusicDemoPage> {
   }
 
   String _format(Duration value) {
-    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-
-    return '$minutes:$seconds';
+    return DurationUtils.formatClock(value);
   }
 }
 

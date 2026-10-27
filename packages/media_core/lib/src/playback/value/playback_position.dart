@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:media_core/src/util/time/time_utils.dart';
 
 /// Playback position value object.
 ///
@@ -36,7 +37,7 @@ final class PlaybackPosition extends Equatable {
   int get milliseconds => value.inMilliseconds;
 
   /// Seconds.
-  double get seconds => value.inMilliseconds / 1000;
+  double get seconds => TimeUtils.toSeconds(value);
 
   /// Whether position is zero.
   bool get isZero => value == Duration.zero;

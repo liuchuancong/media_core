@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show immutable;
+import 'package:media_core/media_core.dart' show MathUtils;
 import 'package:media_core_audio/src/queue/play_mode.dart';
 import 'package:media_core_audio/src/track/music_quality.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
@@ -82,11 +83,7 @@ final class AudioPlaybackState {
 
   /// Progress through the current track, 0.0–1.0.
   double get progress {
-    if (duration <= Duration.zero) {
-      return 0;
-    }
-
-    return (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+    return MathUtils.clampDouble(MathUtils.percent(position.inMilliseconds, duration.inMilliseconds), 0, 1);
   }
 
   /// Creates a copy with selected fields replaced.

@@ -1,3 +1,4 @@
+import 'package:media_core/media_core.dart' show MathUtils;
 import 'package:media_core_audio/src/download/music_download_request.dart';
 
 /// Lifecycle of one download.
@@ -99,7 +100,7 @@ final class MusicDownloadTask {
       return null;
     }
 
-    return (processed.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    return MathUtils.clampDouble(MathUtils.percent(processed.inMilliseconds, total.inMilliseconds), 0, 1);
   }
 
   /// Estimated time left, when speed and duration are both known.

@@ -459,17 +459,7 @@ final class _PlayerTimelineState extends State<PlayerTimeline> {
 String formatPlayerDuration(Duration duration, {bool showHours = false}) {
   final value = duration.isNegative ? Duration.zero : duration;
 
-  final hours = value.inHours;
-  final minutes = value.inMinutes.remainder(60);
-  final seconds = value.inSeconds.remainder(60);
-
-  String two(int number) => number.toString().padLeft(2, '0');
-
-  if (showHours || hours > 0) {
-    return '$hours:${two(minutes)}:${two(seconds)}';
-  }
-
-  return '${two(minutes)}:${two(seconds)}';
+  return DurationUtils.formatClock(value, alwaysShowHours: showHours);
 }
 
 /// Whether a thumb shape draws nothing at all.

@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:media_core/src/util/collection/math_utils.dart';
+import 'package:media_core/src/util/time/time_utils.dart';
 
 /// Playback duration value object.
 ///
@@ -36,7 +38,7 @@ final class PlaybackDuration extends Equatable {
   int get milliseconds => value.inMilliseconds;
 
   /// Seconds.
-  double get seconds => value.inMilliseconds / 1000;
+  double get seconds => TimeUtils.toSeconds(value);
 
   /// Whether duration exists.
   bool get isValid => milliseconds > 0;
@@ -67,21 +69,7 @@ final class PlaybackDuration extends Equatable {
 
   /// Calculates progress.
   double progress(Duration position) {
-    if (!isValid) {
-      return 0;
-    }
-
-    final result = position.inMilliseconds / milliseconds;
-
-    if (result < 0) {
-      return 0;
-    }
-
-    if (result > 1) {
-      return 1;
-    }
-
-    return result;
+    return MathUtils.clampDouble(MathUtils.percent(position.inMilliseconds, milliseconds), 0, 1);
   }
 
   /// The `fromMap()` form: duration as whole milliseconds, so any sub-millisecond

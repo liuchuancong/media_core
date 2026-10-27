@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:media_core/media_core.dart'
-    show MediaJobKind, MediaJobOutcome, MediaJobReporter, MediaJobReporting, MediaJobStart;
+    show DurationUtils, MathUtils, MediaJobKind, MediaJobOutcome, MediaJobReporter, MediaJobReporting, MediaJobStart;
 import 'package:media_core_native/media_core_native.dart' show BackgroundJobKind;
 import 'package:media_core_notify/src/client/notify_event.dart';
 import 'package:media_core_notify/src/media_core_notify.dart';
@@ -98,19 +98,16 @@ final class JobNotifications implements MediaJobReporter {
   };
 
   static String _clock(Duration elapsed) {
-    final minutes = elapsed.inMinutes;
-    final seconds = elapsed.inSeconds % 60;
-
-    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+    return DurationUtils.formatClock(elapsed);
   }
 
   static String _size(int bytes) {
     if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      return '${MathUtils.bytesToMb(bytes).toStringAsFixed(1)} MB';
     }
 
     if (bytes >= 1024) {
-      return '${(bytes / 1024).toStringAsFixed(0)} KB';
+      return '${MathUtils.bytesToKb(bytes).toStringAsFixed(0)} KB';
     }
 
     return '$bytes B';
