@@ -116,9 +116,9 @@ class ResolvedSourceBuilder
   SourceHeaders? get headers => _$this._headers;
   set headers(SourceHeaders? headers) => _$this._headers = headers;
 
-  PlayerSource? _source;
-  PlayerSource? get source => _$this._source;
-  set source(PlayerSource? source) => _$this._source = source;
+  PlayerSourceBuilder? _source;
+  PlayerSourceBuilder get source => _$this._source ??= PlayerSourceBuilder();
+  set source(PlayerSourceBuilder? source) => _$this._source = source;
 
   Map<String, Object?>? _metadata;
   Map<String, Object?>? get metadata => _$this._metadata;
@@ -137,7 +137,7 @@ class ResolvedSourceBuilder
       _mediaType = $v.mediaType;
       _format = $v.format;
       _headers = $v.headers;
-      _source = $v.source;
+      _source = $v.source?.toBuilder();
       _metadata = $v.metadata;
       _$v = null;
     }
@@ -158,42 +158,58 @@ class ResolvedSourceBuilder
   ResolvedSource build() => _build();
 
   _$ResolvedSource _build() {
-    final _$result =
-        _$v ??
-        _$ResolvedSource._(
-          sourceId: BuiltValueNullFieldError.checkNotNull(
-            sourceId,
-            r'ResolvedSource',
-            'sourceId',
-          ),
-          uri: BuiltValueNullFieldError.checkNotNull(
-            uri,
-            r'ResolvedSource',
-            'uri',
-          ),
-          protocol: BuiltValueNullFieldError.checkNotNull(
-            protocol,
-            r'ResolvedSource',
-            'protocol',
-          ),
-          mediaType: BuiltValueNullFieldError.checkNotNull(
-            mediaType,
-            r'ResolvedSource',
-            'mediaType',
-          ),
-          format: BuiltValueNullFieldError.checkNotNull(
-            format,
-            r'ResolvedSource',
-            'format',
-          ),
-          headers: headers,
-          source: source,
-          metadata: BuiltValueNullFieldError.checkNotNull(
-            metadata,
-            r'ResolvedSource',
-            'metadata',
-          ),
+    _$ResolvedSource _$result;
+    try {
+      _$result =
+          _$v ??
+          _$ResolvedSource._(
+            sourceId: BuiltValueNullFieldError.checkNotNull(
+              sourceId,
+              r'ResolvedSource',
+              'sourceId',
+            ),
+            uri: BuiltValueNullFieldError.checkNotNull(
+              uri,
+              r'ResolvedSource',
+              'uri',
+            ),
+            protocol: BuiltValueNullFieldError.checkNotNull(
+              protocol,
+              r'ResolvedSource',
+              'protocol',
+            ),
+            mediaType: BuiltValueNullFieldError.checkNotNull(
+              mediaType,
+              r'ResolvedSource',
+              'mediaType',
+            ),
+            format: BuiltValueNullFieldError.checkNotNull(
+              format,
+              r'ResolvedSource',
+              'format',
+            ),
+            headers: headers,
+            source: _source?.build(),
+            metadata: BuiltValueNullFieldError.checkNotNull(
+              metadata,
+              r'ResolvedSource',
+              'metadata',
+            ),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'source';
+        _source?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'ResolvedSource',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

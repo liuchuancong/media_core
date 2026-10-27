@@ -4,9 +4,9 @@ import 'package:flutter/widgets.dart';
 
 import 'package:media_core/src/adapter/contract/player_video.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/renderer/view/video_zoom_controller.dart';
 import 'package:media_core/src/screenshot/screenshot_surface.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 
 /// Application-facing video widget for a [PlayerHandle].
 ///

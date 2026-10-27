@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:media_core/src/concurrency/serial_executor.dart';
 import 'package:media_core/src/diagnostics/library.dart' show LogCategory, LogModule, MediaCoreLog;
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/pool/alloc/pool_player_host.dart';
 import 'package:media_core/src/pool/model/player_pool_config.dart';
 import 'package:media_core/src/resource/state/resource_pressure.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core_memory/media_core_memory.dart';
 
 /// Decision trail for the pool.

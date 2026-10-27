@@ -30,7 +30,7 @@ _rig({String title = 'Song', String sourceId = 'song'}) async {
 
   await handle.initialize();
   await handle.open(
-    PlayerSource(
+    PlayerSource.of(
       id: SourceId(sourceId),
       uri: Uri.parse('https://example.com/$sourceId.m4a'),
       protocol: SourceProtocol.https,

@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/identity/generation_id.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/recovery/state/recovery_failure.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 
 /// Everything the ladder needs to know to make a recovery decision.
 ///

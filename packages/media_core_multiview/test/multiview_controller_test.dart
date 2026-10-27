@@ -105,14 +105,14 @@ final class _FakePlayerHost implements PoolPlayerHost {
   Future<void> disposeHandle(PoolPlayerHandle handle) async => disposeCount++;
 }
 
-final PlayerSource _testSource = PlayerSource(
+final PlayerSource _testSource = PlayerSource.of(
   id: SourceId('test'),
   uri: Uri.parse('https://example.com/test.m3u8'),
   protocol: SourceProtocol.https,
   format: SourceFormat.mpegTs,
 );
 
-PlayerSource _source(String id) => PlayerSource(
+PlayerSource _source(String id) => PlayerSource.of(
   id: SourceId(id),
   uri: Uri.parse('https://example.com/$id.m3u8'),
   protocol: SourceProtocol.https,

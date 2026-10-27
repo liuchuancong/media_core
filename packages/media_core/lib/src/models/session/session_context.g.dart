@@ -103,9 +103,9 @@ class SessionContextBuilder
   SourceId? get sourceId => _$this._sourceId;
   set sourceId(SourceId? sourceId) => _$this._sourceId = sourceId;
 
-  PlayerSource? _source;
-  PlayerSource? get source => _$this._source;
-  set source(PlayerSource? source) => _$this._source = source;
+  PlayerSourceBuilder? _source;
+  PlayerSourceBuilder get source => _$this._source ??= PlayerSourceBuilder();
+  set source(PlayerSourceBuilder? source) => _$this._source = source;
 
   PlayerPolicy? _policy;
   PlayerPolicy? get policy => _$this._policy;
@@ -126,7 +126,7 @@ class SessionContextBuilder
       _sessionId = $v.sessionId;
       _generationId = $v.generationId;
       _sourceId = $v.sourceId;
-      _source = $v.source;
+      _source = $v.source.toBuilder();
       _policy = $v.policy;
       _platform = $v.platform;
       _$v = null;
@@ -148,45 +148,57 @@ class SessionContextBuilder
   SessionContext build() => _build();
 
   _$SessionContext _build() {
-    final _$result =
-        _$v ??
-        _$SessionContext._(
-          playerId: BuiltValueNullFieldError.checkNotNull(
-            playerId,
-            r'SessionContext',
-            'playerId',
-          ),
-          sessionId: BuiltValueNullFieldError.checkNotNull(
-            sessionId,
-            r'SessionContext',
-            'sessionId',
-          ),
-          generationId: BuiltValueNullFieldError.checkNotNull(
-            generationId,
-            r'SessionContext',
-            'generationId',
-          ),
-          sourceId: BuiltValueNullFieldError.checkNotNull(
-            sourceId,
-            r'SessionContext',
-            'sourceId',
-          ),
-          source: BuiltValueNullFieldError.checkNotNull(
-            source,
-            r'SessionContext',
-            'source',
-          ),
-          policy: BuiltValueNullFieldError.checkNotNull(
-            policy,
-            r'SessionContext',
-            'policy',
-          ),
-          platform: BuiltValueNullFieldError.checkNotNull(
-            platform,
-            r'SessionContext',
-            'platform',
-          ),
+    _$SessionContext _$result;
+    try {
+      _$result =
+          _$v ??
+          _$SessionContext._(
+            playerId: BuiltValueNullFieldError.checkNotNull(
+              playerId,
+              r'SessionContext',
+              'playerId',
+            ),
+            sessionId: BuiltValueNullFieldError.checkNotNull(
+              sessionId,
+              r'SessionContext',
+              'sessionId',
+            ),
+            generationId: BuiltValueNullFieldError.checkNotNull(
+              generationId,
+              r'SessionContext',
+              'generationId',
+            ),
+            sourceId: BuiltValueNullFieldError.checkNotNull(
+              sourceId,
+              r'SessionContext',
+              'sourceId',
+            ),
+            source: source.build(),
+            policy: BuiltValueNullFieldError.checkNotNull(
+              policy,
+              r'SessionContext',
+              'policy',
+            ),
+            platform: BuiltValueNullFieldError.checkNotNull(
+              platform,
+              r'SessionContext',
+              'platform',
+            ),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'source';
+        source.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'SessionContext',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

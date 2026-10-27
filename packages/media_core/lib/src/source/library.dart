@@ -22,7 +22,6 @@ export 'package:media_core/src/source/inspect/source_validator.dart';
 // ============================================================================
 
 export 'package:media_core/src/source/model/media_source.dart';
-export 'package:media_core/src/source/model/player_source.dart';
 export 'package:media_core/src/source/resolve/source_resolve_context.dart';
 export 'package:media_core/src/source/resolve/source_resolver.dart';
 export 'package:media_core/src/source/resolve/source_resolver_chain.dart';

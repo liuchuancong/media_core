@@ -8,8 +8,8 @@ import 'package:media_core/src/adapter/select/player_adapter_selector.dart';
 import 'package:media_core/src/identity/source_id.dart';
 import 'package:media_core/src/models/source/media_track.dart';
 import 'package:media_core/src/models/source/media_track_type.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';
 
@@ -217,7 +217,7 @@ void main() {
       final selector = PlayerAdapterSelector(registry);
 
       final uri = Uri.parse('https://example.com/v.mp4');
-      final flat = PlayerSource(id: SourceId('s'), uri: uri, protocol: SourceProtocol.https, format: SourceFormat.mp4);
+      final flat = PlayerSource.of(id: SourceId('s'), uri: uri, protocol: SourceProtocol.https, format: SourceFormat.mp4);
       final media = ProgressiveMediaSource(track: _videoTrack(uri.toString()));
 
       expect(selector.require(flat).id, selector.requireMedia(media).id);

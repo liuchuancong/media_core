@@ -1,7 +1,7 @@
 import 'package:built_value/built_value.dart';
 import 'package:media_core/src/models/source/media_track_type.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/source/descriptor/source_headers.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_media_type.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';

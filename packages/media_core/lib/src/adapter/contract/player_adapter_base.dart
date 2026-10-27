@@ -14,9 +14,9 @@ import 'package:media_core/src/error/player_error_code.dart';
 import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/models/error/library.dart';
 import 'package:media_core/src/models/screenshot/library.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/playback/value/buffer_range.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/service/media_source_bridge.dart';
 
 /// Template-method base for [PlayerAdapter] implementations.

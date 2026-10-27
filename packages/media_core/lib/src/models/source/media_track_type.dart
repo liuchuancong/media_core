@@ -1,5 +1,5 @@
 import 'package:media_core/src/models/source/media_track.dart';
-import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/source/types/source_media_type.dart';
 
 /// Describes what kind of media a [MediaTrack] carries.

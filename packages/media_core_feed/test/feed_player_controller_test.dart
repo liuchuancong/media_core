@@ -89,7 +89,7 @@ final class _PoolHost implements PoolPlayerHost {
   List<String> get playedSources => handles.expand((handle) => handle.played).toList();
 }
 
-PlayerSource _source(String id) => PlayerSource(
+PlayerSource _source(String id) => PlayerSource.of(
   id: SourceId(id),
   uri: Uri.parse('https://example.com/$id.m3u8'),
   protocol: SourceProtocol.https,

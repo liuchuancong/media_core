@@ -28,7 +28,7 @@ Future<PlayerHandle> _playing(
 }) async {
   final handle = await kernel.create(
     config: config,
-    source: PlayerSource(
+    source: PlayerSource.of(
       id: SourceId(id),
       uri: Uri.parse('https://example.com/$id.mp4'),
       mediaType: SourceMediaType.video,
@@ -154,7 +154,7 @@ void main() {
     final adapter = FakePlayerAdapter();
 
     await adapter.initialize(TestPlayerFactory.context());
-    await adapter.open(PlayerSource(id: SourceId('x'), uri: Uri.parse('https://example.com/x.mp4')));
+    await adapter.open(PlayerSource.of(id: SourceId('x'), uri: Uri.parse('https://example.com/x.mp4')));
     await adapter.play();
 
     expect(adapter.calls, contains('play'), reason: 'the fake does answer the engine calls the sweep relies on');

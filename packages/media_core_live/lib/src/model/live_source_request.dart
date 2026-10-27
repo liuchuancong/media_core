@@ -53,7 +53,7 @@ final class LiveSourceRequest {
           .map((url) {
             final uri = Uri.parse(url);
 
-            return PlayerSource(
+            return PlayerSource.of(
               id: SourceId('live_${uri.host}${uri.path.hashCode}'),
               uri: uri,
               type: SourceType.live,

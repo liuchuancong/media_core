@@ -3,9 +3,9 @@ import 'package:media_core/src/identity/generation_id.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/platform/capability/platform_capabilities.dart';
 import 'package:media_core/src/policy/session/player_policy.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 
 part 'session_context.g.dart';
 
@@ -50,7 +50,7 @@ abstract class SessionContext implements Built<SessionContext, SessionContextBui
         ..sessionId = sessionId
         ..generationId = generationId
         ..sourceId = sourceId
-        ..source = source
+        ..source = source.toBuilder()
         ..policy = policy
         ..platform = platform,
     );

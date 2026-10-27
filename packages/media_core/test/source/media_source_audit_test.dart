@@ -9,7 +9,6 @@ import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/models/source/library.dart';
 import 'package:media_core/src/source/inspect/source_inspector_chain.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/resolve/source_resolve_context.dart';
 import 'package:media_core/src/source/resolve/source_resolver.dart';
 import 'package:media_core/src/source/resolve/source_resolver_chain.dart';
@@ -76,7 +75,7 @@ class _ReplacingResolver implements SourceResolver {
     return ResolvedSource.of(
       sourceId: source.id,
       uri: source.uri,
-      source: PlayerSource(id: source.id, uri: source.uri, title: 'replaced'),
+      source: PlayerSource.of(id: source.id, uri: source.uri, title: 'replaced'),
     );
   }
 }
@@ -210,7 +209,7 @@ void main() {
       await adapter.initialize(TestPlayerFactory.context());
 
       await adapter.open(ProgressiveMediaSource(track: _videoTrack('https://example.com/v.mp4')).toPlayerSource());
-      await adapter.open(PlayerSource(id: SourceId('plain'), uri: Uri.parse('https://example.com/x.mp4')));
+      await adapter.open(PlayerSource.of(id: SourceId('plain'), uri: Uri.parse('https://example.com/x.mp4')));
 
       expect(adapter.openCalls, 2);
 

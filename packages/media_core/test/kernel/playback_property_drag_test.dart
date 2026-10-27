@@ -6,7 +6,7 @@ import 'package:media_core/src/event/player_event_bus.dart';
 import 'package:media_core/src/identity/source_id.dart';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/kernel_options.dart';
-import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/testing/factory/test_player_factory.dart';
 import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 
@@ -35,7 +35,7 @@ import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 Future<PlayerSource> _opened(({PlayerHandle handle, FakePlayerAdapter fake}) rig) async {
   await rig.handle.initialize();
 
-  final source = PlayerSource(id: SourceId('s1'), uri: Uri.parse('https://example.com/a.flv'));
+  final source = PlayerSource.of(id: SourceId('s1'), uri: Uri.parse('https://example.com/a.flv'));
 
   await rig.handle.open(source);
 

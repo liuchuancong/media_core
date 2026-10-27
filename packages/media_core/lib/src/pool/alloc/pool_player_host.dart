@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/player_kernel.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/playback/transport/player_transport_state.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 
 /// A player the pool drives.
 ///

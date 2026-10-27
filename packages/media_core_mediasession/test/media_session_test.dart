@@ -268,7 +268,7 @@ void main() {
 
       await handle.initialize();
       await handle.open(
-        PlayerSource(
+        PlayerSource.of(
           id: SourceId('song'),
           uri: Uri.parse('https://example.com/song.m4a'),
           protocol: SourceProtocol.https,

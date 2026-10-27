@@ -1,6 +1,6 @@
 import 'package:media_core/src/identity/source_id.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/source/descriptor/source_headers.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_media_type.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';
@@ -19,7 +19,7 @@ final class TestSourceFactory {
     String url = 'https://example.com/video.mp4',
     Map<String, String> headers = const {'user-agent': 'media_core_test'},
   }) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId(id),
       uri: Uri.parse(url),
       type: SourceType.remote,
@@ -33,7 +33,7 @@ final class TestSourceFactory {
 
   /// An http mp3 audio source.
   static PlayerSource httpAudio({String id = 'src-http-audio', String url = 'https://example.com/audio.mp3'}) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId(id),
       uri: Uri.parse(url),
       type: SourceType.remote,
@@ -45,7 +45,7 @@ final class TestSourceFactory {
 
   /// An HLS live source.
   static PlayerSource hlsLive({String id = 'src-hls-live', String url = 'https://example.com/live/index.m3u8'}) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId(id),
       uri: Uri.parse(url),
       type: SourceType.live,
@@ -57,7 +57,7 @@ final class TestSourceFactory {
 
   /// A DASH source.
   static PlayerSource dash({String id = 'src-dash', String url = 'https://example.com/stream.mpd'}) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId(id),
       uri: Uri.parse(url),
       type: SourceType.stream,
@@ -69,12 +69,12 @@ final class TestSourceFactory {
 
   /// An RTMP live source.
   static PlayerSource rtmp({String id = 'src-rtmp', String url = 'rtmp://example.com/live/stream'}) {
-    return PlayerSource(id: SourceId(id), uri: Uri.parse(url), type: SourceType.live, protocol: SourceProtocol.rtmp);
+    return PlayerSource.of(id: SourceId(id), uri: Uri.parse(url), type: SourceType.live, protocol: SourceProtocol.rtmp);
   }
 
   /// A local file source.
   static PlayerSource file({String id = 'src-file', String path = '/tmp/video.mp4'}) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId(id),
       uri: Uri.file(path),
       type: SourceType.file,
@@ -86,7 +86,7 @@ final class TestSourceFactory {
 
   /// An asset source.
   static PlayerSource asset({String id = 'src-asset', String path = 'assets/sample.mp4'}) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId(id),
       uri: Uri.parse('asset:///$path'),
       type: SourceType.asset,

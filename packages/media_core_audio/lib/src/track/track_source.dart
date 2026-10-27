@@ -72,7 +72,7 @@ final class TrackSource {
   /// [trackId] only names the source for diagnostics/events; the playback
   /// identity of a track is the track itself.
   PlayerSource toPlayerSource({String? trackId, String? title}) {
-    return PlayerSource(
+    return PlayerSource.of(
       id: SourceId('music_${trackId ?? uri.pathSegments.join('_')}_${uri.path.hashCode}'),
       uri: uri,
       type: isLocal ? SourceType.file : SourceType.remote,

@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:media_core/src/identity/source_id.dart';
-import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 
 /// One rung of the recovery ladder.
 ///

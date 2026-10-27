@@ -5,10 +5,10 @@ import 'package:media_core/media_core.dart';
 import 'package:media_core/testing.dart';
 import 'package:media_core_ui/media_core_ui.dart';
 
-PlayerSource _vod(String id) => PlayerSource(id: SourceId(id), uri: Uri.parse('https://example.com/$id.mp4'));
+PlayerSource _vod(String id) => PlayerSource.of(id: SourceId(id), uri: Uri.parse('https://example.com/$id.mp4'));
 
 PlayerSource _live(String id) =>
-    PlayerSource(id: SourceId(id), uri: Uri.parse('https://example.com/$id.m3u8'), type: SourceType.live);
+    PlayerSource.of(id: SourceId(id), uri: Uri.parse('https://example.com/$id.m3u8'), type: SourceType.live);
 
 /// A handle plus the fake driving it, opened on a source with a known duration.
 final class _Rig {
@@ -337,7 +337,7 @@ void main() {
 
       expect(controller.title, 'episode7.mp4');
 
-      await rig.handle.open(PlayerSource(id: SourceId('t'), uri: Uri.parse('https://example.com/a/b'), title: '给标题'));
+      await rig.handle.open(PlayerSource.of(id: SourceId('t'), uri: Uri.parse('https://example.com/a/b'), title: '给标题'));
       expect(controller.title, '给标题');
     });
 

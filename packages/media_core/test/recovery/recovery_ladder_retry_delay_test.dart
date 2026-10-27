@@ -11,14 +11,14 @@ import 'package:media_core/src/testing/fake/fake_player_adapter.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final current = PlayerSource(
+  final current = PlayerSource.of(
     id: SourceId('current'),
     uri: Uri.parse('https://example.com/current.mp4'),
     mediaType: SourceMediaType.video,
   );
   final lines = <PlayerSource>[
-    PlayerSource(id: SourceId('line-a'), uri: Uri.parse('https://example.com/a.mp4')),
-    PlayerSource(id: SourceId('line-b'), uri: Uri.parse('https://example.com/b.mp4')),
+    PlayerSource.of(id: SourceId('line-a'), uri: Uri.parse('https://example.com/a.mp4')),
+    PlayerSource.of(id: SourceId('line-b'), uri: Uri.parse('https://example.com/b.mp4')),
   ];
   final failure = RecoveryFailure.fromMessage(
     'the decoder stopped',
@@ -116,7 +116,7 @@ void main() {
       addTearDown(kernel.dispose);
 
       final handle = await kernel.create(
-        source: PlayerSource(
+        source: PlayerSource.of(
           id: SourceId('wired'),
           uri: Uri.parse('https://example.com/wired.mp4'),
           mediaType: SourceMediaType.video,

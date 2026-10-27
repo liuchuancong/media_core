@@ -2,9 +2,9 @@ import 'package:media_core/src/identity/generation_id.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/models/session/library.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/policy/session/player_policy.dart';
 import 'package:media_core/src/session/control/player_session.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/testing/factory/test_source_factory.dart';
 
 /// Builds [PlayerSession] and [SessionContext] values for tests.

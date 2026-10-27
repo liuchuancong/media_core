@@ -5,7 +5,7 @@ import 'package:media_core/media_core.dart';
 import 'package:media_core_live/media_core_live.dart';
 
 PlayerSource _line(String url) {
-  return PlayerSource(
+  return PlayerSource.of(
     id: SourceId(url),
     uri: Uri.parse(url),
     type: SourceType.live,

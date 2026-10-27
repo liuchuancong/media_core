@@ -11,7 +11,7 @@ import 'package:media_core/src/core/state/player_lifecycle_state.dart';
 import 'package:media_core/src/core/state/player_playback_state.dart';
 import 'package:media_core/src/models/adapter/library.dart';
 import 'package:media_core/src/models/screenshot/library.dart';
-import 'package:media_core/src/source/model/player_source.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 
 /// Sentinel used by [PlayerAdapterStateMirror.copyWith] to distinguish
 /// "parameter omitted" from "parameter explicitly set to null".

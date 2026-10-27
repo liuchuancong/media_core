@@ -1,8 +1,8 @@
 import 'package:media_core/src/identity/source_id.dart';
 import 'package:media_core/src/models/source/media_track.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/source/descriptor/source_headers.dart';
 import 'package:media_core/src/source/model/media_source.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 import 'package:media_core/src/source/types/source_format.dart';
 import 'package:media_core/src/source/types/source_media_type.dart';
 import 'package:media_core/src/source/types/source_protocol.dart';
@@ -57,7 +57,7 @@ extension MediaSourceBridge on MediaSource {
     final mergedHeaders = _mergeHeaders(this);
     final metadata = <String, Object?>{...?primary?.metadata, metadataKey: this};
 
-    return PlayerSource(
+    return PlayerSource.of(
       id: id ?? _stableIdFor(primary),
       uri: primary?.uri ?? Uri(),
       type: _sourceTypeFor(this, primary),

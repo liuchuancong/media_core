@@ -49,7 +49,7 @@ final class _FakePlayer implements PlaybackListPlayer {
   }
 }
 
-PlayerSource _source(String id) => PlayerSource(
+PlayerSource _source(String id) => PlayerSource.of(
   id: SourceId(id),
   uri: Uri.parse('https://example.com/$id.m3u8'),
   protocol: SourceProtocol.https,

@@ -5,10 +5,10 @@ import 'package:media_core/src/identity/generation_id.dart';
 import 'package:media_core/src/identity/player_id.dart';
 import 'package:media_core/src/identity/session_id.dart';
 import 'package:media_core/src/lifecycle/lifecycle_snapshot.dart';
+import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/playback/transport/playback_snapshot.dart';
 import 'package:media_core/src/recovery/state/recovery_snapshot.dart';
 import 'package:media_core/src/session/model/session_snapshot.dart';
-import 'package:media_core/src/source/model/player_source.dart';
 
 /// Transient aggregate snapshot of one `PlayerHandle`.
 ///

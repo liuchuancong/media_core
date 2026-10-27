@@ -45,7 +45,7 @@ PlayerKernel _kernel(Map<String, FakePlayerAdapter> adapters) {
 
 PlayerSource _line(String url, {String? title}) {
   final uri = Uri.parse(url);
-  return PlayerSource(
+  return PlayerSource.of(
     id: SourceId(url),
     uri: uri,
     type: SourceType.live,

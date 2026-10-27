@@ -7,6 +7,7 @@ library;
 
 export 'package:media_core/src/models/source/media_track.dart';
 export 'package:media_core/src/models/source/media_track_type.dart';
+export 'package:media_core/src/models/source/player_source.dart';
 export 'package:media_core/src/models/source/source_descriptor.dart';
 export 'package:media_core/src/models/source/source_identity.dart';
 export 'package:media_core/src/models/source/source_location.dart';
