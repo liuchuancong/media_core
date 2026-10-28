@@ -21,7 +21,7 @@ dependencies:
   audio_service: ^0.18.19
 
   # Linux implementation of audio_service (MPRIS / D-Bus).
-  audio_service_mpris: ^0.2.1
+  audio_service_mpris: ^1.0.0-beta.3
 
   # Windows implementation of audio_service (SMTC).
   audio_service_win: 
