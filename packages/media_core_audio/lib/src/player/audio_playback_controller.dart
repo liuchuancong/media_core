@@ -25,13 +25,13 @@ final class AudioPlaybackController {
     AudioPlaybackConfig config = const AudioPlaybackConfig(),
     PlayerConfig? playerConfig,
   }) : this._(
-          kernel,
-          queue: queue,
-          registry: registry ?? MusicSourceRegistry(),
-          lyrics: lyrics,
-          config: config,
-          playerConfig: playerConfig,
-        );
+         kernel,
+         queue: queue,
+         registry: registry ?? MusicSourceRegistry(),
+         lyrics: lyrics,
+         config: config,
+         playerConfig: playerConfig,
+       );
 
   AudioPlaybackController._(
     this._kernel, {
@@ -89,6 +89,10 @@ final class AudioPlaybackController {
   Timer? _loadTimer;
 
   MusicQuality _quality;
+  Duration _lyricOffset = Duration.zero;
+  Timer? _sleepTimer;
+  DateTime? _sleepTimerEndsAt;
+  bool _pauseAfterCurrentTrack = false;
   bool _disposed = false;
   int _operation = 0;
 
@@ -106,6 +110,28 @@ final class AudioPlaybackController {
 
   /// Requested quality tier.
   MusicQuality get quality => _quality;
+
+  /// Viewer-adjusted lyric delay; positive values delay the highlight.
+  Duration get lyricOffset => _lyricOffset;
+
+  /// When the sleep timer will pause playback, or null when none is armed.
+  DateTime? get sleepTimerEndsAt => _sleepTimerEndsAt;
+
+  /// Time left on the sleep timer, or null when none is armed.
+  Duration? get sleepTimerRemaining {
+    final endsAt = _sleepTimerEndsAt;
+
+    if (endsAt == null) {
+      return null;
+    }
+
+    final left = endsAt.difference(DateTime.now());
+
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Whether playback pauses when the current track ends.
+  bool get pauseAfterCurrentTrack => _pauseAfterCurrentTrack;
 
   // ---------------------------------------------------------------------------
   // Queue and track selection
@@ -317,6 +343,59 @@ final class AudioPlaybackController {
     _publish();
   }
 
+  /// Arms or clears the sleep timer.
+  ///
+  /// A positive [duration] pauses playback when it elapses; null or a
+  /// non-positive duration clears the timer. This is the logic half of
+  /// lx-music's 定时停止 — the host renders the remaining time from
+  /// [sleepTimerEndsAt] and does not need its own countdown.
+  void setSleepTimer(Duration? duration) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    // A time-based timer and "after this track" are one choice, so arming or
+    // clearing either clears the other.
+    _pauseAfterCurrentTrack = false;
+
+    if (duration == null || duration <= Duration.zero) {
+      _sleepTimerEndsAt = null;
+      _publish(clearSleepTimer: true, pauseAfterCurrentTrack: false);
+
+      return;
+    }
+
+    final endsAt = DateTime.now().add(duration);
+
+    _sleepTimerEndsAt = endsAt;
+    _sleepTimer = Timer(duration, () {
+      _sleepTimer = null;
+      _sleepTimerEndsAt = null;
+
+      // Pausing is the point of the timer; publishing afterwards keeps the
+      // UI's "timer armed" indicator and the actual transport in step.
+      unawaited(pause());
+      _publish(clearSleepTimer: true);
+    });
+
+    _publish(sleepTimerEndsAt: endsAt, pauseAfterCurrentTrack: false);
+  }
+
+  /// Arms or clears the reference's 定时停止「播完当前歌曲」.
+  ///
+  /// It is a one-shot: the flag is spent when the current track ends, and
+  /// enabling it replaces a pending time-based timer because the reference
+  /// offers the two as one choice.
+  void setPauseAfterCurrentTrack({required bool enabled}) {
+    _pauseAfterCurrentTrack = enabled;
+
+    if (enabled) {
+      _sleepTimer?.cancel();
+      _sleepTimer = null;
+      _sleepTimerEndsAt = null;
+    }
+
+    _publish(pauseAfterCurrentTrack: enabled, clearSleepTimer: enabled);
+  }
+
   // ---------------------------------------------------------------------------
   // Queue editing
   // ---------------------------------------------------------------------------
@@ -391,23 +470,45 @@ final class AudioPlaybackController {
     // restart audio through playAt once the current resolve gives up.
     _operation++;
     _clearLoadTimeout();
+    // Stopping is the viewer ending the session, so a pending "after this
+    // track" must not fire into it.
+    _pauseAfterCurrentTrack = false;
     await _handle?.stop();
-    _publish(playing: false, position: Duration.zero);
+    _publish(playing: false, position: Duration.zero, pauseAfterCurrentTrack: false);
   }
 
   // ---------------------------------------------------------------------------
   // Lyrics
   // ---------------------------------------------------------------------------
 
-  /// Loads the lyric for the current track.
-  Future<LyricDocument> loadCurrentLyric({bool force = false}) {
+  /// Loads the lyric for the current track, with [lyricOffset] applied.
+  ///
+  /// The parsed document is cached without the offset, so moving the slider
+  /// and reloading never refetches; [force] still bypasses the cache for a
+  /// user-requested refresh.
+  Future<LyricDocument> loadCurrentLyric({bool force = false}) async {
     final track = queue.current;
 
     if (track == null) {
-      return Future<LyricDocument>.value(LyricDocument.empty);
+      return LyricDocument.empty;
     }
 
-    return lyrics.load(track, force: force);
+    final document = await lyrics.load(track, force: force);
+
+    return document.withOffset(_lyricOffset);
+  }
+
+  /// Sets the viewer's lyric delay.
+  ///
+  /// Positive values delay the highlight; the change is published so an
+  /// in-app lyric view and the desktop overlay move together.
+  void setLyricOffset(Duration offset) {
+    if (_lyricOffset == offset) {
+      return;
+    }
+
+    _lyricOffset = offset;
+    _publish(lyricOffset: offset);
   }
 
   // ---------------------------------------------------------------------------
@@ -544,7 +645,16 @@ final class AudioPlaybackController {
         _publish(buffering: buffering, loading: buffering && !_state.playing);
 
       case PlayerAdapterCompleted():
-        unawaited(next(automatic: true));
+        if (_pauseAfterCurrentTrack) {
+          // Spent: the next completed track advances as usual. Pausing in
+          // place keeps the finished song on screen instead of jumping to the
+          // next one, which is what "stop after this song" promises.
+          _pauseAfterCurrentTrack = false;
+          unawaited(pause());
+          _publish(pauseAfterCurrentTrack: false);
+        } else {
+          unawaited(next(automatic: true));
+        }
 
       case PlayerAdapterStopped():
         _publish(playing: false);
@@ -729,6 +839,10 @@ final class AudioPlaybackController {
     String? error,
     bool clearError = false,
     bool? ended,
+    Duration? lyricOffset,
+    DateTime? sleepTimerEndsAt,
+    bool clearSleepTimer = false,
+    bool? pauseAfterCurrentTrack,
   }) {
     if (_disposed) {
       return;
@@ -752,6 +866,10 @@ final class AudioPlaybackController {
       error: error,
       clearError: clearError,
       ended: ended,
+      lyricOffset: lyricOffset,
+      sleepTimerEndsAt: sleepTimerEndsAt,
+      clearSleepTimer: clearSleepTimer,
+      pauseAfterCurrentTrack: pauseAfterCurrentTrack,
     );
 
     if (next == _state) {
@@ -774,6 +892,8 @@ final class AudioPlaybackController {
     _disposed = true;
     _operation++;
     _clearLoadTimeout();
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
 
     await _adapterSub?.cancel();
     _adapterSub = null;

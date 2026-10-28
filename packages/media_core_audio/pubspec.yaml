@@ -1,5 +1,5 @@
 name: media_core_audio
-description: Music playback for media_core - sources, queue and play modes, lyrics and the native desktop-lyric windows, plus ffmpeg downloads.
+description: Music playback for media_core - sources, queue and play modes, lyrics and the native desktop-lyric windows, plus resumable downloads with tag/lyric writing.
 version: 0.1.0
 publish_to: none
 repository: https://github.com/liuchuancong/media_core
@@ -34,6 +34,12 @@ dependencies:
     sdk: flutter
   media_core:
     path: ../media_core
+
+  # Resumable HTTP transfers with tail verification, plus the transfer/file
+  # abstractions the music download queue drives. Kept in its own package so
+  # video/recording hosts can reuse the same transport.
+  media_core_download:
+    path: ../media_core_download
 
   # Background audio + media notification (lock screen / notification controls)
   # The media surfaces (notification / lock screen / SMTC / MPRIS) and audio

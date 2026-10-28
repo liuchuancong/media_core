@@ -16,6 +16,10 @@ import 'package:media_core_audio/src/lyric/lyric_line.dart';
 ///   romanization track;
 /// - enhanced LRC word timing written as `<mm:ss.xx>word`, used by karaoke
 ///   renderers and desktop lyrics;
+/// - lx-music's extended word timing written as `<startMs,duration>word`,
+///   where the offset is relative to the line's own timestamp;
+/// - `[hh:mm:ss.xx]` timestamps, which some Kugou-sourced files ship and which
+///   players have to read as `mm:ss.xx` (the leading `00:` is an artefact);
 /// - plain text with no timing at all, which becomes an unsynchronized
 ///   document rather than an empty one.
 ///
@@ -35,8 +39,8 @@ final class LrcParser {
   /// else.
   final bool wordByWord;
 
-  static final RegExp _timeTag = RegExp(r'\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]');
-  static final RegExp _wordTag = RegExp(r'<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>');
+  static final RegExp _timeTag = RegExp(r'\[(?:(\d{1,3}):)?(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]');
+  static final RegExp _wordTag = RegExp(r'<(?:(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?|(\d+),(\d+))>');
   static final RegExp _metaTag = RegExp(r'^\[([a-zA-Z_]+):(.*)\]$');
 
   /// Parses [text], optionally merging [translation] and [romanization].
@@ -88,6 +92,9 @@ final class LrcParser {
     return LyricDocument(
       lines: List<LyricLine>.unmodifiable(lines),
       metadata: Map<String, String>.unmodifiable(metadata),
+      raw: text,
+      rawTranslation: translation,
+      rawRomanization: romanization,
     );
   }
 
@@ -118,24 +125,22 @@ final class LrcParser {
 
       final content = line.substring(matches.last.end);
 
-      final words = wordByWord ? _parseWords(content) : const <LyricWord>[];
-      final plainText = words.isEmpty ? content.trim() : words.map((word) => word.text).join().trim();
-
       for (final match in matches) {
-        entries.add(
-          _RawLine(
-            start: _toDuration(match.group(1)!, match.group(2)!, match.group(3)),
-            text: plainText,
-            words: words,
-            order: order++,
-          ),
-        );
+        final start = _toDuration(match.group(1), match.group(2)!, match.group(3)!, match.group(4));
+        final words = wordByWord ? _parseWords(content, start) : const <LyricWord>[];
+        final plainText = words.isEmpty ? content.trim() : words.map((word) => word.text).join().trim();
+
+        entries.add(_RawLine(start: start, text: plainText, words: words, order: order++));
       }
     }
   }
 
-  /// Extracts `<mm:ss.xx>word` runs, or an empty list when there are none.
-  List<LyricWord> _parseWords(String content) {
+  /// Extracts word runs from [content].
+  ///
+  /// Both spellings are accepted: absolute `<mm:ss.xx>` and relative
+  /// `<startMs,duration>` (lx-music's extended lyric). A relative offset is
+  /// added to [lineStart], so callers always see absolute word timestamps.
+  List<LyricWord> _parseWords(String content, Duration lineStart) {
     final matches = _wordTag.allMatches(content).toList(growable: false);
 
     if (matches.isEmpty) {
@@ -153,7 +158,17 @@ final class LrcParser {
         continue;
       }
 
-      words.add(LyricWord(start: _toDuration(match.group(1)!, match.group(2)!, match.group(3)), text: text));
+      final Duration start;
+      Duration? duration;
+
+      if (match.group(4) != null) {
+        start = lineStart + Duration(milliseconds: int.parse(match.group(4)!));
+        duration = Duration(milliseconds: int.parse(match.group(5)!));
+      } else {
+        start = _toDuration(null, match.group(1)!, match.group(2)!, match.group(3));
+      }
+
+      words.add(LyricWord(start: start, text: text, duration: duration));
     }
 
     return List<LyricWord>.unmodifiable(words);
@@ -183,20 +198,20 @@ final class LrcParser {
       final content = line.substring(matches.last.end).trim();
 
       for (final match in matches) {
-        index[_toDuration(match.group(1)!, match.group(2)!, match.group(3)).inMilliseconds] = content;
+        index[_toDuration(match.group(1), match.group(2)!, match.group(3)!, match.group(4)).inMilliseconds] = content;
       }
     }
 
     return index;
   }
 
-  /// Converts `mm`/`ss`/`fraction` groups into a duration.
+  /// Converts `[hh:]mm`/`ss`/`fraction` groups into a duration.
   ///
   /// The fraction is 1–3 digits and always means sub-second precision:
   /// `.5` is 500 ms. Files written by hand use centiseconds, but a single
   /// digit appears too, and reading `.5` as 5 ms would put the line 495 ms
   /// early.
-  Duration _toDuration(String minutes, String seconds, String? fraction) {
+  Duration _toDuration(String? hours, String minutes, String seconds, String? fraction) {
     var milliseconds = 0;
 
     if (fraction != null && fraction.isNotEmpty) {
@@ -209,7 +224,12 @@ final class LrcParser {
       };
     }
 
-    return Duration(minutes: int.parse(minutes), seconds: int.parse(seconds), milliseconds: milliseconds);
+    return Duration(
+      hours: hours == null ? 0 : int.parse(hours),
+      minutes: int.parse(minutes),
+      seconds: int.parse(seconds),
+      milliseconds: milliseconds,
+    );
   }
 
   /// Parses the `offset` metadata tag.

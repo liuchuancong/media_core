@@ -6,7 +6,8 @@
 
 [media_core](../media_core) 的内核只回答"怎么把一个源播起来"。它不知道歌单该怎么推进、音质档位是什么、平台给的播放地址十分钟后就失效、LRC 里的 `<mm:ss.xx>` 该怎么对齐。本包把这些**音乐特有的决策**收在一处：
 
-- **来源契约**：`MusicSource` 只规定三件事 —— 能搜（`search`）、能把曲目解析成可播地址（`resolveTrackSource`）、能给词（`resolveLyric`）。站点实现带着自己的加密、token 与 header 留在宿主 App 里，本包不内置任何平台知识；`MusicSourceRegistry` 按 `MusicTrack.sourceId` 把队列里的曲目路由回它自己的平台。自带的是 `LocalMusicSource`（扫目录、读同名 `.lrc`）。
+- **来源契约**：`MusicSource` 只规定三件事 —— 能搜（`search`）、能把曲目解析成可播地址（`resolveTrackSource`）、能给词（`resolveLyric`）。站点实现带着自己的加密、token 与 header 留在宿主 App 里，本包不内置任何平台知识；`MusicSourceRegistry` 按 `MusicTrack.sourceId` 把队列里的曲目路由回它自己的平台。自带的是 `LocalMusicSource`（扫目录、读同名 `.lrc`，兼容 BOM 与 UTF-8/Latin-1 回退）。
+- **歌词是一条完整的链路**：LRC（含 `[hh:mm:ss]`、多时间戳、`[offset:]`）、lx 扩展逐字（`<起始,时长>`）、解码后的 QRC/KRC/YRC 毫秒文本统一进 `LyricParser`；`LyricDocument.offset` 承担运行时歌词延迟，`LyricExporter` 负责把歌词（含翻译/罗马音/逐字/`[awlrc:…]`）落成 `.lrc` 旁车文件。
 - **一个引擎句柄播完整张歌单**：`AudioPlaybackController` 在首次播放时 `kernel.create()` 一次，之后每首歌重开同一个句柄。每首歌建一个播放器会把解码器启动成本变成用户听得见的延迟。
 - **签名 URL 是一等公民**：`TrackSource.expiresAt` 让解析结果自带寿期；播放失败、或 `AudioPlaybackConfig.loadTimeout` 到点仍没播起来时，**先用重新解析的地址试一次**，再把失败上报 —— 这是区分"链接过期"和"这首本来就播不了"的唯一办法。失败的曲目在本会话内被标记，不再自动重试，队列照常往后走。
 - **媒体面不重复实现**：通知 / 锁屏 / SMTC / MPRIS 与音频焦点属于 [media_core_mediasession](../media_core_mediasession)，因为视频宿主也要用同一套。本包提供 `MediaCoreAudio`（`MediaSessionDriver` 的子类）与 `MusicBackgroundBinding`（把队列、进度、transport 命令镜像过去），并保留 `AudioCapabilityConfig` / `MediaCoreAudioHandler` / `AudioHandlerState` / `AudioHandlerMediaItem` 四个历史名字的 typedef，老调用点不用改。
@@ -29,6 +30,10 @@ player.setQuality(MusicQuality.flac);                   // 下一首生效，不
 // 歌词：解析 + LRU 缓存 + 并发合并；进度对应的当前行/词由 LyricTimeline 给出
 final lyric = await player.loadCurrentLyric();
 final line = lyric.lineAt(player.state.position);
+
+// 运行时歌词延迟（正数延后），以及定时停止
+player.setLyricOffset(const Duration(milliseconds: 300));
+player.setSleepTimer(const Duration(minutes: 30));
 ```
 
 ```dart
@@ -55,16 +60,36 @@ await permissions.request(AudioPermission.mediaLibrary);    // 只在下本地�
 ```
 
 ```dart
-// 下载：ffmpeg 处理 HLS / 签名 CDN / tag 写入 / 编码选择
-final downloads = MusicDownloadQueue(maxConcurrent: 1, maxAttempts: 2);
+// 下载：成品文件走断点续传，HLS/转码走 ffmpeg
+final downloads = MusicDownloadQueue(maxConcurrent: 2, maxAttempts: 3);
 final task = downloads.downloadTrack(
   track: track,
   source: await registry.resolveTrackSource(track, quality: MusicQuality.k320),
   directory: downloadDir,
-  format: MusicDownloadFormat.copy,   // 容器不可直拷时自动转 mp3
+  quality: MusicQuality.k320,
+  pattern: '{artist} - {title}',
+  subdirectory: '我喜欢的音乐',        // 对应 lx 的“按列表名保存”
+  coverUrl: track.coverUri?.toString(),
+  lyric: await source.resolveLyric(track),
+  embedCover: true,                    // 写进标签
+  embedLyric: true,
+  writeLyricFile: true,                // 另存同名 .lrc（UTF-8 BOM）
+  includeTranslation: true,
+  skipExisting: true,
+  resolve: () async => MusicDownloadRequest.forTrack(   // 重试时换新签名 URL
+    track: track,
+    source: await registry.resolveTrackSource(track, quality: MusicQuality.k320),
+    directory: downloadDir,
+  ),
 );
 downloads.updates.listen((t) => render(t.status, t.progress));   // progress 可能为 null
+
+await downloads.pause(task.id);        // 断点续传保留半成品
+await downloads.resume(task.id);       // 恢复前会校验文件尾部
+await downloads.remove(task.id, deleteFile: true);
 ```
+
+队列状态：`queued → running → processing → completed`，另有 `paused` / `skipped` / `failed` / `cancelled`；`processing` 是字节已到、正在写标签/旁车歌词的阶段。
 
 ## 平台支持
 
@@ -86,6 +111,7 @@ pubspec 的 `flutter.plugin.platforms` 只声明了 **android / windows / macos 
 
 ## 相关文档
 
+- lx-music 迁移对齐台账（已迁/未迁与原因）：[doc/lx-music-parity.md](doc/lx-music-parity.md)
 - 内核与句柄生命周期：[../media_core](../media_core)
 - 系统媒体面与音频焦点的实现：[../media_core_mediasession](../media_core_mediasession)
 - 日志分类与 sink：[../media_core_logging](../media_core_logging)

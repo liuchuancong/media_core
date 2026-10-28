@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart' hide Log;
 import 'package:media_core/media_core.dart';
@@ -105,6 +106,7 @@ final class MusicDownloader {
     final headers = Map<String, String>.from(request.headers);
     final userAgent = request.userAgent ?? headers.remove('user-agent');
     final headerString = _buildHeader(headers);
+    final withCover = _canAttachCover(request.extension) && request.embedCover && request.coverUrl != null;
 
     return <String>[
       '-hide_banner',
@@ -124,18 +126,119 @@ final class MusicDownloader {
       if (headerString.isNotEmpty) ...<String>['-headers', headerString],
       '-i',
       request.url,
+      if (withCover) ...<String>[
+        if (userAgent != null && userAgent.isNotEmpty) ...<String>['-user_agent', userAgent],
+        if (headerString.isNotEmpty) ...<String>['-headers', headerString],
+        '-i',
+        request.coverUrl!,
+      ],
       // Audio only: a music download must never pull the video track of a
       // music video or an FLV stream.
       '-map',
       '0:a:0',
-      '-vn',
+      if (withCover) ...<String>['-map', '1:v:0'] else '-vn',
       ..._codecArguments(request),
-      if (request.title != null) ...<String>['-metadata', 'title=${request.title}'],
-      if (request.artist != null) ...<String>['-metadata', 'artist=${request.artist}'],
-      if (request.album != null) ...<String>['-metadata', 'album=${request.album}'],
+      if (withCover) ...<String>['-c:v', 'copy', '-disposition:v', 'attached_pic'],
+      ..._metadataArguments(request),
       ...request.extraArguments,
       '-y',
       request.outputPath,
+    ];
+  }
+
+  /// Rewrites tags on an already-downloaded file, in place.
+  ///
+  /// A direct HTTP transfer cannot write tags: it appends bytes. The cover,
+  /// lyric and title/artist/album are therefore applied afterwards with one
+  /// ffmpeg pass that copies the audio stream and only changes the container
+  /// metadata. Failure leaves the downloaded audio untouched — a download that
+  /// plays is worth more than one whose cover art failed to attach.
+  Future<void> rewriteTags(MusicDownloadRequest request) async {
+    if (!request.embedCover && !request.embedLyric) {
+      return;
+    }
+
+    if (!_canRewriteTags(request.extension)) {
+      MediaCoreLog.debug(
+        LogCategory.audio,
+        'music tags skipped: ${request.extension} has no writable metadata',
+        fields: <String, Object?>{'path': request.outputPath},
+      );
+
+      return;
+    }
+
+    final file = File(request.outputPath);
+
+    if (!file.existsSync()) {
+      return;
+    }
+
+    await initialize();
+
+    final tempPath = _temporaryPath(request.outputPath);
+    var code = await _runArguments(
+      buildTagArguments(request, inputPath: request.outputPath, outputPath: tempPath),
+    );
+
+    if (code != 0 && request.embedCover) {
+      // The cover URL is the part most likely to fail (expired signature,
+      // hot-link protection). Retry once without it so the lyric still lands.
+      await _deleteIfExists(tempPath);
+      code = await _runArguments(
+        buildTagArguments(request, inputPath: request.outputPath, outputPath: tempPath, includeCover: false),
+      );
+    }
+
+    if (code != 0) {
+      await _deleteIfExists(tempPath);
+
+      throw StateError('Writing music tags failed (ffmpeg exit $code)');
+    }
+
+    await file.delete();
+    await File(tempPath).rename(request.outputPath);
+  }
+
+  /// Builds the in-place tag rewrite arguments.
+  ///
+  /// Exposed for tests: the cover input is the part that is easy to get wrong
+  /// (input options must precede its own `-i`, the disposition must sit on the
+  /// output stream), and asserting it does not need an ffmpeg binary.
+  List<String> buildTagArguments(
+    MusicDownloadRequest request, {
+    required String inputPath,
+    required String outputPath,
+    bool includeCover = true,
+  }) {
+    final headers = Map<String, String>.from(request.headers);
+    final userAgent = request.userAgent ?? headers.remove('user-agent');
+    final headerString = _buildHeader(headers);
+    final withCover = includeCover && request.embedCover && request.coverUrl != null && _canAttachCover(request.extension);
+
+    return <String>[
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-nostdin',
+      '-y',
+      '-i',
+      inputPath,
+      if (withCover) ...<String>[
+        if (userAgent != null && userAgent.isNotEmpty) ...<String>['-user_agent', userAgent],
+        if (headerString.isNotEmpty) ...<String>['-headers', headerString],
+        '-i',
+        request.coverUrl!,
+      ],
+      '-map',
+      '0:a:0',
+      if (withCover) ...<String>['-map', '1:v:0'],
+      '-c:a',
+      'copy',
+      if (withCover) ...<String>['-c:v', 'copy', '-disposition:v', 'attached_pic'],
+      ..._metadataArguments(request),
+      if (request.extension == 'mp3') ...<String>['-id3v2_version', '3'],
+      outputPath,
     ];
   }
 
@@ -193,7 +296,7 @@ final class MusicDownloader {
       latest = running.copyWith(
         processed: Duration(milliseconds: statistics.time),
         speed: statistics.speed > 0 ? statistics.speed : 0,
-        bytesWritten: statistics.size,
+        bytesReceived: statistics.size,
         sessionId: session.sessionId.toString(),
       );
       onUpdate?.call(latest);
@@ -297,6 +400,89 @@ final class MusicDownloader {
   }
 
   final Set<String> _cancelled = <String>{};
+
+  /// Tag arguments shared by the one-pass download and the in-place rewrite.
+  List<String> _metadataArguments(MusicDownloadRequest request) {
+    final writable = _canRewriteTags(request.extension);
+
+    return <String>[
+      if (request.title != null) ...<String>['-metadata', 'title=${request.title}'],
+      if (request.artist != null) ...<String>['-metadata', 'artist=${request.artist}'],
+      if (request.album != null) ...<String>['-metadata', 'album=${request.album}'],
+      if (writable && request.embedLyric && (request.lyric ?? '').trim().isNotEmpty)
+        ...<String>['-metadata', 'lyrics=${request.lyric!.trim()}'],
+      if (request.extension == 'mp3') ...<String>['-id3v2_version', '3'],
+    ];
+  }
+
+  /// Runs ffmpeg for one tag-rewrite pass and returns its exit code.
+  Future<int> _runArguments(List<String> arguments) async {
+    final logs = StringBuffer();
+    final session = FFmpegKit.createSessionFromArguments(arguments);
+    final completer = Completer<int>();
+
+    session
+      ..setLogCallback((log) {
+        if (log.message.trim().isNotEmpty) {
+          logs.writeln(log.message);
+        }
+      })
+      ..setCompleteCallback((completed) {
+        if (!completer.isCompleted) {
+          completer.complete(completed.getReturnCode());
+        }
+      });
+
+    try {
+      await session.executeAsync();
+    } on Object catch (error) {
+      if (!completer.isCompleted) {
+        completer.complete(-1);
+      }
+
+      MediaCoreLog.warning(
+        LogCategory.error,
+        'music tag rewrite failed: ${arguments.last}',
+        error: error,
+      );
+    }
+
+    final code = await completer.future;
+
+    if (code != 0) {
+      MediaCoreLog.warning(
+        LogCategory.error,
+        'music tag rewrite exited with $code: ${arguments.last}',
+        fields: <String, Object?>{'log': logs.toString().trim()},
+      );
+    }
+
+    return code;
+  }
+
+  /// Containers whose metadata blocks ffmpeg can rewrite.
+  static bool _canRewriteTags(String extension) {
+    return const <String>{'mp3', 'm4a', 'mp4', 'flac', 'ogg', 'opus'}.contains(extension);
+  }
+
+  /// Containers that accept an attached-picture stream.
+  static bool _canAttachCover(String extension) {
+    return const <String>{'mp3', 'm4a', 'mp4', 'flac'}.contains(extension);
+  }
+
+  static String _temporaryPath(String path) {
+    final dot = path.lastIndexOf('.');
+
+    return dot <= 0 ? '$path.tmp' : '${path.substring(0, dot)}.tmp${path.substring(dot)}';
+  }
+
+  static Future<void> _deleteIfExists(String path) async {
+    final file = File(path);
+
+    if (file.existsSync()) {
+      await file.delete();
+    }
+  }
 
   /// Codec/output arguments for the requested format.
   List<String> _codecArguments(MusicDownloadRequest request) {

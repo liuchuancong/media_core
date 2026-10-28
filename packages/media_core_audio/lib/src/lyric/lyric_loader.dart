@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:media_core_audio/src/lyric/lrc_parser.dart';
 import 'package:media_core_audio/src/lyric/lyric_document.dart';
+import 'package:media_core_audio/src/lyric/lyric_parser.dart';
 import 'package:media_core_audio/src/source/music_source.dart';
 import 'package:media_core_audio/src/source/music_source_registry.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
@@ -26,17 +26,23 @@ typedef LyricProvider = Future<MusicLyricPayload?> Function(MusicTrack track);
 final class LyricLoader {
   /// Creates a loader.
   ///
-  /// Without a [provider] the loader resolves through [registry].
-  LyricLoader({MusicSourceRegistry? registry, LyricProvider? provider, this.maxEntries = 64})
-    : _registry = registry,
-      _provider = provider;
+  /// [providers] are tried in order and the first non-empty answer wins, which
+  /// is how lx-music layers "cached lyric → online lyric → lyric inside the
+  /// downloaded file". Without any provider the loader asks [registry].
+  LyricLoader({
+    MusicSourceRegistry? registry,
+    LyricProvider? provider,
+    List<LyricProvider> providers = const <LyricProvider>[],
+    this.maxEntries = 64,
+  }) : _registry = registry,
+       _providers = <LyricProvider>[?provider, ...providers];
 
   /// Maximum number of cached documents.
   final int maxEntries;
 
   final MusicSourceRegistry? _registry;
-  final LyricProvider? _provider;
-  final LrcParser _parser = const LrcParser();
+  final List<LyricProvider> _providers;
+  final LyricParser _parser = const LyricParser();
 
   final Map<String, LyricDocument> _cache = <String, LyricDocument>{};
   final Map<String, Completer<LyricDocument>> _inFlight = <String, Completer<LyricDocument>>{};
@@ -139,23 +145,30 @@ final class LyricLoader {
       return LyricDocument.empty;
     }
 
-    return _parser.parse(payload.lyric, translation: payload.translation, romanization: payload.romanization);
+    return _parser.parse(
+      payload.lyric,
+      format: payload.format,
+      translation: payload.translation,
+      romanization: payload.romanization,
+    );
   }
 
-  Future<MusicLyricPayload?> _resolve(MusicTrack track) {
-    final provider = _provider;
+  Future<MusicLyricPayload?> _resolve(MusicTrack track) async {
+    for (final provider in _providers) {
+      final payload = await provider(track);
 
-    if (provider != null) {
-      return provider(track);
+      if (payload != null && payload.lyric.trim().isNotEmpty) {
+        return payload;
+      }
     }
 
     final registry = _registry;
 
     if (registry == null) {
-      return Future<MusicLyricPayload?>.value();
+      return null;
     }
 
-    return registry.resolveLyric(track);
+    return await registry.resolveLyric(track);
   }
 
   void _store(String key, LyricDocument document) {

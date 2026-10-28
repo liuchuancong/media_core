@@ -45,9 +45,16 @@ final class DesktopLyricController {
     DesktopLyricStyle style = const DesktopLyricStyle(),
     this.minimumUpdateInterval = const Duration(milliseconds: 200),
     this.showTranslation = true,
+    this.showRomanization = true,
+    this.swapSecondary = false,
   }) : _transport = transport ?? MethodChannelDesktopLyricTransport(),
        _permissions = permissions ?? AudioPermissionService(),
        _style = style,
+       _display = LyricDisplayOptions(
+         showTranslation: showTranslation,
+         showRomanization: showRomanization,
+         swapTranslationAndRomanization: swapSecondary,
+       ),
        _timeline = LyricTimeline(minimumUpdateInterval: minimumUpdateInterval);
 
   /// The music player this overlay follows.
@@ -59,6 +66,12 @@ final class DesktopLyricController {
   /// Whether translations are displayed when the lyric has them.
   final bool showTranslation;
 
+  /// Whether romanizations are displayed when the lyric has them.
+  final bool showRomanization;
+
+  /// Whether romanization is shown above translation.
+  final bool swapSecondary;
+
   final DesktopLyricTransport _transport;
   final AudioPermissionService _permissions;
   final LyricTimeline _timeline;
@@ -67,9 +80,14 @@ final class DesktopLyricController {
   StreamSubscription<LyricPosition>? _lineSub;
   StreamSubscription<DesktopLyricAction>? _actionSub;
 
+  final StreamController<bool> _visibleChanges = StreamController<bool>.broadcast();
+  final StreamController<bool> _lockedChanges = StreamController<bool>.broadcast();
+
   DesktopLyricStyle _style;
+  LyricDisplayOptions _display;
   LyricDocument _document = LyricDocument.empty;
   DesktopLyricState? _lastPushed;
+  Duration _appliedOffset = Duration.zero;
 
   /// Track whose lyric is currently loaded.
   ///
@@ -91,8 +109,21 @@ final class DesktopLyricController {
   /// Whether the overlay ignores pointer input.
   bool get locked => _locked;
 
+  /// Emits whenever the overlay is shown or hidden.
+  ///
+  /// Includes changes the overlay made itself — its own close button — so a
+  /// host that persists the viewer's choice stays in sync with the window.
+  Stream<bool> get visibleChanges => _visibleChanges.stream;
+
+  /// Emits whenever the overlay's lock state changes, including its own
+  /// lock/unlock button.
+  Stream<bool> get lockedChanges => _lockedChanges.stream;
+
   /// Current styling.
   DesktopLyricStyle get style => _style;
+
+  /// Which secondary tracks the overlay shows.
+  LyricDisplayOptions get display => _display;
 
   /// The lyric being displayed.
   LyricDocument get document => _document;
@@ -131,6 +162,8 @@ final class DesktopLyricController {
 
     _visible = true;
 
+    _visibleChanges.add(true);
+
     if (_stateSub == null) {
       _bind();
     }
@@ -148,6 +181,8 @@ final class DesktopLyricController {
     }
 
     _visible = false;
+
+    _visibleChanges.add(false);
 
     await _transport.hide();
   }
@@ -173,6 +208,8 @@ final class DesktopLyricController {
     }
 
     _locked = locked;
+    _lockedChanges.add(locked);
+
     _push(force: true);
   }
 
@@ -183,6 +220,16 @@ final class DesktopLyricController {
     }
 
     _style = style;
+    _push(force: true);
+  }
+
+  /// Replaces which secondary lyric tracks are shown.
+  Future<void> setDisplayOptions(LyricDisplayOptions options) async {
+    if (_disposed) {
+      return;
+    }
+
+    _display = options;
     _push(force: true);
   }
 
@@ -225,6 +272,8 @@ final class DesktopLyricController {
 
     await _timeline.dispose();
     await _transport.dispose();
+    await _visibleChanges.close();
+    await _lockedChanges.close();
   }
 
   // ---------------------------------------------------------------------------
@@ -240,6 +289,12 @@ final class DesktopLyricController {
   void _onPlayerState(AudioPlaybackState state) {
     if (_disposed) {
       return;
+    }
+
+    if (state.lyricOffset != _appliedOffset) {
+      _appliedOffset = state.lyricOffset;
+      _document = _document.withOffset(_appliedOffset);
+      _timeline.setDocument(_document);
     }
 
     _timeline.update(state.position);
@@ -267,6 +322,7 @@ final class DesktopLyricController {
       }
 
       _document = document;
+      _appliedOffset = player.lyricOffset;
       _timeline.setDocument(document);
       _push(force: true);
     } on Object catch (_) {
@@ -308,7 +364,11 @@ final class DesktopLyricController {
 
     final state = DesktopLyricState(
       text: line == null ? '' : _displayText(line.text),
-      translation: showTranslation ? line?.translation : null,
+      translation: line?.secondaryText(
+        showTranslation: _display.showTranslation,
+        showRomanization: _display.showRomanization,
+        swap: _display.swapTranslationAndRomanization,
+      ),
       nextLine: next == null ? null : _displayText(next.text),
       progress: reading.lineProgress,
       playing: player.state.playing,

@@ -28,6 +28,9 @@ final class AudioPlaybackState {
     this.quality,
     this.error,
     this.ended = false,
+    this.lyricOffset = Duration.zero,
+    this.sleepTimerEndsAt,
+    this.pauseAfterCurrentTrack = false,
   });
 
   /// The idle state, before any track was requested.
@@ -78,6 +81,29 @@ final class AudioPlaybackState {
   /// Whether playback reached the end of a non-looping queue.
   final bool ended;
 
+  /// Viewer-adjusted lyric delay; positive values delay the highlight.
+  final Duration lyricOffset;
+
+  /// When a sleep timer will pause playback, or null when none is armed.
+  final DateTime? sleepTimerEndsAt;
+
+  /// Whether playback pauses when the current track ends — the reference's
+  /// 定时停止「播完当前歌曲」.
+  final bool pauseAfterCurrentTrack;
+
+  /// Time left on the sleep timer, or null when none is armed.
+  Duration? get sleepTimerRemaining {
+    final endsAt = sleepTimerEndsAt;
+
+    if (endsAt == null) {
+      return null;
+    }
+
+    final left = endsAt.difference(DateTime.now());
+
+    return left.isNegative ? Duration.zero : left;
+  }
+
   /// Whether a track is loaded.
   bool get hasTrack => track != null;
 
@@ -106,6 +132,10 @@ final class AudioPlaybackState {
     String? error,
     bool clearError = false,
     bool? ended,
+    Duration? lyricOffset,
+    DateTime? sleepTimerEndsAt,
+    bool clearSleepTimer = false,
+    bool? pauseAfterCurrentTrack,
   }) {
     return AudioPlaybackState(
       track: clearTrack ? null : (track ?? this.track),
@@ -123,6 +153,9 @@ final class AudioPlaybackState {
       quality: clearQuality ? null : (quality ?? this.quality),
       error: clearError ? null : (error ?? this.error),
       ended: ended ?? this.ended,
+      lyricOffset: lyricOffset ?? this.lyricOffset,
+      sleepTimerEndsAt: clearSleepTimer ? null : (sleepTimerEndsAt ?? this.sleepTimerEndsAt),
+      pauseAfterCurrentTrack: pauseAfterCurrentTrack ?? this.pauseAfterCurrentTrack,
     );
   }
 
@@ -143,7 +176,10 @@ final class AudioPlaybackState {
         other.muted == muted &&
         other.quality == quality &&
         other.error == error &&
-        other.ended == ended;
+        other.ended == ended &&
+        other.lyricOffset == lyricOffset &&
+        other.sleepTimerEndsAt == sleepTimerEndsAt &&
+        other.pauseAfterCurrentTrack == pauseAfterCurrentTrack;
   }
 
   @override
@@ -163,6 +199,9 @@ final class AudioPlaybackState {
     quality,
     error,
     ended,
+    lyricOffset,
+    sleepTimerEndsAt,
+    pauseAfterCurrentTrack,
   );
 
   @override

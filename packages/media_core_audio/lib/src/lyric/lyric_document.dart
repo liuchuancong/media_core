@@ -8,7 +8,16 @@ import 'package:media_core_audio/src/lyric/lyric_line.dart';
 /// question without sharing state.
 final class LyricDocument {
   /// Creates a document from already-sorted [lines].
-  const LyricDocument({required this.lines, this.metadata = const <String, String>{}, this.isSynchronized = true});
+  const LyricDocument({
+    required this.lines,
+    this.metadata = const <String, String>{},
+    this.isSynchronized = true,
+    this.offset = Duration.zero,
+    this.raw,
+    this.rawTranslation,
+    this.rawRomanization,
+    this.format = 'lrc',
+  });
 
   /// Creates a document from plain text with no timing.
   ///
@@ -21,7 +30,7 @@ final class LyricDocument {
         .map((line) => LyricLine(start: Duration.zero, text: line.trimRight()))
         .toList(growable: false);
 
-    return LyricDocument(lines: lines, isSynchronized: false);
+    return LyricDocument(lines: lines, isSynchronized: false, raw: text, format: 'text');
   }
 
   /// A document with nothing to show.
@@ -35,6 +44,68 @@ final class LyricDocument {
 
   /// Whether the lines carry timing.
   final bool isSynchronized;
+
+  /// Viewer-adjusted delay applied to every lookup.
+  ///
+  /// Positive values delay the lyric (a line authored at 10 s starts being
+  /// highlighted at 10 s + offset); negative values make it appear earlier.
+  /// Kept on the document instead of rewriting [lines] so one cached parse can
+  /// serve any number of offset values — lx-music's slider changes this
+  /// constantly and must not trigger a refetch.
+  final Duration offset;
+
+  /// Original lyric text, when it came from a parser.
+  ///
+  /// Kept for exporting a sidecar `.lrc` without reconstructing (and possibly
+  /// degrading) the file the platform handed over, and so the `[awlrc:…]`
+  /// container lx-music writes can round-trip.
+  final String? raw;
+
+  /// Original translation track, when one was merged.
+  final String? rawTranslation;
+
+  /// Original romanization track, when one was merged.
+  final String? rawRomanization;
+
+  /// Source format hint (`lrc`, `qrc`, `krc`, `yrc`, `text`).
+  final String format;
+
+  /// Whether a translation track is present.
+  bool get hasTranslation => lines.any((line) => (line.translation ?? '').trim().isNotEmpty);
+
+  /// Whether a romanization track is present.
+  bool get hasRomanization => lines.any((line) => (line.romanization ?? '').trim().isNotEmpty);
+
+  /// A copy with a different viewer offset; the parsed lines are shared.
+  LyricDocument withOffset(Duration value) {
+    if (value == offset) {
+      return this;
+    }
+
+    return LyricDocument(
+      lines: lines,
+      metadata: metadata,
+      isSynchronized: isSynchronized,
+      offset: value,
+      raw: raw,
+      rawTranslation: rawTranslation,
+      rawRomanization: rawRomanization,
+      format: format,
+    );
+  }
+
+  /// A copy with every timestamp physically moved by [delta].
+  ///
+  /// Unlike [withOffset] this loses [raw]: the text no longer matches the
+  /// returned timestamps, so exporting it would ship a contradictory file.
+  LyricDocument shifted(Duration delta) {
+    return LyricDocument(
+      lines: List<LyricLine>.unmodifiable(lines.map((line) => line.shifted(delta))),
+      metadata: metadata,
+      isSynchronized: isSynchronized,
+      format: format,
+    );
+  }
 
   /// Whether there is nothing to display.
   bool get isEmpty => lines.isEmpty || lines.every((line) => line.isEmpty && line.text.trim().isEmpty);
@@ -50,12 +121,14 @@ final class LyricDocument {
   /// Binary search: lyric files reach a few hundred lines and the position is
   /// polled several times a second, so this has to stay O(log n) — a linear
   /// scan per tick was the classic hot spot in lyric renderers.
-  int indexAt(Duration position) {
+  int indexAt(Duration position, {Duration? offset}) {
     if (lines.isEmpty) {
       return -1;
     }
 
-    if (position < lines.first.start) {
+    final effective = position - (offset ?? this.offset);
+
+    if (effective < lines.first.start) {
       return -1;
     }
 
@@ -66,10 +139,10 @@ final class LyricDocument {
       final middle = (low + high) >> 1;
       final start = lines[middle].start;
 
-      if (start <= position) {
+      if (start <= effective) {
         final next = middle + 1 < lines.length ? lines[middle + 1].start : null;
 
-        if (next == null || next > position) {
+        if (next == null || next > effective) {
           return middle;
         }
 
@@ -83,16 +156,17 @@ final class LyricDocument {
   }
 
   /// The line active at [position], if any.
-  LyricLine? lineAt(Duration position) {
-    final index = indexAt(position);
+  LyricLine? lineAt(Duration position, {Duration? offset}) {
+    final index = indexAt(position, offset: offset);
 
     return index < 0 ? null : lines[index];
   }
 
   /// A full reading of [position]: active line, line progress and, when the
   /// line carries word timing, the active word and its progress.
-  LyricPosition positionAt(Duration position) {
-    final index = indexAt(position);
+  LyricPosition positionAt(Duration position, {Duration? offset}) {
+    final effective = position - (offset ?? this.offset);
+    final index = indexAt(position, offset: offset);
 
     if (index < 0) {
       return LyricPosition.none;
@@ -101,7 +175,7 @@ final class LyricDocument {
     final line = lines[index];
     final end = line.end ?? (index + 1 < lines.length ? lines[index + 1].start : null);
 
-    final lineProgress = _progress(line.start, end, position);
+    final lineProgress = _progress(line.start, end, effective);
 
     if (!line.hasWordTiming) {
       return LyricPosition(index: index, line: line, lineProgress: lineProgress);
@@ -110,7 +184,7 @@ final class LyricDocument {
     var wordIndex = -1;
 
     for (var i = 0; i < line.words.length; i++) {
-      if (line.words[i].start <= position) {
+      if (line.words[i].start <= effective) {
         wordIndex = i;
       } else {
         break;
@@ -121,15 +195,20 @@ final class LyricDocument {
       return LyricPosition(index: index, line: line, lineProgress: lineProgress);
     }
 
-    final wordStart = line.words[wordIndex].start;
-    final wordEnd = wordIndex + 1 < line.words.length ? line.words[wordIndex + 1].start : end;
+    final word = line.words[wordIndex];
+
+    // The next word's start is the real end of this one; only the last word
+    // falls back to its authored duration or the line's end.
+    final wordEnd = wordIndex + 1 < line.words.length
+        ? line.words[wordIndex + 1].start
+        : (word.duration == null ? end : word.start + word.duration!);
 
     return LyricPosition(
       index: index,
       line: line,
       lineProgress: lineProgress,
       wordIndex: wordIndex,
-      wordProgress: _progress(wordStart, wordEnd, position),
+      wordProgress: _progress(word.start, wordEnd, effective),
     );
   }
 
