@@ -166,18 +166,21 @@ LRESULT CALLBACK MediaCoreAudioPlugin::ActionWindowProcThunk(HWND hwnd,
     return ::DefWindowProc(hwnd, message, wparam, lparam);
   }
 
-  return self->ActionWindowProc(message, wparam, lparam);
+  return self->ActionWindowProc(hwnd, message, wparam, lparam);
 }
 
-LRESULT MediaCoreAudioPlugin::ActionWindowProc(UINT message, WPARAM wparam,
-                                               LPARAM lparam) {
+LRESULT MediaCoreAudioPlugin::ActionWindowProc(HWND hwnd, UINT message,
+                                               WPARAM wparam, LPARAM lparam) {
   if (message == kMessageDrainActions) {
     DrainActions();
 
     return 0;
   }
 
-  return ::DefWindowProc(action_window_, message, wparam, lparam);
+  // The hwnd the message arrived on, not the cached action_window_: during
+  // CreateWindowEx that member is still null, and DefWindowProc failing
+  // WM_NCCREATE aborts the window's creation outright.
+  return ::DefWindowProc(hwnd, message, wparam, lparam);
 }
 
 void MediaCoreAudioPlugin::QueueAction(const std::string& action) {

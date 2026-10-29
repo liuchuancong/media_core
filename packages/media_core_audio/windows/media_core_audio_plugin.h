@@ -52,7 +52,7 @@ class MediaCoreAudioPlugin : public flutter::Plugin {
  private:
   static constexpr UINT kMessageDrainActions = WM_APP + 301;
 
-  LRESULT ActionWindowProc(UINT message, WPARAM wparam, LPARAM lparam);
+  LRESULT ActionWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,

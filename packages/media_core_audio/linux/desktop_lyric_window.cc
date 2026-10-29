@@ -236,7 +236,16 @@ void DesktopLyricWindow::Update(const LyricWindowState& state) {
     state_ = state;
 
     if (lock_changed && state_.locked) {
+      // The hint timer has to start here too: a lock that lands before the
+      // first show would otherwise never expire, and the shown window would
+      // stay interactive forever.
       lock_hint_active_ = true;
+      lock_hint_deadline_ = g_get_monotonic_time() + kLockHintMicros;
+
+      if (lock_hint_source_ == 0) {
+        lock_hint_source_ = g_timeout_add(kLockHintIntervalMs,
+                                          OnLockHintTimeout, this);
+      }
     }
 
     return;

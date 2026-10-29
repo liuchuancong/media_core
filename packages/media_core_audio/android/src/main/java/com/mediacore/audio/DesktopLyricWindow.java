@@ -176,8 +176,11 @@ final class DesktopLyricWindow {
     final Map<?, ?> style = map.get("style") instanceof Map ? (Map<?, ?>) map.get("style") : null;
 
     if (style != null) {
-      textColor = (int) number(style.get("textColor"), textColor);
-      strokeColor = (int) number(style.get("strokeColor"), strokeColor);
+      // The Dart side sends colours as 0xAARRGGBB ints, which the codec
+      // delivers as longs; widening through long first keeps the (int) cast
+      // from saturating 0xFFFFFFFF down to 0x7FFFFFFF (half-transparent text).
+      textColor = (int) (long) number(style.get("textColor"), textColor);
+      strokeColor = (int) (long) number(style.get("strokeColor"), strokeColor);
       strokeWidth = (float) number(style.get("strokeWidth"), strokeWidth);
       final double fontSize = number(style.get("fontSize"), 0);
 
