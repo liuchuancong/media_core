@@ -23,7 +23,16 @@ mixin _$PlayerPoolConfig {
  bool get lazyCreate;/// Whether unused players should be recycled.
  bool get enableRecycle;/// Maximum idle duration before recycle.
  Duration? get idleTimeout;/// Whether pool should keep at least one warm player.
- bool get keepWarm;/// Number of warm players.
+ bool get keepWarm;/// How many **warm** players the pool may hold — the one playing is not one of
+/// them, so `warmSize: 2` is a ledger of at most three players.
+///
+/// Zero means unbounded. It is one number with one meaning, read the same way by
+/// the cap that decides whether another neighbour gets warmed and by the decision
+/// that holds or releases an idle player outside the window — the second of those
+/// used to compare it against the whole ledger instead, which is a second meaning
+/// no doc comment can tell apart from the first. A preset that sizes itself for
+/// the ledger leaves the cap loose: `warmSize: 2` with a one-each-side window is
+/// the budget doing nothing at all.
  int get warmSize;/// Maximum concurrent active sessions.
  int get maxActivePlayers;/// How many neighbours on each side of the active item are kept warm.
 ///
@@ -275,7 +284,16 @@ class _PlayerPoolConfig implements PlayerPoolConfig {
 @override final  Duration? idleTimeout;
 /// Whether pool should keep at least one warm player.
 @override@JsonKey() final  bool keepWarm;
-/// Number of warm players.
+/// How many **warm** players the pool may hold — the one playing is not one of
+/// them, so `warmSize: 2` is a ledger of at most three players.
+///
+/// Zero means unbounded. It is one number with one meaning, read the same way by
+/// the cap that decides whether another neighbour gets warmed and by the decision
+/// that holds or releases an idle player outside the window — the second of those
+/// used to compare it against the whole ledger instead, which is a second meaning
+/// no doc comment can tell apart from the first. A preset that sizes itself for
+/// the ledger leaves the cap loose: `warmSize: 2` with a one-each-side window is
+/// the budget doing nothing at all.
 @override@JsonKey() final  int warmSize;
 /// Maximum concurrent active sessions.
 @override@JsonKey() final  int maxActivePlayers;

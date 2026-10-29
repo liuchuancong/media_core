@@ -18,15 +18,15 @@ mixin _$SessionSnapshot {
 /// PlayerIdentity identity.
  PlayerId get playerId;/// Session identity.
  SessionId get sessionId;/// Current generation identity.
- GenerationId get generationId;/// Current source identity.
+ GenerationId get generationId;/// Time at which this snapshot was created.
+ DateTime get timestamp;/// Current source identity.
  SourceId? get sourceId;/// Current session state.
  SessionState get state;/// Current playback position.
  Duration get position;/// Total media duration.
  Duration? get duration;/// Whether media is currently buffering.
  bool get buffering;/// Whether playback has encountered an error.
  bool get hasError;/// Error description, when available.
- String? get errorMessage;/// Time at which this snapshot was created.
- DateTime get timestamp;
+ String? get errorMessage;
 /// Create a copy of SessionSnapshot
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -38,20 +38,20 @@ $SessionSnapshotCopyWith<SessionSnapshot> get copyWith => _$SessionSnapshotCopyW
 @override
 bool operator ==(Object other) {
   final _this = this as SessionSnapshot;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionSnapshot&&(identical(other.playerId, _this.playerId) || other.playerId == _this.playerId)&&(identical(other.sessionId, _this.sessionId) || other.sessionId == _this.sessionId)&&(identical(other.generationId, _this.generationId) || other.generationId == _this.generationId)&&(identical(other.sourceId, _this.sourceId) || other.sourceId == _this.sourceId)&&(identical(other.state, _this.state) || other.state == _this.state)&&(identical(other.position, _this.position) || other.position == _this.position)&&(identical(other.duration, _this.duration) || other.duration == _this.duration)&&(identical(other.buffering, _this.buffering) || other.buffering == _this.buffering)&&(identical(other.hasError, _this.hasError) || other.hasError == _this.hasError)&&(identical(other.errorMessage, _this.errorMessage) || other.errorMessage == _this.errorMessage)&&(identical(other.timestamp, _this.timestamp) || other.timestamp == _this.timestamp));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionSnapshot&&(identical(other.playerId, _this.playerId) || other.playerId == _this.playerId)&&(identical(other.sessionId, _this.sessionId) || other.sessionId == _this.sessionId)&&(identical(other.generationId, _this.generationId) || other.generationId == _this.generationId)&&(identical(other.timestamp, _this.timestamp) || other.timestamp == _this.timestamp)&&(identical(other.sourceId, _this.sourceId) || other.sourceId == _this.sourceId)&&(identical(other.state, _this.state) || other.state == _this.state)&&(identical(other.position, _this.position) || other.position == _this.position)&&(identical(other.duration, _this.duration) || other.duration == _this.duration)&&(identical(other.buffering, _this.buffering) || other.buffering == _this.buffering)&&(identical(other.hasError, _this.hasError) || other.hasError == _this.hasError)&&(identical(other.errorMessage, _this.errorMessage) || other.errorMessage == _this.errorMessage));
 }
 
 
 @override
 int get hashCode {
   final _this = this as SessionSnapshot;
-  return Object.hash(runtimeType,_this.playerId,_this.sessionId,_this.generationId,_this.sourceId,_this.state,_this.position,_this.duration,_this.buffering,_this.hasError,_this.errorMessage,_this.timestamp);
+  return Object.hash(runtimeType,_this.playerId,_this.sessionId,_this.generationId,_this.timestamp,_this.sourceId,_this.state,_this.position,_this.duration,_this.buffering,_this.hasError,_this.errorMessage);
 }
 
 @override
 String toString() {
   final _this = this as SessionSnapshot;
-  return 'SessionSnapshot(playerId: ${_this.playerId}, sessionId: ${_this.sessionId}, generationId: ${_this.generationId}, sourceId: ${_this.sourceId}, state: ${_this.state}, position: ${_this.position}, duration: ${_this.duration}, buffering: ${_this.buffering}, hasError: ${_this.hasError}, errorMessage: ${_this.errorMessage}, timestamp: ${_this.timestamp})';
+  return 'SessionSnapshot(playerId: ${_this.playerId}, sessionId: ${_this.sessionId}, generationId: ${_this.generationId}, timestamp: ${_this.timestamp}, sourceId: ${_this.sourceId}, state: ${_this.state}, position: ${_this.position}, duration: ${_this.duration}, buffering: ${_this.buffering}, hasError: ${_this.hasError}, errorMessage: ${_this.errorMessage})';
 }
 
 
@@ -62,7 +62,7 @@ abstract mixin class $SessionSnapshotCopyWith<$Res>  {
   factory $SessionSnapshotCopyWith(SessionSnapshot value, $Res Function(SessionSnapshot) _then) = _$SessionSnapshotCopyWithImpl;
 @useResult
 $Res call({
- PlayerId playerId, SessionId sessionId, GenerationId generationId, SourceId? sourceId, SessionState state, Duration position, Duration? duration, bool buffering, bool hasError, String? errorMessage, DateTime timestamp
+ PlayerId playerId, SessionId sessionId, GenerationId generationId, DateTime timestamp, SourceId? sourceId, SessionState state, Duration position, Duration? duration, bool buffering, bool hasError, String? errorMessage
 });
 
 
@@ -79,20 +79,20 @@ class _$SessionSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of SessionSnapshot
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? playerId = null,Object? sessionId = null,Object? generationId = null,Object? sourceId = freezed,Object? state = null,Object? position = null,Object? duration = freezed,Object? buffering = null,Object? hasError = null,Object? errorMessage = freezed,Object? timestamp = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? playerId = null,Object? sessionId = null,Object? generationId = null,Object? timestamp = null,Object? sourceId = freezed,Object? state = null,Object? position = null,Object? duration = freezed,Object? buffering = null,Object? hasError = null,Object? errorMessage = freezed,}) {
   return _then(SessionSnapshot(
 playerId: null == playerId ? _self.playerId : playerId // ignore: cast_nullable_to_non_nullable
 as PlayerId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
 as SessionId,generationId: null == generationId ? _self.generationId : generationId // ignore: cast_nullable_to_non_nullable
-as GenerationId,sourceId: freezed == sourceId ? _self.sourceId : sourceId // ignore: cast_nullable_to_non_nullable
+as GenerationId,timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
+as DateTime,sourceId: freezed == sourceId ? _self.sourceId : sourceId // ignore: cast_nullable_to_non_nullable
 as SourceId?,state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as SessionState,position: null == position ? _self.position : position // ignore: cast_nullable_to_non_nullable
 as Duration,duration: freezed == duration ? _self.duration : duration // ignore: cast_nullable_to_non_nullable
 as Duration?,buffering: null == buffering ? _self.buffering : buffering // ignore: cast_nullable_to_non_nullable
 as bool,hasError: null == hasError ? _self.hasError : hasError // ignore: cast_nullable_to_non_nullable
 as bool,errorMessage: freezed == errorMessage ? _self.errorMessage : errorMessage // ignore: cast_nullable_to_non_nullable
-as String?,timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
-as DateTime,
+as String?,
   ));
 }
 
@@ -177,10 +177,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PlayerId playerId,  SessionId sessionId,  GenerationId generationId,  SourceId? sourceId,  SessionState state,  Duration position,  Duration? duration,  bool buffering,  bool hasError,  String? errorMessage,  DateTime timestamp)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PlayerId playerId,  SessionId sessionId,  GenerationId generationId,  DateTime timestamp,  SourceId? sourceId,  SessionState state,  Duration position,  Duration? duration,  bool buffering,  bool hasError,  String? errorMessage)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SessionSnapshot() when $default != null:
-return $default(_that.playerId,_that.sessionId,_that.generationId,_that.sourceId,_that.state,_that.position,_that.duration,_that.buffering,_that.hasError,_that.errorMessage,_that.timestamp);case _:
+return $default(_that.playerId,_that.sessionId,_that.generationId,_that.timestamp,_that.sourceId,_that.state,_that.position,_that.duration,_that.buffering,_that.hasError,_that.errorMessage);case _:
   return orElse();
 
 }
@@ -198,10 +198,10 @@ return $default(_that.playerId,_that.sessionId,_that.generationId,_that.sourceId
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PlayerId playerId,  SessionId sessionId,  GenerationId generationId,  SourceId? sourceId,  SessionState state,  Duration position,  Duration? duration,  bool buffering,  bool hasError,  String? errorMessage,  DateTime timestamp)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PlayerId playerId,  SessionId sessionId,  GenerationId generationId,  DateTime timestamp,  SourceId? sourceId,  SessionState state,  Duration position,  Duration? duration,  bool buffering,  bool hasError,  String? errorMessage)  $default,) {final _that = this;
 switch (_that) {
 case _SessionSnapshot():
-return $default(_that.playerId,_that.sessionId,_that.generationId,_that.sourceId,_that.state,_that.position,_that.duration,_that.buffering,_that.hasError,_that.errorMessage,_that.timestamp);case _:
+return $default(_that.playerId,_that.sessionId,_that.generationId,_that.timestamp,_that.sourceId,_that.state,_that.position,_that.duration,_that.buffering,_that.hasError,_that.errorMessage);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -218,10 +218,10 @@ return $default(_that.playerId,_that.sessionId,_that.generationId,_that.sourceId
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PlayerId playerId,  SessionId sessionId,  GenerationId generationId,  SourceId? sourceId,  SessionState state,  Duration position,  Duration? duration,  bool buffering,  bool hasError,  String? errorMessage,  DateTime timestamp)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PlayerId playerId,  SessionId sessionId,  GenerationId generationId,  DateTime timestamp,  SourceId? sourceId,  SessionState state,  Duration position,  Duration? duration,  bool buffering,  bool hasError,  String? errorMessage)?  $default,) {final _that = this;
 switch (_that) {
 case _SessionSnapshot() when $default != null:
-return $default(_that.playerId,_that.sessionId,_that.generationId,_that.sourceId,_that.state,_that.position,_that.duration,_that.buffering,_that.hasError,_that.errorMessage,_that.timestamp);case _:
+return $default(_that.playerId,_that.sessionId,_that.generationId,_that.timestamp,_that.sourceId,_that.state,_that.position,_that.duration,_that.buffering,_that.hasError,_that.errorMessage);case _:
   return null;
 
 }
@@ -233,7 +233,7 @@ return $default(_that.playerId,_that.sessionId,_that.generationId,_that.sourceId
 
 
 class _SessionSnapshot implements SessionSnapshot {
-  const _SessionSnapshot({required this.playerId, required this.sessionId, required this.generationId, this.sourceId, this.state = const SessionState.idle(), this.position = Duration.zero, this.duration, this.buffering = false, this.hasError = false, this.errorMessage, required this.timestamp});
+  const _SessionSnapshot({required this.playerId, required this.sessionId, required this.generationId, required this.timestamp, this.sourceId, this.state = const SessionState.idle(), this.position = Duration.zero, this.duration, this.buffering = false, this.hasError = false, this.errorMessage});
   
 
 /// PlayerIdentity identity.
@@ -242,6 +242,8 @@ class _SessionSnapshot implements SessionSnapshot {
 @override final  SessionId sessionId;
 /// Current generation identity.
 @override final  GenerationId generationId;
+/// Time at which this snapshot was created.
+@override final  DateTime timestamp;
 /// Current source identity.
 @override final  SourceId? sourceId;
 /// Current session state.
@@ -256,8 +258,6 @@ class _SessionSnapshot implements SessionSnapshot {
 @override@JsonKey() final  bool hasError;
 /// Error description, when available.
 @override final  String? errorMessage;
-/// Time at which this snapshot was created.
-@override final  DateTime timestamp;
 
 /// Create a copy of SessionSnapshot
 /// with the given fields replaced by the non-null parameter values.
@@ -269,18 +269,18 @@ _$SessionSnapshotCopyWith<_SessionSnapshot> get copyWith => __$SessionSnapshotCo
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionSnapshot&&(identical(other.playerId, playerId) || other.playerId == playerId)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.generationId, generationId) || other.generationId == generationId)&&(identical(other.sourceId, sourceId) || other.sourceId == sourceId)&&(identical(other.state, state) || other.state == state)&&(identical(other.position, position) || other.position == position)&&(identical(other.duration, duration) || other.duration == duration)&&(identical(other.buffering, buffering) || other.buffering == buffering)&&(identical(other.hasError, hasError) || other.hasError == hasError)&&(identical(other.errorMessage, errorMessage) || other.errorMessage == errorMessage)&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionSnapshot&&(identical(other.playerId, playerId) || other.playerId == playerId)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.generationId, generationId) || other.generationId == generationId)&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp)&&(identical(other.sourceId, sourceId) || other.sourceId == sourceId)&&(identical(other.state, state) || other.state == state)&&(identical(other.position, position) || other.position == position)&&(identical(other.duration, duration) || other.duration == duration)&&(identical(other.buffering, buffering) || other.buffering == buffering)&&(identical(other.hasError, hasError) || other.hasError == hasError)&&(identical(other.errorMessage, errorMessage) || other.errorMessage == errorMessage));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,playerId,sessionId,generationId,sourceId,state,position,duration,buffering,hasError,errorMessage,timestamp);
+    return Object.hash(runtimeType,playerId,sessionId,generationId,timestamp,sourceId,state,position,duration,buffering,hasError,errorMessage);
 }
 
 @override
 String toString() {
-    return 'SessionSnapshot(playerId: $playerId, sessionId: $sessionId, generationId: $generationId, sourceId: $sourceId, state: $state, position: $position, duration: $duration, buffering: $buffering, hasError: $hasError, errorMessage: $errorMessage, timestamp: $timestamp)';
+    return 'SessionSnapshot(playerId: $playerId, sessionId: $sessionId, generationId: $generationId, timestamp: $timestamp, sourceId: $sourceId, state: $state, position: $position, duration: $duration, buffering: $buffering, hasError: $hasError, errorMessage: $errorMessage)';
 }
 
 
@@ -291,7 +291,7 @@ abstract mixin class _$SessionSnapshotCopyWith<$Res> implements $SessionSnapshot
   factory _$SessionSnapshotCopyWith(_SessionSnapshot value, $Res Function(_SessionSnapshot) _then) = __$SessionSnapshotCopyWithImpl;
 @override @useResult
 $Res call({
- PlayerId playerId, SessionId sessionId, GenerationId generationId, SourceId? sourceId, SessionState state, Duration position, Duration? duration, bool buffering, bool hasError, String? errorMessage, DateTime timestamp
+ PlayerId playerId, SessionId sessionId, GenerationId generationId, DateTime timestamp, SourceId? sourceId, SessionState state, Duration position, Duration? duration, bool buffering, bool hasError, String? errorMessage
 });
 
 
@@ -308,20 +308,20 @@ class __$SessionSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of SessionSnapshot
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? playerId = null,Object? sessionId = null,Object? generationId = null,Object? sourceId = freezed,Object? state = null,Object? position = null,Object? duration = freezed,Object? buffering = null,Object? hasError = null,Object? errorMessage = freezed,Object? timestamp = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? playerId = null,Object? sessionId = null,Object? generationId = null,Object? timestamp = null,Object? sourceId = freezed,Object? state = null,Object? position = null,Object? duration = freezed,Object? buffering = null,Object? hasError = null,Object? errorMessage = freezed,}) {
   return _then(_SessionSnapshot(
 playerId: null == playerId ? _self.playerId : playerId // ignore: cast_nullable_to_non_nullable
 as PlayerId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
 as SessionId,generationId: null == generationId ? _self.generationId : generationId // ignore: cast_nullable_to_non_nullable
-as GenerationId,sourceId: freezed == sourceId ? _self.sourceId : sourceId // ignore: cast_nullable_to_non_nullable
+as GenerationId,timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
+as DateTime,sourceId: freezed == sourceId ? _self.sourceId : sourceId // ignore: cast_nullable_to_non_nullable
 as SourceId?,state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as SessionState,position: null == position ? _self.position : position // ignore: cast_nullable_to_non_nullable
 as Duration,duration: freezed == duration ? _self.duration : duration // ignore: cast_nullable_to_non_nullable
 as Duration?,buffering: null == buffering ? _self.buffering : buffering // ignore: cast_nullable_to_non_nullable
 as bool,hasError: null == hasError ? _self.hasError : hasError // ignore: cast_nullable_to_non_nullable
 as bool,errorMessage: freezed == errorMessage ? _self.errorMessage : errorMessage // ignore: cast_nullable_to_non_nullable
-as String?,timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
-as DateTime,
+as String?,
   ));
 }
 

@@ -79,6 +79,7 @@ final class DesktopLyricController {
   StreamSubscription<AudioPlaybackState>? _stateSub;
   StreamSubscription<LyricPosition>? _lineSub;
   StreamSubscription<DesktopLyricAction>? _actionSub;
+  StreamSubscription<AudioLoudness>? _loudnessSub;
 
   final StreamController<bool> _visibleChanges = StreamController<bool>.broadcast();
   final StreamController<bool> _lockedChanges = StreamController<bool>.broadcast();
@@ -98,7 +99,9 @@ final class DesktopLyricController {
 
   bool _visible = false;
   bool _locked = false;
+  bool _playing = false;
   bool _disposed = false;
+  int _appliedLyricRevision = 0;
 
   /// The transport in use.
   DesktopLyricTransport get transport => _transport;
@@ -184,6 +187,7 @@ final class DesktopLyricController {
 
     _visibleChanges.add(false);
 
+    unawaited(_transport.setLevels(momentary: -70, shortTerm: -70, active: false));
     await _transport.hide();
   }
 
@@ -269,6 +273,8 @@ final class DesktopLyricController {
     _lineSub = null;
     await _actionSub?.cancel();
     _actionSub = null;
+    await _loudnessSub?.cancel();
+    _loudnessSub = null;
 
     await _timeline.dispose();
     await _transport.dispose();
@@ -284,6 +290,23 @@ final class DesktopLyricController {
     _stateSub = player.stateStream.listen(_onPlayerState);
     _lineSub = _timeline.changes.listen((_) => _push());
     _actionSub = _transport.actions.listen(_onAction);
+    _loudnessSub = player.loudnessStream.listen(_onLoudness);
+  }
+
+  /// Forwards one loudness reading to the overlay's level bars. The
+  /// adapter already throttles to a meter's pace, so this passes through.
+  void _onLoudness(AudioLoudness levels) {
+    if (_disposed) {
+      return;
+    }
+
+    unawaited(
+      _transport.setLevels(
+        momentary: levels.momentary,
+        shortTerm: levels.shortTerm,
+        active: _visible && _playing,
+      ),
+    );
   }
 
   void _onPlayerState(AudioPlaybackState state) {
@@ -299,11 +322,30 @@ final class DesktopLyricController {
 
     _timeline.update(state.position);
 
+    // A play/pause flip changes the meter's active flag; the bars freeze
+    // rather than keep dancing over a paused song.
+    if (state.playing != _playing) {
+      _playing = state.playing;
+      if (!_playing) {
+        unawaited(_transport.setLevels(momentary: -70, shortTerm: -70, active: false));
+      }
+    }
+
+    // A host-supplied lyric (关联歌词) changes the words without changing the
+    // track; the revision is what says so.
+    final revisionChanged = state.lyricRevision != _appliedLyricRevision;
+
+    if (revisionChanged) {
+      _appliedLyricRevision = state.lyricRevision;
+    }
+
     // A track change reloads the lyric; the position tick itself is already
     // handled above.
     if (state.track != _lyricTrack) {
       _lyricTrack = state.track;
       unawaited(_reloadLyric());
+    } else if (revisionChanged) {
+      unawaited(_reloadLyric(force: true));
     }
 
     _push();

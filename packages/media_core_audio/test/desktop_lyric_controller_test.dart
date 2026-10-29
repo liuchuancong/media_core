@@ -27,6 +27,7 @@ final class _FakeTransport implements DesktopLyricTransport {
   bool shown = false;
   bool disposed = false;
   final List<DesktopLyricState> states = <DesktopLyricState>[];
+  final List<({double momentary, double shortTerm, bool active})> levels = <({double momentary, double shortTerm, bool active})>[];
 
   @override
   Stream<DesktopLyricAction> get actions => _actions.stream;
@@ -49,6 +50,11 @@ final class _FakeTransport implements DesktopLyricTransport {
   @override
   Future<void> update(DesktopLyricState state) async {
     states.add(state);
+  }
+
+  @override
+  Future<void> setLevels({required double momentary, required double shortTerm, required bool active}) async {
+    levels.add((momentary: momentary, shortTerm: shortTerm, active: active));
   }
 
   @override

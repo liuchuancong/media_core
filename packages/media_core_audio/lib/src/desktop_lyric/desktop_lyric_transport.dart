@@ -64,6 +64,13 @@ abstract interface class DesktopLyricTransport {
   /// Pushes a full state.
   Future<void> update(DesktopLyricState state);
 
+  /// Pushes one loudness reading for the overlay's level bars, in LUFS.
+  ///
+  /// [active] false means the meter should not paint: no probe in the
+  /// chain, or the overlay is hidden. A transport whose window cannot
+  /// draw levels simply ignores this.
+  Future<void> setLevels({required double momentary, required double shortTerm, required bool active});
+
   /// Actions coming back from the overlay's own buttons.
   Stream<DesktopLyricAction> get actions;
 
@@ -178,6 +185,25 @@ final class MethodChannelDesktopLyricTransport implements DesktopLyricTransport 
     }
   }
 
+  @override
+  Future<void> setLevels({required double momentary, required double shortTerm, required bool active}) async {
+    if (_supported != true) {
+      return;
+    }
+
+    try {
+      await _channel.invokeMethod<void>('setLevels', <String, Object?>{
+        'momentary': momentary,
+        'shortTerm': shortTerm,
+        'active': active,
+      });
+    } on PlatformException {
+      // Levels are cosmetic; a dropped reading is invisible.
+    } on MissingPluginException {
+      // An older host without the method: the bars just stay off.
+    }
+  }
+
   /// Moves/resizes the overlay window.
   Future<void> setBounds({required double x, required double y, required double width, required double height}) async {
     if (_supported != true) {
@@ -252,6 +278,9 @@ final class NoopDesktopLyricTransport implements DesktopLyricTransport {
 
   @override
   Future<void> update(DesktopLyricState state) async {}
+
+  @override
+  Future<void> setLevels({required double momentary, required double shortTerm, required bool active}) async {}
 
   @override
   Future<void> dispose() async {}

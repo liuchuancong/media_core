@@ -229,6 +229,22 @@ void DesktopLyricWindow::Hide() {
   }
 }
 
+void DesktopLyricWindow::SetLevels(double momentary, double short_term,
+                                   bool active) {
+  const HWND hwnd = hwnd_.load();
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    state_.loudness_active = active;
+    state_.loudness_momentary = momentary;
+    state_.loudness_short_term = short_term;
+  }
+
+  if (hwnd) {
+    ::PostMessage(hwnd, kMessageStateChanged, 0, 0);
+  }
+}
+
 void DesktopLyricWindow::Update(const LyricWindowState& state) {
   const HWND hwnd = hwnd_.load();
 
@@ -684,6 +700,7 @@ void DesktopLyricWindow::Paint() {
     }
 
     DrawProgress(graphics, state);
+    DrawLoudness(graphics, state);
   }
 
   POINT destination{window.left, window.top};
@@ -772,6 +789,59 @@ void DesktopLyricWindow::DrawProgress(Gdiplus::Graphics& graphics,
   graphics.FillRectangle(&track, margin, y, width - margin * 2.0f, bar_height);
   graphics.FillRectangle(&fill, margin, y,
                          (width - margin * 2.0f) * progress, bar_height);
+}
+
+/// Maps -60…0 LUFS onto 0…1 of the bar; quieter paints as empty.
+static float LoudnessFraction(double lufs) {
+  return static_cast<float>(std::clamp((lufs + 60.0) / 60.0, 0.0, 1.0));
+}
+
+void DesktopLyricWindow::DrawLoudness(Gdiplus::Graphics& graphics,
+                                      const LyricWindowState& state) {
+  if (!state.loudness_active || !state.playing) {
+    return;
+  }
+
+  RECT window{};
+  const HWND hwnd = hwnd_.load();
+
+  if (hwnd) {
+    ::GetWindowRect(hwnd, &window);
+  }
+
+  const float width = static_cast<float>(window.right - window.left);
+  const float height = static_cast<float>(window.bottom - window.top);
+
+  const float margin = 16.0f * dpi_scale_;
+  const float bar_height = 2.0f * dpi_scale_;
+  const float gap = 2.0f * dpi_scale_;
+  const float progress_height = 3.0f * dpi_scale_;
+  const float bottom = height - progress_height - 6.0f * dpi_scale_;
+
+  // Stacked above the progress bar; an overlay without room for them
+  // (a short window) simply skips the meter.
+  const float top = bottom - bar_height * 2 - gap;
+  if (top < margin) {
+    return;
+  }
+
+  const float track_width = width - margin * 2.0f;
+
+  Gdiplus::SolidBrush track(Gdiplus::Color(0x30, 255, 255, 255));
+  Gdiplus::SolidBrush momentary_fill(Gdiplus::Color(0xB4, 255, 255, 255));
+  Gdiplus::SolidBrush short_term_fill(Gdiplus::Color(0x80, 255, 255, 255));
+
+  const float momentary = LoudnessFraction(state.loudness_momentary);
+  const float short_term = LoudnessFraction(state.loudness_short_term);
+
+  graphics.FillRectangle(&track, margin, top, track_width, bar_height);
+  graphics.FillRectangle(&momentary_fill, margin, top,
+                         track_width * momentary, bar_height);
+
+  const float second_y = top + bar_height + gap;
+  graphics.FillRectangle(&track, margin, second_y, track_width, bar_height);
+  graphics.FillRectangle(&short_term_fill, margin, second_y,
+                         track_width * short_term, bar_height);
 }
 
 void DesktopLyricWindow::DrawLine(Gdiplus::Graphics& graphics,

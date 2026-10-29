@@ -93,9 +93,30 @@ final class MediaSessionItem {
     );
   }
 
+  /// The artwork only when a surface can open it.
+  ///
+  /// Windows' SMTC reads a non-http value as a file path: `file://` with no
+  /// path, a bare relative path, and a Windows drive taken for a scheme
+  /// (`C:\…` parses as scheme `c`) all answer "the specified path is not an
+  /// absolute path" on every publish — and leave the session without a
+  /// thumbnail anyway, so nothing is lost by not sending them.
+  Uri? get _openableArtUri {
+    final uri = artUri;
+    if (uri == null) return null;
+    if (uri.isScheme('file')) return uri.path.isEmpty || uri.path == '/' ? null : uri;
+    return uri.scheme.isEmpty || uri.scheme.length == 1 ? null : uri;
+  }
+
   /// Converts to the platform model.
   MediaItem toMediaItem() {
-    return MediaItem(id: id, album: album, title: title, artist: artist, duration: duration, artUri: artUri);
+    return MediaItem(
+      id: id,
+      album: album,
+      title: title,
+      artist: artist,
+      duration: duration,
+      artUri: _openableArtUri,
+    );
   }
 }
 

@@ -837,6 +837,20 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     _addEvent(PlayerAdapterEvent.volumeChanged(volume: volume));
   }
 
+  /// Reports audio analysis loudness measured by a probe filter in
+  /// the chain (EBU R128 values in LUFS).
+  ///
+  /// The adapter only emits this when the audio chain itself carries
+  /// an analysis filter, so it is not capability-gated: the filter's
+  /// presence is the capability. A backend that observes nothing
+  /// reports nothing, keeping "no meter" distinct from "silence".
+  @protected
+  void emitLoudnessChanged({required double momentary, required double shortTerm}) {
+    if (!acceptsEngineEvents) return;
+
+    _addEvent(PlayerAdapterEvent.loudnessChanged(momentary: momentary, shortTerm: shortTerm));
+  }
+
   /// Reports an engine failure through the unified error model.
   ///
   /// Reports arriving while the source gate is closed are dropped;

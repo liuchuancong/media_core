@@ -44,6 +44,12 @@ struct LyricWindowState {
   double stroke_width = 2.0;
   double opacity = 1.0;
   std::wstring alignment = L"center";
+
+  // Loudness meter (EBU R128, LUFS). Inactive means no probe in the
+  // audio chain (or the song is paused) and no bars are painted.
+  bool loudness_active = false;
+  double loudness_momentary = -70.0;
+  double loudness_short_term = -70.0;
 };
 
 /// The desktop lyric overlay window on Windows.
@@ -81,6 +87,9 @@ class DesktopLyricWindow {
   /// Replaces the drawn state and repaints.
   void Update(const LyricWindowState& state);
 
+  /// Pushes one loudness reading for the meter bars.
+  void SetLevels(double momentary, double short_term, bool active);
+
   /// Moves/resizes the window in physical pixels.
   void SetBounds(int x, int y, int width, int height);
 
@@ -117,6 +126,7 @@ class DesktopLyricWindow {
 
   void DrawControls(Gdiplus::Graphics& graphics, const LyricWindowState& state);
   void DrawProgress(Gdiplus::Graphics& graphics, const LyricWindowState& state);
+  void DrawLoudness(Gdiplus::Graphics& graphics, const LyricWindowState& state);
 
   ActionCallback on_action_;
 

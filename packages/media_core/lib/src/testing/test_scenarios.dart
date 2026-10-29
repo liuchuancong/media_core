@@ -116,6 +116,7 @@ final class TestScenarios {
       logMessage: (_) => 'logMessage',
       volumeChanged: (_) => 'volumeChanged',
       rateChanged: (_) => 'rateChanged',
+      loudnessChanged: (_) => 'loudnessChanged',
       error: (_) => 'error',
     );
   }

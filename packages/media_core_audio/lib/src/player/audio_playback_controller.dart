@@ -90,6 +90,8 @@ final class AudioPlaybackController {
 
   MusicQuality _quality;
   Duration _lyricOffset = Duration.zero;
+  final Map<String, LyricDocument> _lyricOverrides = <String, LyricDocument>{};
+  int _lyricRevision = 0;
   Timer? _sleepTimer;
   DateTime? _sleepTimerEndsAt;
   bool _pauseAfterCurrentTrack = false;
@@ -98,6 +100,15 @@ final class AudioPlaybackController {
 
   /// Playback state stream; replays nothing, so seed from [state].
   Stream<AudioPlaybackState> get stateStream => _states.stream;
+
+  /// Loudness levels from an analysis filter in the audio chain, in
+  /// LUFS (EBU R128 momentary and short-term).
+  ///
+  /// Events arrive only while the chain itself carries a probe; a
+  /// quiet stream means "no meter installed", never silence.
+  Stream<AudioLoudness> get loudnessStream => _loudness.stream;
+
+  final StreamController<AudioLoudness> _loudness = StreamController<AudioLoudness>.broadcast();
 
   /// Latest state snapshot.
   AudioPlaybackState get state => _state;
@@ -485,7 +496,8 @@ final class AudioPlaybackController {
   ///
   /// The parsed document is cached without the offset, so moving the slider
   /// and reloading never refetches; [force] still bypasses the cache for a
-  /// user-requested refresh.
+  /// user-requested refresh. A host-supplied lyric (see [setLyricOverride])
+  /// wins over both.
   Future<LyricDocument> loadCurrentLyric({bool force = false}) async {
     final track = queue.current;
 
@@ -493,9 +505,34 @@ final class AudioPlaybackController {
       return LyricDocument.empty;
     }
 
-    final document = await lyrics.load(track, force: force);
+    final override = _lyricOverrides[_keyOf(track)];
+    final document = override ?? await lyrics.load(track, force: force);
 
     return document.withOffset(_lyricOffset);
+  }
+
+  /// The lyric a host supplied for [track], when one is set.
+  LyricDocument? lyricOverrideFor(MusicTrack track) => _lyricOverrides[_keyOf(track)];
+
+  /// Replaces [track]'s lyric with [document], or removes the override when
+  /// null — the reference's 关联歌词, where the viewer points a song at a
+  /// lyric file instead of the source's guess.
+  ///
+  /// [AudioPlaybackState.lyricRevision] moves so a lyric view reloads even
+  /// though the track itself did not change.
+  void setLyricOverride(MusicTrack track, LyricDocument? document) {
+    final key = _keyOf(track);
+
+    if (document == null) {
+      if (_lyricOverrides.remove(key) == null) {
+        return;
+      }
+    } else {
+      _lyricOverrides[key] = document;
+    }
+
+    _lyricRevision++;
+    _publish(lyricRevision: _lyricRevision);
   }
 
   /// Sets the viewer's lyric delay.
@@ -661,6 +698,11 @@ final class AudioPlaybackController {
 
       case PlayerAdapterErrorEvent(:final message):
         unawaited(_onAdapterError(message));
+
+      case PlayerAdapterLoudnessChanged(:final momentary, :final shortTerm):
+        if (!_loudness.isClosed) {
+          _loudness.add(AudioLoudness(momentary: momentary, shortTerm: shortTerm));
+        }
 
       case PlayerAdapterPositionChanged():
       case PlayerAdapterDurationChanged():
@@ -840,6 +882,7 @@ final class AudioPlaybackController {
     bool clearError = false,
     bool? ended,
     Duration? lyricOffset,
+    int? lyricRevision,
     DateTime? sleepTimerEndsAt,
     bool clearSleepTimer = false,
     bool? pauseAfterCurrentTrack,
@@ -867,6 +910,7 @@ final class AudioPlaybackController {
       clearError: clearError,
       ended: ended,
       lyricOffset: lyricOffset,
+      lyricRevision: lyricRevision,
       sleepTimerEndsAt: sleepTimerEndsAt,
       clearSleepTimer: clearSleepTimer,
       pauseAfterCurrentTrack: pauseAfterCurrentTrack,
@@ -912,5 +956,6 @@ final class AudioPlaybackController {
     }
 
     await _states.close();
+    await _loudness.close();
   }
 }

@@ -89,4 +89,29 @@ void main() {
       await player.dispose();
     }
   });
+
+  test('host lyric override wins over the source and moves the revision', () async {
+    const track = MusicTrack(id: 'song', sourceId: 'test', title: 'Song');
+    final player = AudioPlaybackController(
+      PlayerKernel(),
+      registry: MusicSourceRegistry(<MusicSource>[_LyricSource()]),
+    );
+
+    try {
+      await player.setQueue(const <MusicTrack>[track], autoPlay: false);
+      expect((await player.loadCurrentLyric()).lines.first.text, 'one');
+      final revision = player.state.lyricRevision;
+
+      player.setLyricOverride(track, const LrcParser().parse('[00:01.00]override'));
+      expect(player.state.lyricRevision, greaterThan(revision));
+      expect(player.lyricOverrideFor(track), isNotNull);
+      expect((await player.loadCurrentLyric(force: true)).lines.first.text, 'override');
+
+      player.setLyricOverride(track, null);
+      expect(player.lyricOverrideFor(track), isNull);
+      expect((await player.loadCurrentLyric(force: true)).lines.first.text, 'one');
+    } finally {
+      await player.dispose();
+    }
+  });
 }

@@ -303,6 +303,14 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   int _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
 
+  /// Minimum spacing between published loudness readings. The probe's
+  /// metadata updates far faster than a meter needs to repaint.
+  static const int loudnessIntervalMs = 200;
+
+  final Stopwatch _loudnessClock = Stopwatch();
+
+  int _lastLoudnessMs = -loudnessIntervalMs;
+
   /// Whether the current platform drives the compat-mode surface.
 
   /// Whether the current platform supports the video frame progress
@@ -340,6 +348,11 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (_supportsVideoFrameProgress) {
       _observeDecodedFrames();
     }
+
+    // The loudness probe only reports when the audio chain itself
+    // carries an ebur128 filter, so observing unconditionally is
+    // harmless on chains without one.
+    _observeLoudness();
 
     // Options the caller pushed before this adapter was initialized ride
     // along to the engine's first moment.
@@ -895,6 +908,63 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _hasDecodedVideoFrame = true;
 
     emitVideoFrameProgress();
+  }
+
+  /// Starts the loudness probe observer on mpv's `af-metadata`.
+  ///
+  /// Values only appear when the audio chain carries an `ebur128`
+  /// filter (installed by the caller as part of its `af` graph), so
+  /// an empty reading is treated as "no probe", never as silence.
+  void _observeLoudness() {
+    if (_loudnessClock.isRunning) {
+      return;
+    }
+
+    _loudnessClock.start();
+
+    try {
+      final native = player.platform;
+
+      // `observeProperty` lives on the concrete NativePlayer surface,
+      // not on the shared platform type; probing dynamically matches
+      // the frame-heartbeat observer above.
+      // ignore: avoid_dynamic_calls
+      (native as dynamic).observeProperty?.call('af-metadata', _onLoudnessMetadata);
+    } on Object catch (error, stackTrace) {
+      MediaCoreLog.warning(
+        LogCategory.audio,
+        'observeProperty af-metadata failed: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onLoudnessMetadata(dynamic value) {
+    if (isDisposed) return;
+    if (!_hasOpened || !_playingNow) return;
+    if (value is! Map) return;
+
+    final momentary = _r128Value(value, 'lavfi.r128.M');
+    final shortTerm = _r128Value(value, 'lavfi.r128.S');
+    if (momentary == null || shortTerm == null) return;
+
+    final now = _loudnessClock.elapsedMilliseconds;
+    if (now - _lastLoudnessMs < loudnessIntervalMs) {
+      return;
+    }
+    _lastLoudnessMs = now;
+
+    emitLoudnessChanged(momentary: momentary, shortTerm: shortTerm);
+  }
+
+  /// Reads one ebur128 metadata value; mpv delivers it as a string,
+  /// some node decoders as a single-element list.
+  double? _r128Value(Map<dynamic, dynamic> metadata, String key) {
+    final raw = metadata[key];
+    final text = raw is List ? (raw.isEmpty ? null : raw.last.toString()) : raw?.toString();
+    if (text == null) return null;
+    return double.tryParse(text.trim());
   }
 
   void _onPlaying(bool playing) {

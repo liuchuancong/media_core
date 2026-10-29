@@ -194,6 +194,46 @@ void main() {
       expect(arguments, contains('lyrics=[00:01.00]hello'));
       expect(arguments, containsAllInOrder(<String>['-c:a', 'copy']));
     });
+
+    test('embeds the composed lyric the queue built', () {
+      const request = MusicDownloadRequest(
+        url: 'https://cdn.example.com/a.mp3',
+        outputPath: '/music/a.mp3',
+        extension: 'mp3',
+        lyric: '[00:01.00]hello',
+        embedLyric: true,
+      );
+      const composed = '[00:01.00]hello\n[00:01.00]你好';
+
+      final arguments = MusicDownloader().buildArguments(request, lyric: composed);
+      final tagArguments = MusicDownloader().buildTagArguments(
+        request,
+        inputPath: '/music/a.mp3',
+        outputPath: '/music/a.tmp.mp3',
+        lyric: composed,
+      );
+
+      expect(arguments, contains('lyrics=$composed'));
+      expect(tagArguments, contains('lyrics=$composed'));
+    });
+
+    test('reads the cached playlist instead of the remote URL', () {
+      const request = MusicDownloadRequest(
+        url: 'https://cdn.example.com/a/index.m3u8',
+        outputPath: '/music/a.mp3',
+        extension: 'mp3',
+        format: MusicDownloadFormat.mp3,
+      );
+
+      final arguments = MusicDownloader().buildArguments(
+        request,
+        inputUrl: 'file:///cache/a.parts/playlist.m3u8',
+      );
+
+      expect(arguments, containsAllInOrder(<String>['-i', 'file:///cache/a.parts/playlist.m3u8']));
+      expect(arguments, isNot(contains('https://cdn.example.com/a/index.m3u8')));
+      expect(arguments, containsAllInOrder(<String>['-allowed_extensions', 'ALL']));
+    });
   });
 
   group('MusicDownloadQueue', () {
@@ -313,6 +353,34 @@ void main() {
       }
     });
 
+    test('raising the concurrency starts queued transfers', () async {
+      final sink = _MemorySink();
+      final gate = Completer<void>();
+      final transport = _MemoryTransport(bytes, gate: gate);
+      final queue = MusicDownloadQueue(transport: transport, files: sink);
+
+      try {
+        final first = queue.enqueue(_request(outputPath: '/music/a.mp3'));
+        final second = queue.enqueue(_request(outputPath: '/music/b.mp3'));
+
+        await _until(() => transport.requests.length == 1);
+
+        expect(queue.task(second.id)?.status, MusicDownloadStatus.queued);
+
+        await queue.setMaxConcurrent(2);
+        await _until(() => transport.requests.length == 2);
+
+        expect(queue.maxConcurrent, 2);
+        expect(queue.task(first.id)?.isTerminal, isFalse);
+
+        gate.complete();
+        await _until(() => queue.tasks.every((task) => task.isTerminal));
+      } finally {
+        if (!gate.isCompleted) gate.complete();
+        await queue.dispose();
+      }
+    });
+
     test('pause keeps the partial file and resume finishes it', () async {
       final sink = _MemorySink();
       final gate = Completer<void>();
@@ -343,10 +411,10 @@ void main() {
   });
 }
 
-MusicDownloadRequest _request({bool skipExisting = false}) {
+MusicDownloadRequest _request({bool skipExisting = false, String outputPath = '/music/song.mp3'}) {
   return MusicDownloadRequest(
     url: 'https://cdn.example.com/song.mp3',
-    outputPath: '/music/song.mp3',
+    outputPath: outputPath,
     extension: 'mp3',
     title: 'Song',
     artist: 'Artist',

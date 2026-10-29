@@ -102,7 +102,7 @@ final class MusicDownloader {
   /// Argument order matters to ffmpeg — input options must precede `-i`, output
   /// options must follow it — which is why this returns a list rather than
   /// letting callers append at will.
-  List<String> buildArguments(MusicDownloadRequest request) {
+  List<String> buildArguments(MusicDownloadRequest request, {String? lyric, String? inputUrl}) {
     final headers = Map<String, String>.from(request.headers);
     final userAgent = request.userAgent ?? headers.remove('user-agent');
     final headerString = _buildHeader(headers);
@@ -115,6 +115,10 @@ final class MusicDownloader {
       '-nostdin',
       '-protocol_whitelist',
       config.protocolWhitelist,
+      // The segment cache feeds a local playlist whose entries are files and
+      // whose key may still be remote; the demuxer must accept both.
+      '-allowed_extensions',
+      'ALL',
       '-thread_queue_size',
       '${config.threadQueueSize}',
       '-rw_timeout',
@@ -125,7 +129,7 @@ final class MusicDownloader {
       if (userAgent != null && userAgent.isNotEmpty) ...<String>['-user_agent', userAgent],
       if (headerString.isNotEmpty) ...<String>['-headers', headerString],
       '-i',
-      request.url,
+      inputUrl ?? request.url,
       if (withCover) ...<String>[
         if (userAgent != null && userAgent.isNotEmpty) ...<String>['-user_agent', userAgent],
         if (headerString.isNotEmpty) ...<String>['-headers', headerString],
@@ -139,7 +143,7 @@ final class MusicDownloader {
       if (withCover) ...<String>['-map', '1:v:0'] else '-vn',
       ..._codecArguments(request),
       if (withCover) ...<String>['-c:v', 'copy', '-disposition:v', 'attached_pic'],
-      ..._metadataArguments(request),
+      ..._metadataArguments(request, lyric: lyric),
       ...request.extraArguments,
       '-y',
       request.outputPath,
@@ -153,7 +157,7 @@ final class MusicDownloader {
   /// ffmpeg pass that copies the audio stream and only changes the container
   /// metadata. Failure leaves the downloaded audio untouched — a download that
   /// plays is worth more than one whose cover art failed to attach.
-  Future<void> rewriteTags(MusicDownloadRequest request) async {
+  Future<void> rewriteTags(MusicDownloadRequest request, {String? lyric}) async {
     if (!request.embedCover && !request.embedLyric) {
       return;
     }
@@ -178,7 +182,7 @@ final class MusicDownloader {
 
     final tempPath = _temporaryPath(request.outputPath);
     var code = await _runArguments(
-      buildTagArguments(request, inputPath: request.outputPath, outputPath: tempPath),
+      buildTagArguments(request, inputPath: request.outputPath, outputPath: tempPath, lyric: lyric),
     );
 
     if (code != 0 && request.embedCover) {
@@ -186,7 +190,13 @@ final class MusicDownloader {
       // hot-link protection). Retry once without it so the lyric still lands.
       await _deleteIfExists(tempPath);
       code = await _runArguments(
-        buildTagArguments(request, inputPath: request.outputPath, outputPath: tempPath, includeCover: false),
+        buildTagArguments(
+          request,
+          inputPath: request.outputPath,
+          outputPath: tempPath,
+          includeCover: false,
+          lyric: lyric,
+        ),
       );
     }
 
@@ -210,6 +220,7 @@ final class MusicDownloader {
     required String inputPath,
     required String outputPath,
     bool includeCover = true,
+    String? lyric,
   }) {
     final headers = Map<String, String>.from(request.headers);
     final userAgent = request.userAgent ?? headers.remove('user-agent');
@@ -236,7 +247,7 @@ final class MusicDownloader {
       '-c:a',
       'copy',
       if (withCover) ...<String>['-c:v', 'copy', '-disposition:v', 'attached_pic'],
-      ..._metadataArguments(request),
+      ..._metadataArguments(request, lyric: lyric),
       if (request.extension == 'mp3') ...<String>['-id3v2_version', '3'],
       outputPath,
     ];
@@ -248,7 +259,12 @@ final class MusicDownloader {
   /// change. The returned task is the terminal one; a failure is *returned*
   /// rather than thrown, because a download that fails is a normal outcome the
   /// queue wants to retry.
-  Future<MusicDownloadTask> run(MusicDownloadTask task, {void Function(MusicDownloadTask)? onUpdate}) async {
+  Future<MusicDownloadTask> run(
+    MusicDownloadTask task, {
+    void Function(MusicDownloadTask)? onUpdate,
+    String? lyric,
+    String? inputUrl,
+  }) async {
     if (_disposed) {
       return task.copyWith(status: MusicDownloadStatus.failed, error: 'Downloader disposed');
     }
@@ -262,7 +278,7 @@ final class MusicDownloader {
     final logs = StringBuffer();
     _logs[task.id] = logs;
 
-    final session = FFmpegKit.createSessionFromArguments(buildArguments(task.request));
+    final session = FFmpegKit.createSessionFromArguments(buildArguments(task.request, lyric: lyric, inputUrl: inputUrl));
     _sessions[task.id] = session;
 
     final completer = Completer<MusicDownloadTask>();
@@ -402,15 +418,15 @@ final class MusicDownloader {
   final Set<String> _cancelled = <String>{};
 
   /// Tag arguments shared by the one-pass download and the in-place rewrite.
-  List<String> _metadataArguments(MusicDownloadRequest request) {
+  List<String> _metadataArguments(MusicDownloadRequest request, {String? lyric}) {
     final writable = _canRewriteTags(request.extension);
+    final lyrics = (lyric ?? request.lyric)?.trim() ?? '';
 
     return <String>[
       if (request.title != null) ...<String>['-metadata', 'title=${request.title}'],
       if (request.artist != null) ...<String>['-metadata', 'artist=${request.artist}'],
       if (request.album != null) ...<String>['-metadata', 'album=${request.album}'],
-      if (writable && request.embedLyric && (request.lyric ?? '').trim().isNotEmpty)
-        ...<String>['-metadata', 'lyrics=${request.lyric!.trim()}'],
+      if (writable && request.embedLyric && lyrics.isNotEmpty) ...<String>['-metadata', 'lyrics=$lyrics'],
       if (request.extension == 'mp3') ...<String>['-id3v2_version', '3'],
     ];
   }

@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:media_core/media_core.dart' show IdGenerator, LogCategory, MediaCoreLog;
+import 'package:media_core_audio/src/download/hls_playlist.dart';
 import 'package:media_core_audio/src/download/music_download_request.dart';
 import 'package:media_core_audio/src/download/music_download_task.dart';
 import 'package:media_core_audio/src/download/music_downloader.dart';
@@ -27,8 +30,11 @@ import 'package:media_core_download/media_core_download.dart';
 /// - **direct** — a finished container over HTTP is appended byte-by-byte with
 ///   the core download primitives, so pausing keeps the partial file and
 ///   resuming verifies its tail before continuing (lx-music's resume rule);
-/// - **ffmpeg** — HLS/DASH/segmented sources and transcodes cannot be resumed
-///   mid-file, so pausing cancels and resuming restarts that file.
+/// - **ffmpeg** — HLS/DASH/segmented sources and transcodes run through
+///   ffmpeg. A DASH stream or a transcode cannot be resumed mid-file, so
+///   pausing cancels it; an HLS playlist is cached segment by segment first,
+///   and a resumed task fetches only the segments it is missing before ffmpeg
+///   reads the local playlist.
 ///
 /// The queue owns task *status*, not task URLs: a host that needs a fresh URL
 /// per attempt passes a `resolve` callback, and the queue re-resolves before
@@ -47,8 +53,9 @@ final class MusicDownloadQueue {
        _transport = transport ?? HttpDownloadTransport(),
        _files = files ?? const IoDownloadFileSink();
 
-  /// Maximum simultaneous downloads.
-  final int maxConcurrent;
+  /// Maximum simultaneous downloads; [setMaxConcurrent] changes it while
+  /// tasks are queued. Transfers already running are left alone.
+  int maxConcurrent;
 
   /// Attempts per task, including the first.
   final int maxAttempts;
@@ -108,6 +115,15 @@ final class MusicDownloadQueue {
 
   /// The task with [id], or null.
   MusicDownloadTask? task(String id) => _tasks[id];
+
+  /// Changes how many transfers may run at once.
+  ///
+  /// Raising it starts queued tasks at the next free slot; lowering it lets
+  /// running transfers finish and holds the rest until one does.
+  Future<void> setMaxConcurrent(int value) {
+    maxConcurrent = value < 1 ? 1 : value;
+    return _drain();
+  }
 
   /// Enqueues [request].
   ///
@@ -245,8 +261,8 @@ final class MusicDownloadQueue {
   /// Continues a paused task.
   ///
   /// A paused direct transfer resumes from its partial file; an ffmpeg
-  /// transfer restarts that file from zero, because there is no reliable
-  /// mid-stream resume for a segmented source.
+  /// transfer restarts its own pass, and an HLS source reuses the segments its
+  /// cache already holds.
   Future<void> resume(String taskId) async {
     final task = _tasks[taskId];
 
@@ -338,6 +354,12 @@ final class MusicDownloadQueue {
     _lastProgressAt.remove(taskId);
     _lastSpeedAt.remove(taskId);
     _lastSpeedBytes.remove(taskId);
+
+    // The segment cache is scratch space for this task; removing the row makes
+    // it unreachable, whether or not the viewer also asked to delete the file.
+    if (_isHls(task.request)) {
+      await _discardHlsCache(task.request);
+    }
 
     if (deleteFile) {
       await _deleteIfExists(task.request.outputPath);
@@ -677,9 +699,31 @@ final class MusicDownloadQueue {
   }
 
   /// Runs an ffmpeg transfer (HLS, DASH, transcodes).
+  ///
+  /// An HLS playlist is first turned into a local segment cache: every segment
+  /// is fetched on its own and renamed into place only once complete, so a
+  /// retry or a resumed task skips what it already has instead of starting the
+  /// whole song again (lx-music's segment cache rule). ffmpeg then reads the
+  /// rewritten local playlist.
   Future<MusicDownloadTask> _runFfmpeg(MusicDownloadTask task, Object token) async {
+    String? inputUrl;
+    var cached = false;
+
+    if (_isHls(task.request)) {
+      final prepared = await _prepareHls(task, token);
+
+      if (prepared == null) {
+        return task.copyWith(status: MusicDownloadStatus.paused);
+      }
+
+      inputUrl = prepared.url;
+      cached = prepared.cached;
+    }
+
     final result = await _downloader.run(
       task,
+      lyric: task.request.embedLyric ? _downloadLyricText(task.request) : null,
+      inputUrl: inputUrl,
       onUpdate: (updated) {
         if (_isActive(task.id, token)) {
           _emit(updated);
@@ -692,10 +736,302 @@ final class MusicDownloadQueue {
     }
 
     if (result.isCompleted) {
+      if (cached) {
+        await _discardHlsCache(task.request);
+      }
+
       return result.copyWith(status: MusicDownloadStatus.processing);
     }
 
     return result;
+  }
+
+  /// Whether [request] points at an HLS playlist rather than a file.
+  static bool _isHls(MusicDownloadRequest request) {
+    final uri = Uri.tryParse(request.url);
+
+    if (uri == null) {
+      return false;
+    }
+
+    final path = uri.path.toLowerCase();
+
+    return path.endsWith('.m3u8') || path.endsWith('.m3u');
+  }
+
+  /// Builds the local playlist ffmpeg reads, downloading whatever segments the
+  /// cache is missing.
+  ///
+  /// Returns the URL ffmpeg should open — the rewritten local playlist, whose
+  /// `cached` flag says the segment cache backs it — or the remote URL when the
+  /// source cannot be cached (a live playlist's window moves, and a URL that
+  /// answers with something other than a playlist is left to ffmpeg). Returns
+  /// null when the task was paused or cancelled.
+  Future<({String url, bool cached})?> _prepareHls(MusicDownloadTask task, Object token) async {
+    final request = task.request;
+    final remote = Uri.parse(request.url);
+
+    var text = await _fetchPlaylistText(remote, task, token);
+
+    if (text == null) {
+      return null;
+    }
+
+    if (!text.contains('#EXTM3U')) {
+      // Not a playlist, whatever the extension said: let ffmpeg have it.
+      return (url: request.url, cached: false);
+    }
+
+    var base = remote;
+    final master = HlsMasterPlaylist.parse(text, remote);
+
+    if (master != null) {
+      base = master.choose(request.qualityId).uri;
+      final variant = await _fetchPlaylistText(base, task, token);
+
+      if (variant == null) {
+        return null;
+      }
+
+      text = variant;
+    }
+
+    final media = HlsMediaPlaylist.parse(text, base);
+
+    if (media == null || media.isLive) {
+      // A live window cannot be resumed from a cache; ffmpeg follows it.
+      return (url: request.url, cached: false);
+    }
+
+    final directory = _hlsCacheDirectory(request);
+    await Directory(directory).create(recursive: true);
+
+    String? initPath;
+
+    if (media.initUri != null) {
+      initPath = initCachePath(directory, media.initUri!);
+
+      if (!await _hasContent(initPath)) {
+        final written = await _downloadHlsFile(
+          media.initUri!,
+          initPath,
+          task,
+          token,
+          onBytes: (received) => _reportProgress(task, received, 0),
+        );
+
+        if (written == null) {
+          return null;
+        }
+      }
+    }
+
+    final cached = await completedHlsSegments(directory, media.segments);
+    var settled = 0;
+
+    for (final index in cached) {
+      settled += await _files.length(segmentCachePath(directory, index, media.segments[index].uri));
+    }
+
+    // A byte-range playlist names one resource from several `#EXT-X-BYTERANGE`
+    // segments; caching it once keeps the ranges meaningful and the transfer
+    // from fetching the same file per segment.
+    final byUri = <String, String>{};
+    final paths = <String>[];
+
+    for (var index = 0; index < media.segments.length; index++) {
+      final uri = media.segments[index].uri;
+      final key = uri.toString();
+      final known = byUri[key];
+
+      if (known != null) {
+        paths.add(known);
+        continue;
+      }
+
+      final path = segmentCachePath(directory, index, uri);
+
+      byUri[key] = path;
+      paths.add(path);
+
+      if (cached.contains(index)) {
+        continue;
+      }
+
+      final written = await _downloadHlsFile(
+        media.segments[index].uri,
+        path,
+        task,
+        token,
+        onBytes: (received) => _reportProgress(task, settled + received, 0),
+      );
+
+      if (written == null) {
+        return null;
+      }
+
+      settled += written;
+    }
+
+    final playlistPath = '$directory/playlist.m3u8';
+    final rewritten = rewriteHlsPlaylist(text, base: base, segmentPaths: paths, initPath: initPath);
+
+    await File(playlistPath).writeAsString(rewritten, flush: true);
+
+    return (url: Uri.file(playlistPath).toString(), cached: true);
+  }
+
+  /// Reads [uri] as text; null when the task was paused or cancelled.
+  Future<String?> _fetchPlaylistText(Uri uri, MusicDownloadTask task, Object token) async {
+    final request = task.request;
+    final response = await _transport.fetch(
+      DownloadRequest(
+        url: uri.toString(),
+        startByte: 0,
+        headers: request.headers,
+        userAgent: request.userAgent,
+        maxRedirects: 3,
+      ),
+    );
+    final builder = BytesBuilder(copy: false);
+
+    await for (final chunk in response.byteStream) {
+      if (!_isActive(task.id, token)) {
+        return null;
+      }
+
+      builder.add(chunk);
+    }
+
+    final bytes = builder.takeBytes();
+
+    if (bytes.isEmpty) {
+      throw StateError('The HLS playlist at $uri is empty.');
+    }
+
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  /// Downloads one segment (or the init segment) to [path].
+  ///
+  /// The bytes land in `<path>.part` first: a segment file only appears under
+  /// its final name when it is complete, so [completedHlsSegments] can trust
+  /// existence. [onBytes] reports the running size while it arrives. Returns
+  /// the byte count, or null when the task was paused or cancelled.
+  Future<int?> _downloadHlsFile(
+    Uri uri,
+    String path,
+    MusicDownloadTask task,
+    Object token, {
+    required void Function(int received) onBytes,
+  }) async {
+    final request = task.request;
+    final response = await _transport.fetch(
+      DownloadRequest(
+        url: uri.toString(),
+        startByte: 0,
+        headers: request.headers,
+        userAgent: request.userAgent,
+        maxRedirects: 3,
+      ),
+    );
+    final partial = '$path.part';
+
+    await _files.truncate(partial, 0);
+
+    var received = 0;
+
+    await for (final chunk in response.byteStream) {
+      if (!_isActive(task.id, token)) {
+        await _files.delete(partial);
+
+        return null;
+      }
+
+      if (chunk.isEmpty) {
+        continue;
+      }
+
+      await _files.append(partial, chunk);
+      received += chunk.length;
+      onBytes(received);
+    }
+
+    if (received == 0) {
+      await _files.delete(partial);
+
+      throw StateError('The HLS segment at $uri is empty.');
+    }
+
+    final target = File(path);
+
+    if (target.existsSync()) {
+      await target.delete();
+    }
+
+    await File(partial).rename(path);
+
+    return received;
+  }
+
+  /// The scratch directory holding one task's segment cache.
+  static String _hlsCacheDirectory(MusicDownloadRequest request) => '${request.outputPath}.parts';
+
+  /// Deletes a task's segment cache.
+  Future<void> _discardHlsCache(MusicDownloadRequest request) async {
+    final directory = Directory(_hlsCacheDirectory(request));
+
+    try {
+      if (directory.existsSync()) {
+        await directory.delete(recursive: true);
+      }
+    } on Object catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.error,
+        'music download cache cleanup failed: ${directory.path}',
+        error: error,
+      );
+    }
+  }
+
+  static Future<bool> _hasContent(String path) async {
+    try {
+      return await File(path).length() > 0;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// The lyric text a download writes, for both the sidecar and the embedded
+  /// tag: the source's lyric plus the translation, romanization, word timing
+  /// or `[awlrc:…]` block the request asked for — lx-music's `buildLyrics`.
+  String? _downloadLyricText(MusicDownloadRequest request) {
+    final raw = request.lyric?.trim() ?? '';
+    if (raw.isEmpty) return null;
+
+    try {
+      final document = _lyricParser.parse(
+        raw,
+        format: request.lyricFormat,
+        translation: request.lyricTranslation,
+        romanization: request.lyricRomanization,
+      );
+      final text = _lyricExporter
+          .build(
+            document,
+            options: LyricExportOptions(
+              includeTranslation: request.includeTranslation,
+              includeRomanization: request.includeRomanization,
+              includeWordTiming: request.includeWordTiming,
+              includeAwlrc: request.includeAwlrc,
+            ),
+          )
+          .trim();
+
+      return text.isEmpty ? null : text;
+    } on Object {
+      return raw;
+    }
   }
 
   /// Writes tags and the sidecar lyric after the bytes are complete.
@@ -704,29 +1040,14 @@ final class MusicDownloadQueue {
     _emit(updated);
 
     final request = updated.request;
+    final downloadLyric = _downloadLyricText(request);
     String? lyricPath;
 
-    if (request.writeLyricFile && request.lyricPath != null && (request.lyric ?? '').trim().isNotEmpty) {
+    if (request.writeLyricFile && request.lyricPath != null && downloadLyric != null) {
       try {
-        final document = _lyricParser.parse(
-          request.lyric!,
-          format: request.lyricFormat,
-          translation: request.lyricTranslation,
-          romanization: request.lyricRomanization,
-        );
-        final text = _lyricExporter.build(
-          document,
-          options: LyricExportOptions(
-            includeTranslation: request.includeTranslation,
-            includeRomanization: request.includeRomanization,
-            includeWordTiming: request.includeWordTiming,
-            includeAwlrc: request.includeAwlrc,
-          ),
-        );
-
         lyricPath = await const LyricFileWriter().write(
           request.lyricPath!,
-          text,
+          downloadLyric,
           encoding: request.lyricEncoding,
         );
       } on Object catch (error) {
@@ -743,7 +1064,7 @@ final class MusicDownloadQueue {
     // transfer needs the follow-up rewrite.
     if (request.isDirectTransfer && (request.embedCover || request.embedLyric)) {
       try {
-        await _downloader.rewriteTags(request);
+        await _downloader.rewriteTags(request, lyric: downloadLyric);
       } on Object catch (error) {
         MediaCoreLog.warning(
           LogCategory.error,

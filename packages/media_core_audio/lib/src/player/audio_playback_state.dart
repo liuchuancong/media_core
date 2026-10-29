@@ -29,6 +29,7 @@ final class AudioPlaybackState {
     this.error,
     this.ended = false,
     this.lyricOffset = Duration.zero,
+    this.lyricRevision = 0,
     this.sleepTimerEndsAt,
     this.pauseAfterCurrentTrack = false,
   });
@@ -84,6 +85,11 @@ final class AudioPlaybackState {
   /// Viewer-adjusted lyric delay; positive values delay the highlight.
   final Duration lyricOffset;
 
+  /// Bumped when the lyric shown for the current track changes without the
+  /// track changing — a host-supplied lyric, for example. A lyric view reloads
+  /// when this moves.
+  final int lyricRevision;
+
   /// When a sleep timer will pause playback, or null when none is armed.
   final DateTime? sleepTimerEndsAt;
 
@@ -133,6 +139,7 @@ final class AudioPlaybackState {
     bool clearError = false,
     bool? ended,
     Duration? lyricOffset,
+    int? lyricRevision,
     DateTime? sleepTimerEndsAt,
     bool clearSleepTimer = false,
     bool? pauseAfterCurrentTrack,
@@ -154,6 +161,7 @@ final class AudioPlaybackState {
       error: clearError ? null : (error ?? this.error),
       ended: ended ?? this.ended,
       lyricOffset: lyricOffset ?? this.lyricOffset,
+      lyricRevision: lyricRevision ?? this.lyricRevision,
       sleepTimerEndsAt: clearSleepTimer ? null : (sleepTimerEndsAt ?? this.sleepTimerEndsAt),
       pauseAfterCurrentTrack: pauseAfterCurrentTrack ?? this.pauseAfterCurrentTrack,
     );
@@ -178,6 +186,7 @@ final class AudioPlaybackState {
         other.error == error &&
         other.ended == ended &&
         other.lyricOffset == lyricOffset &&
+        other.lyricRevision == lyricRevision &&
         other.sleepTimerEndsAt == sleepTimerEndsAt &&
         other.pauseAfterCurrentTrack == pauseAfterCurrentTrack;
   }
@@ -200,6 +209,7 @@ final class AudioPlaybackState {
     error,
     ended,
     lyricOffset,
+    lyricRevision,
     sleepTimerEndsAt,
     pauseAfterCurrentTrack,
   );
@@ -209,4 +219,20 @@ final class AudioPlaybackState {
       'AudioPlaybackState(${track?.displayName ?? 'idle'}, $index/$queueLength, '
       '${mode.name}${playing ? ', playing' : ''}${loading ? ', loading' : ''}'
       '${buffering ? ', buffering' : ''}${error == null ? '' : ', error: $error'})';
+}
+
+
+/// One loudness reading from an analysis filter in the audio chain.
+///
+/// Values follow EBU R128: negative LUFS, measured over the momentary
+/// (400 ms) and short-term (3 s) windows.
+final class AudioLoudness {
+  /// Creates a reading.
+  const AudioLoudness({required this.momentary, required this.shortTerm});
+
+  /// Momentary loudness (400 ms window), in LUFS.
+  final double momentary;
+
+  /// Short-term loudness (3 s window), in LUFS.
+  final double shortTerm;
 }

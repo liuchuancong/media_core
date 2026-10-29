@@ -183,12 +183,12 @@ return disposed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  started,TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  completed,TResult Function( PresentationMode? mode,  String error,  int generation,  String? requestId,  String? source)?  failed,TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  changed,TResult Function( int generation,  String? requestId,  String? source)?  disposed,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  started,TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  completed,TResult Function( String error,  PresentationMode? mode,  int generation,  String? requestId,  String? source)?  failed,TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  changed,TResult Function( int generation,  String? requestId,  String? source)?  disposed,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PresentationStarted() when started != null:
 return started(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationCompleted() when completed != null:
 return completed(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationFailed() when failed != null:
-return failed(_that.mode,_that.error,_that.generation,_that.requestId,_that.source);case PresentationChanged() when changed != null:
+return failed(_that.error,_that.mode,_that.generation,_that.requestId,_that.source);case PresentationChanged() when changed != null:
 return changed(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationDisposed() when disposed != null:
 return disposed(_that.generation,_that.requestId,_that.source);case _:
   return orElse();
@@ -208,12 +208,12 @@ return disposed(_that.generation,_that.requestId,_that.source);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)  started,required TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)  completed,required TResult Function( PresentationMode? mode,  String error,  int generation,  String? requestId,  String? source)  failed,required TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)  changed,required TResult Function( int generation,  String? requestId,  String? source)  disposed,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)  started,required TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)  completed,required TResult Function( String error,  PresentationMode? mode,  int generation,  String? requestId,  String? source)  failed,required TResult Function( PresentationMode mode,  int generation,  String? requestId,  String? source)  changed,required TResult Function( int generation,  String? requestId,  String? source)  disposed,}) {final _that = this;
 switch (_that) {
 case PresentationStarted():
 return started(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationCompleted():
 return completed(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationFailed():
-return failed(_that.mode,_that.error,_that.generation,_that.requestId,_that.source);case PresentationChanged():
+return failed(_that.error,_that.mode,_that.generation,_that.requestId,_that.source);case PresentationChanged():
 return changed(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationDisposed():
 return disposed(_that.generation,_that.requestId,_that.source);}
 }
@@ -229,12 +229,12 @@ return disposed(_that.generation,_that.requestId,_that.source);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  started,TResult? Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  completed,TResult? Function( PresentationMode? mode,  String error,  int generation,  String? requestId,  String? source)?  failed,TResult? Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  changed,TResult? Function( int generation,  String? requestId,  String? source)?  disposed,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  started,TResult? Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  completed,TResult? Function( String error,  PresentationMode? mode,  int generation,  String? requestId,  String? source)?  failed,TResult? Function( PresentationMode mode,  int generation,  String? requestId,  String? source)?  changed,TResult? Function( int generation,  String? requestId,  String? source)?  disposed,}) {final _that = this;
 switch (_that) {
 case PresentationStarted() when started != null:
 return started(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationCompleted() when completed != null:
 return completed(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationFailed() when failed != null:
-return failed(_that.mode,_that.error,_that.generation,_that.requestId,_that.source);case PresentationChanged() when changed != null:
+return failed(_that.error,_that.mode,_that.generation,_that.requestId,_that.source);case PresentationChanged() when changed != null:
 return changed(_that.mode,_that.generation,_that.requestId,_that.source);case PresentationDisposed() when disposed != null:
 return disposed(_that.generation,_that.requestId,_that.source);case _:
   return null;
@@ -417,13 +417,13 @@ as String?,
 
 
 class PresentationFailed extends PresentationEvent {
-  const PresentationFailed({this.mode, required this.error, this.generation = 0, this.requestId, this.source}): super._();
+  const PresentationFailed({required this.error, this.mode, this.generation = 0, this.requestId, this.source}): super._();
   
 
-/// Target mode if known.
- final  PresentationMode? mode;
 /// Error message.
  final  String error;
+/// Target mode if known.
+ final  PresentationMode? mode;
 /// Request generation.
 @override@JsonKey() final  int generation;
 /// Request identifier.
@@ -441,18 +441,18 @@ $PresentationFailedCopyWith<PresentationFailed> get copyWith => _$PresentationFa
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is PresentationFailed&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.error, error) || other.error == error)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.source, source) || other.source == source));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PresentationFailed&&(identical(other.error, error) || other.error == error)&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.source, source) || other.source == source));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,mode,error,generation,requestId,source);
+    return Object.hash(runtimeType,error,mode,generation,requestId,source);
 }
 
 @override
 String toString() {
-    return 'PresentationEvent.failed(mode: $mode, error: $error, generation: $generation, requestId: $requestId, source: $source)';
+    return 'PresentationEvent.failed(error: $error, mode: $mode, generation: $generation, requestId: $requestId, source: $source)';
 }
 
 
@@ -463,7 +463,7 @@ abstract mixin class $PresentationFailedCopyWith<$Res> implements $PresentationE
   factory $PresentationFailedCopyWith(PresentationFailed value, $Res Function(PresentationFailed) _then) = _$PresentationFailedCopyWithImpl;
 @override @useResult
 $Res call({
- PresentationMode? mode, String error, int generation, String? requestId, String? source
+ String error, PresentationMode? mode, int generation, String? requestId, String? source
 });
 
 
@@ -480,11 +480,11 @@ class _$PresentationFailedCopyWithImpl<$Res>
 
 /// Create a copy of PresentationEvent
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? mode = freezed,Object? error = null,Object? generation = null,Object? requestId = freezed,Object? source = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? error = null,Object? mode = freezed,Object? generation = null,Object? requestId = freezed,Object? source = freezed,}) {
   return _then(PresentationFailed(
-mode: freezed == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
-as PresentationMode?,error: null == error ? _self.error : error // ignore: cast_nullable_to_non_nullable
-as String,generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+error: null == error ? _self.error : error // ignore: cast_nullable_to_non_nullable
+as String,mode: freezed == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
+as PresentationMode?,generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
 as int,requestId: freezed == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
 as String?,source: freezed == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
 as String?,

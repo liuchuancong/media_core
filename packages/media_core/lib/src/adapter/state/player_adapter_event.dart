@@ -179,6 +179,16 @@ abstract class PlayerAdapterEvent with _$PlayerAdapterEvent {
   /// Playback rate changed.
   const factory PlayerAdapterEvent.rateChanged({required double rate}) = PlayerAdapterRateChanged;
 
+  /// Audio analysis levels changed.
+  ///
+  /// [momentary] and [shortTerm] are EBU R128 loudness values in
+  /// LUFS, measured by an analysis filter the audio chain itself
+  /// installed. A backend without such a probe in the chain never
+  /// emits this event, so its absence is the honest "no meter here"
+  /// signal; consumers must not fake levels when it is missing.
+  const factory PlayerAdapterEvent.loudnessChanged({required double momentary, required double shortTerm}) =
+      PlayerAdapterLoudnessChanged;
+
   /// Adapter error occurred.
   const factory PlayerAdapterEvent.error({required String message, Object? error, StackTrace? stackTrace}) =
       PlayerAdapterErrorEvent;

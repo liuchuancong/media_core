@@ -67,6 +67,25 @@ void main() {
       expect(media.duration, const Duration(seconds: 5));
       expect(media.artUri, isNull);
     });
+
+    test('artwork a surface cannot open is not sent at all', () {
+      Uri? published(String? artwork) =>
+          MediaSessionItem(id: 'm', title: 'T', artUri: artwork == null ? null : Uri.parse(artwork))
+              .toMediaItem()
+              .artUri;
+
+      expect(published('https://host/art.png'), Uri.parse('https://host/art.png'));
+      expect(published(r'file:///C:/Users/x/art.png'), isNotNull);
+      expect(published('content://media/external/images/1'), isNotNull);
+
+      // Windows' SMTC takes each of these as a file path and answers
+      // "the specified path is not an absolute path" on every publish.
+      expect(published('file://'), isNull);
+      expect(published('a/cover.png'), isNull);
+      expect(published(r'C:\Users\x\cover.png'), isNull);
+      expect(published(''), isNull);
+      expect(published(null), isNull);
+    });
   });
 
   group('MediaSessionHandler', () {

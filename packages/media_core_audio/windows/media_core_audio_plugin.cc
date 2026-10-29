@@ -321,6 +321,27 @@ void MediaCoreAudioPlugin::HandleMethodCall(
     return;
   }
 
+  if (method == "setLevels") {
+    const auto* arguments =
+        std::get_if<flutter::EncodableMap>(method_call.arguments());
+
+    if (!arguments) {
+      result->Success();
+
+      return;
+    }
+
+    if (window_) {
+      window_->SetLevels(NumberAt(*arguments, "momentary", -70.0),
+                         NumberAt(*arguments, "shortTerm", -70.0),
+                         BoolAt(*arguments, "active", false));
+    }
+
+    result->Success();
+
+    return;
+  }
+
   result->NotImplemented();
 }
 
