@@ -105,7 +105,10 @@ class DesktopLyricWindow {
   static constexpr UINT kMessageHide = WM_APP + 204;
   static constexpr UINT kMessageQuit = WM_APP + 205;
 
-  LRESULT WindowProc(UINT message, WPARAM wparam, LPARAM lparam);
+  // Takes the hwnd the message arrived on: during CreateWindowEx the cached
+  // hwnd_ is still null, and DefWindowProc called with a null hwnd fails
+  // WM_NCCREATE with ERROR_INVALID_WINDOW_HANDLE, which aborts creation.
+  LRESULT WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 
   void ThreadMain();
   void Paint();

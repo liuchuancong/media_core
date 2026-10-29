@@ -172,7 +172,7 @@ LRESULT CALLBACK DesktopLyricWindow::WindowProcThunk(HWND hwnd, UINT message,
     return ::DefWindowProc(hwnd, message, wparam, lparam);
   }
 
-  return self->WindowProc(message, wparam, lparam);
+  return self->WindowProc(hwnd, message, wparam, lparam);
 }
 
 LyricWindowState DesktopLyricWindow::Snapshot() {
@@ -404,10 +404,8 @@ std::string DesktopLyricWindow::HitTestControls(int x, int y) const {
   return std::string();
 }
 
-LRESULT DesktopLyricWindow::WindowProc(UINT message, WPARAM wparam,
-                                       LPARAM lparam) {
-  const HWND hwnd = hwnd_.load();
-
+LRESULT DesktopLyricWindow::WindowProc(HWND hwnd, UINT message,
+                                       WPARAM wparam, LPARAM lparam) {
   switch (message) {
     case kMessageStateChanged:
     case kMessageBoundsChanged:
