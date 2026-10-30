@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show protected;
 import 'package:media_core/src/adapter/contract/player_adapter.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/contract/player_audio_device.dart';
 import 'package:media_core/src/adapter/select/composite_support.dart';
 import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/state/player_adapter_event.dart';
@@ -431,6 +432,31 @@ abstract base class PlayerAdapterBase implements PlayerAdapter {
     final bytes = await onCaptureFrame(request);
 
     return bytes;
+  }
+
+  /// Lists the engine's audio output devices — the snapshot behind a
+  /// settings row, not a subscription.
+  ///
+  /// An uninitialized or disposed adapter answers empty, and a backend
+  /// without a device list does the same through its hook default, so the
+  /// caller treats an empty list as "no picker here" and hides the surface.
+  @override
+  Future<List<PlayerAudioDevice>> listAudioDevices() async {
+    if (!_initialized || _disposed) {
+      return const <PlayerAudioDevice>[];
+    }
+
+    // Awaited instead of returned directly, so a synchronously throwing
+    // engine hook still reaches the caller as an error on the Future.
+    final devices = await onListAudioDevices();
+
+    return devices;
+  }
+
+  /// The engine's own audio output devices, with the current one marked.
+  @protected
+  Future<List<PlayerAudioDevice>> onListAudioDevices() async {
+    return const <PlayerAudioDevice>[];
   }
 
   @override

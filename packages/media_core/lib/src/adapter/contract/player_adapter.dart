@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/contract/player_audio_device.dart';
 import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/state/player_adapter_event.dart';
 import 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
@@ -124,6 +125,16 @@ abstract interface class PlayerAdapter {
   /// decoded frame at its real resolution, without the widget layer's fit,
   /// scaling or absence from the tree.
   Future<Uint8List?> captureFrame(ScreenshotRequest request);
+
+  /// Lists the audio output devices the engine can send sound to.
+  ///
+  /// The answer is a snapshot of the engine's own device list; an empty
+  /// list is the honest answer for a backend or platform without a device
+  /// picker, never a placeholder. Selecting a device is not a method of its
+  /// own: it travels as the `audio-device` engine option through
+  /// [applyEngineOptions], where the usual option memory keeps the choice
+  /// across engine rebuilds.
+  Future<List<PlayerAudioDevice>> listAudioDevices();
 
   /// Closes current source.
   Future<void> close();

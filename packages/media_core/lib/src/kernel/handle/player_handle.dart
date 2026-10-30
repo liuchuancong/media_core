@@ -4,6 +4,7 @@ import 'package:clock/clock.dart';
 import 'package:media_core/media_core.dart' show MediaPlayerView, PlayerKernel;
 import 'package:media_core/src/adapter/contract/player_adapter.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/contract/player_audio_device.dart';
 import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/adapter/select/player_adapter_selector.dart';
@@ -67,6 +68,7 @@ import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
 part 'player_handle_adapter.dart';
+part 'player_handle_audio_devices.dart';
 part 'player_handle_engine_options.dart';
 part 'player_handle_lifecycle.dart';
 // The implementation of [PlayerHandle] is split by concern across `part`

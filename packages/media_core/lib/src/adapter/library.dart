@@ -15,6 +15,7 @@ library;
 export 'package:media_core/src/adapter/contract/player_adapter.dart';
 export 'package:media_core/src/adapter/contract/player_adapter_base.dart';
 export 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+export 'package:media_core/src/adapter/contract/player_audio_device.dart';
 export 'package:media_core/src/adapter/contract/player_video.dart';
 // ============================================================================
 // Public exports

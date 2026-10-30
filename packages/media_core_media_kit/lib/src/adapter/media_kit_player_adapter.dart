@@ -768,6 +768,33 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     }
   }
 
+  /// mpv's own `audio-device-list`, already observed and cached by media_kit;
+  /// the engine's current `audio-device` marks the selected entry. The web
+  /// platform surface carries no list, and the empty default answers there.
+  @override
+  Future<List<PlayerAudioDevice>> onListAudioDevices() async {
+    final p = _player;
+
+    if (p == null) {
+      return const <PlayerAudioDevice>[];
+    }
+
+    try {
+      final current = p.state.audioDevice.name;
+      return <PlayerAudioDevice>[
+        for (final device in p.state.audioDevices)
+          PlayerAudioDevice(
+            name: device.name,
+            description: device.description,
+            selected: device.name == current,
+          ),
+      ];
+    } on Object catch (error) {
+      MediaCoreLog.warning(LogCategory.audio, 'listAudioDevices failed: $error', error: error);
+      return const <PlayerAudioDevice>[];
+    }
+  }
+
   /// Whether mpv renders subtitles itself.
   ///
   /// Only then can `screenshot` burn them into the image. Read from the live

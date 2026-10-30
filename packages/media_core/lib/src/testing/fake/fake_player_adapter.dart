@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:media_core/src/adapter/contract/player_adapter.dart';
 import 'package:media_core/src/adapter/contract/player_adapter_capabilities.dart';
+import 'package:media_core/src/adapter/contract/player_audio_device.dart';
 import 'package:media_core/src/adapter/select/engine_option.dart';
 import 'package:media_core/src/adapter/state/player_adapter_event.dart';
 import 'package:media_core/src/adapter/state/player_adapter_metrics.dart';
@@ -36,6 +37,9 @@ final class FakePlayerAdapter implements PlayerAdapter {
   FakePlayerAdapterBehavior behavior;
 
   final String _id;
+
+  @override
+  Future<List<PlayerAudioDevice>> listAudioDevices() async => const <PlayerAudioDevice>[];
 
   final StreamController<PlayerAdapterEvent> _eventController = StreamController<PlayerAdapterEvent>.broadcast();
 
