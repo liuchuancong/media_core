@@ -3,11 +3,12 @@ import 'dart:io' show Platform;
 
 import 'package:audio_service/audio_service.dart' as asvc;
 import 'package:audio_service_mpris/audio_service_mpris.dart' as ampris;
-import 'package:audio_service_win/audio_service_win.dart' as aswin;
 import 'package:audio_session/audio_session.dart' as asession;
 import 'package:media_core/media_core.dart';
 import 'package:media_core_mediasession/src/media_session_config.dart';
+import 'package:media_core_mediasession/src/media_session_flutter_bottom.dart';
 import 'package:media_core_mediasession/src/media_session_handler.dart';
+import 'package:media_core_mediasession/src/media_session_surfaces.dart' show mediaSessionArtUriKey;
 import 'package:meta/meta.dart' show visibleForTesting;
 
 final LogModule _log = MediaCoreLog.of(LogCategory.session);
@@ -174,7 +175,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// Platform integration:
   ///
   /// - Android/iOS: media notification + lock screen controls
-  /// - Windows: SMTC (System Media Transport Controls) via audio_service_win
+  /// - Windows: SMTC (System Media Transport Controls) via flutter_media_session
   /// - Linux: MPRIS (D-Bus) via audio_service_mpris — shows up in GNOME/KDE
   ///   media applets and media keys work
   ///
@@ -842,7 +843,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     // backend selection visible.
     try {
       if (Platform.isWindows) {
-        aswin.AudioServiceWin.registerWith();
+        MediaSessionFlutterBottom.registerWith();
       } else if (Platform.isLinux) {
         ampris.AudioServiceMpris.registerWith();
       }
@@ -1005,7 +1006,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
     final name = title ?? _titleOf(source, uri);
 
-    final metadata = source?.metadataValue('artUri');
+    final metadata = source?.metadataValue(mediaSessionArtUriKey);
 
     final artUri = metadata is String ? Uri.tryParse(metadata) : (source != null ? artUriResolver?.call(source) : null);
 

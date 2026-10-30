@@ -16,12 +16,6 @@ dependencies:
   # Linux implementation of audio_service (MPRIS / D-Bus)
   audio_service_mpris: ^1.0.0-beta.3
 
-  # Windows implementation of audio_service
-  audio_service_win: 
-    git:
-      url: https://github.com/Predidit/audio_service_win.git
-      ref: 8ad650c6eb487208b9861d44755c8e58db061c88
-
   # Audio focus / interruption / becoming-noisy events
   audio_session: ^0.2.3
 

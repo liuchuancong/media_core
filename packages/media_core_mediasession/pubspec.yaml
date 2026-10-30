@@ -23,17 +23,19 @@ dependencies:
   # Linux implementation of audio_service (MPRIS / D-Bus).
   audio_service_mpris: ^1.0.0-beta.3
 
-  # Windows implementation of audio_service (SMTC).
-  audio_service_win: 
-    git:
-      url: https://github.com/Predidit/audio_service_win.git
-      ref: 8ad650c6eb487208b9861d44755c8e58db061c88
+  # The bridge implements audio_service's platform interface directly.
+  audio_service_platform_interface: ^0.1.3
 
   # Audio focus, interruptions and becoming-noisy.
   audio_session: ^0.2.3
 
   flutter:
     sdk: flutter
+
+  # The Windows bottom rides flutter_media_session's SMTC; the deprecated
+  # third-party audio_service_win is retired.
+  flutter_media_session: ^3.0.9
+
 
   # The player whose state is published and whose transport is driven.
   media_core:

@@ -2,6 +2,10 @@ import 'package:media_core/media_core.dart' show MediaSessionActivation, MediaSe
 import 'package:media_core_mediasession/src/media_session_bootstrap.dart';
 import 'package:media_core_mediasession/src/media_session_driver.dart';
 
+/// The metadata key a source's cover travels under: the room art that the
+/// media surfaces should show, a URL string.
+const String mediaSessionArtUriKey = 'artUri';
+
 /// The media surfaces, reached by name instead of by a player handle.
 ///
 /// The kernel binds the active player and that covers the ordinary case: whoever
