@@ -10,6 +10,7 @@ final class AudioPlaybackConfig {
     this.prefetchNext = true,
     this.refreshSourceOnError = true,
     this.initialQuality = MusicQuality.auto,
+    this.backendId,
   });
 
   /// How long a source may take to start playing before the controller
@@ -34,6 +35,11 @@ final class AudioPlaybackConfig {
 
   /// Quality requested when the caller does not name one.
   final MusicQuality initialQuality;
+
+  /// The backend the music player's engine is created on; null lets the
+  /// kernel pick. The music module names an audio-only backend here so the
+  /// engine carries the audio extras (taps, effects) it was chosen for.
+  final String? backendId;
 }
 
 /// The music player: one queue, one engine handle, one state snapshot.

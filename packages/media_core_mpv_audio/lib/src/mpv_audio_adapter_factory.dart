@@ -41,4 +41,17 @@ final class MpvAudioAdapterFactory implements PlayerAdapterFactory {
 
   @override
   bool supports(String id) => id == kMpvAudioBackendId;
+
+  /// Builds a registration entry for `PlayerKernel.registerBackend` or
+  /// a [PlayerAdapterRegistry]. That path carries [capabilities] on the
+  /// registration entry itself, so capability-based selection works
+  /// before an adapter is ever instantiated.
+  PlayerAdapterRegistration registration({int priority = 80}) {
+    return PlayerAdapterRegistration(
+      id: kMpvAudioBackendId,
+      factory: this,
+      capabilities: capabilities,
+      priority: priority,
+    );
+  }
 }

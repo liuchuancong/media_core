@@ -570,7 +570,10 @@ final class AudioPlaybackController {
 
   Future<PlayerHandle?> _createHandle() async {
     try {
-      final handle = _playerConfig == null ? await _kernel.create() : await _kernel.create(config: _playerConfig);
+      final handle = await _kernel.create(
+        config: _playerConfig ?? PlayerConfig.defaults,
+        preferredBackend: config.backendId,
+      );
 
       if (_disposed) {
         await _kernel.release(handle.id);
