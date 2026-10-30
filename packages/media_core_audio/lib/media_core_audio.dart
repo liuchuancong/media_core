@@ -74,6 +74,7 @@ export 'package:media_core_audio/src/background/music_background_binding.dart';
 export 'package:media_core_audio/src/desktop_lyric/desktop_lyric_controller.dart';
 export 'package:media_core_audio/src/desktop_lyric/desktop_lyric_state.dart';
 export 'package:media_core_audio/src/desktop_lyric/desktop_lyric_transport.dart';
+export 'package:media_core_audio/src/hotkeys/global_hotkeys_transport.dart';
 export 'package:media_core_audio/src/download/music_download_queue.dart';
 export 'package:media_core_audio/src/download/music_download_request.dart';
 export 'package:media_core_audio/src/download/music_download_task.dart';

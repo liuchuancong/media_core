@@ -51,6 +51,7 @@ class MediaCoreAudioPlugin : public flutter::Plugin {
 
  private:
   static constexpr UINT kMessageDrainActions = WM_APP + 301;
+  static constexpr UINT kMessageDrainHotkeys = WM_APP + 303;
 
   LRESULT ActionWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 
@@ -64,13 +65,48 @@ class MediaCoreAudioPlugin : public flutter::Plugin {
   /// Sends queued actions to Dart; only ever runs on the platform thread.
   void DrainActions();
 
+  /// Replaces the whole global-hotkey table; only ever runs on the platform
+  /// thread, where `WM_HOTKEY` is delivered.
+  void HandleReplaceHotkeys(
+      const flutter::EncodableMap& combos,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  /// The `media_core_audio/global_hotkeys` channel's methods.
+  void HandleHotkeyMethodCall(
+      const flutter::MethodCall<flutter::EncodableValue>& method_call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  /// Releases every registered global shortcut.
+  void ClearHotkeys();
+
+  /// Queues a fired shortcut and wakes the platform thread.
+  void QueueHotkey(const std::string& combo, const std::string& action);
+
+  /// Sends queued hotkey fires to Dart; only ever runs on the platform thread.
+  void DrainHotkeys();
+
   flutter::PluginRegistrarWindows* registrar_ = nullptr;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> hotkeys_channel_;
   std::unique_ptr<DesktopLyricWindow> window_;
 
   HWND action_window_ = nullptr;
   std::mutex actions_mutex_;
   std::vector<std::string> pending_actions_;
+
+  /// One registered global shortcut: `RegisterHotKey` id plus the strings
+  /// reported back to Dart when its `WM_HOTKEY` arrives.
+  struct HotkeyEntry {
+    int id = 0;
+    std::string combo;
+    std::string action;
+  };
+
+  /// The live table; platform thread only, so no mutex.
+  std::vector<HotkeyEntry> hotkeys_;
+  int next_hotkey_id_ = 1;
+  std::mutex hotkey_events_mutex_;
+  std::vector<std::pair<std::string, std::string>> pending_hotkey_events_;
 };
 
 }  // namespace media_core_audio

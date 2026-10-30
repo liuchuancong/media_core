@@ -2,12 +2,133 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace media_core_audio {
 namespace {
 
 constexpr wchar_t kActionWindowClassName[] = L"MediaCoreAudioActionWindow";
 constexpr char kChannelName[] = "media_core_audio/desktop_lyric";
+constexpr char kHotkeysChannelName[] = "media_core_audio/global_hotkeys";
+
+/// A combination string parsed into `RegisterHotKey` arguments.
+struct ParsedCombo {
+  UINT mods = 0;
+  UINT vk = 0;
+};
+
+/// The non-modifier key's virtual-key code, in the caller's lower-case
+/// vocabulary: letters, digits, `f1`–`f24`, the arrows and the named keys a
+/// keyboard has. Unknown names fail, which surfaces as a failed registration
+/// rather than a stuck key.
+bool VirtualKeyOf(const std::string& key, UINT* out) {
+  if (key.size() == 1) {
+    const char c = key[0];
+
+    if (c >= 'a' && c <= 'z') {
+      *out = static_cast<UINT>('A') + (c - 'a');
+
+      return true;
+    }
+
+    if (c >= '0' && c <= '9') {
+      *out = static_cast<UINT>(c);
+
+      return true;
+    }
+
+    switch (c) {
+      case '-': *out = VK_OEM_MINUS; return true;
+      case '=': *out = VK_OEM_PLUS; return true;
+      case ',': *out = VK_OEM_COMMA; return true;
+      case '.': *out = VK_OEM_PERIOD; return true;
+      case '/': *out = VK_OEM_2; return true;
+      case ';': *out = VK_OEM_1; return true;
+      case '\'': *out = VK_OEM_7; return true;
+      case '[': *out = VK_OEM_4; return true;
+      case ']': *out = VK_OEM_6; return true;
+      case '\\': *out = VK_OEM_5; return true;
+      case '`': *out = VK_OEM_3; return true;
+      default: return false;
+    }
+  }
+
+  static const std::map<std::string, UINT> named = {
+    {"arrowleft", VK_LEFT}, {"arrowright", VK_RIGHT},
+    {"arrowup", VK_UP}, {"arrowdown", VK_DOWN},
+    {"space", VK_SPACE}, {"enter", VK_RETURN}, {"escape", VK_ESCAPE},
+    {"tab", VK_TAB}, {"backspace", VK_BACK}, {"delete", VK_DELETE},
+    {"insert", VK_INSERT}, {"home", VK_HOME}, {"end", VK_END},
+    {"pageup", VK_PRIOR}, {"pagedown", VK_NEXT},
+  };
+
+  if (const auto found = named.find(key); found != named.end()) {
+    *out = found->second;
+
+    return true;
+  }
+
+  if (key.size() >= 2 && key[0] == 'f') {
+    try {
+      const int number = std::stoi(key.substr(1));
+
+      if (number >= 1 && number <= 24) {
+        *out = static_cast<UINT>(VK_F1 + number - 1);
+
+        return true;
+      }
+    } catch (const std::exception&) {
+      // Falls through to the rejection below.
+    }
+  }
+
+  return false;
+}
+
+/// Parses `mod+alt+f5`-style combination strings. `mod` reads as Ctrl, the
+/// same way the caller's in-app accelerators read it.
+bool ParseCombo(const std::string& text, ParsedCombo* out) {
+  UINT mods = 0;
+  std::string key;
+  size_t start = 0;
+
+  while (start <= text.size()) {
+    const size_t plus = text.find('+', start);
+    const std::string part = text.substr(
+        start, plus == std::string::npos ? std::string::npos : plus - start);
+
+    if (part == "mod" || part == "ctrl") {
+      mods |= MOD_CONTROL;
+    } else if (part == "alt") {
+      mods |= MOD_ALT;
+    } else if (part == "shift") {
+      mods |= MOD_SHIFT;
+    } else if (!part.empty()) {
+      if (!key.empty()) {
+        return false;
+      }
+
+      key = part;
+    }
+
+    if (plus == std::string::npos) {
+      break;
+    }
+
+    start = plus + 1;
+  }
+
+  UINT vk = 0;
+
+  if (key.empty() || !VirtualKeyOf(key, &vk)) {
+    return false;
+  }
+
+  out->mods = mods;
+  out->vk = vk;
+
+  return true;
+}
 
 /// Reads a string member out of an encoded map.
 std::string StringAt(const flutter::EncodableMap& map, const char* key) {
@@ -118,6 +239,19 @@ MediaCoreAudioPlugin::MediaCoreAudioPlugin(
     HandleMethodCall(call, std::move(result));
   });
 
+  // Global shortcuts talk on their own channel and share the action window:
+  // `WM_HOTKEY` for a combination registered on it lands in the same
+  // procedure, still on the platform thread.
+  hotkeys_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          registrar->messenger(), kHotkeysChannelName,
+          &flutter::StandardMethodCodec::GetInstance());
+
+  hotkeys_channel_->SetMethodCallHandler(
+      [this](const auto& call, auto result) {
+        HandleHotkeyMethodCall(call, std::move(result));
+      });
+
   // Message-only window used to hop from the overlay thread onto the platform
   // thread; it is never shown and exists purely for its message queue.
   EnsureActionWindowClass();
@@ -131,6 +265,8 @@ MediaCoreAudioPlugin::MediaCoreAudioPlugin(
 }
 
 MediaCoreAudioPlugin::~MediaCoreAudioPlugin() {
+  ClearHotkeys();
+
   if (window_) {
     window_->Hide();
     window_.reset();
@@ -144,6 +280,11 @@ MediaCoreAudioPlugin::~MediaCoreAudioPlugin() {
   if (channel_) {
     channel_->SetMethodCallHandler(nullptr);
     channel_.reset();
+  }
+
+  if (hotkeys_channel_) {
+    hotkeys_channel_->SetMethodCallHandler(nullptr);
+    hotkeys_channel_.reset();
   }
 }
 
@@ -173,6 +314,28 @@ LRESULT MediaCoreAudioPlugin::ActionWindowProc(HWND hwnd, UINT message,
                                                WPARAM wparam, LPARAM lparam) {
   if (message == kMessageDrainActions) {
     DrainActions();
+
+    return 0;
+  }
+
+  if (message == kMessageDrainHotkeys) {
+    DrainHotkeys();
+
+    return 0;
+  }
+
+  if (message == WM_HOTKEY) {
+    // `wparam` is the id `RegisterHotKey` was given; the table is a small
+    // vector, a scan is cheaper than a map.
+    const int id = static_cast<int>(wparam);
+
+    for (const HotkeyEntry& entry : hotkeys_) {
+      if (entry.id == id) {
+        QueueHotkey(entry.combo, entry.action);
+
+        break;
+      }
+    }
 
     return 0;
   }
@@ -224,6 +387,102 @@ void MediaCoreAudioPlugin::DrainActions() {
 
     channel_->InvokeMethod("action", std::make_unique<flutter::EncodableValue>(arguments));
   }
+}
+
+void MediaCoreAudioPlugin::QueueHotkey(const std::string& combo,
+                                       const std::string& action) {
+  const HWND target = action_window_;
+
+  if (!target) {
+    return;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(hotkey_events_mutex_);
+    pending_hotkey_events_.emplace_back(combo, action);
+  }
+
+  ::PostMessage(target, kMessageDrainHotkeys, 0, 0);
+}
+
+void MediaCoreAudioPlugin::DrainHotkeys() {
+  for (;;) {
+    std::pair<std::string, std::string> fired;
+
+    {
+      std::lock_guard<std::mutex> lock(hotkey_events_mutex_);
+
+      if (pending_hotkey_events_.empty()) {
+        return;
+      }
+
+      fired = pending_hotkey_events_.front();
+      pending_hotkey_events_.erase(pending_hotkey_events_.begin());
+    }
+
+    if (!hotkeys_channel_) {
+      return;
+    }
+
+    flutter::EncodableMap arguments;
+    arguments[flutter::EncodableValue("combo")] =
+        flutter::EncodableValue(fired.first);
+    arguments[flutter::EncodableValue("action")] =
+        flutter::EncodableValue(fired.second);
+
+    hotkeys_channel_->InvokeMethod(
+        "fired", std::make_unique<flutter::EncodableValue>(arguments));
+  }
+}
+
+void MediaCoreAudioPlugin::ClearHotkeys() {
+  if (!action_window_) {
+    hotkeys_.clear();
+
+    return;
+  }
+
+  for (const HotkeyEntry& entry : hotkeys_) {
+    ::UnregisterHotKey(action_window_, entry.id);
+  }
+
+  hotkeys_.clear();
+}
+
+void MediaCoreAudioPlugin::HandleReplaceHotkeys(
+    const flutter::EncodableMap& combos,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  ClearHotkeys();
+
+  flutter::EncodableMap answer;
+  int id = 1;
+
+  for (const auto& entry : combos) {
+    const std::string* combo = std::get_if<std::string>(&entry.first);
+    const std::string* action = std::get_if<std::string>(&entry.second);
+
+    if (!combo || !action) {
+      continue;
+    }
+
+    ParsedCombo parsed;
+
+    bool registered = ParseCombo(*combo, &parsed) &&
+                      action_window_ != nullptr &&
+                      ::RegisterHotKey(action_window_, id, parsed.mods,
+                                       parsed.vk) != 0;
+
+    if (registered) {
+      hotkeys_.push_back({id, *combo, *action});
+
+      ++id;
+    }
+
+    answer[flutter::EncodableValue(*combo)] =
+        flutter::EncodableValue(registered);
+  }
+
+  result->Success(flutter::EncodableValue(answer));
 }
 
 void MediaCoreAudioPlugin::HandleMethodCall(
@@ -343,6 +602,56 @@ void MediaCoreAudioPlugin::HandleMethodCall(
                          BoolAt(*arguments, "active", false));
     }
 
+    result->Success();
+
+    return;
+  }
+
+  result->NotImplemented();
+}
+
+void MediaCoreAudioPlugin::HandleHotkeyMethodCall(
+    const flutter::MethodCall<flutter::EncodableValue>& method_call,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const std::string& method = method_call.method_name();
+
+  if (method == "isSupported") {
+    result->Success(flutter::EncodableValue(true));
+
+    return;
+  }
+
+  if (method == "replace") {
+    const auto* arguments =
+        std::get_if<flutter::EncodableMap>(method_call.arguments());
+
+    if (!arguments) {
+      result->Success(flutter::EncodableValue(flutter::EncodableMap()));
+
+      return;
+    }
+
+    const auto combos_iterator =
+        arguments->find(flutter::EncodableValue("combos"));
+
+    if (combos_iterator == arguments->end()) {
+      result->Success(flutter::EncodableValue(flutter::EncodableMap()));
+
+      return;
+    }
+
+    if (const auto* combos =
+            std::get_if<flutter::EncodableMap>(&combos_iterator->second)) {
+      HandleReplaceHotkeys(*combos, std::move(result));
+    } else {
+      result->Success(flutter::EncodableValue(flutter::EncodableMap()));
+    }
+
+    return;
+  }
+
+  if (method == "clear") {
+    ClearHotkeys();
     result->Success();
 
     return;
