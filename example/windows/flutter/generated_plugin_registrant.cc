@@ -11,6 +11,7 @@
 #include <media_core_audio/media_core_audio_plugin_c_api.h>
 #include <media_core_native/media_core_native_plugin_c_api.h>
 #include <media_kit_video/media_kit_video_plugin_c_api.h>
+#include <mpv_audio_kit/mpv_audio_kit_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   AudioServiceWinPluginCApiRegisterWithRegistrar(
@@ -23,4 +24,6 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("MediaCoreNativePluginCApi"));
   MediaKitVideoPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("MediaKitVideoPluginCApi"));
+  MpvAudioKitPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("MpvAudioKitPluginCApi"));
 }
