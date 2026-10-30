@@ -527,14 +527,21 @@ final class AudioTagReader {
     }
 
     final mimeLength = takeLength();
-    final descriptionLength = takeLength();
 
-    if (mimeLength < 0 || descriptionLength < 0 || offset + mimeLength + descriptionLength + 16 > data.length) {
+    if (mimeLength < 0 || offset + mimeLength > data.length) {
       return null;
     }
 
     final mime = _ascii(data, offset, mimeLength);
     offset += mimeLength;
+
+    // The mime string comes before the description length — the spec reads
+    // type, mime length, mime, then description length.
+    final descriptionLength = takeLength();
+
+    if (descriptionLength < 0 || offset + descriptionLength + 16 > data.length) {
+      return null;
+    }
 
     final description = utf8.decode(
       Uint8List.sublistView(data, offset, offset + descriptionLength),
