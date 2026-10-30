@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:media_core/media_core.dart' show IdGenerator, LogCategory, MediaCoreLog;
+import 'package:media_core/media_core.dart'
+    show MediaJobKind, MediaJobOutcome, MediaJobReporting, MediaJobStart;
 import 'package:media_core_audio/src/download/hls_playlist.dart';
 import 'package:media_core_audio/src/download/music_download_request.dart';
 import 'package:media_core_audio/src/download/music_download_task.dart';
@@ -1174,6 +1176,10 @@ final class MusicDownloadQueue {
     );
   }
 
+  /// The tasks whose start was already announced, so a progress emit does
+  /// not re-announce the same download.
+  final Set<String> _startsAnnounced = <String>{};
+
   void _emit(MusicDownloadTask task) {
     if (_disposed) {
       return;
@@ -1183,6 +1189,51 @@ final class MusicDownloadQueue {
 
     if (!_updates.isClosed) {
       _updates.add(task);
+    }
+
+    _reportJob(task);
+  }
+
+  /// Tells the notification layer how this download is going, if anybody
+  /// installed one — the same contract the core's download manager reports
+  /// under. A start is announced once; the verdicts are completion and
+  /// failure. A pause or a cancel is the viewer's own action and says
+  /// nothing here, and a report must never throw back into the queue.
+  void _reportJob(MusicDownloadTask task) {
+    final reporter = MediaJobReporting.reporter;
+    if (reporter == null) return;
+
+    final label = [task.request.artist, task.request.title].whereType<String>().where((part) => part.isNotEmpty).join(' - ');
+    try {
+      if (task.status.isRunning && _startsAnnounced.add(task.id)) {
+        reporter.reportStart(MediaJobStart(kind: MediaJobKind.download, label: label));
+        return;
+      }
+      if (task.status == MusicDownloadStatus.completed) {
+        reporter.report(
+          MediaJobOutcome(
+            kind: MediaJobKind.download,
+            label: label,
+            success: true,
+            bytesWritten: task.bytesReceived,
+            elapsed: task.finishedAt != null && task.startedAt != null ? task.finishedAt!.difference(task.startedAt!) : null,
+            path: task.outputPath,
+          ),
+        );
+      } else if (task.status == MusicDownloadStatus.failed) {
+        reporter.report(
+          MediaJobOutcome(
+            kind: MediaJobKind.download,
+            label: label,
+            success: false,
+            bytesWritten: task.bytesReceived,
+            elapsed: task.finishedAt != null && task.startedAt != null ? task.finishedAt!.difference(task.startedAt!) : null,
+            error: task.error,
+          ),
+        );
+      }
+    } on Object {
+      // A notification is how the viewer finds out; it is not the download.
     }
   }
 
