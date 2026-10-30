@@ -10,6 +10,7 @@ set(PLUGIN_NAME "media_core_audio_plugin")
 list(APPEND PLUGIN_SOURCES
   "media_core_audio_plugin.cc"
   "desktop_lyric_window.cc"
+  "global_hotkeys_x11.cc"
 )
 
 add_library(${PLUGIN_NAME} SHARED ${PLUGIN_SOURCES})
@@ -25,6 +26,10 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter)
 # GTK brings Pango and Cairo with it, which is what the overlay draws with.
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
+# Global shortcuts hold passive grabs on the X root window.
+find_package(X11 REQUIRED)
+target_include_directories(${PLUGIN_NAME} PRIVATE ${X11_INCLUDE_DIR})
+target_link_libraries(${PLUGIN_NAME} PRIVATE ${X11_LIBRARIES})
 
 set(${PROJECT_NAME}_bundled_libraries
   ""

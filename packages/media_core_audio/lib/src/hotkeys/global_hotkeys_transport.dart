@@ -37,7 +37,8 @@ final class GlobalHotkeyEvent {
 /// | platform | registration | notes |
 /// |---|---|---|
 /// | Windows | `RegisterHotKey` on a message-only window the plugin owns | `WM_HOTKEY` hops back through the plugin's action window |
-/// | Linux, macOS | — | not implemented yet; [isSupported] stays false, which is not an error |
+/// | Linux | X11 passive grabs on the root window | one dedicated display connection + event thread; no X display answers `isSupported: false` |
+/// | macOS | Carbon `RegisterEventHotKey` | fires hop back through the shared Carbon event handler; `mod` reads as Ctrl, matching Windows |
 abstract interface class GlobalHotkeysTransport {
   /// Whether the current platform/host can register global shortcuts.
   Future<bool> isSupported();
