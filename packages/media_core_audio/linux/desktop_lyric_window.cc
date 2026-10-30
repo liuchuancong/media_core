@@ -382,13 +382,14 @@ void DesktopLyricWindow::Paint(cairo_t* cr) {
 
   double cursor = top;
 
-  DrawText(cr, state_.text, cursor, state_.font_size, true, state_.text_color);
-  cursor += state_.font_size * 1.3;
+  DrawText(cr, state_.text, cursor, state_.font_size, state_.bold_line,
+           state_.text_color);
+  cursor += state_.font_size * 1.3 + state_.line_gap;
 
   if (state_.has_lyrics && !state_.translation.empty()) {
-    DrawText(cr, state_.translation, cursor, state_.font_size * 0.42, false,
-             0xCCFFFFFF);
-    cursor += state_.font_size * 0.55;
+    DrawText(cr, state_.translation, cursor, state_.font_size * 0.42,
+             state_.bold_extended, 0xCCFFFFFF);
+    cursor += state_.font_size * 0.55 + state_.line_gap;
   }
 
   if (state_.has_lyrics && !state_.next_line.empty() && height > 120) {

@@ -3,6 +3,7 @@ package com.mediacore.audio;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -84,6 +85,9 @@ final class DesktopLyricWindow {
   private float strokeWidth = 2f;
   private float fontScale = 1f;
   private String alignment = "center";
+  private float lineGap = 0f;
+  private boolean boldLine = true;
+  private boolean boldExtended = false;
 
   /** True while the user is dragging the window. */
   private boolean dragging;
@@ -189,6 +193,9 @@ final class DesktopLyricWindow {
       }
 
       alignment = string(style.get("alignment")) != null ? string(style.get("alignment")) : alignment;
+      lineGap = (float) number(style.get("lineGap"), lineGap);
+      boldLine = bool(style.get("boldLine"), boldLine);
+      boldExtended = bool(style.get("boldExtended"), boldExtended);
     }
 
     if (shown && root != null) {
@@ -365,12 +372,16 @@ final class DesktopLyricWindow {
     textView.setTextColor(textColor);
     textView.setShadowLayer(Math.max(1f, dp(strokeWidth)), 0, 0, strokeColor);
     textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24 * Math.max(0.5f, fontScale));
+    textView.setTypeface(null, boldLine ? Typeface.BOLD : Typeface.NORMAL);
 
     translationView.setText(translation == null ? "" : translation);
     translationView.setVisibility(translation == null || translation.isEmpty() ? View.GONE : View.VISIBLE);
+    translationView.setTypeface(null, boldExtended ? Typeface.BOLD : Typeface.NORMAL);
+    ((LinearLayout.LayoutParams) translationView.getLayoutParams()).topMargin = dp(lineGap);
 
     nextView.setText(nextLine == null ? "" : nextLine);
     nextView.setVisibility(nextLine == null || nextLine.isEmpty() ? View.GONE : View.VISIBLE);
+    ((LinearLayout.LayoutParams) nextView.getLayoutParams()).topMargin = dp(lineGap);
 
     playPauseButton.setImageResource(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
     lockChip.setText(locked ? "已锁定" : "锁定");

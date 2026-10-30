@@ -263,6 +263,9 @@ void DesktopLyricWindow::Update(const LyricWindowState& state) {
     state_.stroke_width = state.stroke_width;
     state_.opacity = state.opacity;
     state_.alignment = state.alignment;
+    state_.line_gap = state.line_gap;
+    state_.bold_line = state.bold_line;
+    state_.bold_extended = state.bold_extended;
 
     // `locked` and `visible` are owned by this class: locking has to run the
     // hint timer here, and visibility belongs to Show()/Hide().
@@ -667,19 +670,20 @@ void DesktopLyricWindow::Paint() {
     }
 
     const float text_height = base * 1.3f;
+    const float line_gap = static_cast<float>(state.line_gap) * dpi_scale_;
     DrawLine(graphics, state.text,
              Gdiplus::RectF(0.0f, top, static_cast<Gdiplus::REAL>(width),
                             text_height),
-             base, true, state.text_color, state);
+             base, state.bold_line, state.text_color, state);
 
-    float cursor = top + text_height;
+    float cursor = top + text_height + line_gap;
 
     if (state.has_lyrics && !state.translation.empty()) {
       DrawLine(graphics, state.translation,
                Gdiplus::RectF(0.0f, cursor, static_cast<Gdiplus::REAL>(width),
                               base * 0.55f),
-               base * 0.42f, false, 0xCCFFFFFF, state);
-      cursor += base * 0.55f;
+               base * 0.42f, state.bold_extended, 0xCCFFFFFF, state);
+      cursor += base * 0.55f + line_gap;
     }
 
     if (state.has_lyrics && !state.next_line.empty() && height > 120) {

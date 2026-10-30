@@ -44,6 +44,9 @@ struct LyricWindowState {
   double stroke_width = 2.0;
   double opacity = 1.0;
   std::wstring alignment = L"center";
+  double line_gap = 0.0;
+  bool bold_line = true;
+  bool bold_extended = false;
 
   // Loudness meter (EBU R128, LUFS). Inactive means no probe in the
   // audio chain (or the song is paused) and no bars are painted.

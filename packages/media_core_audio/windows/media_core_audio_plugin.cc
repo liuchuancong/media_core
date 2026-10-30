@@ -312,6 +312,9 @@ void MediaCoreAudioPlugin::HandleMethodCall(
         state.stroke_width = NumberAt(*style, "strokeWidth", state.stroke_width);
         state.opacity = NumberAt(*style, "opacity", state.opacity);
         state.alignment = WideFromUtf8(StringAt(*style, "alignment"));
+        state.line_gap = NumberAt(*style, "lineGap", state.line_gap);
+        state.bold_line = BoolAt(*style, "boldLine", state.bold_line);
+        state.bold_extended = BoolAt(*style, "boldExtended", state.bold_extended);
       }
     }
 

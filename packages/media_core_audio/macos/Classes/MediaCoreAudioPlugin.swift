@@ -109,6 +109,9 @@ public class MediaCoreAudioPlugin: NSObject, FlutterPlugin {
       state.strokeWidth = number(style["strokeWidth"]) ?? state.strokeWidth
       state.opacity = number(style["opacity"]) ?? state.opacity
       state.alignment = string(style["alignment"]) ?? state.alignment
+      state.lineGap = number(style["lineGap"]) ?? state.lineGap
+      state.boldLine = (style["boldLine"] as? Bool) ?? state.boldLine
+      state.boldExtended = (style["boldExtended"] as? Bool) ?? state.boldExtended
 
       // The Dart side sends colours as 0xAARRGGBB ints, the same encoding the
       // native windows take: no Flutter types cross the channel.

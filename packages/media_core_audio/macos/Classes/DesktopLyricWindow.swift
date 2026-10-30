@@ -20,6 +20,9 @@ struct LyricWindowState {
   var strokeWidth: CGFloat = 2
   var opacity: CGFloat = 1
   var alignment: String = "center"
+  var lineGap: CGFloat = 0
+  var boldLine: Bool = true
+  var boldExtended: Bool = false
 }
 
 /// The desktop lyric overlay on macOS.
@@ -258,22 +261,22 @@ final class LyricContentView: NSView {
       state.text.isEmpty ? "♪" : state.text,
       y: cursor,
       size: state.fontSize,
-      bold: true,
+      bold: state.boldLine,
       color: state.textColor,
       state: state
     )
-    cursor += state.fontSize * 1.3
+    cursor += state.fontSize * 1.3 + state.lineGap
 
     if state.hasLyrics && !state.translation.isEmpty {
       drawLine(
         state.translation,
         y: cursor,
         size: state.fontSize * 0.42,
-        bold: false,
+        bold: state.boldExtended,
         color: NSColor.white.withAlphaComponent(0.8),
         state: state
       )
-      cursor += state.fontSize * 0.55
+      cursor += state.fontSize * 0.55 + state.lineGap
     }
 
     if state.hasLyrics && !state.nextLine.isEmpty && height > 120 {

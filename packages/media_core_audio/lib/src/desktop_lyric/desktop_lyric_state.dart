@@ -14,6 +14,9 @@ final class DesktopLyricStyle {
     this.strokeWidth = 2,
     this.opacity = 1.0,
     this.alignment = DesktopLyricAlignment.center,
+    this.lineGap = 0,
+    this.boldLine = true,
+    this.boldExtended = false,
   });
 
   /// Font family, when the host can resolve one.
@@ -38,6 +41,15 @@ final class DesktopLyricStyle {
   /// Horizontal anchoring of the text.
   final DesktopLyricAlignment alignment;
 
+  /// Vertical gap between the stacked lines, in logical pixels.
+  final double lineGap;
+
+  /// Whether the main line draws bold.
+  final bool boldLine;
+
+  /// Whether the translation line draws bold.
+  final bool boldExtended;
+
   /// Creates a copy with selected fields replaced.
   DesktopLyricStyle copyWith({
     Object? fontFamily = _sentinel,
@@ -47,6 +59,9 @@ final class DesktopLyricStyle {
     double? strokeWidth,
     double? opacity,
     DesktopLyricAlignment? alignment,
+    double? lineGap,
+    bool? boldLine,
+    bool? boldExtended,
   }) {
     return DesktopLyricStyle(
       fontFamily: identical(fontFamily, _sentinel) ? this.fontFamily : fontFamily as String?,
@@ -56,6 +71,9 @@ final class DesktopLyricStyle {
       strokeWidth: strokeWidth ?? this.strokeWidth,
       opacity: opacity ?? this.opacity,
       alignment: alignment ?? this.alignment,
+      lineGap: lineGap ?? this.lineGap,
+      boldLine: boldLine ?? this.boldLine,
+      boldExtended: boldExtended ?? this.boldExtended,
     );
   }
 
@@ -69,6 +87,9 @@ final class DesktopLyricStyle {
       'strokeWidth': strokeWidth,
       'opacity': opacity,
       'alignment': alignment.name,
+      'lineGap': lineGap,
+      'boldLine': boldLine,
+      'boldExtended': boldExtended,
     };
   }
 

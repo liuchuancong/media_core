@@ -28,6 +28,9 @@ struct LyricWindowState {
   double stroke_width = 2.0;
   double opacity = 1.0;
   std::string alignment = "center";
+  double line_gap = 0.0;
+  bool bold_line = true;
+  bool bold_extended = false;
 };
 
 /// The desktop lyric overlay on Linux (X11/Wayland) through GTK.
