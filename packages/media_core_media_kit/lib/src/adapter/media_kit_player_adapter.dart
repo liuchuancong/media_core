@@ -927,9 +927,14 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
       // `observeProperty` lives on the concrete NativePlayer surface,
       // not on the shared platform type; probing dynamically matches
-      // the frame-heartbeat observer above.
+      // the frame-heartbeat observer above. Its listener is
+      // `Future<void> Function(String)`: mpv formats the observed
+      // property before handing it over, so af-metadata arrives as a
+      // `+key=value` string rather than a map.
       // ignore: avoid_dynamic_calls
-      (native as dynamic).observeProperty?.call('af-metadata', _onLoudnessMetadata);
+      (native as dynamic).observeProperty?.call('af-metadata', (dynamic value) async {
+        _onLoudnessMetadata(value?.toString() ?? '');
+      });
     } on Object catch (error, stackTrace) {
       MediaCoreLog.warning(
         LogCategory.audio,
@@ -940,10 +945,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     }
   }
 
-  void _onLoudnessMetadata(dynamic value) {
+  void _onLoudnessMetadata(String value) {
     if (isDisposed) return;
     if (!_hasOpened || !_playingNow) return;
-    if (value is! Map) return;
+    if (value.isEmpty) return;
 
     final momentary = _r128Value(value, 'lavfi.r128.M');
     final shortTerm = _r128Value(value, 'lavfi.r128.S');
@@ -958,13 +963,13 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     emitLoudnessChanged(momentary: momentary, shortTerm: shortTerm);
   }
 
-  /// Reads one ebur128 metadata value; mpv delivers it as a string,
-  /// some node decoders as a single-element list.
-  double? _r128Value(Map<dynamic, dynamic> metadata, String key) {
-    final raw = metadata[key];
-    final text = raw is List ? (raw.isEmpty ? null : raw.last.toString()) : raw?.toString();
-    if (text == null) return null;
-    return double.tryParse(text.trim());
+  /// Reads one ebur128 value out of mpv's map string form,
+  /// `+lavfi.r128.M=-23.1+lavfi.r128.S=-23.4`. The sign can belong to
+  /// the value itself, so entries cannot just be split on `+`.
+  double? _r128Value(String metadata, String key) {
+    final match = RegExp('${RegExp.escape(key)}=([-+]?[0-9]*\\.?[0-9]+)').firstMatch(metadata);
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!);
   }
 
   void _onPlaying(bool playing) {
