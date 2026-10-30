@@ -75,7 +75,7 @@ void main() {
               .artUri;
 
       expect(published('https://host/art.png'), Uri.parse('https://host/art.png'));
-      expect(published(r'file:///C:/Users/x/art.png'), isNotNull);
+      expect(published('file:///C:/Users/x/art.png'), isNotNull);
       expect(published('content://media/external/images/1'), isNotNull);
 
       // Windows' SMTC takes each of these as a file path and answers

@@ -37,8 +37,6 @@ dependencies:
   # The framework itself.
   media_core:
     path: ../packages/media_core
-  media_core_mpv_audio:
-    path: ../packages/media_core_mpv_audio
 
   # Feature modules, one import per demo page below.
   media_core_audio:
@@ -53,7 +51,6 @@ dependencies:
     path: ../packages/media_core_list_playback
   media_core_live:
     path: ../packages/media_core_live
-
   # Logging: the framework logs through this package, and the example turns
   # it on so the demo pages can show what the framework decides.
   media_core_logging:
@@ -72,6 +69,9 @@ dependencies:
   # Memory accounting: the memory demo page and the cache demo both read it.
   media_core_memory:
     path: ../packages/media_core_memory
+
+  media_core_mpv_audio:
+    path: ../packages/media_core_mpv_audio
 
   media_core_multiview:
     path: ../packages/media_core_multiview

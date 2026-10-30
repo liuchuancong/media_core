@@ -159,7 +159,7 @@ final class MediaKitAudioTapProbe {
     } on Object catch (error, stackTrace) {
       MediaCoreLog.warning(
         LogCategory.audio,
-        'audio tap observe \$metadataProperty failed: \$error',
+        'audio tap observe $metadataProperty failed: $error',
         error: error,
         stackTrace: stackTrace,
       );
