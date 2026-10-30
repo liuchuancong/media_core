@@ -1,7 +1,7 @@
 /// The PCM-tap feasibility probe (spectrum plan stages B1 + B2).
 ///
 /// B1 mounts `astats` into mpv's `af` chain and reads the per-frame levels
-/// back through the `af-metadata` property — the same observed-property
+/// back through the `af-metadata/tap` property — the same observed-property
 /// route the EBU R128 loudness probe already uses in production. B2
 /// measures the channel itself: the metadata callback rate in Hz and the
 /// wall-clock cost of parsing one frame's string, so the plan's ≥30 Hz /
@@ -82,7 +82,11 @@ final class MediaKitAudioTapProbe {
   MediaKitAudioTapProbe(this._player);
 
   /// The filter entry the probe appends to `af`.
-  static const String filterEntry = 'lavfi=[astats=metadata=1:reset=1]';
+  static const String filterEntry = '@tap:lavfi=[astats=metadata=1:reset=1]';
+
+  /// The property the tap reads. mpv only publishes filter metadata under
+  /// `af-metadata/<label>`, so the mount carries the [filterEntry]'s label.
+  static const String metadataProperty = 'af-metadata/tap';
 
   final mk.Player _player;
 
@@ -148,14 +152,14 @@ final class MediaKitAudioTapProbe {
     try {
       // NativePlayer-only API, reached the way the loudness probe reaches it.
       // ignore: avoid_dynamic_calls
-      (_player.platform as dynamic).observeProperty?.call('af-metadata', (dynamic value) async {
+      (_player.platform as dynamic).observeProperty?.call(metadataProperty, (dynamic value) async {
         _onMetadata(value?.toString() ?? '');
       });
       return true;
     } on Object catch (error, stackTrace) {
       MediaCoreLog.warning(
         LogCategory.audio,
-        'audio tap observe af-metadata failed: $error',
+        'audio tap observe \$metadataProperty failed: \$error',
         error: error,
         stackTrace: stackTrace,
       );
@@ -167,7 +171,7 @@ final class MediaKitAudioTapProbe {
     try {
       // NativePlayer-only API, matched to the observer above.
       // ignore: avoid_dynamic_calls
-      (_player.platform as dynamic).unobserveProperty?.call('af-metadata');
+      (_player.platform as dynamic).unobserveProperty?.call(metadataProperty);
     } on Object {
       // The player is going away; nothing left to unobserve.
     }

@@ -891,7 +891,6 @@ float DesktopLyricWindow::DrawVerticalLine(Gdiplus::Graphics& graphics,
   Gdiplus::FontFamily& effective = family.IsAvailable() ? family : fallback;
 
   const float pitch = size * 1.3f;
-  const float advance = size * 1.06f;
   const float bottom = top + area_height;
 
   Gdiplus::SolidBrush brush(ToColor(color));
