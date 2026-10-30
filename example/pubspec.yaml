@@ -37,6 +37,8 @@ dependencies:
   # The framework itself.
   media_core:
     path: ../packages/media_core
+  media_core_mpv_audio:
+    path: ../packages/media_core_mpv_audio
 
   # Feature modules, one import per demo page below.
   media_core_audio:

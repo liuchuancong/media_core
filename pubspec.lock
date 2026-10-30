@@ -362,6 +362,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.2"
+  fftea:
+    dependency: transitive
+    description:
+      name: fftea
+      sha256: fede501db039de9737d527a28b1f5ede8f68342f2c4e53459dfa372bd271ed6c
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.0+1"
   file:
     dependency: transitive
     description:
@@ -777,6 +785,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
+  mpv_audio_kit:
+    dependency: transitive
+    description:
+      name: mpv_audio_kit
+      sha256: "28a3a1497a43de36e9f9f1bad5638fe0b072cd24e65eaa6e04fe55a42e1c102a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.3"
   mustache_template:
     dependency: transitive
     description:
