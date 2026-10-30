@@ -31,6 +31,7 @@ struct LyricWindowState {
   double line_gap = 0.0;
   bool bold_line = true;
   bool bold_extended = false;
+  bool vertical = false;
 };
 
 /// The desktop lyric overlay on Linux (X11/Wayland) through GTK.
@@ -88,6 +89,12 @@ class DesktopLyricWindow {
   void Paint(cairo_t* cr);
   void DrawText(cairo_t* cr, const std::string& text, double y, double size,
                 bool bold, std::uint32_t color);
+
+  /// Draws one slot as vertical-rl columns — CJK upright, horizontal scripts
+  /// rotated a quarter turn — from [right] leftwards. Returns width consumed.
+  double DrawVerticalText(cairo_t* cr, const std::string& text, double right,
+                          double top, double area_height, double size,
+                          bool bold, std::uint32_t color);
   void DrawControls(cairo_t* cr);
   void DrawProgress(cairo_t* cr);
   void LayoutControls();

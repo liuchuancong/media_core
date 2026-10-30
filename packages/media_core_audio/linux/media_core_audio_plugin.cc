@@ -101,6 +101,7 @@ media_core_audio::LyricWindowState ParseState(FlValue* arguments) {
       state.line_gap = NumberAt(style, "lineGap", state.line_gap);
       state.bold_line = BoolAt(style, "boldLine", state.bold_line);
       state.bold_extended = BoolAt(style, "boldExtended", state.bold_extended);
+      state.vertical = BoolAt(style, "vertical", state.vertical);
     }
   }
 

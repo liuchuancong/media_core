@@ -380,21 +380,48 @@ void DesktopLyricWindow::Paint(cairo_t* cr) {
     DrawControls(cr);
   }
 
-  double cursor = top;
+  if (state_.vertical) {
+    // Vertical-rl: the slots sit side by side, the current line owning the
+    // right edge, each slot's columns flowing leftwards.
+    const double column_area =
+        std::max(40.0, static_cast<double>(height) - top - 40.0);
+    const double inset = 16.0;
+    double right = static_cast<double>(width) - inset;
 
-  DrawText(cr, state_.text, cursor, state_.font_size, state_.bold_line,
-           state_.text_color);
-  cursor += state_.font_size * 1.3 + state_.line_gap;
+    const double main_taken = DrawVerticalText(
+        cr, state_.text, right, top, column_area, state_.font_size,
+        state_.bold_line, state_.text_color);
+    right -= main_taken + state_.line_gap;
 
-  if (state_.has_lyrics && !state_.translation.empty()) {
-    DrawText(cr, state_.translation, cursor, state_.font_size * 0.42,
-             state_.bold_extended, 0xCCFFFFFF);
-    cursor += state_.font_size * 0.55 + state_.line_gap;
-  }
+    if (state_.has_lyrics && !state_.translation.empty()) {
+      const double taken =
+          DrawVerticalText(cr, state_.translation, right, top, column_area,
+                           state_.font_size * 0.42, state_.bold_extended,
+                           0xCCFFFFFF);
+      right -= taken + state_.line_gap;
+    }
 
-  if (state_.has_lyrics && !state_.next_line.empty() && height > 120) {
-    DrawText(cr, state_.next_line, cursor, state_.font_size * 0.34, false,
-             0x88FFFFFF);
+    if (state_.has_lyrics && !state_.next_line.empty() && width > 120) {
+      DrawVerticalText(cr, state_.next_line, right, top, column_area,
+                       state_.font_size * 0.34, false, 0x88FFFFFF);
+    }
+  } else {
+    double cursor = top;
+
+    DrawText(cr, state_.text, cursor, state_.font_size, state_.bold_line,
+             state_.text_color);
+    cursor += state_.font_size * 1.3 + state_.line_gap;
+
+    if (state_.has_lyrics && !state_.translation.empty()) {
+      DrawText(cr, state_.translation, cursor, state_.font_size * 0.42,
+               state_.bold_extended, 0xCCFFFFFF);
+      cursor += state_.font_size * 0.55 + state_.line_gap;
+    }
+
+    if (state_.has_lyrics && !state_.next_line.empty() && height > 120) {
+      DrawText(cr, state_.next_line, cursor, state_.font_size * 0.34, false,
+               0x88FFFFFF);
+    }
   }
 
   if (lock_hint_active_) {
@@ -402,6 +429,138 @@ void DesktopLyricWindow::Paint(cairo_t* cr) {
   }
 
   DrawProgress(cr);
+}
+
+double DesktopLyricWindow::DrawVerticalText(cairo_t* cr,
+                                            const std::string& text,
+                                            double right, double top,
+                                            double area_height, double size,
+                                            bool bold, std::uint32_t color) {
+  if (text.empty() || size <= 0.0 || area_height <= size) {
+    return 0.0;
+  }
+
+  const double pitch = size * 1.3;
+  const double bottom = top + area_height;
+  double column = right - pitch;
+  double y = top;
+  double start_column = column;
+
+  PangoFontDescription* description = pango_font_description_new();
+  pango_font_description_set_family(description, state_.font_family.c_str());
+  pango_font_description_set_absolute_size(description, size * PANGO_SCALE);
+  pango_font_description_set_weight(description,
+                                    bold ? PANGO_WEIGHT_BOLD
+                                         : PANGO_WEIGHT_NORMAL);
+
+  cairo_set_line_width(cr, std::max(1.0, state_.stroke_width));
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  std::uint32_t cp = 0;
+  std::uint8_t continuation = 0;
+  for (const char byte : text) {
+    const std::uint8_t b = static_cast<std::uint8_t>(byte);
+    if (continuation > 0) {
+      cp = (cp << 6) | (b & 0x3F);
+      --continuation;
+      if (continuation > 0) {
+        continue;
+      }
+    } else if (b >= 0xF0) {
+      cp = b & 0x07;
+      continuation = 3;
+      continue;
+    } else if (b >= 0xE0) {
+      cp = b & 0x0F;
+      continuation = 2;
+      continue;
+    } else if (b >= 0xC0) {
+      cp = b & 0x1F;
+      continuation = 1;
+      continue;
+    } else {
+      cp = b;
+    }
+
+    const bool upright = (cp >= 0x2E80 && cp <= 0x9FFF) ||
+                         (cp >= 0xAC00 && cp <= 0xD7AF) ||
+                         (cp >= 0xF900 && cp <= 0xFAFF) ||
+                         (cp >= 0xFF00 && cp <= 0xFF60) ||
+                         (cp >= 0x3000 && cp <= 0x303F);
+
+    char utf8[5];
+    gint utf8_len;
+    if (cp < 0x80) {
+      utf8[0] = static_cast<char>(cp);
+      utf8_len = 1;
+    } else if (cp < 0x800) {
+      utf8[0] = static_cast<char>(0xC0 | (cp >> 6));
+      utf8[1] = static_cast<char>(0x80 | (cp & 0x3F));
+      utf8_len = 2;
+    } else if (cp < 0x10000) {
+      utf8[0] = static_cast<char>(0xE0 | (cp >> 12));
+      utf8[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      utf8[2] = static_cast<char>(0x80 | (cp & 0x3F));
+      utf8_len = 3;
+    } else {
+      utf8[0] = static_cast<char>(0xF0 | (cp >> 18));
+      utf8[1] = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+      utf8[2] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      utf8[3] = static_cast<char>(0x80 | (cp & 0x3F));
+      utf8_len = 4;
+    }
+
+    PangoLayout* layout = pango_cairo_create_layout(cr);
+    pango_layout_set_text(layout, utf8, utf8_len);
+    pango_layout_set_font_description(layout, description);
+    PangoRectangle ink;
+    PangoRectangle logical;
+    pango_layout_get_pixel_extents(layout, &ink, &logical);
+
+    const double step = upright
+                            ? std::max(static_cast<double>(logical.height),
+                                       size * 0.6)
+                            : std::max(static_cast<double>(logical.width),
+                                       size * 0.3);
+    if (y + step > bottom) {
+      column -= pitch;
+      y = top;
+      if (column < -pitch) {
+        g_object_unref(layout);
+        break;  // the slot spent the whole window width; clipping is honest
+      }
+    }
+
+    if (upright) {
+      cairo_move_to(cr, column + (pitch - logical.width) * 0.5 - ink.x, y - ink.y);
+      pango_cairo_layout_path(cr, layout);
+      SetSourceColor(cr, state_.stroke_color);
+      cairo_stroke_preserve(cr);
+      SetSourceColor(cr, color);
+      cairo_fill(cr);
+    } else {
+      // Horizontal scripts rotate a quarter turn, reading downwards the way
+      // vertical-rl sets Latin text.
+      cairo_save(cr);
+      cairo_translate(cr, column + pitch * 0.5, y + step * 0.5);
+      cairo_rotate(cr, kPi * 0.5);
+      cairo_move_to(cr, -logical.width * 0.5 - ink.x, -logical.height * 0.5 - ink.y);
+      pango_cairo_layout_path(cr, layout);
+      SetSourceColor(cr, state_.stroke_color);
+      cairo_stroke_preserve(cr);
+      SetSourceColor(cr, color);
+      cairo_fill(cr);
+      cairo_restore(cr);
+    }
+
+    g_object_unref(layout);
+    y += step;
+  }
+
+  pango_font_description_free(description);
+
+  const double consumed = start_column - column + pitch;
+  return consumed > 0.0 ? std::min(consumed, right) : 0.0;
 }
 
 void DesktopLyricWindow::DrawText(cairo_t* cr, const std::string& text,

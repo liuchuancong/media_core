@@ -573,6 +573,7 @@ void MediaCoreAudioPlugin::HandleMethodCall(
         state.alignment = WideFromUtf8(StringAt(*style, "alignment"));
         state.line_gap = NumberAt(*style, "lineGap", state.line_gap);
         state.bold_line = BoolAt(*style, "boldLine", state.bold_line);
+        state.vertical = BoolAt(*style, "vertical", state.vertical);
         state.bold_extended = BoolAt(*style, "boldExtended", state.bold_extended);
       }
     }

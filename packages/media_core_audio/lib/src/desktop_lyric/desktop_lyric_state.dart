@@ -17,6 +17,7 @@ final class DesktopLyricStyle {
     this.lineGap = 0,
     this.boldLine = true,
     this.boldExtended = false,
+    this.vertical = false,
   });
 
   /// Font family, when the host can resolve one.
@@ -50,6 +51,11 @@ final class DesktopLyricStyle {
   /// Whether the translation line draws bold.
   final bool boldExtended;
 
+  /// Whether the lyric reads top-to-bottom in right-to-left columns — the
+  /// reference's `writing-mode: vertical-rl`: CJK glyphs stay upright,
+  /// horizontal-script glyphs rotate, lines stack as columns.
+  final bool vertical;
+
   /// Creates a copy with selected fields replaced.
   DesktopLyricStyle copyWith({
     Object? fontFamily = _sentinel,
@@ -62,6 +68,7 @@ final class DesktopLyricStyle {
     double? lineGap,
     bool? boldLine,
     bool? boldExtended,
+    bool? vertical,
   }) {
     return DesktopLyricStyle(
       fontFamily: identical(fontFamily, _sentinel) ? this.fontFamily : fontFamily as String?,
@@ -74,6 +81,7 @@ final class DesktopLyricStyle {
       lineGap: lineGap ?? this.lineGap,
       boldLine: boldLine ?? this.boldLine,
       boldExtended: boldExtended ?? this.boldExtended,
+      vertical: vertical ?? this.vertical,
     );
   }
 
@@ -90,6 +98,7 @@ final class DesktopLyricStyle {
       'lineGap': lineGap,
       'boldLine': boldLine,
       'boldExtended': boldExtended,
+      'vertical': vertical,
     };
   }
 

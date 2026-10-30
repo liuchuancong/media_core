@@ -671,26 +671,55 @@ void DesktopLyricWindow::Paint() {
 
     const float text_height = base * 1.3f;
     const float line_gap = static_cast<float>(state.line_gap) * dpi_scale_;
-    DrawLine(graphics, state.text,
-             Gdiplus::RectF(0.0f, top, static_cast<Gdiplus::REAL>(width),
-                            text_height),
-             base, state.bold_line, state.text_color, state);
 
-    float cursor = top + text_height + line_gap;
+    if (state.vertical) {
+      // Vertical-rl: the slots sit side by side, the current line owning the
+      // right edge, each slot's columns flowing leftwards. The progress strip
+      // keeps the bottom, the control strip keeps the top.
+      const float column_area = std::max(
+          40.0f * dpi_scale_,
+          static_cast<float>(height) - top - 40.0f * dpi_scale_);
+      const float inset = 16.0f * dpi_scale_;
+      float right = static_cast<float>(width) - inset;
 
-    if (state.has_lyrics && !state.translation.empty()) {
-      DrawLine(graphics, state.translation,
-               Gdiplus::RectF(0.0f, cursor, static_cast<Gdiplus::REAL>(width),
-                              base * 0.55f),
-               base * 0.42f, state.bold_extended, 0xCCFFFFFF, state);
-      cursor += base * 0.55f + line_gap;
-    }
+      const float main_taken = DrawVerticalLine(
+          graphics, state.text, right, top, column_area, base,
+          state.bold_line, state.text_color, state);
+      right -= main_taken + line_gap;
 
-    if (state.has_lyrics && !state.next_line.empty() && height > 120) {
-      DrawLine(graphics, state.next_line,
-               Gdiplus::RectF(0.0f, cursor, static_cast<Gdiplus::REAL>(width),
-                              base * 0.45f),
-               base * 0.34f, false, 0x88FFFFFF, state);
+      if (state.has_lyrics && !state.translation.empty()) {
+        const float taken = DrawVerticalLine(
+            graphics, state.translation, right, top, column_area,
+            base * 0.42f, state.bold_extended, 0xCCFFFFFF, state);
+        right -= taken + line_gap;
+      }
+
+      if (state.has_lyrics && !state.next_line.empty() && width > 120) {
+        DrawVerticalLine(graphics, state.next_line, right, top, column_area,
+                         base * 0.34f, false, 0x88FFFFFF, state);
+      }
+    } else {
+      DrawLine(graphics, state.text,
+               Gdiplus::RectF(0.0f, top, static_cast<Gdiplus::REAL>(width),
+                              text_height),
+               base, state.bold_line, state.text_color, state);
+
+      float cursor = top + text_height + line_gap;
+
+      if (state.has_lyrics && !state.translation.empty()) {
+        DrawLine(graphics, state.translation,
+                 Gdiplus::RectF(0.0f, cursor, static_cast<Gdiplus::REAL>(width),
+                                base * 0.55f),
+                 base * 0.42f, state.bold_extended, 0xCCFFFFFF, state);
+        cursor += base * 0.55f + line_gap;
+      }
+
+      if (state.has_lyrics && !state.next_line.empty() && height > 120) {
+        DrawLine(graphics, state.next_line,
+                 Gdiplus::RectF(0.0f, cursor, static_cast<Gdiplus::REAL>(width),
+                                base * 0.45f),
+                 base * 0.34f, false, 0x88FFFFFF, state);
+      }
     }
 
     if (lock_hint_active_) {
@@ -844,6 +873,98 @@ void DesktopLyricWindow::DrawLoudness(Gdiplus::Graphics& graphics,
   graphics.FillRectangle(&track, margin, second_y, track_width, bar_height);
   graphics.FillRectangle(&short_term_fill, margin, second_y,
                          track_width * short_term, bar_height);
+}
+
+float DesktopLyricWindow::DrawVerticalLine(Gdiplus::Graphics& graphics,
+                                           const std::wstring& text,
+                                           float right, float top,
+                                           float area_height, float size,
+                                           bool bold, std::uint32_t color,
+                                           const LyricWindowState& state) {
+  if (text.empty() || size <= 0.0f || area_height <= size) {
+    return 0.0f;
+  }
+
+  const INT style = bold ? Gdiplus::FontStyleBold : Gdiplus::FontStyleRegular;
+  Gdiplus::FontFamily family(state.font_family.c_str());
+  Gdiplus::FontFamily fallback(L"Segoe UI");
+  Gdiplus::FontFamily& effective = family.IsAvailable() ? family : fallback;
+
+  const float pitch = size * 1.3f;
+  const float advance = size * 1.06f;
+  const float bottom = top + area_height;
+
+  Gdiplus::SolidBrush brush(ToColor(color));
+  Gdiplus::Pen pen(ToColor(state.stroke_color),
+                   static_cast<Gdiplus::REAL>(
+                       std::max(1.0, state.stroke_width) * dpi_scale_));
+  pen.SetLineJoin(Gdiplus::LineJoinRound);
+
+  Gdiplus::StringFormat format;
+  format.SetAlignment(Gdiplus::StringAlignmentCenter);
+  format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+  format.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap |
+                        Gdiplus::StringFormatFlagsNoClip);
+
+  float column = right - pitch;  // the column's left edge
+  float y = top;
+
+  for (const wchar_t ch : text) {
+    const bool upright =
+        (ch >= 0x2E80 && ch <= 0x9FFF) || (ch >= 0xAC00 && ch <= 0xD7AF) ||
+        (ch >= 0xF900 && ch <= 0xFAFF) || (ch >= 0xFF00 && ch <= 0xFF60) ||
+        (ch >= 0x3000 && ch <= 0x303F);
+
+    // A one-glyph path measured for its ink box decides the glyph's slot.
+    const std::wstring glyph(1, ch);
+    Gdiplus::GraphicsPath measure;
+    measure.AddString(glyph.c_str(), -1, &effective, style,
+                      static_cast<Gdiplus::REAL>(size),
+                      Gdiplus::RectF(-size, -size, size * 2.0f, size * 2.0f),
+                      &format);
+    Gdiplus::RectF ink;
+    measure.GetBounds(&ink);
+
+    const float step = upright ? std::max(ink.Height, size * 0.6f)
+                               : std::max(ink.Width, size * 0.3f);
+    if (y + step > bottom) {
+      column -= pitch;
+      y = top;
+      if (column < -pitch) {
+        break;  // the slot spent the whole window width; clipping is honest
+      }
+    }
+
+    Gdiplus::GraphicsPath path;
+    if (upright) {
+      path.AddString(glyph.c_str(), -1, &effective, style,
+                     static_cast<Gdiplus::REAL>(size),
+                     Gdiplus::RectF(column, y, pitch, step), &format);
+    } else {
+      // Horizontal scripts rotate a quarter turn clockwise, so the line reads
+      // downwards the way vertical-rl sets Latin text.
+      Gdiplus::Matrix saved;
+      graphics.GetTransform(&saved);
+      graphics.TranslateTransform(column + pitch * 0.5f, y + step * 0.5f);
+      graphics.RotateTransform(90.0f);
+      path.AddString(glyph.c_str(), -1, &effective, style,
+                     static_cast<Gdiplus::REAL>(size),
+                     Gdiplus::RectF(-step * 0.5f, -pitch * 0.5f, step, pitch),
+                     &format);
+      graphics.FillPath(&brush, &path);
+      graphics.DrawPath(&pen, &path);
+      graphics.SetTransform(&saved);
+      y += step;
+      continue;
+    }
+
+    graphics.FillPath(&brush, &path);
+    graphics.DrawPath(&pen, &path);
+    y += step;
+  }
+
+  const float consumed = right - column;
+  return consumed > 0.0f ? consumed : 0.0f;
 }
 
 void DesktopLyricWindow::DrawLine(Gdiplus::Graphics& graphics,

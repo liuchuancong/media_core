@@ -47,6 +47,7 @@ struct LyricWindowState {
   double line_gap = 0.0;
   bool bold_line = true;
   bool bold_extended = false;
+  bool vertical = false;
 
   // Loudness meter (EBU R128, LUFS). Inactive means no probe in the
   // audio chain (or the song is paused) and no bars are painted.
@@ -129,6 +130,14 @@ class DesktopLyricWindow {
   void DrawLine(Gdiplus::Graphics& graphics, const std::wstring& text,
                 const Gdiplus::RectF& bounds, float size, bool bold,
                 std::uint32_t color, const LyricWindowState& state);
+
+  /// Draws one slot's text as vertical-rl columns — CJK upright, horizontal
+  /// scripts rotated a quarter turn — filling downwards from [top] with
+  /// columns flowing right-to-left from [right]. Returns the width consumed.
+  float DrawVerticalLine(Gdiplus::Graphics& graphics, const std::wstring& text,
+                         float right, float top, float area_height, float size,
+                         bool bold, std::uint32_t color,
+                         const LyricWindowState& state);
 
   void DrawControls(Gdiplus::Graphics& graphics, const LyricWindowState& state);
   void DrawProgress(Gdiplus::Graphics& graphics, const LyricWindowState& state);
