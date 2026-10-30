@@ -17,6 +17,7 @@ import 'package:example/demos/console/source_demo.dart';
 import 'package:example/demos/console/task_demo.dart';
 import 'package:example/demos/module_demo.dart';
 import 'package:example/demos/runnable_demo.dart';
+import 'package:example/pages/audio_tap_demo_page.dart';
 import 'package:example/pages/feed_demo_page.dart';
 import 'package:example/pages/live_demo_page.dart';
 import 'package:example/pages/media_session_demo_page.dart';
@@ -43,6 +44,15 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
     purposeEn:
         'kernel → register backend → create → open → play; with seek, volume, rate, mute, loop and operation records.',
     builder: (_) => const PlayerDemoPage(),
+  ),
+  RunnableDemo(
+    id: 'audio-tap',
+    nameZh: '音频分析探针（频谱 B1/B2）',
+    nameEn: 'Audio analysis tap (spectrum B1/B2)',
+    purposeZh: '裸 media_kit 播放器上挂 astats 进 af，经 af-metadata 读回每帧电平；实时给出回调率与解析耗时，对照频谱方案 ≥30 Hz / <2 ms 预算给出通过与否。',
+    purposeEn:
+        'On a bare media_kit player, astats is appended to af and per-frame levels come back through af-metadata; the live callback rate and parse cost are checked against the spectrum plan budgets (>=30 Hz, <2 ms).',
+    builder: (_) => const AudioTapDemoPage(),
   ),
   RunnableDemo(
     id: 'ui-styles',

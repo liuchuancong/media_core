@@ -20,6 +20,7 @@ import 'package:media_core_media_kit/src/adapter/media_kit_player_adapter.dart' 
 
 export 'package:media_core_media_kit/src/adapter/media_kit_adapter_factory.dart';
 export 'package:media_core_media_kit/src/adapter/media_kit_player_adapter.dart';
+export 'package:media_core_media_kit/src/audio_analysis/media_kit_audio_tap_probe.dart';
 export 'package:media_core_media_kit/src/utils/mpv_platform_profile.dart' show MpvPlatformProfile;
 export 'package:media_core_media_kit/src/utils/player_consts.dart' show PlayerConsts;
 export 'package:media_core_media_kit/src/video/media_kit_video_view.dart';
