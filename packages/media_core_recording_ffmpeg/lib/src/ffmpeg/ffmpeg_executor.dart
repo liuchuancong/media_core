@@ -168,11 +168,32 @@ final class FfmpegKitExecutor implements FfmpegExecutor {
       logCallback: onLog == null ? null : (log) => onLog(log.message),
     );
 
-    return _FfmpegKitExecution(
-      session: session..execute(),
+    final execution = _FfmpegKitExecution(
+      session: session,
       completion: completion.future,
       cancelSession: _cancelSession,
     );
+
+    // The session goes through the plugin's **asynchronous** path: `execute()`
+    // is the synchronous one — it does not return until FFmpeg exits, and on
+    // the Flutter UI isolate that freezes every window, timer and frame for
+    // the whole length of a recording. The async path hands the process to the
+    // plugin's queue, returns at once, and still reports the end through the
+    // completion callback above. A submission the plugin refuses never gets an
+    // exit code of its own, so it completes as a failed process rather than
+    // leaving the backend waiting on work that never started.
+    unawaited(
+      session.executeAsync().then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          if (!completion.isCompleted) {
+            completion.completeError(error, stackTrace);
+          }
+        },
+      ),
+    );
+
+    return execution;
   }
 
   @override
@@ -180,6 +201,12 @@ final class FfmpegKitExecutor implements FfmpegExecutor {
     _disposed = true;
   }
 }
+
+/// The exit code reported for a process that never ran or could not answer.
+///
+/// FFmpeg's own codes fit a byte; 255 is the one it reports for a killed
+/// process, and a submission failure is the same kind of news to the caller.
+const int _kUnknownExitCode = 255;
 
 final class _FfmpegKitExecution implements FfmpegExecution {
   _FfmpegKitExecution({
@@ -191,11 +218,23 @@ final class _FfmpegKitExecution implements FfmpegExecution {
     // The exit code is only meaningful once the native call reports back, and
     // the same completion is what says the process is no longer running — the
     // plugin exposes no reliable running flag, so the process lifetime is
-    // tracked here instead.
-    _exitCode = completion.then((_) {
-      _running = false;
-      return _session.getReturnCode();
-    });
+    // tracked here instead. A session that never started, or that cannot answer
+    // for its code, reads as a failed process: that is what the backend already
+    // makes of a non-zero code when nobody asked to stop.
+    _exitCode = completion.then<int>(
+      (_) {
+        _running = false;
+        try {
+          return _session.getReturnCode();
+        } on Object {
+          return _kUnknownExitCode;
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        _running = false;
+        return _kUnknownExitCode;
+      },
+    );
   }
 
   final FFmpegSession _session;
