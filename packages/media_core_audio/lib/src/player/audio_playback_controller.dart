@@ -467,6 +467,18 @@ final class AudioPlaybackController {
     }
   }
 
+  /// Moves a queue entry, keeping playback coherent: the track on air stays
+  /// the track on air, at its new place, and a shuffled queue re-rolls its
+  /// order around it. The queue itself owns the cursor maths; nothing is
+  /// re-resolved, so a running song keeps playing.
+  Future<void> moveInQueue(int from, int to) async {
+    if (from == to || from < 0 || from >= queue.length) {
+      return;
+    }
+    queue.move(from, to);
+    _publish(queueLength: queue.length, index: queue.index);
+  }
+
   /// Empties the queue and stops playback.
   Future<void> clearQueue() async {
     queue.clear();
