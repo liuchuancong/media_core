@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/media_http_handler.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/media_resource_registry.dart';
+import 'package:media_core_cast_dlna/src/infrastructure/media/http/remote_proxy_handler.dart';
+import 'package:media_core_cast_dlna/src/infrastructure/media/http/remote_proxy_registry.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/network/ip_address_selector.dart';
 import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
 
@@ -54,6 +56,8 @@ final class MediaHttpServer {
 
   final Future<InternetAddress?> Function() _addressSelector;
   final MediaResourceRegistry _registry;
+  final RemoteProxyRegistry _remoteRegistry = RemoteProxyRegistry();
+  late final RemoteProxyHandler _remoteHandler = RemoteProxyHandler(_remoteRegistry);
 
   HttpServer? _server;
   Timer? _sweepTimer;
@@ -73,8 +77,8 @@ final class MediaHttpServer {
   /// The LAN address generated URLs point at, once running.
   InternetAddress? get address => _address;
 
-  /// How many resources are currently registered.
-  int get resourceCount => _registry.length;
+  /// How many resources are currently registered (files + remote).
+  int get resourceCount => _registry.length + _remoteRegistry.length;
 
   InternetAddress? _address;
 
@@ -90,7 +94,8 @@ final class MediaHttpServer {
       _server = server;
       _handler = MediaHttpHandler(_registry);
       server.listen(
-        (request) => _handler!.handle(request),
+        (request) =>
+            request.uri.pathSegments.firstOrNull == 'r' ? _remoteHandler.handle(request) : _handler!.handle(request),
         onError: (Object _) {
           // Per-connection errors surface here; the listening socket
           // must survive one broken client.
@@ -133,6 +138,40 @@ final class MediaHttpServer {
     return Uri.parse('http://${address.address}:${server.port}/${registration.token}/${registration.id}');
   }
 
+  /// Registers a remote URL for proxy streaming and returns the URL a
+  /// renderer fetches. [upstreamHeaders] are attached to every upstream
+  /// fetch (Referer/Cookie/UA — the reason the TV cannot fetch the URL
+  /// itself); [isPlaylist] marks an HLS manifest whose child references
+  /// are rewritten into proxy URLs.
+  Future<Uri> registerRemote(
+    Uri upstream, {
+    Map<String, String> upstreamHeaders = const <String, String>{},
+    String? mimeType,
+    Duration? ttl,
+    bool isPlaylist = false,
+  }) async {
+    if (!isRunning) {
+      throw const MediaServerException('media server is not running');
+    }
+    final address = _address;
+    final server = _server;
+    if (address == null || server == null) {
+      throw const MediaServerException('no LAN address is known; the media URL would be unreachable');
+    }
+    final registration = _remoteRegistry.register(
+      upstream,
+      upstreamHeaders: upstreamHeaders,
+      mimeType: mimeType,
+      ttl: ttl,
+      isPlaylist: isPlaylist,
+    );
+    _ensureSweep();
+    return Uri.parse('http://${address.address}:${server.port}/r/${registration.token}');
+  }
+
+  /// Unregisters a remote resource by the URL [registerRemote] returned.
+  void unregisterRemote(Uri url) => _remoteRegistry.unregisterUrl(url);
+
   /// Unregisters a resource by the URL [registerFile] returned.
   void unregister(Uri url) => _registry.unregisterUrl(url);
 
@@ -148,6 +187,7 @@ final class MediaHttpServer {
     _sweepTimer?.cancel();
     _sweepTimer = null;
     _registry.clear();
+    _remoteRegistry.clear();
     await _server?.close(force: true);
     _server = null;
     _address = null;
@@ -162,7 +202,8 @@ final class MediaHttpServer {
     }
     _sweepTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _registry.sweepExpired();
-      if (!_registry.anyExpiring) {
+      _remoteRegistry.sweepExpired();
+      if (!_registry.anyExpiring && !_remoteRegistry.anyExpiring) {
         _sweepTimer?.cancel();
         _sweepTimer = null;
       }

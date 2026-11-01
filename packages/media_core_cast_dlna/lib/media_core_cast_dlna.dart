@@ -71,6 +71,8 @@ export 'src/infrastructure/media/http/media_http_handler.dart';
 export 'src/infrastructure/media/http/media_http_range.dart';
 export 'src/infrastructure/media/http/media_http_server.dart';
 export 'src/infrastructure/media/http/media_resource_registry.dart';
+export 'src/infrastructure/media/http/remote_proxy_handler.dart';
+export 'src/infrastructure/media/http/remote_proxy_registry.dart';
 export 'src/infrastructure/network/ip_address_selector.dart';
 export 'src/logging/dlna_log.dart';
 export 'src/utils/duration_parser.dart';

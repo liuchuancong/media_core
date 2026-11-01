@@ -223,7 +223,7 @@ class DlnaCastBackend implements MediaCastBackend {
   Future<String> _playableUri(CastDevice device, CastMedia media) async {
     final capability = await _capabilityOf(device);
     final source = Uri.parse(media.url);
-    final served = await _maybeServe(device, source);
+    final served = await _maybeServe(device, source, media.headers);
     final uri = served ?? source;
     final mimeType = media.mimeType ?? MimeType.forPath(media.url);
 
@@ -268,13 +268,16 @@ class DlnaCastBackend implements MediaCastBackend {
     return capability;
   }
 
-  /// Registers a local file with the media server, returning its LAN
-  /// URL; remote URLs pass through untouched.
-  Future<Uri?> _maybeServe(CastDevice device, Uri source) async {
+  /// Registers media with the media server, returning the LAN URL the
+  /// TV fetches:
+  ///
+  /// - a local file is served from disk;
+  /// - a remote URL that carries request headers (Referer/Cookie/UA —
+  ///   the token-gated kind a TV cannot fetch) is proxied, with HLS
+  ///   playlists rewritten so segment fetches keep the headers;
+  /// - a plain remote URL passes through untouched.
+  Future<Uri?> _maybeServe(CastDevice device, Uri source, Map<String, String> upstreamHeaders) async {
     final file = _localFileOf(source.toString());
-    if (file == null) {
-      return null;
-    }
     final server = _mediaServer;
     if (!server.isRunning) {
       await server.start();
@@ -285,7 +288,17 @@ class DlnaCastBackend implements MediaCastBackend {
     if (previous != null) {
       server.unregister(previous);
     }
-    final url = await server.registerFile(file);
+
+    if (file != null) {
+      final url = await server.registerFile(file);
+      _served[device.id] = url;
+      return url;
+    }
+    if (upstreamHeaders.isEmpty) {
+      return null;
+    }
+    final isPlaylist = source.path.toLowerCase().endsWith('.m3u8');
+    final url = await server.registerRemote(source, upstreamHeaders: upstreamHeaders, isPlaylist: isPlaylist);
     _served[device.id] = url;
     return url;
   }

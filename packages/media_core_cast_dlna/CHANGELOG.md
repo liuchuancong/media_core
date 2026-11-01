@@ -1,3 +1,12 @@
+## 0.9.0
+
+URL proxy for header-gated remote lines (TECHNICAL_DESIGN.md §16.5/§31.2) — the piece that makes token-signed live lines castable.
+
+- `MediaHttpServer.registerRemote`: proxies a remote URL behind a token route (`/r/{token}`), attaching the registered upstream headers (Referer/Cookie/UA) to every upstream fetch. Byte ranges are forwarded verbatim and the upstream's status, `Content-Range` and content type are relayed; HEAD is honored; failures surface as honest 404/502.
+- HLS playlists are rewritten in flight: segment, variant and `EXT-X-KEY`/`EXT-X-MAP` URIs resolve against the upstream base and are re-issued as proxy child URLs (`/r/{token}/{childId}`, deterministic FNV-1a ids so live manifest refreshes stay stable). Children loop back through the proxy with the same headers; the origin address never reaches the TV.
+- `DlnaCastBackend.setMedia` now proxies remote URLs that carry `CastMedia.headers` automatically — the same cast dialog in pure_live starts working for signed lines with no app-side change.
+- TTL sweeps cover remote registrations; `unregisterRemote` drops a route on demand.
+
 ## 0.8.0
 
 Structured logging across the protocol core (TECHNICAL_DESIGN.md §25) plus the §25.3 diagnostics snapshot.
