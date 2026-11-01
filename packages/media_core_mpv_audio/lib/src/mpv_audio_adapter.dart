@@ -6,6 +6,11 @@ import 'package:mpv_audio_kit/mpv_audio_kit.dart' as mak;
 
 final LogModule _log = MediaCoreLog.of(LogCategory.player);
 
+/// Characters a header line cannot carry: a colon would end the name, and a
+/// CR, LF or NUL would split or inject a request line.
+final RegExp _kForbiddenHeaderName = RegExp(r'[\r\n,:\x00]');
+final RegExp _kForbiddenHeaderValue = RegExp(r'[\r\n\x00]');
+
 /// [PlayerAdapter] implementation backed by mpv_audio_kit — the patched
 /// libmpv audio engine.
 ///
@@ -108,13 +113,65 @@ final class MpvAudioPlayerAdapter extends PlayerAdapterBase {
     if (player == null) {
       throw StateError('mpv_audio adapter has no engine to open with');
     }
-    final headers = source.headers;
-    await player.open(
-      mak.Media(
-        source.uri.toString(),
-        httpHeaders: headers == null || headers.isEmpty ? null : Map<String, String>.of(headers.values),
-      ),
-    );
+    await _applyNetworkHeaders(player, source.headers);
+    await player.open(mak.Media(source.uri.toString()));
+  }
+
+  /// Writes the source's headers into mpv's network options, ahead of the
+  /// load.
+  ///
+  /// `Media.httpHeaders` cannot carry a comma: the engine comma-joins the
+  /// entries and rejects the character in any value, while a browser user
+  /// agent always carries one (`KHTML, like Gecko`). With that UA in the map,
+  /// every music open failed with `Invalid argument (header value)` before
+  /// even reaching mpv. mpv's list parser does accept `\,`, and `user-agent` /
+  /// `referrer` (mpv writes the `Referer` line from it) are plain string
+  /// options, so the exact values go through the raw option surface instead.
+  /// A header the request line cannot express at all (CR, LF, NUL) is dropped
+  /// with a warning rather than failing an otherwise playable load.
+  ///
+  /// Only the next open reads these options, and this engine plays one file
+  /// at a time, so the entry being loaded is always the one written here.
+  Future<void> _applyNetworkHeaders(mak.Player player, SourceHeaders? headers) async {
+    String? userAgent;
+    String? referrer;
+    final fields = <String>[];
+
+    for (final entry in headers?.values.entries ?? const <MapEntry<String, String>>[]) {
+      final name = entry.key.trim();
+
+      switch (name.toLowerCase()) {
+        case 'user-agent':
+          userAgent = entry.value;
+        case 'referer' || 'referrer':
+          referrer = entry.value;
+        default:
+          if (name.isEmpty || _kForbiddenHeaderName.hasMatch(name) || _kForbiddenHeaderValue.hasMatch(entry.value)) {
+            _log.warning('dropped http header mpv cannot carry', fields: <String, Object?>{'header': name});
+          } else {
+            // `\,` keeps a comma inside the value while separating fields.
+            fields.add('${name.replaceAll(',', r'\,')}: ${entry.value.replaceAll(',', r'\,')}');
+          }
+      }
+    }
+
+    try {
+      // Empty values clear the previous track's options: a source without a
+      // UA must not send the last song's identity.
+      await player.setRawProperty('options/user-agent', userAgent ?? '');
+      await player.setRawProperty('options/referrer', referrer ?? '');
+      if (fields.isEmpty) {
+        // Writing an empty list would leave one blank header line on the
+        // request; the list's own clear operation is the honest reset.
+        await player.sendRawCommand(const <String>['change-list', 'http-header-fields', 'clr', '']);
+      } else {
+        await player.setRawProperty('options/http-header-fields', fields.join(','));
+      }
+    } on Object catch (error) {
+      // Headers are best-effort: a rejected option must not take the whole
+      // track down when the stream itself is fine without it.
+      _log.warning('mpv rejected the http headers', error: error);
+    }
   }
 
   @override
