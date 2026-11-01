@@ -43,6 +43,14 @@
 | 文档 | ✅ README/CHANGELOG/TECHNICAL_DESIGN 交付状态对齐 |
 | API 审查 | ✅ 导出 1:1，无泄漏 |
 
+## pure_live 接入点（player-lab）
+
+`F:/pure_live/player-lab` 已完成接入验证：`DlnaCastBackend` + media_core 的
+`CastController` 组成设备面板（发现/选择/投送/传输态），`flutter analyze` 零问题、
+Windows debug 构建通过。pure_live 正式接入时照抄该面板即可；注意 player-lab 的
+`dependency_overrides: wakelock_plus ^1.7.0`（解决 media_kit_video 的 dbus ^0.7 与
+bonsoir_linux 的 dbus ^0.8 冲突——与 media_core 工作区根部的 override 同源）。
+
 ## 待真机矩阵（Phase 10 剩余）
 
 Android TV / 智能电视 / Windows / macOS / Linux 各一台：长时间播放、断网恢复、厂商怪癖收集（注册进 `DeviceCompatibilityRegistry`）、正式 Release。

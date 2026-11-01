@@ -158,6 +158,12 @@ await dlna.dispose();
 
 发现流量只落在标准组播组 `239.255.255.250:1900`；mDNS 流量由 Bonsoir 按标准端口处理。本包不上传设备信息、不持久化任何设备身份：`DlnaDevice` 只活在内存里，`dispose()` 即清空。响应体一律限量读取（`maxCastResponseBodyBytes`，1 MiB），描述位置只接受 `http`/`https`——URL 来自局域网里任何一台应答者的报文，不能当成可信输入。
 
+## pure_live 接入
+
+参考 `F:/pure_live/player-lab` 的 `lib/main.dart`：`DlnaCastBackend` 交给 media_core 的
+`CastController` 即得到可监听的设备列表与传输状态；本地文件投送走 `prepareMedia` 重写。
+注意与 media_kit 共存时的 `wakelock_plus` override（dbus 版本冲突，player-lab 已示范）。
+
 ## 相关文档
 
 - 技术规范与实施阶段：[TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md)
