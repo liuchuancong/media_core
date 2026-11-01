@@ -3,7 +3,7 @@ name: media_core_cast_dlna
 description: DLNA/UPnP casting backend for media_core - SSDP discovery, device description parsing, SOAP AVTransport/RenderingControl commands and DIDL-Lite payloads behind the protocol-neutral MediaCastBackend interface.
 
 
-version: 0.1.0
+version: 0.8.0
 publish_to: none
 repository: https://github.com/liuchuancong/media_core
 issue_tracker: https://github.com/liuchuancong/media_core/issues
@@ -15,6 +15,10 @@ environment:
   flutter: ">=3.35.0"
 
 dependencies:
+  # Auxiliary mDNS/DNS-SD discovery channel. SSDP stays the primary
+  # DLNA discovery mechanism; see TECHNICAL_DESIGN.md sections 9 and 24.7.
+  bonsoir: ^7.1.6
+
   flutter:
     sdk: flutter
 
@@ -22,6 +26,9 @@ dependencies:
   # CastDevice, CastMedia, CastPosition, CastEvent, CastException.
   media_core:
     path: ../media_core
+
+  # @immutable on the value objects.
+  meta: ^1.19.0
 
   # Device description and SOAP response documents.
   xml: ^6.6.1
