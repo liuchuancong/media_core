@@ -6,18 +6,18 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <audio_service_win/audio_service_win_plugin_c_api.h>
 #include <ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter_plugin.h>
+#include <flutter_media_session/flutter_media_session_plugin_c_api.h>
 #include <media_core_audio/media_core_audio_plugin_c_api.h>
 #include <media_core_native/media_core_native_plugin_c_api.h>
 #include <media_kit_video/media_kit_video_plugin_c_api.h>
 #include <mpv_audio_kit/mpv_audio_kit_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  AudioServiceWinPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("AudioServiceWinPluginCApi"));
   FfmpegKitExtendedFlutterPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FfmpegKitExtendedFlutterPlugin"));
+  FlutterMediaSessionPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FlutterMediaSessionPluginCApi"));
   MediaCoreAudioPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("MediaCoreAudioPluginCApi"));
   MediaCoreNativePluginCApiRegisterWithRegistrar(
