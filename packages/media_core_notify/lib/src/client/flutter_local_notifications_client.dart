@@ -6,6 +6,8 @@
 /// a different client.
 library;
 
+import 'dart:ffi' as ffi;
+
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:media_core/media_core.dart' show LogCategory, LogModule, MediaCoreLog;
@@ -17,16 +19,90 @@ import 'package:media_core_notify/src/jobs/foreground_jobs.dart';
 
 final LogModule _log = MediaCoreLog.of(LogCategory.general);
 
+/// Arms a COM apartment on the calling thread before the plugin's Windows
+/// FFI surface is touched.
+///
+/// The plugin's Windows implementation is plain FFI, so every call — the DLL
+/// load, `CoRegisterClassObject` of the toast activation callback and the
+/// `ToastNotificationManager` activation — runs on whatever thread the caller
+/// used. From a Flutter root isolate that is the isolate thread, and the
+/// engine only ever gives *its* platform thread an apartment. Combase on
+/// current Windows fail-fasts outright on the apartment-less registration
+/// (the process dies with abort() during boot), and older hosts die through
+/// `winrt::check_hresult` throwing a C++ exception across the FFI boundary.
+/// `COINIT_MULTITHREADED` needs no message pump, S_FALSE and
+/// RPC_E_CHANGED_MODE both mean an apartment already exists, and the init is
+/// deliberately never balanced by `CoUninitialize`: the apartment lives for
+/// the process, like the engine's own.
+void _ensureWindowsComApartment() {
+  try {
+    final ole32 = ffi.DynamicLibrary.open('ole32.dll');
+    final coInitializeEx = ole32.lookupFunction<
+      ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Uint32),
+      int Function(ffi.Pointer<ffi.Void>, int)
+    >('CoInitializeEx');
+    coInitializeEx(ffi.Pointer.fromAddress(0), 0x0);
+  } on Object catch (error) {
+    // Only reachable off-Windows or in a sandbox without ole32; configure()
+    // reports the platform's refusal downstream either way.
+    _log.warning('windows COM apartment pre-init failed', error: error);
+  }
+}
+
+/// The data-binding name a Windows running line carries its title in.
+///
+/// The line's text is written as `{name}` in the toast XML and supplied as data,
+/// rather than baked into the markup, because that is the only way a toast can be
+/// told again with new words: see [FlutterLocalNotificationsClient.showRunningLine].
+@visibleForTesting
+const String kWindowsLineTitleBinding = 'mc_line_title';
+
+/// The data-binding name a Windows running line carries its body in.
+@visibleForTesting
+const String kWindowsLineBodyBinding = 'mc_line_body';
+
+/// The two things a Windows running line needs from the toast mechanism.
+///
+/// Split out because the plugin's Windows half cannot be constructed off a
+/// Windows build — its field initialiser opens the native library — and "raise
+/// once, then re-word" is exactly the rule that must not regress back into a
+/// banner per second without anyone noticing. The default implementation is
+/// [_PluginWindowsLineOps]; a test passes its own.
+@visibleForTesting
+abstract interface class WindowsLineOps {
+  /// Raises the toast for [event]'s line, with its words supplied as data.
+  Future<void> raise(NotifyEvent event);
+
+  /// Re-words the toast already up under [event]'s id, and says whether it was
+  /// there. Never throws: a line that could not be re-worded is still the line
+  /// the user was told about, only a moment behind.
+  Future<bool> reword(NotifyEvent event);
+}
+
 /// The client backed by `flutter_local_notifications`.
 final class FlutterLocalNotificationsClient implements LocalNotificationClient {
   /// Creates a client. A second instance is harmless: the plugin it wraps is a
   /// singleton, so both talk to the same pipeline.
-  FlutterLocalNotificationsClient({FlutterLocalNotificationsPlugin? plugin})
-    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  ///
+  /// [windowsLineOps] is the seam [WindowsLineOps] documents; nothing else about
+  /// a client is configurable behind a host's back.
+  FlutterLocalNotificationsClient({FlutterLocalNotificationsPlugin? plugin, WindowsLineOps? windowsLineOps})
+    : _plugin = plugin ?? FlutterLocalNotificationsPlugin() {
+    _windowsLineOps = windowsLineOps ?? _PluginWindowsLineOps(_plugin);
+  }
 
   final FlutterLocalNotificationsPlugin _plugin;
 
+  late final WindowsLineOps _windowsLineOps;
+
   int _nextId = kFirstPostedNotificationId;
+
+  /// The Windows line ids this client has already raised a toast for.
+  ///
+  /// One per feature, emptied when the feature's line is taken down. Its whole
+  /// job is to make the second repost of a line a silent content update rather
+  /// than a second banner; see [showRunningLine].
+  final Set<int> _windowsLines = <int>{};
 
   AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
@@ -50,6 +126,10 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
       // No identity named, so nothing to initialise with. Said as a false rather
       // than as an exception: the job runs either way, it just has no toast to show.
       return false;
+    }
+
+    if (platform == TargetPlatform.windows) {
+      _ensureWindowsComApartment();
     }
 
     final started = await _plugin.initialize(
@@ -199,6 +279,10 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
 
   @override
   Future<void> dismiss(int id) async {
+    // Deliberately not `_windowsLines.remove(id)`: a line the host took down was
+    // still raised once, and a recording that carries on re-wording it must not
+    // answer the viewer's swipe with a fresh banner a second later. The ledger is
+    // emptied by [clearRunningLine], which is what a feature actually ending is.
     try {
       await _plugin.cancel(id: id);
     } on Object catch (error) {
@@ -212,7 +296,14 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
     // One id per feature, replaced in place: a line is one notification about
     // several jobs of that feature, and a second show() must not stack a second one
     // under it.
-    final ongoing = event.copyWith(id: event.id ?? kRunningLineNotificationId, tone: NotifyTone.progress);
+    final id = event.id ?? kRunningLineNotificationId;
+    final ongoing = event.copyWith(id: id, tone: NotifyTone.progress);
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      await _showWindowsLine(ongoing);
+
+      return;
+    }
 
     try {
       await _plugin.show(
@@ -228,8 +319,47 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
     }
   }
 
+  /// Draws — or, from the second call on, quietly re-words — one Windows line.
+  ///
+  /// A toast has no persistent form. `show()` always goes through
+  /// `ToastNotifier.Show`, and Windows reads that as *a new notification*: the
+  /// Action Center entry is replaced under the shared tag, but the banner drops
+  /// again every time. A recording's line moves once a second, so drawing it the
+  /// way the other platforms do gave the viewer a fresh toast every second of
+  /// every recording — the noise this package's repost window exists to keep
+  /// down, arriving through the one door that window cannot reach.
+  ///
+  /// So the line is raised once, and every later change re-words the toast that
+  /// is already up and raises nothing. Once the toast has expired into the
+  /// history the re-word simply misses, and it is allowed to miss: the honest
+  /// desktop shape of a running line is one announcement when the work starts,
+  /// not a metronome, and re-raising to keep the text current is the bug again.
+  /// The line comes back with the next feature that starts, because
+  /// [clearRunningLine] forgets it.
+  Future<void> _showWindowsLine(NotifyEvent event) async {
+    final id = event.id!;
+
+    if (_windowsLines.contains(id)) {
+      await _windowsLineOps.reword(event);
+
+      return;
+    }
+
+    _windowsLines.add(id);
+
+    try {
+      await _windowsLineOps.raise(event);
+    } on Object {
+      _windowsLines.remove(id);
+
+      rethrow;
+    }
+  }
+
   @override
   Future<void> clearRunningLine({required int id}) async {
+    _windowsLines.remove(id);
+
     try {
       await _plugin.cancel(id: id);
     } on Object catch (error) {
@@ -244,12 +374,21 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
 
   /// The plugin's own description of [event] on every platform.
   ///
+  /// [textAsBindings] is Windows' running line only: it puts the title and body in
+  /// the toast's data rather than in its markup, so a later `updateBindings` can
+  /// move the words without raising the toast again — and the caller then shows
+  /// the `{name}` tokens in place of the text.
+  ///
   /// The tone table is this package's whole rule about how insistent an event may
   /// be, so it is checked without a notification server, an Android or a toast API:
   /// the platform-specific details classes cannot be round-tripped off-platform any
   /// other way (see [initializationFor] for the same reason).
   @visibleForTesting
-  static NotificationDetails detailsFor(NotifyEvent event, {required bool ongoing}) {
+  static NotificationDetails detailsFor(
+    NotifyEvent event, {
+    required bool ongoing,
+    bool textAsBindings = false,
+  }) {
     return NotificationDetails(
       android: _androidDetails(event, ongoing: ongoing),
       iOS: _darwinDetails(event.tone),
@@ -265,8 +404,22 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
       windows: WindowsNotificationDetails(
         audio: event.tone == NotifyTone.progress ? WindowsNotificationAudio.silent() : null,
         duration: ongoing ? WindowsNotificationDuration.long : null,
+        bindings: textAsBindings ? windowsLineBindings(event) : const <String, String>{},
       ),
     );
+  }
+
+  /// The words [event] carries, in the data-binding form a Windows line needs.
+  ///
+  /// A missing body is an empty string rather than an absent binding: a `{name}`
+  /// in the markup that no data answers is rendered as the literal token, and a
+  /// line the user reads must never turn into that.
+  @visibleForTesting
+  static Map<String, String> windowsLineBindings(NotifyEvent event) {
+    return <String, String>{
+      kWindowsLineTitleBinding: event.title,
+      kWindowsLineBodyBinding: event.body ?? '',
+    };
   }
 
   static LinuxNotificationUrgency _linuxUrgencyOf(NotifyTone tone) => switch (tone) {
@@ -353,4 +506,58 @@ final class FlutterLocalNotificationsClient implements LocalNotificationClient {
     BackgroundJobKind.task => '@drawable/ic_stat_media_core_task',
     null => null,
   };
+}
+
+/// [WindowsLineOps] on the real toast mechanism.
+final class _PluginWindowsLineOps implements WindowsLineOps {
+  /// Wraps the plugin a client is already talking to.
+  const _PluginWindowsLineOps(this._plugin);
+
+  final FlutterLocalNotificationsPlugin _plugin;
+
+  @override
+  Future<void> raise(NotifyEvent event) async {
+    // The tokens, not the text: the words arrive as data so `reword` can move
+    // them later without a new toast. A body the event does not carry binds to
+    // empty rather than staying a bare `{name}` in the user's face.
+    try {
+      await _plugin.show(
+        id: event.id!,
+        title: '{$kWindowsLineTitleBinding}',
+        body: '{$kWindowsLineBodyBinding}',
+        payload: event.payload,
+        notificationDetails: FlutterLocalNotificationsClient.detailsFor(
+          event,
+          ongoing: true,
+          textAsBindings: true,
+        ),
+      );
+    } on Object catch (error) {
+      _log.warning('notification show failed', error: error);
+
+      rethrow;
+    }
+  }
+
+  @override
+  Future<bool> reword(NotifyEvent event) async {
+    final windows = _plugin.resolvePlatformSpecificImplementation<FlutterLocalNotificationsWindows>();
+
+    if (windows == null) {
+      return false;
+    }
+
+    try {
+      return await windows.updateBindings(
+        id: event.id!,
+        bindings: FlutterLocalNotificationsClient.windowsLineBindings(event),
+      ).then((result) => result == NotificationUpdateResult.success);
+    } on Object catch (error) {
+      // A line that could not be re-worded is still the line the user was told
+      // about; only the words are a moment behind.
+      _log.debug('windows running line reword failed', fields: <String, Object?>{'error': error});
+
+      return false;
+    }
+  }
 }

@@ -63,7 +63,11 @@
 library;
 
 export 'package:media_core_notify/src/client/flutter_local_notifications_client.dart'
-    show FlutterLocalNotificationsClient;
+    show
+        FlutterLocalNotificationsClient,
+        WindowsLineOps,
+        kWindowsLineBodyBinding,
+        kWindowsLineTitleBinding;
 export 'package:media_core_notify/src/client/notification_client.dart'
     show
         DesktopNotifySettings,
