@@ -312,6 +312,10 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   @override
   Future<void> start(RecordingSource source, RecordingConfig config) async {
     _ensureNotDisposed();
+    // A host should warm the native library itself, but a start that throws
+    // "not initialized" is a recording lost for a step nobody can do except
+    // this class. Idempotent, so an explicit initialize() costs nothing.
+    await _executorOf().initialize();
     // The state, not just the process: a recording that is between attempts has
     // no process running and is still very much a recording.
     if (_execution != null || _state.status.isActive) {
@@ -364,7 +368,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       await _launch(source.value);
     } catch (error, stackTrace) {
       await _releaseKeepAlive();
-      _log.error('could not start the recording', error: error, fields: <String, Object?>{'url': source.value});
+      _log.error(
+        'could not start the recording',
+        error: error,
+        fields: <String, Object?>{'url': FfmpegRecordArguments.redactUrl(source.value)},
+      );
       _emit(_state.copyWith(status: RecordingStatus.error, error: error));
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -385,7 +393,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     final directory = _activeDirectory!;
     final attempt = _journalPaths.length;
-    final prefix = attempt == 0 ? _basePrefix : '${_basePrefix}_r$attempt';
+    final prefix = attemptFilePrefix(_basePrefix, attempt);
     final segmentPattern = '${prefix}_%06d${config.resolvedSegmentSuffix}';
     final journalPath = joinOutputPath(directory, '$prefix${config.journalSuffix}');
     final arguments = FfmpegRecordArguments(config: config).recordArguments(
@@ -410,13 +418,16 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       ..info(
         attempt == 0 ? 'starting a recording' : 're-opening the source',
         fields: <String, Object?>{
-          'url': url,
+          'url': FfmpegRecordArguments.redactUrl(url),
           'directory': directory,
           'segmentPattern': segmentPattern,
           'attempt': attempt,
         },
       )
-      ..debug('ffmpeg arguments', fields: <String, Object?>{'argv': arguments.join(' ')});
+      ..debug(
+        'ffmpeg arguments',
+        fields: <String, Object?>{'argv': FfmpegRecordArguments.redactArguments(arguments).join(' ')},
+      );
 
     if (attempt == 0) {
       // The lease is taken before the process exists. The wake lock must not
@@ -464,6 +475,15 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   ///
   /// The label is the same prefix the verdict carries, so a start and a result read
   /// as two lines about one job rather than two jobs.
+  /// The name a job notification shows: [FfmpegRecordConfig.jobLabel] when the
+  /// host gave one, otherwise the capture prefix — which is at least the file a
+  /// reader can find.
+  String get _jobLabel {
+    final label = config.jobLabel?.trim() ?? '';
+    if (label.isNotEmpty) return label;
+    return _basePrefix.isEmpty ? 'recording' : _basePrefix;
+  }
+
   void _reportStart() {
     if (_startReported) {
       return;
@@ -471,9 +491,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _startReported = true;
 
-    MediaJobReporting.reporter?.reportStart(
-      MediaJobStart(kind: MediaJobKind.recording, label: _basePrefix.isEmpty ? 'recording' : _basePrefix),
-    );
+    MediaJobReporting.reporter?.reportStart(MediaJobStart(kind: MediaJobKind.recording, label: _jobLabel));
   }
 
   /// Writes the manifest that says what this recording is.
@@ -551,7 +569,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   Future<RecordingResult> stop() async {
     _ensureNotDisposed();
     if (_journalPaths.isEmpty) {
-      return RecordingResult.of(success: false, outputPath: _activeDirectory, error: StateError('No recording to stop.'));
+      return RecordingResult.of(
+        success: false,
+        outputPath: _activeDirectory,
+        error: StateError('No recording to stop.'),
+      );
     }
 
     // Terminal means terminal: a second stop - or a stop after the recording
@@ -560,7 +582,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     final settled = _lastResult;
 
     if (settled != null || _state.status.isTerminal) {
-      return settled ?? RecordingResult.of(success: false, outputPath: _activeDirectory, error: StateError('The recording already ended.'));
+      return settled ??
+          RecordingResult.of(
+            success: false,
+            outputPath: _activeDirectory,
+            error: StateError('The recording already ended.'),
+          );
     }
 
     // The intent must be set before the process ends, or the exit watcher sees
@@ -651,7 +678,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     MediaJobReporting.reporter?.report(
       MediaJobOutcome(
         kind: MediaJobKind.recording,
-        label: _basePrefix.isEmpty ? 'recording' : _basePrefix,
+        label: _jobLabel,
         success: success,
         bytesWritten: bytesWritten,
         elapsed: _recordedMediaTime,
@@ -893,7 +920,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// and a phone must stay free to start the next recording while this one is tidied.
   /// A failed join reports itself and never touches the segments, which already are the
   /// recording. See [FfmpegRecordingRemuxer] for what the join reads and when it skips.
-  Future<FfmpegRemuxResult> combineLastRecording({FfmpegRemuxTarget target = FfmpegRemuxTarget.mp4}) {
+  Future<FfmpegRemuxResult> combineLastRecording({
+    FfmpegRemuxTarget target = FfmpegRemuxTarget.mp4,
+    void Function(double? progress)? onProgress,
+    void Function(FfmpegExecution execution)? onExecution,
+  }) {
     final directory = _activeDirectory;
     final manifest = _lastManifest;
 
@@ -909,7 +940,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     return FfmpegRecordingRemuxer(
       executor: _executor,
       probe: _probe,
-    ).run(manifest: manifest, directory: directory, target: target);
+    ).run(manifest: manifest, directory: directory, target: target, onProgress: onProgress, onExecution: onExecution);
   }
 
   /// Adds the ended process's media time to the recording's total.
@@ -1058,7 +1089,10 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       final refreshed = await refresher(source);
 
       if (refreshed == null || StringUtils.isBlank(refreshed)) {
-        throw StateError('The stream address could not be refreshed for ${source.id ?? source.value}.');
+        throw StateError(
+          'The stream address could not be refreshed for '
+          '${source.id ?? FfmpegRecordArguments.redactUrl(source.value)}.',
+        );
       }
 
       url = refreshed;
@@ -1329,7 +1363,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     final FfmpegSegmentJournal journal;
 
     try {
-      journal = FfmpegSegmentJournal.fromFiles(mine.map(File.new), notBefore: notBefore);
+      journal = FfmpegSegmentJournal.fromFiles(
+        mine.map(File.new),
+        notBefore: notBefore,
+        unlisted: mine.map(_segmentSourceOf),
+      );
     } on Object catch (error) {
       _log.error(
         'the segment journal could not be read',
@@ -1357,6 +1395,21 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
 
     return check;
+  }
+
+  /// Where the attempt behind [journalPath] kept its segments.
+  ///
+  /// The journal's own name is the answer: `_launch` writes it as
+  /// `<prefix><journalSuffix>` in the take's directory, so stripping that suffix
+  /// recovers exactly the prefix the segment pattern was built from — including
+  /// the `_r<N>` a re-opened attempt carries. Deriving it here rather than
+  /// keeping a parallel list means the scan cannot drift from the naming.
+  UnlistedSegmentSource _segmentSourceOf(String journalPath) {
+    return UnlistedSegmentSource(
+      directory: outputDirectoryOf(journalPath),
+      prefix: journalFilePrefix(journalPath, config.journalSuffix),
+      segmentSuffix: config.resolvedSegmentSuffix,
+    );
   }
 
   /// Why a finished recording is reported as a failure, or null when it is not.

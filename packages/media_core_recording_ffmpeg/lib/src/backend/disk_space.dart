@@ -28,9 +28,7 @@ abstract final class FfmpegDiskSpace {
     final runner = run ?? Process.run;
 
     final executable = Platform.isWindows ? 'powershell' : 'df';
-    final arguments = Platform.isWindows
-        ? powershellArguments(directory)
-        : dfArguments(directory);
+    final arguments = Platform.isWindows ? powershellArguments(directory) : dfArguments(directory);
 
     if (arguments == null) {
       return null;

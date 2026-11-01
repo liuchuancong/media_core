@@ -37,4 +37,5 @@ export 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_record_container.d
 export 'package:media_core_recording_ffmpeg/src/journal/recording_manifest.dart';
 export 'package:media_core_recording_ffmpeg/src/journal/recording_recovery.dart';
 export 'package:media_core_recording_ffmpeg/src/journal/recording_remuxer.dart';
+export 'package:media_core_recording_ffmpeg/src/journal/recording_transcoder.dart';
 export 'package:media_core_recording_ffmpeg/src/journal/recording_verification.dart';

@@ -1,6 +1,14 @@
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_record_arguments.dart';
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_record_container.dart';
 
+/// The journal suffix [FfmpegRecordConfig] writes by default.
+///
+/// Named because a reader holding only a recording's manifest on disk — the
+/// remuxer, or whoever wonders what a folder contains — has to strip exactly
+/// this to recover the prefix the segments were named from, and a second
+/// literal is how the two sides stop agreeing.
+const String kFfmpegDefaultJournalSuffix = '.clock-v1.csv';
+
 /// Tunables for an FFmpeg recording.
 ///
 /// The defaults are the ones the reference implementation settled on after
@@ -12,15 +20,22 @@ final class FfmpegRecordConfig {
   const FfmpegRecordConfig({
     this.segmentTime = 300,
     this.rwTimeout = 15,
+    this.proxy,
+    this.caFile,
+    this.tlsVerify = true,
+    this.analyzeDuration = const Duration(seconds: 20),
+    this.probeSizeBytes = 10 * 1024 * 1024,
+    this.extensionPicky = true,
     this.threadQueueSize = 2048,
     this.preferBestStream = true,
     this.container = FfmpegRecordContainer.mpegTs,
     this.filePrefix,
+    this.jobLabel,
     this.includeTimestampPrefix = true,
     this.subdirectoryPerRecording = false,
     this.writeManifest = true,
     this.segmentSuffix,
-    this.journalSuffix = '.clock-v1.csv',
+    this.journalSuffix = kFfmpegDefaultJournalSuffix,
     this.verifyOutput = true,
     this.verifyPlayability = true,
     this.restartLimit = 3,
@@ -83,6 +98,47 @@ final class FfmpegRecordConfig {
   /// segment and short enough to notice.
   final int rwTimeout;
 
+  /// HTTP proxy the input is opened through, as `http://host:port`.
+  ///
+  /// A host that already routes its player through a proxy must route the
+  /// recording the same way, or the account's address resolves while the
+  /// capture does not. FFmpeg's HTTP protocol option is used, so this covers
+  /// both `http://` and `https://` inputs; it has no SOCKS or PAC support.
+  final String? proxy;
+
+  /// PEM bundle of trusted certificate authorities.
+  ///
+  /// FFmpeg's OpenSSL build keeps a compile-time CA path that does not exist
+  /// on a phone, so an HTTPS input without this file fails verification even
+  /// when the server uses a public CA. A host that ships a bundle passes its
+  /// path here; null keeps FFmpeg's own defaults.
+  final String? caFile;
+
+  /// Whether an HTTPS input's certificate chain and host name are verified.
+  ///
+  /// Leave this on. Turning it off accepts a self-signed or intercepted
+  /// certificate, which is the only way to record through a proxy that
+  /// terminates TLS without installing its CA, and it also removes the
+  /// protection against a real interception.
+  final bool tlsVerify;
+
+  /// How long FFmpeg analyses the input before it starts writing.
+  ///
+  /// A live HLS playlist can take several segments before its codecs and
+  /// timestamps are unambiguous; five seconds cut some slow CDNs short, so the
+  /// default is the twenty seconds the reference settled on.
+  final Duration analyzeDuration;
+
+  /// How many bytes FFmpeg probes for the same reason.
+  final int probeSizeBytes;
+
+  /// Whether FFmpeg's strict HLS extension/container check stays on.
+  ///
+  /// A few HLS streams declare a segment extension the container does not
+  /// match (CHZZK is the known one) and only open with `-extension_picky 0`.
+  /// The host turns it off for those platforms rather than for every stream.
+  final bool extensionPicky;
+
   /// Input packet queue size.
   ///
   /// Recording favours completeness over latency, so this is much larger than
@@ -104,6 +160,15 @@ final class FfmpegRecordConfig {
   /// sanitises to nothing) takes the generated name described by
   /// [includeTimestampPrefix].
   final String? filePrefix;
+
+  /// A human label for job reporting — the body of a finished recording's
+  /// notification — when [filePrefix] is not one.
+  ///
+  /// The prefix is chosen for the filesystem and for FFmpeg's path handling: an
+  /// ASCII stem the host renames afterwards, which reads as
+  /// `rec_20261031_120000_000` in a toast. This is the same recording under the
+  /// name a person recognises — the room — while the files keep the prefix.
+  final String? jobLabel;
 
   /// Whether the generated prefix carries a timestamp.
   ///
@@ -235,10 +300,17 @@ final class FfmpegRecordConfig {
   FfmpegRecordConfig copyWith({
     int? segmentTime,
     int? rwTimeout,
+    String? proxy,
+    String? caFile,
+    bool? tlsVerify,
+    Duration? analyzeDuration,
+    int? probeSizeBytes,
+    bool? extensionPicky,
     int? threadQueueSize,
     bool? preferBestStream,
     FfmpegRecordContainer? container,
     String? filePrefix,
+    String? jobLabel,
     bool? includeTimestampPrefix,
     bool? subdirectoryPerRecording,
     bool? writeManifest,
@@ -259,10 +331,17 @@ final class FfmpegRecordConfig {
     return FfmpegRecordConfig(
       segmentTime: segmentTime ?? this.segmentTime,
       rwTimeout: rwTimeout ?? this.rwTimeout,
+      proxy: proxy ?? this.proxy,
+      caFile: caFile ?? this.caFile,
+      tlsVerify: tlsVerify ?? this.tlsVerify,
+      analyzeDuration: analyzeDuration ?? this.analyzeDuration,
+      probeSizeBytes: probeSizeBytes ?? this.probeSizeBytes,
+      extensionPicky: extensionPicky ?? this.extensionPicky,
       threadQueueSize: threadQueueSize ?? this.threadQueueSize,
       preferBestStream: preferBestStream ?? this.preferBestStream,
       container: container ?? this.container,
       filePrefix: filePrefix ?? this.filePrefix,
+      jobLabel: jobLabel ?? this.jobLabel,
       includeTimestampPrefix: includeTimestampPrefix ?? this.includeTimestampPrefix,
       subdirectoryPerRecording: subdirectoryPerRecording ?? this.subdirectoryPerRecording,
       writeManifest: writeManifest ?? this.writeManifest,

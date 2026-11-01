@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:media_core/media_core.dart';
+import 'package:media_core_recording_ffmpeg/src/config/ffmpeg_record_config.dart';
 import 'package:media_core_recording_ffmpeg/src/config/output_path.dart';
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_executor.dart';
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_probe.dart';
+import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_record_container.dart';
 import 'package:media_core_recording_ffmpeg/src/journal/recording_manifest.dart';
 import 'package:media_core_recording_ffmpeg/src/journal/recording_verification.dart';
 
@@ -125,10 +127,10 @@ final class FfmpegRemuxResult {
 /// standing between two recordings.
 ///
 /// It reads the recording's own records rather than a directory listing: the
-/// [FfmpegRecordingManifest] says which attempt journals exist, and a journal
-/// says which segments were closed. Anything not named there is not part of the
-/// recording, which is also why a kill mid-write loses one segment and not the
-/// file.
+/// [FfmpegRecordingManifest] says which attempt journals exist, a journal says
+/// which segments were closed, and each attempt's folder is then scanned for the
+/// segment it was still writing when its process ended. Anything the recording
+/// cannot name is not part of the recording.
 final class FfmpegRecordingRemuxer {
   /// Creates the remuxer.
   ///
@@ -163,18 +165,20 @@ final class FfmpegRecordingRemuxer {
     required FfmpegRecordingManifest manifest,
     required String directory,
     FfmpegRemuxTarget target = FfmpegRemuxTarget.mp4,
+    void Function(double? progress)? onProgress,
+    void Function(FfmpegExecution execution)? onExecution,
   }) async {
     final outputPath = joinOutputPath(directory, combinedName(manifest.prefix, target));
 
     final segments = _segmentsOf(manifest, directory);
 
     if (segments.isEmpty) {
-      // Not "nothing was recorded" but "nothing was closed": the segment still
-      // open when the process ended is not joinable, and a merge that invents a
-      // file out of a half-written one is worse than no merge.
+      // Nothing to join: neither a closed segment nor one still open when the
+      // process ended. A merge that invents a file out of an empty folder is
+      // worse than no merge, so this says so rather than producing one.
       return FfmpegRemuxResult.failed(
         outputPath: outputPath,
-        error: const FfmpegRemuxException('the recording journal lists no closed segment to join'),
+        error: const FfmpegRemuxException('the recording wrote no segment to join'),
       );
     }
 
@@ -185,9 +189,14 @@ final class FfmpegRecordingRemuxer {
     }
 
     final listPath = joinOutputPath(directory, '${manifest.prefix}.concat.txt');
+    final partialPath = _partialPathOf(outputPath);
 
     try {
       File(listPath).writeAsStringSync(_concatList(segments));
+      // A partial file from an interrupted attempt is an instruction, not a
+      // recording: the next attempt starts over.
+      final stale = File(partialPath);
+      if (stale.existsSync()) stale.deleteSync();
     } on Object catch (error) {
       return FfmpegRemuxResult.failed(outputPath: outputPath, error: error);
     }
@@ -217,7 +226,7 @@ final class FfmpegRecordingRemuxer {
       '-c',
       'copy',
       ...target.outputArguments,
-      outputPath,
+      partialPath,
     ]);
 
     _log.info(
@@ -230,25 +239,41 @@ final class FfmpegRecordingRemuxer {
       },
     );
 
+    final totalInputBytes = segments.fold<int>(0, (sum, segment) => sum + segment.bytes);
+    var completed = false;
+
     try {
-      final execution = await _executorOf().start(
+      final executor = _executorOf();
+      await executor.initialize();
+      final execution = await executor.start(
         arguments: arguments,
-        onStatistics: (statistics) =>
-            _memory.report(_memoryKey, items: 1, bytes: statistics.sizeBytes, note: 'remux of ${manifest.prefix}'),
+        onStatistics: (statistics) {
+          _memory.report(_memoryKey, items: 1, bytes: statistics.sizeBytes, note: 'remux of ${manifest.prefix}');
+          if (onProgress != null) {
+            onProgress(totalInputBytes > 0 ? (statistics.sizeBytes / totalInputBytes).clamp(0.0, 1.0) : null);
+          }
+        },
       );
+      onExecution?.call(execution);
 
       final code = await _awaitExit(execution);
-      final output = FileStat.statSync(outputPath);
+      final partial = FileStat.statSync(partialPath);
 
-      if (code != 0 || output.type == FileSystemEntityType.notFound || output.size <= 0) {
+      if (code != 0 || partial.type == FileSystemEntityType.notFound || partial.size <= 0) {
         return FfmpegRemuxResult.failed(
           outputPath: outputPath,
           error: FfmpegRemuxException(
-            'FFmpeg exited with $code and left ${output.type == FileSystemEntityType.notFound ? 'no' : '${output.size}B'} output',
+            'FFmpeg exited with $code and left '
+            '${partial.type == FileSystemEntityType.notFound ? 'no' : '${partial.size}B'} output',
           ),
         );
       }
 
+      // Rename only after a complete exit: a file named as the joined result
+      // must never be a truncated one.
+      await File(partialPath).rename(outputPath);
+      completed = true;
+      final output = FileStat.statSync(outputPath);
       final duration = await _probeOf()?.durationOf(outputPath) ?? Duration.zero;
 
       _log.info(
@@ -274,27 +299,58 @@ final class FfmpegRecordingRemuxer {
       } on Object {
         // A list that cannot be deleted is a leftover file, not a failed remux.
       }
+      if (!completed) {
+        try {
+          final partial = File(partialPath);
+          if (partial.existsSync()) partial.deleteSync();
+        } on Object {
+          // A partial file left behind is cache-cleared later.
+        }
+      }
     }
+  }
+
+  /// The sibling path the join writes before it is complete.
+  static String _partialPathOf(String outputPath) {
+    const extension = '.mp4';
+    final lower = outputPath.toLowerCase();
+    if (lower.endsWith(extension)) {
+      return '${outputPath.substring(0, outputPath.length - extension.length)}.partial.mp4';
+    }
+    return '$outputPath.partial.mp4';
   }
 
   FfmpegExecutor _executorOf() => _executor ??= FfmpegKitExecutor();
 
   FfmpegProbe? _probeOf() => _probe ?? const FFprobeKitFfmpegProbe();
 
-  /// The segments this recording closed, in the order they were written.
+  /// The segments this recording wrote, in the order they were written.
   ///
   /// Every attempt's journal is read, oldest attempt first: a recording whose
   /// source dropped five times is one recording, and the join has to produce its
-  /// whole timeline.
+  /// whole timeline. Each attempt's directory is then scanned for the segment it
+  /// was still writing when the process ended — see [UnlistedSegmentSource] for
+  /// why that one file is missing from the list that names all the others, and
+  /// why leaving it out would cut the tail off every merged recording this
+  /// package ever produces.
   List<FfmpegJournalledSegment> _segmentsOf(FfmpegRecordingManifest manifest, String directory) {
     // A host that wrote its own manifest (or an older one) may name no journals at
     // all; the conventional name for the recording's first attempt is then the
     // only thing left to read, and a recording that never re-opened has exactly it.
     final journals = manifest.journals.isEmpty
-        ? <String>[joinOutputPath(directory, '${manifest.prefix}.clock-v1.csv')]
+        ? <String>[joinOutputPath(directory, '${manifest.prefix}$kFfmpegDefaultJournalSuffix')]
         : manifest.journals.map((journal) => joinOutputPath(directory, journal)).toList();
 
-    return FfmpegSegmentJournal.fromFiles(journals.map(File.new)).entries.toList();
+    return FfmpegSegmentJournal.fromFiles(
+      journals.map(File.new),
+      unlisted: journals.map(
+        (journal) => UnlistedSegmentSource(
+          directory: outputDirectoryOf(journal),
+          prefix: journalFilePrefix(journal, kFfmpegDefaultJournalSuffix),
+          segmentSuffix: manifest.container.segmentSuffix,
+        ),
+      ),
+    ).entries.toList();
   }
 
   /// The concat demuxer's list: one `file '<path>'` line per segment.

@@ -3,6 +3,38 @@ import 'dart:io';
 import 'package:media_core_recording_ffmpeg/src/config/output_path.dart';
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_probe.dart';
 
+/// Where one attempt's segment files live, named so a reader can tell which of
+/// them this attempt wrote.
+///
+/// A journal is not the whole of a recording. FFmpeg's segment muxer appends a
+/// line to `-segment_list` only when a segment **closes**, and a stop cancels
+/// the process rather than asking it to quit, so the segment being written at
+/// that moment sits on disk — playable, since MPEG-TS commits complete packets
+/// as it goes — without ever being listed. With `-segment_time` on the order of
+/// minutes that is the entire output of any shorter recording: read the journal
+/// alone and a take the viewer watched fill up reports as "nothing was
+/// recorded", and a merge drops the last segment of every take that ever ran.
+///
+/// The scan is bounded to what one attempt can own: files named
+/// `<prefix>_<digits><segmentSuffix>` in [directory], modified no earlier than
+/// the session started. A merged file, a sidecar or a neighbour's take is not
+/// named by that pattern and stays out of the list.
+final class UnlistedSegmentSource {
+  /// Describes where the attempts of one recording wrote their segments.
+  const UnlistedSegmentSource({required this.directory, required this.prefix, required this.segmentSuffix});
+
+  /// The directory the attempt's segments and journal were written to.
+  final String directory;
+
+  /// The file-name prefix that attempt was given — the base prefix for the
+  /// first, the `_r<N>`-suffixed one for each re-opening.
+  final String prefix;
+
+  /// The suffix each segment carries, which also names the profile it was
+  /// written under: see `FfmpegRecordContainer.segmentSuffix`.
+  final String segmentSuffix;
+}
+
 /// The segment journal FFmpeg writes when `-segment_list_type csv` is used, read
 /// back as the record of *what was actually captured*.
 ///
@@ -89,13 +121,25 @@ final class FfmpegSegmentJournal {
   /// judged against.
   ///
   /// [notBefore] applies to every file read: see [FfmpegSegmentJournal.fromFile].
-  factory FfmpegSegmentJournal.fromFiles(Iterable<File> files, {DateTime? notBefore}) {
+  ///
+  /// [unlisted] is one entry per journal, in the same order, naming where that
+  /// attempt's segments live; see [UnlistedSegmentSource] for why a journal is
+  /// not the whole of a recording. An empty list — the default — keeps the
+  /// reader a pure statement about the list files.
+  factory FfmpegSegmentJournal.fromFiles(
+    Iterable<File> files, {
+    DateTime? notBefore,
+    Iterable<UnlistedSegmentSource> unlisted = const <UnlistedSegmentSource>[],
+  }) {
     final combined = <FfmpegJournalledSegment>[];
     var unreadable = 0;
     var stale = 0;
+    final journals = files.toList();
+    final sources = unlisted.toList();
+    final listed = <String>{};
 
-    for (final file in files) {
-      final journal = FfmpegSegmentJournal.fromFile(file, notBefore: notBefore);
+    for (var attempt = 0; attempt < journals.length; attempt++) {
+      final journal = FfmpegSegmentJournal.fromFile(journals[attempt], notBefore: notBefore);
 
       unreadable += journal.unreadableLines;
       stale += journal.staleEntries;
@@ -104,10 +148,113 @@ final class FfmpegSegmentJournal {
         combined.add(
           FfmpegJournalledSegment(index: combined.length, name: entry.name, path: entry.path, bytes: entry.bytes),
         );
+        listed.add(entry.path);
+      }
+
+      if (attempt >= sources.length) {
+        continue;
+      }
+
+      // The attempt's own open segment belongs between this journal's last
+      // entry and the next attempt's first, which is why the scan runs inside
+      // the loop rather than once over the whole list: a merge that reads the
+      // result back as a concat list would otherwise place the tail in the
+      // middle of the recording.
+      for (final segment in unlistedSegments(source: sources[attempt], listedPaths: listed, notBefore: notBefore)) {
+        combined.add(segment);
+        listed.add(segment.path);
       }
     }
 
     return FfmpegSegmentJournal._(dedupeByPath(combined), unreadable, staleEntries: stale);
+  }
+
+  /// The segments [source] holds that no journal named.
+  ///
+  /// Files already in [listedPaths] are skipped, as are the ones a filesystem
+  /// says were written before [notBefore] — the same ownership test the journal
+  /// reader applies. A zero-byte file is skipped too: FFmpeg opened it and
+  /// abandoned it without a packet, so it is not output, and leaving it out keeps
+  /// "the input delivered nothing" the answer for a take that truly has none.
+  static List<FfmpegJournalledSegment> unlistedSegments({
+    required UnlistedSegmentSource source,
+    required Set<String> listedPaths,
+    DateTime? notBefore,
+  }) {
+    final directory = Directory(source.directory);
+
+    if (!directory.existsSync()) {
+      return const <FfmpegJournalledSegment>[];
+    }
+
+    final pattern = RegExp('^${_escapeRegExp(source.prefix)}_(\\d+)${_escapeRegExp(source.segmentSuffix)}\$');
+    final found = <({int index, FfmpegJournalledSegment segment})>[];
+
+    for (final entity in directory.listSync()) {
+      if (entity is! File) {
+        continue;
+      }
+
+      final name = entity.uri.pathSegments.last;
+      final match = pattern.firstMatch(name);
+
+      if (match == null) {
+        continue;
+      }
+
+      final path = entity.path;
+
+      if (listedPaths.contains(path)) {
+        continue;
+      }
+
+      final stat = entity.statSync();
+
+      if (stat.size <= 0) {
+        continue;
+      }
+
+      if (notBefore != null && stat.modified.isBefore(notBefore)) {
+        continue;
+      }
+
+      found.add((
+        index: int.parse(match.group(1)!),
+        segment: FfmpegJournalledSegment(index: 0, name: name, path: path, bytes: stat.size),
+      ));
+    }
+
+    // FFmpeg's own numbering is the order the bytes were written in; a directory
+    // listing has none.
+    found.sort((a, b) => a.index.compareTo(b.index));
+
+    return List<FfmpegJournalledSegment>.unmodifiable(
+      found.indexed.map(
+        (entry) => FfmpegJournalledSegment(
+          index: entry.$1,
+          name: entry.$2.segment.name,
+          path: entry.$2.segment.path,
+          bytes: entry.$2.segment.bytes,
+        ),
+      ),
+    );
+  }
+
+  /// Quotes [text] so it matches itself inside a [RegExp].
+  static String _escapeRegExp(String text) {
+    final escaped = StringBuffer();
+
+    for (final unit in text.codeUnits) {
+      if (unit >= 0x61 && unit <= 0x7a || unit >= 0x41 && unit <= 0x5a || unit >= 0x30 && unit <= 0x39) {
+        escaped.writeCharCode(unit);
+      } else {
+        escaped
+          ..write(r'\')
+          ..writeCharCode(unit);
+      }
+    }
+
+    return escaped.toString();
   }
 
   /// Segments in the order FFmpeg listed them, oldest first.

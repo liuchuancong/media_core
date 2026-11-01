@@ -25,8 +25,14 @@ Filesystem             1024-blocks      Used Available Capacity Mounted on
     test('"not measurable" is unknown, never zero', () {
       // A zero would refuse a recording that had plenty of room; `-P` prints `-` or
       // `*` in the available column for a filesystem that cannot report it.
-      expect(FfmpegDiskSpace.parseDf('Filesystem 1024-blocks Used Available Capacity Mounted on\nnone - - - - /here\n'), isNull);
-      expect(FfmpegDiskSpace.parseDf('Filesystem 1024-blocks Used Available Capacity Mounted on\nnone 1 1 * - /here\n'), isNull);
+      expect(
+        FfmpegDiskSpace.parseDf('Filesystem 1024-blocks Used Available Capacity Mounted on\nnone - - - - /here\n'),
+        isNull,
+      );
+      expect(
+        FfmpegDiskSpace.parseDf('Filesystem 1024-blocks Used Available Capacity Mounted on\nnone 1 1 * - /here\n'),
+        isNull,
+      );
     });
 
     test('the POSIX format never wraps, which is why -kP is asked for', () {
@@ -38,7 +44,11 @@ Filesystem             1024-blocks      Used Available Capacity Mounted on
     test('a drive letter becomes the root form DriveInfo takes', () {
       expect(FfmpegDiskSpace.windowsRoot(r'C:\Users\me\recordings'), r'C:\');
       expect(FfmpegDiskSpace.windowsRoot(r'c:\x'), r'c:\');
-      expect(FfmpegDiskSpace.windowsRoot(r'\\nas\share\room-42'), isNull, reason: 'a UNC path has no drive to ask about');
+      expect(
+        FfmpegDiskSpace.windowsRoot(r'\\nas\share\room-42'),
+        isNull,
+        reason: 'a UNC path has no drive to ask about',
+      );
       expect(FfmpegDiskSpace.windowsRoot('/mnt/data'), isNull);
     });
 
@@ -96,11 +106,14 @@ Filesystem             1024-blocks      Used Available Capacity Mounted on
     test('a path with no volume to ask about never runs anything', () async {
       var calls = 0;
 
-      final free = await FfmpegDiskSpace.probe(r'\\nas\share\room', run: (e, a) async {
-        calls++;
+      final free = await FfmpegDiskSpace.probe(
+        r'\\nas\share\room',
+        run: (e, a) async {
+          calls++;
 
-        return _result(0, '1');
-      });
+          return _result(0, '1');
+        },
+      );
 
       if (Platform.isWindows) {
         expect(free, isNull);

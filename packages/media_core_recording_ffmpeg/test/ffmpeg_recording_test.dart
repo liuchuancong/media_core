@@ -672,6 +672,42 @@ void main() {
         expect(reporter.seen.single.elapsed, result.duration);
       });
 
+      test('a host-given job label names the notification, not the capture prefix', () async {
+        final labelled = FfmpegRecordingBackend(
+          executor: executor,
+          config: const FfmpegRecordConfig(filePrefix: 'room', restartLimit: 0, jobLabel: '  房间名  '),
+          outputDirectory: directory.path,
+          probe: _FakeProbe(),
+        );
+        addTearDown(labelled.dispose);
+        await labelled.initialize();
+        await labelled.start(_source(), const RecordingConfig());
+        executor.lastStatistics!(const FfmpegStatistics(timeMs: 6500, sizeBytes: 2048));
+
+        final result = await labelled.stop();
+
+        expect(reporter.starts.single.label, '房间名');
+        expect(reporter.seen.single.label, '房间名', reason: result.toString());
+      });
+
+      test('a blank job label falls back to the capture prefix', () async {
+        final blank = FfmpegRecordingBackend(
+          executor: executor,
+          config: const FfmpegRecordConfig(filePrefix: 'room', restartLimit: 0, jobLabel: '   '),
+          outputDirectory: directory.path,
+          probe: _FakeProbe(),
+        );
+        addTearDown(blank.dispose);
+        await blank.initialize();
+        await blank.start(_source(), const RecordingConfig());
+        executor.lastStatistics!(const FfmpegStatistics(timeMs: 6500, sizeBytes: 2048));
+
+        final result = await blank.stop();
+
+        expect(reporter.starts.single.label, 'room');
+        expect(reporter.seen.single.label, 'room', reason: result.toString());
+      });
+
       test('a stream that ended on its own is announced once, and a later stop does not repeat it', () async {
         await backend.initialize();
         await backend.start(_source(), const RecordingConfig());

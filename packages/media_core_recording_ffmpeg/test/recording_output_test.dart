@@ -372,7 +372,7 @@ void main() {
         '0:v:0?',
         reason: 'an audio-only room has no video track to demand',
       );
-      expect(arguments.last, endsWith('room.combined.mp4'));
+      expect(arguments.last, endsWith('room.combined.partial.mp4'));
       expect(arguments, contains('-movflags'), reason: 'faststart, so a phone can seek before the file arrives');
     });
 

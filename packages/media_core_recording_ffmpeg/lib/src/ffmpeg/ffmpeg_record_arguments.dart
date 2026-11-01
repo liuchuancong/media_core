@@ -68,14 +68,15 @@ final class FfmpegRecordArguments {
       'info',
       // Recording favours complete stream discovery over playback latency.
       '-analyzeduration',
-      '5000000',
+      config.analyzeDuration.inMicroseconds.clamp(1, 2147483647).toString(),
       '-probesize',
-      '5000000',
+      config.probeSizeBytes.clamp(1024, 2147483647).toString(),
       '-fflags',
       '+genpts+discardcorrupt',
       '-protocol_whitelist',
       protocolWhitelist,
       ...inputProtocolOptions(url),
+      if (!config.extensionPicky) ...['-extension_picky', '0'],
       '-thread_queue_size',
       config.threadQueueSize.clamp(64, 65536).toString(),
       if (userAgent != null && userAgent.isNotEmpty) ...['-user_agent', userAgent],
@@ -208,6 +209,28 @@ final class FfmpegRecordArguments {
         '-rw_timeout',
         timeoutMicros,
       ]);
+      // TLS options belong to the HTTPS protocol; passing them to a plain
+      // HTTP input is at best ignored and at worst an unknown-option error.
+      // FFmpeg's OpenSSL build carries a compile-time CA directory that a
+      // phone does not have, so a public HTTPS certificate fails verification
+      // unless the host supplies its own bundle. Verification stays on by
+      // default; turning it off is the deliberate escape hatch for a
+      // self-signed or TLS-terminating proxy.
+      if (scheme == 'https') {
+        if (!config.tlsVerify) {
+          options.addAll(['-tls_verify', '0']);
+        }
+        final caFile = config.caFile?.trim() ?? '';
+        if (caFile.isNotEmpty) {
+          options.addAll(['-ca_file', caFile]);
+        }
+      }
+      // The HTTP proxy option covers CONNECT for HTTPS as well, so it applies
+      // to both schemes.
+      final proxy = config.proxy?.trim() ?? '';
+      if (proxy.isNotEmpty) {
+        options.addAll(['-http_proxy', proxy]);
+      }
     } else if (scheme == 'rtsp') {
       options.addAll(['-rtsp_transport', 'tcp', '-rw_timeout', timeoutMicros]);
     } else if (scheme == 'udp' || scheme == 'rtp') {
@@ -333,4 +356,39 @@ final class FfmpegRecordArguments {
 
   /// Human-readable command for logs and tests. Never passed to FFmpeg.
   static String formatArguments(Iterable<String> arguments) => arguments.map(quoteArgument).join(' ');
+
+  /// A URL safe to write into a log.
+  ///
+  /// A live address is commonly signed: its query carries a short-lived
+  /// credential, and its user-info can carry a proxy password. Neither belongs
+  /// in a log a viewer may paste into an issue. The scheme, host and path are
+  /// kept so the line still says which stream failed.
+  static String redactUrl(String value) {
+    if (!value.contains('://')) return value;
+    var end = value.length;
+    final query = value.indexOf('?');
+    final fragment = value.indexOf('#');
+    if (query >= 0) end = query;
+    if (fragment >= 0 && fragment < end) end = fragment;
+    var visible = value.substring(0, end);
+    final schemeEnd = visible.indexOf('://');
+    final at = visible.indexOf('@', schemeEnd + 3);
+    if (at > schemeEnd) {
+      visible = '${visible.substring(0, schemeEnd + 3)}<credentials>@${visible.substring(at + 1)}';
+    }
+    return end == value.length ? visible : '$visible?<redacted>';
+  }
+
+  /// An argument list with signed URLs and header values masked, for logs.
+  static List<String> redactArguments(List<String> arguments) {
+    final redacted = <String>[];
+    for (var index = 0; index < arguments.length; index++) {
+      if (index > 0 && arguments[index - 1] == '-headers') {
+        redacted.add('<redacted headers>');
+        continue;
+      }
+      redacted.add(redactUrl(arguments[index]));
+    }
+    return redacted;
+  }
 }
