@@ -70,7 +70,7 @@ final class BackgroundBackendRefused extends BackgroundBackendOutcome {
 /// Playback is a session of its own, with its own service and its own control
 /// surface, and it is not a `BackgroundExecutionKind`. This contract exists so
 /// that separation is written down rather than implied: `media_core_mediasession`
-/// implements it over `audio_service`, and nothing else activates a media
+/// implements it over `flutter_media_session`, and nothing else activates a media
 /// session.
 ///
 /// The qualification for activating one is real playback — a playing transport,

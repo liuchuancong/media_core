@@ -67,8 +67,8 @@ final List<RunnableDemo> runnableDemos = <RunnableDemo>[
     id: 'media-session',
     nameZh: '系统媒体面：通知 / 锁屏 / SMTC',
     nameEn: 'System media surfaces: notification, lock screen, SMTC',
-    purposeZh: '视频播放器接入系统媒体控件（Android 通知、iOS 锁屏、Windows SMTC、Linux MPRIS）：标题、进度、播放暂停、±10 秒、停止；按通知上的按钮会走回同一个 handle，日志里能看到状态变化。',
-    purposeEn: 'A video player published to the platform surfaces (Android notification, iOS lock screen, Windows SMTC, Linux MPRIS) with title, progress, play/pause, ±10s and stop; pressing them drives the same handle, and the log shows it.',
+    purposeZh: '视频播放器接入系统媒体控件（Android 通知、iOS 锁屏、Windows SMTC、Web）：标题、进度、播放暂停、±10 秒、停止；按通知上的按钮会走回同一个 handle，日志里能看到状态变化。',
+    purposeEn: 'A video player published to the platform surfaces (Android notification, iOS lock screen, Windows SMTC, web) with title, progress, play/pause, ±10s and stop; pressing them drives the same handle, and the log shows it.',
     builder: (_) => const MediaSessionDemoPage(),
   ),
   RunnableDemo(

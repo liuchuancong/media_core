@@ -6,10 +6,17 @@ import 'package:media_core_mediasession/src/media_session_driver.dart';
 /// media surfaces should show, a URL string.
 const String mediaSessionArtUriKey = 'artUri';
 
+/// The metadata key for the surfaces' second line: the artist of a song, the
+/// streamer of a live room.
+const String mediaSessionArtistKey = 'artist';
+
+/// The metadata key for the surfaces' album line.
+const String mediaSessionAlbumKey = 'album';
+
 /// The media surfaces, reached by name instead of by a player handle.
 ///
 /// The kernel binds the active player and that covers the ordinary case: whoever
-/// is playing owns the notification, the lock screen, SMTC or MPRIS. This door is
+/// is playing owns the notification, the lock screen or SMTC. This door is
 /// for the other case — a host with no `PlayerHandle` to bind (its own player, a
 /// live wall that wants a named cell to hold the bar, a session that must be
 /// handed over before the next one starts) — and for the one thing a handle cannot
@@ -34,8 +41,8 @@ const String mediaSessionArtUriKey = 'artUri';
 /// ```
 ///
 /// Nothing here starts a service or posts a notification of its own; the media
-/// surface belongs to `audio_service` on Android (declared by the host's manifest)
-/// and to SMTC/MPRIS on desktop. Job notifications — recording, download — are a
+/// surface belongs to flutter_media_session (the Media3 service on Android, SMTC on
+/// Windows, Now Playing on Apple platforms). Job notifications — recording, download — are a
 /// different owner entirely: `media_core_native`'s per-feature services.
 abstract final class MediaSessionSurfaces {
   /// Which session holds the surface right now, or null when nobody does.

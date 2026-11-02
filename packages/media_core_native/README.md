@@ -43,7 +43,7 @@ if (result case BackgroundAcquireSuccess(:final lease)) {
 
 `NativeBackgroundRuntime.shared` 是全进程共用的那一个登记表（第一次用到时创建；宿主自己装过 `BackgroundRuntimes.current` 就用宿主的）。它把请求翻译成下面这套通道调用，Java 侧的多任务聚合与唤醒锁引用计数**原样保留**——重复计数的问题在登记层解决，而不是在服务层再记一遍。
 
-录制与 `media_core_download`（`keepAlive`）都走这条路。媒体**播放**不走：它有自己的服务与主人（`media_core_mediasession` 的 `audio_service`），也不是 `BackgroundExecutionKind` 的一员。
+录制与 `media_core_download`（`keepAlive`）都走这条路。媒体**播放**不走：它有自己的服务与主人（`media_core_mediasession` 的 `flutter_media_session`），也不是 `BackgroundExecutionKind` 的一员。
 
 ### 直接用通道
 
@@ -92,7 +92,7 @@ try {
 
 `POST_NOTIFICATIONS`（Android 13+）由本包**声明但不申请**：什么时候问用户是宿主决定，`media_core_notify` 的 `requestPermission()` 是这个问题唯一的入口。早先版本在第一次 `acquire` 里通过当前 Activity 弹窗，那等于让一个后台恢复的下载把系统对话框顶在用户脸上并等答案。**拒绝不等于失败** —— 前台服务与唤醒锁照旧生效，只是用户看不到那条通知，这是用户的选择，不是让录制失败的 reason。平台连服务都不肯起（受限后台启动、清单缺失）时才返回 null。
 
-Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `FOREGROUND_SERVICE_SPECIAL_USE` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那三个 `<service>`）**已在本插件的清单里声明**，会合并进应用——普通的 `<service>` 可以来自库清单。**audio_service 不在这一条里**：它自己的库清单是空的，媒体播放的 `AudioService`（`mediaPlayback`）和 `MediaButtonReceiver` 必须写在应用的清单里，缺一项后台播放就没有服务可起、控制条也无从显示（`example/` 里已经写了）。
+Android 侧需要的清单条目（`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` / `FOREGROUND_SERVICE_SPECIAL_USE` / `WAKE_LOCK` / `POST_NOTIFICATIONS` 与那三个 `<service>`）**已在本插件的清单里声明**，会合并进应用——普通的 `<service>` 可以来自库清单。媒体播放的服务同样来自库清单：`flutter_media_session` 自带 `mediaPlayback` 服务与权限，应用不用再写。
 
 Android 15 给 `dataSync` 前台服务设了**每天 6 小时**的额度，所以下载和普通任务留在 `dataSync`；直播录制没有可用期限，它声明 `specialUse`（清单里带 `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` 的理由说明，上架时同样的话还要在商店里再写一遍）。额度用完系统会停掉**那个**服务并在 `onTimeout` 里干净收尾，不会让进程因为不响应被杀，也不会连带摘掉别的功能的保护。
 

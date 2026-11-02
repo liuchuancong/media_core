@@ -15,26 +15,12 @@ environment:
   flutter: ">=3.35.0"
 
 dependencies:
-  # The platform media surfaces. audio_service is the one abstraction that
-  # reaches all four: a notification on Android, the lock screen and Control
-  # Center on iOS, SMTC on Windows and MPRIS on Linux.
-  audio_service: ^0.18.19
-
-  # Linux implementation of audio_service (MPRIS / D-Bus).
-  audio_service_mpris: ^1.0.0-beta.3
-
-  # The bridge implements audio_service's platform interface directly.
-  audio_service_platform_interface: ^0.1.3
-
-  # Audio focus, interruptions and becoming-noisy.
-  audio_session: ^0.2.3
-
   flutter:
     sdk: flutter
 
-  # The Windows bottom rides flutter_media_session's SMTC; the deprecated
-  # third-party audio_service_win is retired.
-  flutter_media_session: ^3.0.9
+  # The platform media surfaces and audio focus: Media3 on Android, Now
+  # Playing on iOS/macOS, SMTC on Windows, the Media Session API on the web.
+  flutter_media_session: ^3.1.0-pre.4
 
 
   # The player whose state is published and whose transport is driven.

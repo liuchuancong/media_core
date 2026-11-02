@@ -19,7 +19,7 @@ import 'package:media_core_mediasession/media_core_mediasession.dart';
 /// trip; the button turns the surfaces off and on again so the difference is one
 /// tap away.
 ///
-/// Android needs the `audio_service` manifest entries and, on API 33+, the
+/// flutter_media_session brings the Android service; on API 33+ the
 /// notification permission; the package README lists them. On a platform where
 /// the surface cannot appear, the driver still publishes state, so this page
 /// stays a truthful demonstration of what the host would see.
@@ -240,7 +240,7 @@ final class _MediaSessionDemoPageState extends State<MediaSessionDemoPage> {
                   _row('surfaces', MediaSessionBootstrap.enabled ? 'enabled (app-wide)' : 'off'),
                   _row('driver', driver?.toString() ?? 'none'),
                   _row('active player', driver?.active?.id.value ?? 'none'),
-                  _row('channel', driver?.config.androidNotificationChannelId ?? '—'),
+                  _row('seek step', driver == null ? '—' : '${driver.config.seekStep.inSeconds}s'),
                   _row(
                     'controls',
                     driver == null

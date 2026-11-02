@@ -1,4 +1,3 @@
-import 'package:audio_session/audio_session.dart' as asession;
 import 'package:media_core/media_core.dart';
 
 import 'package:media_core_mediasession/src/media_session_config.dart';
@@ -17,7 +16,7 @@ import 'package:media_core_mediasession/src/media_session_driver.dart';
 ///
 ///   // One line at app start: every player created afterwards — video, music,
 ///   // the feed, the focused cell of a multiview wall — publishes to the
-///   // notification, the lock screen, SMTC or MPRIS.
+///   // notification, the lock screen or SMTC.
 ///   await MediaSessionBootstrap.enable();
 ///
 ///   runApp(const MyApp());
@@ -26,10 +25,9 @@ import 'package:media_core_mediasession/src/media_session_driver.dart';
 ///
 /// ### Why one driver for the whole process
 ///
-/// The platform has exactly one media notification: one `AudioService` handler,
-/// one SMTC session, one MPRIS name. Two drivers would fight over it — and
-/// `AudioService.init` asserts in debug on a second call — so this class owns
-/// the single instance and hands the same one to every kernel.
+/// The platform has exactly one media notification: one media session, one
+/// SMTC session. Two drivers would fight over it, so this class owns the
+/// single instance and hands the same one to every kernel.
 ///
 /// ### Why it is opt-in
 ///
@@ -68,16 +66,15 @@ final class MediaSessionBootstrap {
   /// that wants to be sure does not have to check first.
   ///
   /// [driver] exists for a host that configured its own — it still owns
-  /// initializing it — and for tests, which have no audio_service platform.
+  /// initializing it — and for tests, which have no platform session.
   ///
-  /// Throws when the platform refuses to initialize (a missing `audio_service`
-  /// manifest entry on Android, for instance). A host that wants the app to
+  /// Throws when the platform refuses to initialize (Linux, which
+  /// flutter_media_session does not implement yet, for instance). A host that wants the app to
   /// boot regardless should catch and log, which is what the example app does.
   static Future<MediaSessionDriver> enable({
     MediaSessionConfig config = const MediaSessionConfig(),
     MediaSessionDriver? driver,
     Uri? Function(PlayerSource source)? artUriResolver,
-    asession.AudioSessionConfiguration? sessionConfiguration,
   }) async {
     final existing = _current;
 
@@ -86,8 +83,7 @@ final class MediaSessionBootstrap {
     }
 
     // Concurrent callers share one enable: two `initialize()`s would both run
-    // the platform handshake, and the second `AudioService.init` is what the
-    // platform asserts against. A failure clears the pending future so a
+    // the platform handshake against the one platform session. A failure clears the pending future so a
     // retry is possible at all.
     final pending = _pending;
 
@@ -95,9 +91,7 @@ final class MediaSessionBootstrap {
       return await pending;
     }
 
-    final session =
-        driver ??
-        MediaSessionDriver(config: config, artUriResolver: artUriResolver, sessionConfiguration: sessionConfiguration);
+    final session = driver ?? MediaSessionDriver(config: config, artUriResolver: artUriResolver);
 
     final initializing = session.initialize().then((_) => session);
     _pending = initializing;

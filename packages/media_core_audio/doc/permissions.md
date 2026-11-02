@@ -42,32 +42,8 @@ The plugin's own manifest already declares, and merges into the app:
 - `WAKE_LOCK`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`
   (background playback).
 
-`audio_service` requires three more entries that a library cannot add for the
-app, because the app's own activity is replaced:
-
-```xml
-<application ...>
-  <activity android:name="com.ryanheise.audioservice.AudioServiceActivity" ... />
-
-  <service android:name="com.ryanheise.audioservice.AudioService"
-      android:foregroundServiceType="mediaPlayback"
-      android:exported="true" tools:ignore="Instantiatable">
-    <intent-filter>
-      <action android:name="android.media.browse.MediaBrowserService" />
-    </intent-filter>
-  </service>
-
-  <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-      android:exported="true" tools:ignore="Instantiatable">
-    <intent-filter>
-      <action android:name="android.intent.action.MEDIA_BUTTON" />
-    </intent-filter>
-  </receiver>
-</application>
-```
-
-Without the service/receiver the media notification, the lock-screen controls
-and headset buttons stay dead even though playback works.
+The media-playback service itself comes from `flutter_media_session`'s library
+manifest and merges automatically; no extra entries are needed.
 
 ### iOS
 

@@ -1,14 +1,12 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
-import 'package:audio_service/audio_service.dart' as asvc;
-import 'package:audio_service_mpris/audio_service_mpris.dart' as ampris;
-import 'package:audio_session/audio_session.dart' as asession;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb, listEquals;
+import 'package:flutter_media_session/flutter_media_session.dart' as fms;
 import 'package:media_core/media_core.dart';
 import 'package:media_core_mediasession/src/media_session_config.dart';
-import 'package:media_core_mediasession/src/media_session_flutter_bottom.dart';
 import 'package:media_core_mediasession/src/media_session_handler.dart';
-import 'package:media_core_mediasession/src/media_session_surfaces.dart' show mediaSessionArtUriKey;
+import 'package:media_core_mediasession/src/media_session_models.dart';
+import 'package:media_core_mediasession/src/media_session_surfaces.dart' show mediaSessionAlbumKey, mediaSessionArtUriKey, mediaSessionArtistKey;
 import 'package:meta/meta.dart' show visibleForTesting;
 
 final LogModule _log = MediaCoreLog.of(LogCategory.session);
@@ -46,10 +44,9 @@ abstract interface class MediaSessionRemoteTarget {
 /// platform's media surfaces:
 ///
 /// ```text
-/// PlayerHandle.playbackStream ──▶ MediaSessionHandler ──▶ notification / SMTC / MPRIS
+/// PlayerHandle.playbackStream ──▶ MediaSessionHandler ──▶ flutter_media_session
 /// notification buttons        ──▶ MediaSessionHandler ──▶ PlayerHandle
-/// audio focus interruptions   ──▶ pause / duck / resume
-/// headphones unplugged        ──▶ pause
+/// audio focus interruptions   ──▶ pause / resume (flutter_media_session)
 /// ```
 ///
 /// ### Why this is its own package
@@ -72,18 +69,16 @@ abstract interface class MediaSessionRemoteTarget {
 /// session.setActive(handle);
 /// ```
 ///
-/// The host app still owns the platform plumbing a library cannot declare for
-/// it — the `audio_service` activity/service entries and, on Android 13+, the
-/// notification permission. See the package README.
+/// flutter_media_session merges its own Android service and permissions and
+/// asks for the notification permission on activation; the host still owns
+/// the iOS `audio` background mode. Linux has no surface yet.
 base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSession {
   /// Creates the driver.
   MediaSessionDriver({
     this.config = const MediaSessionConfig(),
-    asession.AudioSessionConfiguration? sessionConfiguration,
     this.artUriResolver,
     @visibleForTesting MediaSessionHandler? handler,
-  }) : _sessionConfiguration = sessionConfiguration,
-       _handler = handler;
+  }) : _handler = handler;
 
   /// Capability configuration.
   final MediaSessionConfig config;
@@ -97,8 +92,6 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   ///
   /// Called once per media item, on the main isolate.
   final Uri? Function(PlayerSource source)? artUriResolver;
-
-  final asession.AudioSessionConfiguration? _sessionConfiguration;
 
   MediaSessionHandler? _handler;
   PlayerHandle? _active;
@@ -136,8 +129,18 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   Future<void> Function(double rate)? setSpeedHandler;
 
   StreamSubscription<void>? _playbackSub;
-  StreamSubscription<asession.AudioInterruptionEvent>? _interruptionSub;
-  StreamSubscription<void>? _noisySub;
+
+  // The bridge to flutter_media_session: the handler's values go out, the
+  // system's button presses come back.
+  StreamSubscription<fms.MediaAction>? _actionSub;
+  StreamSubscription<MediaItem?>? _itemSub;
+  StreamSubscription<PlaybackState>? _stateSub;
+
+  /// Platform calls run one after another, so a clear can never overtake the
+  /// publish that preceded it.
+  Future<void> _platformQueue = Future<void>.value();
+  bool _platformActive = false;
+  List<fms.MediaAction>? _publishedLayout;
 
   bool _initialized = false;
   bool _disposed = false;
@@ -145,15 +148,12 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// Whether the platform handshake ran and got nothing back.
   ///
   /// The difference between "not yet" and "not here" for every later activation: a
-  /// driver whose `AudioService.init` threw has no surface at all, and saying so is
+  /// driver whose platform activation threw has no surface at all, and saying so is
   /// the only way a host learns the platform is missing the feature instead of
   /// chasing a startup order.
   bool _noSurface = false;
-  bool _ducked = false;
-  bool _resumeOnInterruptionEnd = false;
-  double _volumeBeforeDuck = 1;
 
-  /// The underlying audio_service handler.
+  /// The session state and transport the surfaces mirror.
   ///
   /// Null before [initialize].
   MediaSessionHandler? get handler => _handler;
@@ -168,19 +168,19 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  /// Initializes audio_service and the audio session.
+  /// Activates the platform media session.
   ///
   /// Call once, early (before `runApp` is fine).
   ///
-  /// Platform integration:
+  /// Platform integration, all through flutter_media_session:
   ///
-  /// - Android/iOS: media notification + lock screen controls
-  /// - Windows: SMTC (System Media Transport Controls) via flutter_media_session
-  /// - Linux: MPRIS (D-Bus) via audio_service_mpris — shows up in GNOME/KDE
-  ///   media applets and media keys work
+  /// - Android: Media3 notification and lock screen controls
+  /// - iOS/macOS: lock screen, Control Center, Now Playing
+  /// - Windows: SMTC (System Media Transport Controls)
+  /// - Web: the Media Session API
   ///
-  /// On platforms without audio_session support the focus part is skipped;
-  /// the surfaces still work.
+  /// Linux has no implementation and throws [UnsupportedError]; a host that
+  /// wants the app to boot regardless catches it.
   Future<void> initialize() async {
     if (_initialized || _disposed) {
       return;
@@ -188,73 +188,66 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
     _initialized = true;
 
-    _registerPlatformImplementation();
-
     if (_handler != null) {
-      // Supplied from outside (a test): the platform session is still wired,
-      // but there is no handler to build.
+      // Supplied from outside (a test): there is no platform to bridge.
       return;
     }
 
-    MediaSessionHandler started;
+    final started = MediaSessionHandler(
+      onPlay: _transportPlay,
+      onPause: _transportPause,
+      onSeek: _transportSeek,
+      onStop: _transportStop,
+      onRewind: () => _seekTransportBy(-config.seekStep),
+      onFastForward: () => _seekTransportBy(config.seekStep),
+      // These wrappers read the mutable handler fields at invocation time:
+      // the driver is created once at startup while the player that owns a
+      // queue appears later, so a null check baked in here would leave the
+      // skip buttons permanently dead for a host that installs handlers after
+      // initialize().
+      onNext: () async {
+        await skipToNextHandler?.call();
+      },
+      onPrevious: () async {
+        await skipToPreviousHandler?.call();
+      },
+      onSkipToQueueItem: (index) async {
+        await skipToQueueItemHandler?.call(index);
+      },
+      onSetSpeed: (rate) async {
+        await setSpeedHandler?.call(rate);
+      },
+      controlsBuilder: _buildControls,
+    );
 
     try {
-      started = await asvc.AudioService.init(
-        builder: () => MediaSessionHandler(
-          onPlay: () async {
-            await _transportPlay();
-          },
-          onPause: () async {
-            await _transportPause();
-          },
-          onSeek: (position) async {
-            await _transportSeek(position);
-          },
-          onStop: () async {
-            await _transportStop();
-          },
-          // The notification's ±seekStep buttons, clamped to the start of the
-          // stream; without a handler here the presses hit BaseAudioHandler's
-          // empty no-ops - buttons that look alive and do nothing.
-          onRewind: () async {
-            await _seekTransportBy(-config.seekStep);
-          },
-          onFastForward: () async {
-            await _seekTransportBy(config.seekStep);
-          },
-          // These wrappers read the mutable handler fields at invocation time:
-          // the driver is created once at startup while the player that owns a
-          // queue appears later, so a null check baked in here would leave the
-          // notification's skip buttons permanently dead for a host that
-          // installs handlers after initialize().
-          onNext: () async {
-            await skipToNextHandler?.call();
-          },
-          onPrevious: () async {
-            await skipToPreviousHandler?.call();
-          },
-          onSkipToQueueItem: (index) async {
-            await skipToQueueItemHandler?.call(index);
-          },
-          onSetSpeed: (rate) async {
-            await setSpeedHandler?.call(rate);
-          },
-          controlsBuilder: _buildControls,
-          stopOnTaskRemoved: config.androidStopOnRemoveTask,
-        ),
-        config: asvc.AudioServiceConfig(
-          androidNotificationChannelId: config.androidNotificationChannelId,
-          androidNotificationChannelName: config.androidNotificationChannelName,
-          androidNotificationOngoing: config.androidNotificationOngoing,
-          androidStopForegroundOnPause: !config.androidNotificationOngoing,
-        ),
-      );
+      if (!_supportsPlatform) {
+        throw UnsupportedError('flutter_media_session has no implementation for $defaultTargetPlatform');
+      }
+
+      final platform = fms.FlutterMediaSessionPlatform.instance;
+
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        await platform.requestNotificationPermission();
+      }
+
+      await platform.activate();
+      _platformActive = true;
+
+      if (config.processInterruptions) {
+        await _bestEffort(() => platform.setAutoHandleInterruptions(true));
+      }
+
+      final step = config.seekStep.inSeconds;
+      await _bestEffort(() => platform.setSkipIntervals(forwardSeconds: step, backwardSeconds: step));
+
+      _actionSub = platform.onMediaAction.listen(_onPlatformAction, onError: (_) {});
     } on Object catch (error, stackTrace) {
       // Remembered, then rethrown: `enable` still fails the way its own doc says it
       // does, but a host that caught that and kept using the driver gets an honest
       // answer from `activate` — there is no surface here, rather than "not yet,
       // keep waiting".
-      _log.error('audio service init failed; no media surface', error: error, stackTrace: stackTrace);
+      _log.error('media session activation failed; no media surface', error: error, stackTrace: stackTrace);
       _noSurface = true;
       // A failed init stays retryable: `_initialized` was set optimistically
       // at the top, and leaving it set turns a later attempt into a silent
@@ -264,10 +257,12 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     }
 
     _handler = started;
+    _itemSub = started.mediaItem.listen((item) => _enqueue(() => _pushItem(item)));
+    _stateSub = started.playbackState.listen((state) => _enqueue(() => _pushState(state)));
 
-    // A player or a remote window may have claimed the surface while
-    // audio_service was initializing. Publish what was remembered now that
-    // there is a handler to receive it.
+    // A player or a remote window may have claimed the surface while the
+    // platform was activating. Publish what was remembered now that there is
+    // a handler to receive it.
     final remoteItem = _remoteItem;
     final remoteState = _remoteState;
     final active = _active;
@@ -289,28 +284,6 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
         },
       );
     }
-
-    if (!_supportsAudioSession) {
-      return;
-    }
-
-    try {
-      final session = await asession.AudioSession.instance;
-
-      await session.configure(_sessionConfiguration ?? const asession.AudioSessionConfiguration.music());
-
-      if (config.processInterruptions) {
-        _interruptionSub = session.interruptionEventStream.listen(_onInterruption, onError: (_) {});
-      }
-
-      if (config.pauseOnBecomingNoisy) {
-        _noisySub = session.becomingNoisyEventStream.listen((_) => _pauseTransport(), onError: (_) {});
-      }
-    } on Object catch (error) {
-      // A platform without a functional audio_session implementation. Playback
-      // still works; focus handling is simply unavailable.
-      _log.warning('audio focus handling unavailable', error: error);
-    }
   }
 
   /// Releases this driver.
@@ -324,16 +297,24 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     await _playbackSub?.cancel();
     _playbackSub = null;
 
-    await _interruptionSub?.cancel();
-    _interruptionSub = null;
-
-    await _noisySub?.cancel();
-    _noisySub = null;
-
     // The surface goes away rather than being parked: a driver that is gone has
     // nothing left to publish, and an idle-but-still-listed media item is a
     // control bar for a session that no longer exists.
     await _handler?.releaseSurface();
+    await _platformQueue;
+
+    await _actionSub?.cancel();
+    _actionSub = null;
+    await _itemSub?.cancel();
+    _itemSub = null;
+    await _stateSub?.cancel();
+    _stateSub = null;
+
+    if (_platformActive) {
+      _platformActive = false;
+      await _bestEffort(fms.FlutterMediaSessionPlatform.instance.deactivate);
+    }
+
     _surfaceOwner = null;
     _remoteTarget = null;
     _remoteItem = null;
@@ -366,7 +347,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// Pass null to detach. The kernel calls this automatically via
   /// `attachAudio`; apps without a kernel can drive it directly. Safe before
   /// [initialize]: the binding is remembered and published once a handler
-  /// exists, so a host that opens a player while `AudioService.init` is still
+  /// exists, so a host that opens a player while the platform is still activating and still
   /// running does not end up with a silent notification.
   void setActive(PlayerHandle? handle) {
     if (_disposed || (identical(handle, _active) && _remoteTarget == null)) {
@@ -395,8 +376,6 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     _remoteState = null;
 
     _active = handle;
-    _ducked = false;
-    _resumeOnInterruptionEnd = false;
 
     final handler = _handler;
 
@@ -597,27 +576,6 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     await _transportSeek(target < Duration.zero ? Duration.zero : target);
   }
 
-  /// Pauses whichever transport owns the surface, for the platform's own
-  /// interruption paths (unplugged headphones, a call).
-  Future<void> _pauseTransport() async {
-    final remote = _remoteTarget;
-    if (remote != null) {
-      await remote.pause();
-      return;
-    }
-    await _active?.pause();
-  }
-
-  /// Resumes whichever transport owns the surface after an interruption.
-  Future<void> _resumeTransport() async {
-    final remote = _remoteTarget;
-    if (remote != null) {
-      await remote.play();
-      return;
-    }
-    await _active?.play();
-  }
-
   // ---------------------------------------------------------------------------
   // MediaBackgroundSession
   // ---------------------------------------------------------------------------
@@ -766,92 +724,162 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   }
 
   // ---------------------------------------------------------------------------
-  // Interruptions
+  // Platform bridge
   // ---------------------------------------------------------------------------
 
-  void _onInterruption(asession.AudioInterruptionEvent event) {
-    final remote = _remoteTarget;
-    final active = _active;
-
-    if (active == null && remote == null) {
-      return;
+  /// Whether flutter_media_session has an implementation here.
+  static bool get _supportsPlatform {
+    if (kIsWeb) {
+      return true;
     }
 
-    if (event.begin) {
-      switch (event.type) {
-        case asession.AudioInterruptionType.duck:
-          // A remote window's volume is not on this side of the bridge; the
-          // interruption still pauses the session through the pause branch.
-          if (active == null) {
-            return;
-          }
-          if (!_ducked) {
-            _ducked = true;
-            _volumeBeforeDuck = active.playback.volume;
-            _log.info(
-              'ducking for interruption',
-              fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
-            );
-            unawaited(active.setVolume(_volumeBeforeDuck * config.duckFactor));
-          }
-
-        case asession.AudioInterruptionType.pause:
-        case asession.AudioInterruptionType.unknown:
-          _resumeOnInterruptionEnd = config.resumeAfterInterruption &&
-              (remote != null ? (_remoteState?.playing ?? false) : active!.playback.isPlaying);
-          _log.info(
-            'pausing for interruption',
-            fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
-          );
-          unawaited(_pauseTransport());
-      }
-
-      return;
-    }
-
-    if (_ducked && active != null) {
-      _ducked = false;
-      _log.info(
-        'restoring volume after interruption',
-        fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
-      );
-      unawaited(active.setVolume(_volumeBeforeDuck));
-    }
-
-    if (_resumeOnInterruptionEnd) {
-      _resumeOnInterruptionEnd = false;
-      _log.info(
-        'resuming after interruption',
-        fields: <String, Object?>{'type': event.type.name, 'begin': event.begin},
-      );
-      unawaited(_resumeTransport());
-    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.macOS || TargetPlatform.windows => true,
+      _ => false,
+    };
   }
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  bool get _supportsAudioSession {
-    // audio_session has no implementation on Windows/Linux.
-    return Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
-  }
-
-  void _registerPlatformImplementation() {
-    // Federated plugins normally self-register through the generated plugin
-    // registrant. Explicit registration covers custom embedders and makes the
-    // backend selection visible.
+  /// Runs an optional platform call; a platform that lacks it is not an error.
+  static Future<void> _bestEffort(Future<void> Function() call) async {
     try {
-      if (Platform.isWindows) {
-        MediaSessionFlutterBottom.registerWith();
-      } else if (Platform.isLinux) {
-        ampris.AudioServiceMpris.registerWith();
-      }
+      await call();
     } on Object catch (error) {
-      // Registration is best-effort: audio_service falls back to its default
-      // platform implementation when this fails.
-      _log.debug('platform implementation registration failed', fields: <String, Object?>{'error': error.toString()});
+      _log.debug('optional media session call skipped', fields: <String, Object?>{'error': error.toString()});
     }
+  }
+
+  void _enqueue(Future<void> Function() step) {
+    _platformQueue = _platformQueue.then((_) => step()).catchError((Object error) {
+      _log.warning('media session publish failed', error: error);
+    });
+  }
+
+  /// Turns a system button press (or an interruption the plugin handled) into
+  /// the handler's transport call.
+  void _onPlatformAction(fms.MediaAction action) {
+    final handler = _handler;
+    if (handler == null) {
+      return;
+    }
+
+    final command = switch (action.name) {
+      'play' => handler.play(),
+      'pause' => handler.pause(),
+      'stop' => handler.stop(),
+      'skipToNext' => handler.skipToNext(),
+      'skipToPrevious' => handler.skipToPrevious(),
+      'rewind' => handler.rewind(),
+      'fastForward' => handler.fastForward(),
+      'seekTo' => handler.seek(action.seekPosition ?? Duration.zero),
+      _ => Future<void>.value(),
+    };
+
+    unawaited(
+      command.catchError((Object error) {
+        _log.warning('media action failed', error: error);
+      }),
+    );
+  }
+
+  Future<void> _ensurePlatformActive() async {
+    if (_platformActive) {
+      return;
+    }
+
+    await fms.FlutterMediaSessionPlatform.instance.activate();
+    _platformActive = true;
+    _publishedLayout = null;
+  }
+
+  Future<void> _pushItem(MediaItem? item) async {
+    final platform = fms.FlutterMediaSessionPlatform.instance;
+
+    if (item == null) {
+      // A cleared item is a released surface: the notification and the
+      // platform's "now playing" entry go away instead of going blank.
+      if (_platformActive) {
+        _platformActive = false;
+        await platform.deactivate();
+      }
+      return;
+    }
+
+    await _ensurePlatformActive();
+    await platform.updateMetadata(
+      fms.MediaMetadata(
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        artworkUri: item.artUri?.toString(),
+        duration: item.duration,
+      ),
+    );
+  }
+
+  Future<void> _pushState(PlaybackState state) async {
+    // A released surface stays released: activating the platform again only
+    // to say "idle" would bring the notification back.
+    if (!_platformActive && (state.processingState == AudioProcessingState.idle || _handler?.mediaItem.value == null)) {
+      return;
+    }
+
+    await _ensurePlatformActive();
+
+    final platform = fms.FlutterMediaSessionPlatform.instance;
+    final layout = <fms.MediaAction>[for (final control in state.controls) _platformActionOf(control.action)];
+
+    if (!listEquals(layout, _publishedLayout)) {
+      _publishedLayout = layout;
+
+      final seekable = state.controls.any(
+        (control) => control.action == MediaAction.rewind || control.action == MediaAction.fastForward,
+      );
+      final compact = <int>[
+        for (final index in config.androidCompactActionIndices)
+          if (index < layout.length) index,
+      ];
+
+      await _bestEffort(() => platform.setActionLayout(fms.ActionSlotLayout(layout, compactActionIndices: compact)));
+      await _bestEffort(
+        () => platform.updateAvailableActions(<fms.MediaAction>{
+          ...layout,
+          // The play/pause slot swaps with the state; both verbs stay allowed.
+          if (layout.contains(fms.MediaAction.play) || layout.contains(fms.MediaAction.pause)) ...<fms.MediaAction>{
+            fms.MediaAction.play,
+            fms.MediaAction.pause,
+          },
+          if (seekable) fms.MediaAction.seekTo,
+        }),
+      );
+    }
+
+    await platform.updatePlaybackState(
+      fms.PlaybackState(
+        status: switch (state.processingState) {
+          AudioProcessingState.loading || AudioProcessingState.buffering => fms.PlaybackStatus.buffering,
+          AudioProcessingState.completed => fms.PlaybackStatus.ended,
+          AudioProcessingState.error => fms.PlaybackStatus.error,
+          AudioProcessingState.idle => fms.PlaybackStatus.idle,
+          AudioProcessingState.ready => state.playing ? fms.PlaybackStatus.playing : fms.PlaybackStatus.paused,
+        },
+        position: state.updatePosition,
+        speed: state.speed,
+        bufferedPosition: state.bufferedPosition,
+      ),
+    );
+  }
+
+  static fms.MediaAction _platformActionOf(MediaAction action) {
+    return switch (action) {
+      MediaAction.play => fms.MediaAction.play,
+      MediaAction.pause => fms.MediaAction.pause,
+      MediaAction.stop => fms.MediaAction.stop,
+      MediaAction.seek => fms.MediaAction.seekTo,
+      MediaAction.rewind => fms.MediaAction.rewind,
+      MediaAction.fastForward => fms.MediaAction.fastForward,
+      MediaAction.skipToPrevious => fms.MediaAction.skipToPrevious,
+      MediaAction.skipToNext => fms.MediaAction.skipToNext,
+    };
   }
 
   /// The controls the platform shows for the current state.
@@ -861,40 +889,28 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   /// player therefore gets play/pause, ±[MediaSessionConfig.seekStep] and stop,
   /// while a queue player gets skip-previous/next in the same slots — which is
   /// what each platform's users expect from that kind of app.
-  List<asvc.MediaControl> _buildControls(bool playing, {bool seekable = true}) {
+  List<MediaControl> _buildControls(bool playing, {bool seekable = true}) {
     if (!config.showControls) {
-      return const <asvc.MediaControl>[];
+      return const <MediaControl>[];
     }
 
-    return <asvc.MediaControl>[
+    return <MediaControl>[
       if (skipToPreviousHandler != null)
-        asvc.MediaControl(androidIcon: config.previousIcon, label: 'Previous', action: asvc.MediaAction.skipToPrevious)
+        MediaControl.skipToPrevious
       else if (config.showSeekButtons && seekable)
-        asvc.MediaControl(
-          androidIcon: config.rewindIcon,
-          label: 'Back ${config.seekStep.inSeconds}s',
-          action: asvc.MediaAction.rewind,
-        ),
-      asvc.MediaControl(
-        androidIcon: playing ? config.pauseIcon : config.playIcon,
-        label: playing ? 'Pause' : 'Play',
-        action: playing ? asvc.MediaAction.pause : asvc.MediaAction.play,
-      ),
+        MediaControl(action: MediaAction.rewind, label: 'Back ${config.seekStep.inSeconds}s'),
+      if (playing) MediaControl.pause else MediaControl.play,
       if (skipToNextHandler != null)
-        asvc.MediaControl(androidIcon: config.nextIcon, label: 'Next', action: asvc.MediaAction.skipToNext)
+        MediaControl.skipToNext
       else if (config.showSeekButtons && seekable)
-        asvc.MediaControl(
-          androidIcon: config.fastForwardIcon,
-          label: 'Forward ${config.seekStep.inSeconds}s',
-          action: asvc.MediaAction.fastForward,
-        ),
-      asvc.MediaControl(androidIcon: config.stopIcon, label: 'Stop', action: asvc.MediaAction.stop),
+        MediaControl(action: MediaAction.fastForward, label: 'Forward ${config.seekStep.inSeconds}s'),
+      MediaControl.stop,
     ];
   }
 
   /// Controls for the current owner: a live remote session gets no seek
   /// buttons, a local handle keeps the configured pair.
-  List<asvc.MediaControl> _currentControls(bool playing) {
+  List<MediaControl> _currentControls(bool playing) {
     return _buildControls(playing, seekable: _remoteTarget?.canSeek ?? true);
   }
 
@@ -998,7 +1014,8 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   ///
   /// Title order: [title] when the session named itself, then the source's own
   /// title, then its file name, then the URI — a notification that says "Media" is
-  /// worse than one that says "movie.mp4". Artwork comes from the source metadata,
+  /// worse than one that says "movie.mp4". Artist and album come from the
+  /// source metadata ([mediaSessionArtistKey], [mediaSessionAlbumKey]). Artwork comes from the source metadata,
   /// then from [artUriResolver]; a video source usually only has the second.
   MediaSessionItem _itemFor(PlayerHandle handle, {String? title}) {
     final source = handle.source;
@@ -1011,10 +1028,14 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     final artUri = metadata is String ? Uri.tryParse(metadata) : (source != null ? artUriResolver?.call(source) : null);
 
     final duration = handle.playback.duration;
+    final artist = source?.metadataValue(mediaSessionArtistKey);
+    final album = source?.metadataValue(mediaSessionAlbumKey);
 
     return MediaSessionItem(
       id: source?.id.value ?? handle.id.value,
       title: name,
+      artist: artist is String ? artist : '',
+      album: album is String ? album : '',
       duration: duration == Duration.zero ? null : duration,
       artUri: artUri,
     );
@@ -1024,8 +1045,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
   String toString() {
     return 'MediaSessionDriver('
         'initialized: $_initialized, '
-        'active: ${_active?.id.value ?? 'none'}, '
-        'channel: ${config.androidNotificationChannelId}'
+        'active: ${_active?.id.value ?? 'none'}'
         ')';
   }
 }

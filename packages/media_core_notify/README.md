@@ -23,7 +23,7 @@ with, and one line that says what is running right now.
 
 - The **media** notification (playback controls, artwork, lock screen, SMTC,
   MPRIS). That is [`media_core_mediasession`](../media_core_mediasession), which
-  publishes it through `audio_service`. Two packages drawing one media
+  publishes it through `flutter_media_session`. Two packages drawing one media
   notification is a doubled tray, so the boundary is by surface, not by
   convenience.
 - **Process protection.** Keeping a recording or download alive with the screen

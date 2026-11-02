@@ -5,10 +5,8 @@
 ///
 /// **1. Capability (host-facing)** — bridges the kernel to the platform:
 ///
-/// - `audio_service` — media notification, lock screen controls, background
-///   playback (Android/iOS; Windows via audio_service_win)
-/// - `audio_session` — audio focus, interruptions (calls, other apps),
-///   becoming-noisy (headphones unplugged)
+/// - `flutter_media_session` — media notification, lock screen controls,
+///   SMTC, background playback and audio focus interruptions (calls, other apps)
 ///
 /// ```dart
 /// final audio = MediaCoreAudio();

@@ -1,8 +1,9 @@
 /// System media surfaces for `media_core`.
 ///
-/// One capability, four platforms: a media notification with controls on
-/// Android, the lock screen and Control Center on iOS, SMTC on Windows and
-/// MPRIS on Linux — plus audio focus, interruptions and pause-on-unplug. It
+/// One capability over flutter_media_session: a media notification with
+/// controls on Android, the lock screen and Control Center on iOS and macOS,
+/// SMTC on Windows and the Media Session API on the web — plus audio focus
+/// interruptions. It
 /// works for **any** player the kernel owns, video included; that is the reason
 /// it is a package of its own rather than part of the music module.
 ///
@@ -36,26 +37,19 @@
 ///
 /// What the host still owns (a library cannot declare these for the app):
 ///
-/// - Android: `AudioServiceActivity`, the `AudioService` service and
-///   `MediaButtonReceiver` entries in the manifest, plus the
-///   `POST_NOTIFICATIONS` permission on API 33+ (`media_core_audio`'s
-///   `AudioPermissionService` asks for exactly that one, or use your own
-///   permission plugin);
 /// - iOS: the `audio` background mode in `Info.plist`, otherwise the lock
 ///   screen entry disappears when the app is suspended;
-/// - drawables for the control icons named in [MediaSessionConfig].
+/// - Windows (unpackaged): an AppUserModelID, so SMTC names the app.
+///
+/// The Android service, its permissions and the API 33+ notification prompt
+/// come with flutter_media_session. Linux has no surface yet: enabling there
+/// throws [UnsupportedError].
 library;
 
-import 'package:media_core_mediasession/src/media_session_config.dart' show MediaSessionConfig;
-
-// The handler extends `BaseAudioHandler` and its streams carry these types, so
-// a host that observes the surfaces would otherwise have to depend on
-// audio_service itself just to name them.
-export 'package:audio_service/audio_service.dart'
-    show AudioProcessingState, BaseAudioHandler, MediaAction, MediaControl, MediaItem, PlaybackState;
 
 export 'package:media_core_mediasession/src/media_session_bootstrap.dart';
 export 'package:media_core_mediasession/src/media_session_config.dart';
 export 'package:media_core_mediasession/src/media_session_driver.dart';
 export 'package:media_core_mediasession/src/media_session_handler.dart';
+export 'package:media_core_mediasession/src/media_session_models.dart';
 export 'package:media_core_mediasession/src/media_session_surfaces.dart';

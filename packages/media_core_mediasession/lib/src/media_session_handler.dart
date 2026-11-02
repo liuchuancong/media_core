@@ -1,4 +1,4 @@
-import 'package:audio_service/audio_service.dart';
+import 'package:media_core_mediasession/src/media_session_models.dart';
 
 /// Where the transport is, in the words the platform understands.
 ///
@@ -120,16 +120,17 @@ final class MediaSessionItem {
   }
 }
 
-/// [BaseAudioHandler] that bridges the platform media surfaces and media_core.
+/// The media session's state and transport, independent of any platform.
 ///
-/// Outbound (player → notification): [publishState] and [publishMediaItem]
-/// mirror a `PlayerHandle`'s playback state.
+/// Outbound (player → surfaces): [publishState] and [publishMediaItem] update
+/// [playbackState] and [mediaItem]; the driver forwards those values to
+/// flutter_media_session, and a host or a test can observe them directly.
 ///
-/// Inbound (notification → player): transport commands are forwarded through
-/// the callbacks supplied at construction. A callback that was not supplied
-/// degrades to [BaseAudioHandler]'s default, so a control the host did not
-/// install cannot silently do nothing.
-final class MediaSessionHandler extends BaseAudioHandler {
+/// Inbound (surfaces → player): the driver turns each system button into one
+/// of the transport methods below, which call the callbacks supplied at
+/// construction. A control the host did not install does nothing rather than
+/// throwing into the platform.
+final class MediaSessionHandler {
   /// Creates the handler.
   MediaSessionHandler({
     required Future<void> Function() onPlay,
@@ -143,7 +144,6 @@ final class MediaSessionHandler extends BaseAudioHandler {
     Future<void> Function()? onRewind,
     Future<void> Function()? onFastForward,
     this.controlsBuilder,
-    this.stopOnTaskRemoved = false,
   }) : _onPlay = onPlay,
        _onPause = onPause,
        _onSeek = onSeek,
@@ -166,26 +166,24 @@ final class MediaSessionHandler extends BaseAudioHandler {
   final Future<void> Function()? _onRewind;
   final Future<void> Function()? _onFastForward;
 
+  /// What the surfaces show as the transport state.
+  final MediaSessionValue<PlaybackState> playbackState = MediaSessionValue<PlaybackState>(const PlaybackState());
+
+  /// What the surfaces show as the current item, or null for none.
+  final MediaSessionValue<MediaItem?> mediaItem = MediaSessionValue<MediaItem?>(null);
+
+  /// The play list a queue player published.
+  final MediaSessionValue<List<MediaItem>> queue = MediaSessionValue<List<MediaItem>>(const <MediaItem>[]);
+
   /// Whether the platform may offer skip-next.
   bool get canSkipToNext => _onNext != null;
 
   /// Whether the platform may offer skip-previous.
   bool get canSkipToPrevious => _onPrevious != null;
 
-  /// Whether the task-removal callback stops playback.
-  ///
-  /// `MediaSessionConfig.androidStopOnRemoveTask`, which is what the platform's
-  /// "the viewer swiped the app away" signal is for. Off means the audio keeps
-  /// running from the notification, which is what a music app wants and what a
-  /// live room does not.
-  final bool stopOnTaskRemoved;
-
-  /// Optional builder for notification controls.
+  /// Optional builder for the surface controls.
   ///
   /// Receives the current playing state and returns the controls to display.
-  /// When null a play/pause + stop pair is used.
-  // Positional `playing` mirrors audio_service's `MediaControlsBuilder`, so a
-  // platform-provided builder can be dropped in without rewrapping.
   // ignore: avoid_positional_boolean_parameters
   final List<MediaControl> Function(bool playing)? controlsBuilder;
 
@@ -225,28 +223,17 @@ final class MediaSessionHandler extends BaseAudioHandler {
 
   /// Pushes idle state into the media surface.
   void publishIdle() {
-    playbackState.add(PlaybackState());
+    playbackState.add(const PlaybackState());
   }
 
   /// Gives the platform's media surface back, without touching the player.
   ///
-  /// The notification and the system session go away (`idle` is what removes
-  /// them), and the transport is left exactly where it was: a host detaching a
-  /// surface is not a viewer pressing stop.
+  /// The item is cleared and the state goes idle, which is what makes the
+  /// driver deactivate the platform session; the transport is left exactly
+  /// where it was: a host detaching a surface is not a viewer pressing stop.
   Future<void> releaseSurface() async {
     clearMediaItem();
-    await stopFromHost();
-  }
-
-  /// [BaseAudioHandler.stop] — the platform's "this session is over" — without
-  /// the transport command that the notification's stop button means.
-  ///
-  /// Named because our own `stop()` override *is* the viewer's button: calling
-  /// `super.stop()` from a release path would otherwise read as pausing the
-  /// player to whoever was watching the code.
-  Future<void> stopFromHost() async {
     publishIdle();
-    await super.stop();
   }
 
   /// Pushes [item] as the current media item.
@@ -259,10 +246,10 @@ final class MediaSessionHandler extends BaseAudioHandler {
     mediaItem.add(null);
   }
 
-  /// Publishes the play list so the platform can show and jump through it.
+  /// Publishes the play list.
   ///
   /// The playing entry is also published as the current [mediaItem]; the
-  /// platform derives "current" from that, not from the list order.
+  /// surfaces derive "current" from that, not from the list order.
   void publishQueue(List<MediaSessionItem> items, {int index = -1}) {
     queue.add(items.map((item) => item.toMediaItem()).toList(growable: false));
 
@@ -275,105 +262,36 @@ final class MediaSessionHandler extends BaseAudioHandler {
   // Inbound transport commands (notification / lock screen / media keys)
   // ---------------------------------------------------------------------------
 
-  @override
+  /// Resumes playback.
   Future<void> play() => _onPlay();
 
-  @override
+  /// Pauses playback.
   Future<void> pause() => _onPause();
 
-  @override
+  /// Moves the playhead.
   Future<void> seek(Duration position) => _onSeek(position);
 
-  @override
+  /// The viewer's stop button: stops the player and ends the session.
   Future<void> stop() async {
     await _onStop();
-    await super.stop();
+    await releaseSurface();
   }
 
-  /// The viewer swiped the app away in Android's recents.
-  ///
-  /// Without [stopOnTaskRemoved] this answers nothing and playback continues —
-  /// the music keeps playing from the notification, which is what a music app
-  /// asks for. With it, the stop the viewer meant is the stop that happens: a
-  /// live room that keeps streaming after its page is gone is the case the flag
-  /// exists for.
-  @override
-  Future<void> onTaskRemoved() async {
-    if (!stopOnTaskRemoved) {
-      return;
-    }
+  /// Skips to the next queue entry, when a queue transport is installed.
+  Future<void> skipToNext() async => await _onNext?.call();
 
-    await stop();
-  }
+  /// Skips to the previous queue entry, when a queue transport is installed.
+  Future<void> skipToPrevious() async => await _onPrevious?.call();
 
-  @override
-  Future<void> skipToNext() async {
-    final next = _onNext;
+  /// Jumps back by the configured step.
+  Future<void> rewind() async => await _onRewind?.call();
 
-    // Without a queue the sane degrade is the default behavior.
-    if (next == null) {
-      return await super.skipToNext();
-    }
+  /// Jumps forward by the configured step.
+  Future<void> fastForward() async => await _onFastForward?.call();
 
-    await next();
-  }
+  /// Jumps to a queue index.
+  Future<void> skipToQueueItem(int index) async => await _onSkipToQueueItem?.call(index);
 
-  /// Relative seeks. The notification advertises rewind/fast-forward buttons
-  /// whenever a driver config asks for them; without these overrides the
-  /// presses fall through to [BaseAudioHandler]'s empty no-ops, which is a
-  /// button that looks alive and does nothing.
-  @override
-  Future<void> rewind() async {
-    final rewind = _onRewind;
-
-    if (rewind == null) {
-      return await super.rewind();
-    }
-
-    await rewind();
-  }
-
-  @override
-  Future<void> fastForward() async {
-    final fastForward = _onFastForward;
-
-    if (fastForward == null) {
-      return await super.fastForward();
-    }
-
-    await fastForward();
-  }
-
-  @override
-  Future<void> skipToPrevious() async {
-    final previous = _onPrevious;
-
-    if (previous == null) {
-      return await super.skipToPrevious();
-    }
-
-    await previous();
-  }
-
-  @override
-  Future<void> skipToQueueItem(int index) async {
-    final skip = _onSkipToQueueItem;
-
-    if (skip == null) {
-      return await super.skipToQueueItem(index);
-    }
-
-    await skip(index);
-  }
-
-  @override
-  Future<void> setSpeed(double speed) async {
-    final setSpeed = _onSetSpeed;
-
-    if (setSpeed == null) {
-      return await super.setSpeed(speed);
-    }
-
-    await setSpeed(speed);
-  }
+  /// Changes the playback rate.
+  Future<void> setSpeed(double speed) async => await _onSetSpeed?.call(speed);
 }

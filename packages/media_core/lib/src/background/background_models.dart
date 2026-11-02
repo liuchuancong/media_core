@@ -15,7 +15,7 @@ import 'package:meta/meta.dart';
 /// What a job is doing, for the runtime that has to keep it alive.
 ///
 /// Media playback is not one of these. It has its own service ownership on
-/// Android (`media_core_mediasession` over `audio_service`) and its own control
+/// Android (`media_core_mediasession` over `flutter_media_session`) and its own control
 /// surface, and folding it in here would put `mediaPlayback` on a job service —
 /// which Android 14 rejects rather than forgiving.
 ///

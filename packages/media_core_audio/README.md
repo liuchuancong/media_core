@@ -10,7 +10,7 @@
 - **歌词是一条完整的链路**：LRC（含 `[hh:mm:ss]`、多时间戳、`[offset:]`）、lx 扩展逐字（`<起始,时长>`）、解码后的 QRC/KRC/YRC 毫秒文本统一进 `LyricParser`；`LyricDocument.offset` 承担运行时歌词延迟，`LyricExporter` 负责把歌词（含翻译/罗马音/逐字/`[awlrc:…]`）落成 `.lrc` 旁车文件。
 - **一个引擎句柄播完整张歌单**：`AudioPlaybackController` 在首次播放时 `kernel.create()` 一次，之后每首歌重开同一个句柄。每首歌建一个播放器会把解码器启动成本变成用户听得见的延迟。
 - **签名 URL 是一等公民**：`TrackSource.expiresAt` 让解析结果自带寿期；播放失败、或 `AudioPlaybackConfig.loadTimeout` 到点仍没播起来时，**先用重新解析的地址试一次**，再把失败上报 —— 这是区分"链接过期"和"这首本来就播不了"的唯一办法。失败的曲目在本会话内被标记，不再自动重试，队列照常往后走。
-- **媒体面不重复实现**：通知 / 锁屏 / SMTC / MPRIS 与音频焦点属于 [media_core_mediasession](../media_core_mediasession)，因为视频宿主也要用同一套。本包提供 `MediaCoreAudio`（`MediaSessionDriver` 的子类）与 `MusicBackgroundBinding`（把队列、进度、transport 命令镜像过去），并保留 `AudioCapabilityConfig` / `MediaCoreAudioHandler` / `AudioHandlerState` / `AudioHandlerMediaItem` 四个历史名字的 typedef，老调用点不用改。
+- **媒体面不重复实现**：通知 / 锁屏 / SMTC 与音频焦点属于 [media_core_mediasession](../media_core_mediasession)，因为视频宿主也要用同一套。本包提供 `MediaCoreAudio`（`MediaSessionDriver` 的子类）与 `MusicBackgroundBinding`（把队列、进度、transport 命令镜像过去），并保留 `AudioCapabilityConfig` / `MediaCoreAudioHandler` / `AudioHandlerState` / `AudioHandlerMediaItem` 四个历史名字的 typedef，老调用点不用改。
 
 桌面歌词为什么连着原生窗口一起放在本包：判断"现在第几行、走到哪儿、锁没锁"是 Dart，而那扇窗是平台对象（Win32 layered window、Android `TYPE_APPLICATION_OVERLAY`、borderless `NSWindow`、GTK popup），两者用 `DesktopLyricTransport` 隔开。没有实现的平台 `isSupported()` 返回 `false`、`show()` 返回 `false`，宿主就不提供这个功能 —— 这不是错误状态。
 
@@ -99,7 +99,7 @@ pubspec 的 `flutter.plugin.platforms` 只声明了 **android / windows / macos 
 | --- | --- | --- | --- | --- | --- | --- |
 | 播放 / 队列 / 歌词 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌（见下） |
 | 桌面歌词窗口 | ✅ | ✅ | ✅ | ✅ | ❌ 无跨应用悬浮窗 | ❌ 网页出不了自己的标签页 |
-| 媒体通知 / 锁屏 | ✅ `audio_service` | ✅ `audio_service_win`（SMTC） | ✅ 走 `audio_service` 的 iOS 实现路径 | ✅ `audio_service_mpris`（MPRIS） | ✅ `audio_service` | — |
+| 媒体通知 / 锁屏 | ✅ `flutter_media_session` | ✅ `flutter_media_session`（SMTC） | ✅ `flutter_media_session` | — 暂不支持 | ✅ `flutter_media_session` | — |
 | 下载 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 两点要说清：

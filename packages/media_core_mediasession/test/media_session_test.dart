@@ -5,25 +5,6 @@ import 'package:media_core_mediasession/media_core_mediasession.dart';
 
 void main() {
   group('MediaSessionConfig', () {
-    test('every default icon is an Android `type/name` resource string', () {
-      const config = MediaSessionConfig();
-      final icons = <String>[
-        config.playIcon,
-        config.pauseIcon,
-        config.stopIcon,
-        config.previousIcon,
-        config.nextIcon,
-        config.rewindIcon,
-        config.fastForwardIcon,
-      ];
-      for (final icon in icons) {
-        // audio_service's getResourceId splits on '/' and indexes [1]; a bare
-        // name crashes setState on every publish, so the defaults must be
-        // full resource strings.
-        expect(icon, contains('/'), reason: '$icon must be type/name');
-      }
-    });
-
     test('the video variant keeps seek controls and widens the compact row', () {
       const music = MediaSessionConfig();
       const video = MediaSessionConfig.video();
@@ -33,13 +14,6 @@ void main() {
       // The queue-less layout has one more visible control than music's pair.
       expect(video.androidCompactActionIndices, const <int>[0, 1, 2]);
       expect(music.androidCompactActionIndices, const <int>[0, 1]);
-      expect(video.androidNotificationChannelId, isNot(music.androidNotificationChannelId));
-    });
-
-    test('duck factor is a real multiplier default', () {
-      const config = MediaSessionConfig();
-      expect(config.duckFactor, greaterThan(0));
-      expect(config.duckFactor, lessThan(1));
     });
   });
 
@@ -227,37 +201,21 @@ void main() {
     });
   });
 
-  group('the task the viewer swiped away', () {
-    ({MediaSessionHandler handler, List<String> log}) swipedAway({required bool stopOnTaskRemoved}) {
+  group('the viewer pressing stop', () {
+    test('stops the player and releases the surface', () async {
       final log = <String>[];
-      final handler = MediaSessionHandler(
+      final h = MediaSessionHandler(
         onPlay: () async {},
         onPause: () async {},
         onSeek: (_) async {},
         onStop: () async => log.add('stop'),
-        stopOnTaskRemoved: stopOnTaskRemoved,
-      );
+      )..publishMediaItem(const MediaSessionItem(id: 'a', title: 'A'));
 
-      return (handler: handler, log: log);
-    }
+      await h.stop();
 
-    test('asking for a stop on removal gets one', () async {
-      final run = swipedAway(stopOnTaskRemoved: true);
-      await run.handler.onTaskRemoved();
-
-      expect(run.log, <String>['stop']);
-    });
-
-    test('by default the audio outlives the recents entry', () async {
-      final run = swipedAway(stopOnTaskRemoved: false);
-      await run.handler.onTaskRemoved();
-
-      expect(run.log, isEmpty, reason: 'a music app keeps playing from the notification');
-    });
-
-    test('the handler holds the flag the constructor was given', () {
-      expect(swipedAway(stopOnTaskRemoved: true).handler.stopOnTaskRemoved, isTrue);
-      expect(swipedAway(stopOnTaskRemoved: false).handler.stopOnTaskRemoved, isFalse);
+      expect(log, <String>['stop']);
+      expect(h.mediaItem.value, isNull);
+      expect(h.playbackState.value.processingState, AudioProcessingState.idle);
     });
   });
 

@@ -36,7 +36,7 @@ Future<void> main() async {
   // / MPRIS without any per-page wiring. The 'media-session' page shows the
   // round trip; this line is the whole integration.
   //
-  // Caught on purpose: a platform that cannot start audio_service (a missing
+  // Caught on purpose: a platform without a media session (Linux, for now) —
   // manifest entry on Android, an unsupported embedder) must not keep the demo
   // app from booting — the surfaces are simply off, and the probe/`media-session`
   // pages say so.

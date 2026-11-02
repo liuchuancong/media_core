@@ -1,13 +1,13 @@
 # media_core_mediasession
 
-> 把内核里的**任意**播放器接到系统的媒体面上：Android 通知、iOS 锁屏/控制中心、Windows SMTC、Linux MPRIS，外加音频焦点、打断处理与"拔耳机就暂停"。
+> 把内核里的**任意**播放器接到系统的媒体面上：Android 通知、iOS/macOS 锁屏与控制中心、Windows SMTC、Web Media Session，外加音频焦点打断处理。底层统一走 `flutter_media_session`。
 
 ## 为什么单独成包
 
 这不是音频功能。视频播放器要的是同一份东西——同一条通知、同一个锁屏条目、同一套媒体键——差别只在装修（把上一首/下一首换成 ±10 秒、频道名不一样）。把它留在音乐模块里，视频宿主就为了一个通知被迫依赖整个音乐模块（音源、歌词、桌面歌词、下载、ffmpeg）。所以它在这里，`media_core_audio` 反而改为依赖本包。
 
 ```text
-PlayerHandle.playbackStream ──▶ MediaSessionHandler ──▶ 通知 / SMTC / MPRIS
+PlayerHandle.playbackStream ──▶ MediaSessionHandler ──▶ flutter_media_session ──▶ 通知 / 锁屏 / SMTC
 通知按钮 / 锁屏 / 媒体键     ──▶ MediaSessionHandler ──▶ PlayerHandle
 
 音频焦点打断（来电、别的播放器） ──▶ 暂停 / 压低 / 恢复
@@ -31,7 +31,7 @@ void main() async {
 
 内核本来就负责"谁是活跃播放器、什么时候切换"——所以一个进程一个驱动就够了，宿主不必逐个播放器写 `attachAudio`。想要封面就用 `enable(artUriResolver: ...)`（视频源通常只有 URL 和标题）；想让某个内核不上系统面（设置页预览、诊断播放器）就传 `KernelOptions(autoAttachAudio: false)`；内核在 `enable()` 之前就创建了，用 `MediaSessionBootstrap.attachTo(kernel)` 补挂。
 
-**为什么是一个进程一个驱动**：平台只有一条媒体通知——一个 `AudioService` handler、一个 SMTC 会话、一个 MPRIS 名字；两个驱动会互相抢，而且 `AudioService.init` 第二次调用在 debug 会直接断言失败。所以由 bootstrap 独占那一个实例。
+**为什么是一个进程一个驱动**：平台只有一条媒体通知——一个媒体会话、一个 SMTC 会话；两个驱动会互相抢。所以由 bootstrap 独占那一个实例。
 
 **为什么必须显式开启**：发通知、起前台服务是应用级决定（要清单条目、图标资源、Android 13+ 还要运行时权限）。库在背后替宿主做这件事，轻则意外，重则在那份清单缺失时直接崩。所以不调 `enable()` 就什么都不发生；调了之后才是自动的。
 
@@ -63,7 +63,7 @@ final handle = await kernel.create(source: source, config: const PlayerConfig(au
 
 ## 这块控制条归谁
 
-系统只有一个媒体面：一条通知、一个锁屏条目、一个 SMTC/MPRIS 会话。所以本包把它当成**有主人的资源**，而不是谁都能写的共享变量：
+系统只有一个媒体面：一条通知、一个锁屏条目、一个 SMTC 会话。所以本包把它当成**有主人的资源**，而不是谁都能写的共享变量：
 
 | 谁 | 怎么拿 | 能不能改写别人的 |
 | --- | --- | --- |
@@ -97,9 +97,9 @@ final handle = await kernel.create(source: source, config: const PlayerConfig(au
 
 ## 宿主自己必须声明的（库替不了应用）
 
-- **Android**：`AudioServiceActivity`、`AudioService` 服务、`MediaButtonReceiver` 三个清单条目（`audio_service` 的硬性要求，因为应用自己的 Activity 被替换）；API 33+ 还要 `POST_NOTIFICATIONS`——`media_core_audio` 的 `AudioPermissionService` 正好提供这一个（`AudioPermission.notifications`），或用自己的权限插件。
+- **Android**：无需手写清单。媒体服务与权限由 `flutter_media_session` 的库清单合并进来，API 33+ 的通知权限在 `initialize()` 时自动申请。
 - **iOS**：`Info.plist` 里的 `audio` 后台模式。没有它，应用一挂起锁屏条目就消失。
-- **图标**：`MediaSessionConfig` 里那几组 drawable 名。
+- **Windows（非 MSIX）**：设置 AppUserModelID，否则 SMTC 显示为"未知应用"（见 `flutter_media_session` 的 Windows 文档）。
 
 ## 与 `media_core_audio` 的关系
 
@@ -112,5 +112,6 @@ final handle = await kernel.create(source: source, config: const PlayerConfig(au
 | Android | 媒体通知（含控件、封面）、锁屏、媒体键；前台服务 |
 | iOS | 锁屏 / 控制中心 Now Playing、媒体键 |
 | Windows | SMTC（系统媒体传输控件、音量浮层） |
-| Linux | MPRIS（D-Bus）：GNOME/KDE 媒体部件与媒体键 |
-| macOS | 通过 audio_service 的 iOS 实现路径（锁屏条目可用） |
+| macOS | 控制中心 Now Playing、媒体键 |
+| Web | Media Session API |
+| Linux | 暂不支持（`flutter_media_session` 计划中的 MPRIS），`initialize()` 抛 `UnsupportedError` |

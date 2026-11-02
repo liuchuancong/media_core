@@ -54,7 +54,7 @@ await MediaSessionSurfaces.deactivate('wall/cell-2');  // the owner gives the ba
     '不是主人就改写不了那一格，也收不走别人的通知；多画面切换里旧玩家的迟到回调正是靠这条被丢弃',
     '媒体面没启用时 activate 答 notEnabled，而不是回一个可以被忽略的 null：把"没启用"读成"接管成功"就是文档 §9.3 要消掉的那个假后台播放',
     '四个拒绝各有各的动作：notEnabled（先 enable）、notInitialized（等握手）、surfaceUnavailable（这平台就没有）、disposed（还在调用已扔掉的驱动）',
-    '这条面属于播放：audio_service 的服务与通知（宿主的清单要声明）；录制与下载那条是 media_core_native 每功能一个服务，互不覆盖',
+    '这条面属于播放：flutter_media_session 的服务与通知（库清单自带）；录制与下载那条是 media_core_native 每功能一个服务，互不覆盖',
   ];
 
   @override
@@ -64,7 +64,7 @@ await MediaSessionSurfaces.deactivate('wall/cell-2');  // the owner gives the ba
     'A session that no longer owns the bar can neither rewrite it nor clear it — the multiview callback bug, made impossible',
     'With no surfaces enabled, activate answers notEnabled instead of returning a null a host ignores: reading "nothing happened" as "claimed" is the fake background playback §9.3 set out to remove',
     'Each refusal asks for a different action: notEnabled (enable first), notInitialized (wait), surfaceUnavailable (this platform has none), disposed (still calling a thrown-away driver)',
-    'This surface belongs to playback (audio_service, declared by the host manifest); recording and download are media_core_native per-feature services that never overwrite it',
+    'This surface belongs to playback (flutter_media_session, merged from its library manifest); recording and download are media_core_native per-feature services that never overwrite it',
   ];
 
   @override

@@ -24,7 +24,7 @@
 /// ## What this package does not own
 ///
 /// The **media** notification (playback controls, artwork, lock screen) belongs
-/// to `media_core_mediasession`, which publishes it through `audio_service`. Two
+/// to `media_core_mediasession`, which publishes it through `flutter_media_session`. Two
 /// packages drawing one media notification is the classic doubled tray, so the
 /// split is by surface, not by convenience.
 ///

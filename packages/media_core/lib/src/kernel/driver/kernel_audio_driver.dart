@@ -18,8 +18,8 @@ import 'package:media_core/src/kernel/player_kernel.dart' show PlayerKernel;
 ///
 /// Implementations:
 ///
-/// - `media_core_mediasession` (audio_service / audio_session) — the media
-///   notification, lock screen, SMTC and MPRIS surfaces for any player, video
+/// - `media_core_mediasession` (flutter_media_session) — the media
+///   notification, lock screen and SMTC surfaces for any player, video
 ///   included; `media_core_audio` builds on it.
 ///
 /// It does not:
