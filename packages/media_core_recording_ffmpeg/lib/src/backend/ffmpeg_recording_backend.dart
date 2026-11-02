@@ -937,8 +937,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       );
     }
 
+    // A disposed backend took its executor with it (the manager disposes the
+    // session's backend as part of stop), and a join is meant to run after the
+    // stop: the remuxer then gets a fresh executor instead of a dead one.
     return FfmpegRecordingRemuxer(
-      executor: _executor,
+      executor: _disposed ? null : _executor,
       probe: _probe,
     ).run(manifest: manifest, directory: directory, target: target, onProgress: onProgress, onExecution: onExecution);
   }
