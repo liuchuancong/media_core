@@ -60,6 +60,7 @@ final class FfmpegRemuxResult {
     required this.bytesWritten,
     required this.duration,
     required this.skipped,
+    this.elapsed = Duration.zero,
     this.error,
   });
 
@@ -68,7 +69,15 @@ final class FfmpegRemuxResult {
     required String outputPath,
     required int bytesWritten,
     Duration duration = Duration.zero,
-  }) : this(success: true, outputPath: outputPath, bytesWritten: bytesWritten, duration: duration, skipped: false);
+    Duration elapsed = Duration.zero,
+  }) : this(
+         success: true,
+         outputPath: outputPath,
+         bytesWritten: bytesWritten,
+         duration: duration,
+         skipped: false,
+         elapsed: elapsed,
+       );
 
   /// A run that found the output already there and left it alone.
   const FfmpegRemuxResult.alreadyThere({
@@ -100,6 +109,9 @@ final class FfmpegRemuxResult {
   /// Duration FFprobe reported for the output, or [Duration.zero] when no probe
   /// was available to ask.
   final Duration duration;
+
+  /// Wall-clock time the join itself took.
+  final Duration elapsed;
 
   /// Whether the work was skipped because a complete output already existed.
   ///
@@ -168,6 +180,7 @@ final class FfmpegRecordingRemuxer {
     void Function(double? progress)? onProgress,
     void Function(FfmpegExecution execution)? onExecution,
   }) async {
+    final watch = Stopwatch()..start();
     final outputPath = joinOutputPath(directory, combinedName(manifest.prefix, target));
 
     final segments = _segmentsOf(manifest, directory);
@@ -281,7 +294,12 @@ final class FfmpegRecordingRemuxer {
         fields: <String, Object?>{'output': outputPath, 'bytes': output.size, 'durationMs': duration.inMilliseconds},
       );
 
-      return FfmpegRemuxResult.completed(outputPath: outputPath, bytesWritten: output.size, duration: duration);
+      return FfmpegRemuxResult.completed(
+        outputPath: outputPath,
+        bytesWritten: output.size,
+        duration: duration,
+        elapsed: watch.elapsed,
+      );
     } on Object catch (error) {
       _log.error('the remux could not run', error: error, fields: <String, Object?>{'output': outputPath});
 

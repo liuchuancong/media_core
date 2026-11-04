@@ -10,13 +10,30 @@ import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 /// transcoding concepts and say nothing useful about a `-c copy` capture.
 final class FfmpegStatistics {
   /// Creates a report of one FFmpeg statistics line.
+  ///
+  /// Every figure FFmpeg's own progress line carries; a caller reads the ones
+  /// its surface shows and ignores the rest, rather than the model growing a
+  /// field each time a screen wants another number.
   const FfmpegStatistics({
+    this.sessionId = -1,
+    this.elapsedMs = 0,
     this.timeMs = 0,
     this.sizeBytes = 0,
     this.bitrate = 0,
     this.speed = 0,
+    this.videoFrameNumber = 0,
+    this.videoFps = 0,
+    this.videoQuality = 0,
+    this.duplicatedFrames = 0,
     this.droppedFrames = 0,
+    this.transcodingProgress,
   });
+
+  /// The FFmpeg session this line belongs to.
+  final int sessionId;
+
+  /// Wall-clock milliseconds since the process started.
+  final int elapsedMs;
 
   /// Media time processed, in milliseconds.
   ///
@@ -28,18 +45,45 @@ final class FfmpegStatistics {
   /// Bytes written so far.
   final int sizeBytes;
 
-  /// Output bitrate, in kbit/s.
+  /// Output bitrate as FFmpeg reports it (bits per second).
   final double bitrate;
 
   /// Processing speed relative to realtime (`1` is realtime).
   final double speed;
 
+  /// Frames encoded so far; 0 for a stream copy that encodes nothing.
+  final int videoFrameNumber;
+
+  /// The encoder's frames per second as FFmpeg reports it.
+  final double videoFps;
+
+  /// The encoder's quality figure (a quantizer value); 0 when not reported.
+  final double videoQuality;
+
+  /// Frames FFmpeg duplicated to keep the output's clock.
+  final int duplicatedFrames;
+
   /// Frames dropped at the encoder. Non-zero on a `-c copy` capture means the
   /// input could not keep up with the output.
   final int droppedFrames;
 
+  /// Normalized progress (0–1) when the session has a bounded duration; null
+  /// for a live capture, which never ends on its own.
+  final double? transcodingProgress;
+
+  /// Media time processed.
+  Duration get time => Duration(milliseconds: timeMs);
+
+  /// Wall clock since the process started.
+  Duration get elapsed => Duration(milliseconds: elapsedMs);
+
+  /// [transcodingProgress] as a whole percentage, or null when unbounded.
+  int? get progressPercent => transcodingProgress == null ? null : (transcodingProgress! * 100).round().clamp(0, 100);
+
   @override
-  String toString() => 'FfmpegStatistics(${timeMs}ms, ${sizeBytes}B, ${speed}x)';
+  String toString() =>
+      'FfmpegStatistics($timeMs ms, $sizeBytes B, $speed x'
+      '${transcodingProgress == null ? '' : ', $progressPercent%'})';
 }
 
 /// One FFmpeg process.
@@ -157,11 +201,18 @@ final class FfmpegKitExecutor implements FfmpegExecutor {
           : (statistics) {
               onStatistics(
                 FfmpegStatistics(
+                  sessionId: statistics.sessionId,
+                  elapsedMs: statistics.timeElapsed,
                   timeMs: statistics.time,
                   sizeBytes: statistics.size,
                   bitrate: statistics.bitrate,
                   speed: statistics.speed,
+                  videoFrameNumber: statistics.videoFrameNumber,
+                  videoFps: statistics.videoFps,
+                  videoQuality: statistics.videoQuality,
+                  duplicatedFrames: statistics.dupFrames,
                   droppedFrames: statistics.dropFrames,
+                  transcodingProgress: statistics.transcodingProgress,
                 ),
               );
             },

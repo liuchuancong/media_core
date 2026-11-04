@@ -87,12 +87,12 @@ final class _FakeProbe implements FfmpegProbe {
   final bool canRead;
 
   @override
-  Future<Duration?> durationOf(String path) async {
+  Future<FfmpegMediaInfo?> infoOf(String path) async {
     if (!canRead || !File(path).existsSync()) {
       return null;
     }
 
-    return const Duration(seconds: 30);
+    return const FfmpegMediaInfo(duration: Duration(seconds: 30));
   }
 }
 
@@ -1566,9 +1566,9 @@ final class _CountingProbe implements FfmpegProbe {
   final List<String> paths = <String>[];
 
   @override
-  Future<Duration?> durationOf(String path) async {
+  Future<FfmpegMediaInfo?> infoOf(String path) async {
     paths.add(path);
 
-    return const Duration(seconds: 30);
+    return const FfmpegMediaInfo(duration: Duration(seconds: 30));
   }
 }

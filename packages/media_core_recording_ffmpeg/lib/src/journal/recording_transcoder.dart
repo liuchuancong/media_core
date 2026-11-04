@@ -42,6 +42,7 @@ final class FfmpegTranscodeResult {
     required this.bytesWritten,
     required this.duration,
     required this.alreadyThere,
+    this.elapsed = Duration.zero,
     this.error,
   });
 
@@ -50,7 +51,15 @@ final class FfmpegTranscodeResult {
     required String outputPath,
     required int bytesWritten,
     Duration duration = Duration.zero,
-  }) : this(success: true, outputPath: outputPath, bytesWritten: bytesWritten, duration: duration, alreadyThere: false);
+    Duration elapsed = Duration.zero,
+  }) : this(
+         success: true,
+         outputPath: outputPath,
+         bytesWritten: bytesWritten,
+         duration: duration,
+         alreadyThere: false,
+         elapsed: elapsed,
+       );
 
   /// A run that found a complete output and left it alone.
   const FfmpegTranscodeResult.skipped({
@@ -84,6 +93,9 @@ final class FfmpegTranscodeResult {
 
   /// Whether a complete output already existed and the work was skipped.
   final bool alreadyThere;
+
+  /// Wall-clock time the re-encode itself took.
+  final Duration elapsed;
 
   /// Why the run failed, when it did.
   final Object? error;
@@ -129,6 +141,7 @@ final class FfmpegRecordingTranscoder {
     void Function(double? progress)? onProgress,
     void Function(FfmpegExecution execution)? onExecution,
   }) async {
+    final watch = Stopwatch()..start();
     final input = File(inputPath);
     final inputStat = FileStat.statSync(inputPath);
 
@@ -239,7 +252,12 @@ final class FfmpegRecordingTranscoder {
         fields: <String, Object?>{'output': outputPath, 'bytes': output.size, 'durationMs': duration.inMilliseconds},
       );
 
-      return FfmpegTranscodeResult.completed(outputPath: outputPath, bytesWritten: output.size, duration: duration);
+      return FfmpegTranscodeResult.completed(
+        outputPath: outputPath,
+        bytesWritten: output.size,
+        duration: duration,
+        elapsed: watch.elapsed,
+      );
     } on Object catch (error) {
       _log.error('the transcode could not run', error: error, fields: <String, Object?>{'output': outputPath});
 

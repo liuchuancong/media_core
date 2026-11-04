@@ -59,6 +59,7 @@ final class FfmpegRecordingOutcome {
     required this.bytesWritten,
     required this.directory,
     this.segments,
+    this.duration = Duration.zero,
     this.error,
   });
 
@@ -79,6 +80,13 @@ final class FfmpegRecordingOutcome {
 
   /// Directory the segments were written to.
   final String? directory;
+
+  /// Media time the take captured, as its own stream reported it: shorter than
+  /// [elapsed] when the source stalled or the process started late.
+  final Duration duration;
+
+  /// The mean bitrate the take wrote at, or 0 when it is too short to measure.
+  double get averageBitrate => elapsed.inSeconds <= 0 ? 0 : bytesWritten * 8 / elapsed.inSeconds;
 
   /// Why it failed, when it did.
   final Object? error;
@@ -460,6 +468,7 @@ class FfmpegLiveRecordingWatcher {
         success: state.status == RecordingStatus.completed && !state.hasError,
         bytesWritten: check?.bytesOnDisk ?? state.bytesWritten,
         segments: check?.segments,
+        duration: state.duration,
         directory: _backend.activeDirectory,
         error: state.error ?? _failureOf(state, check),
       ),

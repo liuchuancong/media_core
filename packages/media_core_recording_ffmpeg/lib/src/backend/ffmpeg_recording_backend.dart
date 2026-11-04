@@ -264,11 +264,21 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   FfmpegRecordingCheck? _lastCheck;
   Duration _lastMediaTime = Duration.zero;
   int _lastBytes = 0;
+  FfmpegStatistics? _lastStatistics;
   bool _disposed = false;
 
   /// Current state.
   @override
   RecordingState get state => _state;
+
+  /// The most recent statistics line of the running process, or null before
+  /// the first one arrives (and between attempts).
+  ///
+  /// [RecordingState] carries only the figures a backend promises; a host that
+  /// wants the encoder's own numbers — frames per second, dropped frames, the
+  /// quantizer — reads them here without this class copying every one into the
+  /// state.
+  FfmpegStatistics? get lastStatistics => _lastStatistics;
 
   /// State changes.
   Stream<RecordingState> get onStateChanged => _stateController.stream;
@@ -416,6 +426,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _writeManifest();
     _lastMediaTime = Duration.zero;
     _lastBytes = 0;
+    _lastStatistics = null;
     _attemptSettled = false;
     _stallTicks = 0;
     _reportedSegments = 0;
@@ -902,6 +913,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     }
     _lastMediaTime = Duration(milliseconds: statistics.timeMs);
     _lastBytes = statistics.sizeBytes;
+    _lastStatistics = statistics;
     _memory.report(_memoryKey, items: 1, bytes: _lastBytes, note: 'recording, ${_totalMediaTime.inSeconds}s written');
     if (_state.status != RecordingStatus.recording) {
       return;

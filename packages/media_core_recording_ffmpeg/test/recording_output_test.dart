@@ -630,5 +630,5 @@ final class _NoProbe implements FfmpegProbe {
   const _NoProbe();
 
   @override
-  Future<Duration?> durationOf(String path) async => null;
+  Future<FfmpegMediaInfo?> infoOf(String path) async => null;
 }
