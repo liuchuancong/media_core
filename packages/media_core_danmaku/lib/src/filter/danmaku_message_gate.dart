@@ -9,7 +9,13 @@ import 'package:media_core_danmaku/src/model/danmaku_message.dart';
 ///
 /// - **Age**: a message older than [maxMessageAge] is dropped. A socket that
 ///   kept buffering while the app was backgrounded must not dump a backlog
-///   into the view as if it were live chat.
+///   into the view as if it were live chat. A message the platform says it is
+///   re-showing ([DanmakuMessage.replayed] — the backlog handed over when a
+///   viewer joins, or a resend after a resumed connection) is measured against
+///   the longer [maxReplayAge] instead, because its own time stamp is
+///   legitimately old; a paid card still within its display window
+///   ([DanmakuSuperChat.endTime]) is never dropped for its age, since the
+///   platform shows it for its own span rather than as live traffic.
 /// - **Identity**: a stable platform id keeps its own long window, because an
 ///   id is unambiguous and a replay can be rejected without risk. Platforms
 ///   without ids fall back to a short fingerprint window (type + viewer +
@@ -25,18 +31,21 @@ final class DanmakuMessageGate {
     Duration fallbackDuplicateWindow = const Duration(milliseconds: 2500),
     Duration stableIdWindow = const Duration(minutes: 10),
     Duration maxMessageAge = const Duration(seconds: 45),
+    Duration maxReplayAge = const Duration(seconds: 135),
     Duration maxFutureSkew = const Duration(minutes: 10),
     int maxEntries = 4096,
   }) : assert(maxEntries > 0, 'maxEntries must leave room for at least one fingerprint'),
        _fallbackDuplicateWindow = fallbackDuplicateWindow,
        _stableIdWindow = stableIdWindow,
        _maxMessageAge = maxMessageAge,
+       _maxReplayAge = maxReplayAge,
        _maxFutureSkew = maxFutureSkew,
        _maxEntries = maxEntries;
 
   Duration _fallbackDuplicateWindow;
   Duration _stableIdWindow;
   Duration _maxMessageAge;
+  Duration _maxReplayAge;
   final Duration _maxFutureSkew;
   int _maxEntries;
 
@@ -48,6 +57,9 @@ final class DanmakuMessageGate {
 
   /// Maximum accepted message age.
   Duration get maxMessageAge => _maxMessageAge;
+
+  /// Oldest platform time accepted for a message the platform is re-showing.
+  Duration get maxReplayAge => _maxReplayAge;
 
   /// How far ahead of local time a platform timestamp may be before the
   /// packet is treated as malformed.
@@ -74,11 +86,13 @@ final class DanmakuMessageGate {
     required Duration fallbackDuplicateWindow,
     required Duration stableIdWindow,
     required Duration maxMessageAge,
+    required Duration maxReplayAge,
     required int maxEntries,
   }) {
     _fallbackDuplicateWindow = fallbackDuplicateWindow;
     _stableIdWindow = stableIdWindow;
     _maxMessageAge = maxMessageAge;
+    _maxReplayAge = maxReplayAge;
     _maxEntries = maxEntries;
     _seen.clear();
   }
@@ -92,8 +106,13 @@ final class DanmakuMessageGate {
 
     if (sentAt != null) {
       final age = receivedAt.difference(sentAt);
-      if (age > maxMessageAge) return false;
       if (age < -maxFutureSkew) return false;
+      // A re-shown message carries a time the platform chose rather than a
+      // moment the room is in, and a paid card is on screen for its own span;
+      // the live rule would delete both, which reads as a room whose chat
+      // stopped the moment the viewer arrived.
+      final limit = message.replayed ? maxReplayAge : maxMessageAge;
+      if (age > limit && !_stillOnDisplay(message, receivedAt)) return false;
     }
 
     final key = _fingerprint(message);
@@ -121,6 +140,15 @@ final class DanmakuMessageGate {
 
   /// Number of retained fingerprints. Exposed for tests and diagnostics.
   int get size => _seen.length;
+
+  /// Whether [message] is a paid card the platform is still showing at [now].
+  ///
+  /// A super chat is announced once and displayed for its own minutes, so a
+  /// card that has not expired is not backlog however old its arrival time is.
+  static bool _stillOnDisplay(DanmakuMessage message, DateTime now) {
+    final card = message.superChat;
+    return card != null && now.isBefore(card.endTime);
+  }
 
   String _fingerprint(DanmakuMessage message) {
     final stableId = message.messageId.trim();

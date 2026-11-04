@@ -71,6 +71,7 @@ final class DanmakuController {
          fallbackDuplicateWindow: config.fallbackDuplicateWindow,
          stableIdWindow: config.stableIdWindow,
          maxMessageAge: config.maxMessageAge,
+         maxReplayAge: config.maxReplayAge,
          maxEntries: config.maxGateEntries,
        ),
        _repeatedFilter = DanmakuRepeatedFilter(maxEntries: config.maxRepeatedEntries),
@@ -363,6 +364,7 @@ final class DanmakuController {
       fallbackDuplicateWindow: config.fallbackDuplicateWindow,
       stableIdWindow: config.stableIdWindow,
       maxMessageAge: config.maxMessageAge,
+      maxReplayAge: config.maxReplayAge,
       maxEntries: config.maxGateEntries,
     );
     _similarityFilter.updateConfig(

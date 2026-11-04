@@ -19,6 +19,7 @@ final class DanmakuConfig {
     this.fallbackDuplicateWindow = const Duration(milliseconds: 2500),
     this.stableIdWindow = const Duration(minutes: 10),
     this.maxMessageAge = const Duration(seconds: 45),
+    this.maxReplayAge = const Duration(seconds: 135),
     this.maxGateEntries = 4096,
     this.repeatedFilterEnabled = true,
     this.repeatedFilterWindow = const Duration(seconds: 5),
@@ -61,6 +62,17 @@ final class DanmakuConfig {
   /// Platform backlog — a socket that kept buffering while the app was
   /// backgrounded — must not be rendered as if it were live chat.
   final Duration maxMessageAge;
+
+  /// Oldest platform time accepted for a message the platform says it is
+  /// re-showing (`DanmakuMessage.replayed`) — the backlog a socket hands over
+  /// on joining, or a resend after a resumed connection.
+  ///
+  /// 135 s is 17LIVE's resume window, the longest one a platform in this
+  /// project declares (its connection-state TTL plus its max idle interval):
+  /// traffic older than that is not a resume, it is a recording. A replayed
+  /// message judged by `maxMessageAge` instead never reaches the view, which
+  /// reads as a room whose chat is dead when the viewer joined mid-stream.
+  final Duration maxReplayAge;
 
   /// Upper bound on remembered message fingerprints. Bounds memory when a
   /// high-traffic room runs for hours.
@@ -105,6 +117,7 @@ final class DanmakuConfig {
     Duration? fallbackDuplicateWindow,
     Duration? stableIdWindow,
     Duration? maxMessageAge,
+    Duration? maxReplayAge,
     int? maxGateEntries,
     bool? repeatedFilterEnabled,
     Duration? repeatedFilterWindow,
@@ -121,6 +134,7 @@ final class DanmakuConfig {
       fallbackDuplicateWindow: fallbackDuplicateWindow ?? this.fallbackDuplicateWindow,
       stableIdWindow: stableIdWindow ?? this.stableIdWindow,
       maxMessageAge: maxMessageAge ?? this.maxMessageAge,
+      maxReplayAge: maxReplayAge ?? this.maxReplayAge,
       maxGateEntries: maxGateEntries ?? this.maxGateEntries,
       repeatedFilterEnabled: repeatedFilterEnabled ?? this.repeatedFilterEnabled,
       repeatedFilterWindow: repeatedFilterWindow ?? this.repeatedFilterWindow,

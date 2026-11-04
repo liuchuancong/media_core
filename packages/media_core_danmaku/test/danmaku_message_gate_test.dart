@@ -1,8 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core_danmaku/media_core_danmaku.dart';
 
-DanmakuMessage chat({String text = 'hello', String id = '', String user = 'viewer', DateTime? sentAt}) {
-  return DanmakuMessage(type: DanmakuMessageType.chat, userName: user, text: text, messageId: id, sentAt: sentAt);
+DanmakuMessage chat({
+  String text = 'hello',
+  String id = '',
+  String user = 'viewer',
+  DateTime? sentAt,
+  bool replayed = false,
+}) {
+  return DanmakuMessage(
+    type: DanmakuMessageType.chat,
+    userName: user,
+    text: text,
+    messageId: id,
+    sentAt: sentAt,
+    replayed: replayed,
+  );
 }
 
 void main() {
@@ -105,6 +118,63 @@ void main() {
       );
     });
 
+    test('measures a re-shown message against the replay window', () {
+      final gate = DanmakuMessageGate();
+      final now = DateTime(2026, 9, 26, 12);
+
+      // Beyond the live window and inside the replay one: the platform is
+      // handing over a backlog or a resume, so its own time is not the room's.
+      expect(
+        gate.accepts(
+          chat(text: 'backlog', sentAt: now.subtract(const Duration(minutes: 2))),
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        gate.accepts(
+          chat(text: 'backlog', sentAt: now.subtract(const Duration(minutes: 2)), replayed: true),
+          now: now,
+        ),
+        isTrue,
+      );
+      // Past the replay window it is a recording, not a resume.
+      expect(
+        gate.accepts(
+          chat(text: 'ancient', sentAt: now.subtract(const Duration(minutes: 3)), replayed: true),
+          now: now,
+        ),
+        isFalse,
+      );
+    });
+
+    test('keeps a paid card the platform is still displaying', () {
+      final gate = DanmakuMessageGate();
+      final now = DateTime(2026, 9, 26, 12);
+
+      expect(
+        gate.accepts(
+          DanmakuMessage(
+            type: DanmakuMessageType.superChat,
+            userName: 'patron',
+            text: 'paid line',
+            sentAt: now.subtract(const Duration(minutes: 4)),
+            superChat: DanmakuSuperChat(
+              userName: 'patron',
+              text: 'paid line',
+              price: 500,
+              startTime: now.subtract(const Duration(minutes: 4)),
+              endTime: now.add(const Duration(minutes: 1)),
+              backgroundColor: '',
+              backgroundBottomColor: '',
+            ),
+          ),
+          now: now,
+        ),
+        isTrue,
+      );
+    });
+
     test('bounds retained fingerprints', () {
       final gate = DanmakuMessageGate(maxEntries: 2);
       final now = DateTime(2026, 9, 26, 12);
@@ -143,6 +213,7 @@ void main() {
         fallbackDuplicateWindow: const Duration(seconds: 1),
         stableIdWindow: const Duration(seconds: 30),
         maxMessageAge: const Duration(seconds: 10),
+        maxReplayAge: const Duration(seconds: 40),
         maxEntries: 16,
       );
 
@@ -150,6 +221,7 @@ void main() {
       expect(gate.accepts(chat(id: 'm1'), now: now), isTrue);
       expect(gate.stableIdWindow, const Duration(seconds: 30));
       expect(gate.maxMessageAge, const Duration(seconds: 10));
+      expect(gate.maxReplayAge, const Duration(seconds: 40));
       expect(gate.maxEntries, 16);
     });
 

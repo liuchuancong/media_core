@@ -247,6 +247,7 @@ final class DanmakuMessage {
     this.fansLevel = '',
     this.fansName = '',
     this.isLocal = false,
+    this.replayed = false,
     this.messageId = '',
     this.sentAt,
     this.style,
@@ -284,6 +285,17 @@ final class DanmakuMessage {
   /// True for messages this client composed (echoes of the viewer's own send,
   /// local notices). Local messages bypass user-facing filters.
   final bool isLocal;
+
+  /// True when the platform is showing this message again rather than saying
+  /// it now: the backlog handed over on joining, or a resend after a resumed
+  /// connection.
+  ///
+  /// Such a message's platform time is legitimately old, so the gate measures
+  /// it against the replay window instead of the live one. Without this a
+  /// viewer who joins a stream that has been running would be told the room is
+  /// silent, and a reconnect would swallow everything the platform deigned to
+  /// re-send.
+  final bool replayed;
 
   /// Stable per-message identity from the platform, empty when unavailable.
   ///
