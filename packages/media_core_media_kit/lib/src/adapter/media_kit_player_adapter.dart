@@ -190,6 +190,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// pitch-shift a broadcast that has no meaningful playback speed.
   bool _liveSource = false;
 
+  /// The option keys the caller has written by name, so the live-open table
+  /// never replaces a tuning the host asked for.
+  final Set<String> _hostOptionKeys = <String>{};
+
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _hasOpened = false;
@@ -357,6 +361,9 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // Options the caller pushed before this adapter was initialized ride
     // along to the engine's first moment.
     for (final option in consumeStashedEngineOptions()) {
+      // A key the caller named is theirs, not a default's: the live-open
+      // table leaves anything written by name alone.
+      _hostOptionKeys.add(option.key);
       await _applyNativeOption(option);
     }
   }
@@ -373,6 +380,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       // applied, so the caller can rebuild the player with it instead of
       // assuming the tuning landed. A list value is not a property write:
       // see [mpvListOptionCommands].
+      _hostOptionKeys.add(option.key);
       final applied = await _applyNativeOption(option);
 
       outcomes.add(applied ? EngineOptionOutcome.appliedLive : EngineOptionOutcome.unsupported);
@@ -401,8 +409,25 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _hasDecodedVideoFrame = false;
     _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
 
+    // The properties a live input needs are set here rather than at creation
+    // because they describe the input, not the player, and the player outlives
+    // the room whose stream it opens next.
+    if (_liveSource) await _applyLiveOpenDefaults();
+
     final hook = beforeOpen;
     if (hook != null) await hook(player, source);
+  }
+
+  /// Writes [mpvLiveOpenDefaults] except where the caller has named the key.
+  ///
+  /// A rejected property is logged by [_setNativeProperty] and is not fatal:
+  /// an mpv build without the option opens the stream on its own budget, which
+  /// is what happened before this table existed.
+  Future<void> _applyLiveOpenDefaults() async {
+    for (final entry in mpvLiveOpenDefaults.entries) {
+      if (_hostOptionKeys.contains(entry.key)) continue;
+      await _setNativeProperty(entry.key, entry.value);
+    }
   }
 
   @override

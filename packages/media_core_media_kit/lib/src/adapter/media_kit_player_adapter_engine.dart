@@ -31,6 +31,32 @@ List<List<String>> mpvListOptionCommands(String key, List<Object?> entries) {
   return commands;
 }
 
+/// The mpv properties a live input opens with, instead of the file defaults.
+///
+/// media_kit builds its player for files: libavformat's probe budget is left at
+/// its own default (5 MB of data or 5 s of stream, whichever comes first) and
+/// `cache-on-disk` is on. Neither suits a broadcast — a CDN sends a second or
+/// two of data at once and then real time, so a five-second analysis waits on
+/// the stream instead of playing it, and a disk cache writes live forward
+/// buffer to the drive for nothing.
+///
+/// The two probe numbers are the reference's own A/B on a Bilibili stream:
+/// first frame at 1802 ms with 2 MiB / 2 s and 708 ms with these (cold, median
+/// of 5, audio every time). `network-timeout` is raised over media_kit's 5 s
+/// because a slow-but-alive line that answers at 6 s is exactly what the viewer
+/// reads as "the room never opens", and `hwdec-software-fallback` leaves a
+/// hardware decoder after one failing frame rather than five.
+///
+/// A caller that names any of these keys through an [EngineOption] wins: the
+/// table skips keys the adapter has already been asked to write.
+const Map<String, String> mpvLiveOpenDefaults = <String, String>{
+  'demuxer-lavf-probesize': '1048576',
+  'demuxer-lavf-analyzeduration': '1',
+  'cache-on-disk': 'no',
+  'network-timeout': '15',
+  'hwdec-software-fallback': '1',
+};
+
 /// Engine creation: the caller's native configurations, verbatim.
 ///
 /// The adapter normalises nothing here. `PlayerConfiguration` and
