@@ -93,6 +93,15 @@ final class DanmakuController {
   /// message without touching the session.
   DanmakuFilterPolicy policy;
 
+  /// Called for a chat message the viewer's own policy hid.
+  ///
+  /// Only the policy reports here, and only this: a duplicate, a collapsed
+  /// repeat and a similar text are the room's own traffic, while a blocked
+  /// name or word is something the viewer asked never to see. A host that says
+  /// "this stream hid N of them" has to count the second kind, or its number
+  /// measures the room rather than the shield.
+  void Function(DanmakuMessage message, DanmakuFilterReason reason)? onSuppressed;
+
   final DanmakuMessageGate _gate;
   final DanmakuRepeatedFilter _repeatedFilter;
   final DanmakuSimilarityFilter _similarityFilter;
@@ -443,7 +452,11 @@ final class DanmakuController {
         // policy rejects what the viewer never wants to see, and only then do
         // the two content filters look at the text.
         if (!_gate.accepts(message)) return;
-        if (!policy.allows(message)) return;
+        final decision = policy.evaluate(message);
+        if (!decision.allowed) {
+          onSuppressed?.call(message, decision.reason!);
+          return;
+        }
         if (!_repeatedFilter.accepts(
           message,
           enabled: _config.repeatedFilterEnabled,

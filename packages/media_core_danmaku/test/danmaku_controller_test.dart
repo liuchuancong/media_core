@@ -332,6 +332,34 @@ void main() {
       expect(policy.allows(chat(text: within)), isFalse);
     });
 
+    test("reports only the shield's own verdicts, and not the room's traffic", () async {
+      await ready();
+      final hidden = <(String, DanmakuFilterReason)>[];
+      controller
+        ..policy = DanmakuFilterPolicy(blockedKeywords: <String>['spoiler'])
+        ..onSuppressed = (message, reason) => hidden.add((message.text, reason));
+
+      transport.listener!.onDanmakuMessage(chat(text: 'a spoiler here', id: 'm1'));
+      transport.listener!.onDanmakuMessage(chat(text: 'this is fine', id: 'm2'));
+      // The same packet again: the gate hides it, and the gate is not the
+      // viewer's shield — a number that counted this would measure the socket.
+      transport.listener!.onDanmakuMessage(chat(text: 'a spoiler here', id: 'm1'));
+
+      expect(hidden, [('a spoiler here', DanmakuFilterReason.blockedKeyword)]);
+    });
+
+    test('reports a blocked viewer by name, not by word', () async {
+      await ready();
+      final reasons = <DanmakuFilterReason>[];
+      controller
+        ..policy = DanmakuFilterPolicy(blockedUsers: <String>['troll'])
+        ..onSuppressed = (_, reason) => reasons.add(reason);
+
+      transport.listener!.onDanmakuMessage(chat(user: 'troll'));
+
+      expect(reasons, [DanmakuFilterReason.blockedUser]);
+    });
+
     test('suppresses blocked viewers case-insensitively', () async {
       await ready();
       controller.policy = DanmakuFilterPolicy(blockedUsers: <String>['  Troll ']);
