@@ -1,5 +1,13 @@
 import 'package:media_core/media_core.dart' show RecordingSource;
 
+/// The address a re-opened source plays from, with the headers it needs.
+///
+/// `headers` replaces what the session opens `url` with; null keeps the headers
+/// the session started with, which is right when the host re-mints the address
+/// of the same line and wrong when it hands back another line — a different CDN
+/// answers 403 for the referer the previous line carried.
+typedef RefreshedSource = ({String url, Map<String, String>? headers});
+
 /// Gets a fresh address for [source].
 ///
 /// A live room's stream URL is usually signed and short-lived: the address that
@@ -8,10 +16,10 @@ import 'package:media_core/media_core.dart' show RecordingSource;
 /// that cannot succeed. Only the host can mint a new one, which is why this is a
 /// callback rather than something the backend does.
 ///
-/// Returning null or an empty value says the refresh is not possible right now,
-/// and the recording ends with [FfmpegRecordingGaveUpException] rather than
+/// Returning null or an empty address says the refresh is not possible right
+/// now, and the recording ends with [FfmpegRecordingGaveUpException] rather than
 /// burning the remaining attempts on an address that will not work.
-typedef UrlRefresher = Future<String?> Function(RecordingSource source);
+typedef UrlRefresher = Future<RefreshedSource?> Function(RecordingSource source);
 
 /// Reports how many bytes are free where [directory] lives.
 ///

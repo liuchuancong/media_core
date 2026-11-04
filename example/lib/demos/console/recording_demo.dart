@@ -240,7 +240,10 @@ print('${result.success} ${backend.lastCheck}');  // judged by the files, not th
         restartBackoffMax: const Duration(milliseconds: 40),
       ),
       outputDirectory: '$directory/recovered',
-      urlRefresher: (source) async => 'https://example.com/live/room.flv?sign=${++refreshes}',
+      urlRefresher: (source) async => (
+        url: 'https://example.com/live/room.flv?sign=${++refreshes}',
+        headers: null,
+      ),
     );
     await second.initialize();
     await second.start(const RecordingSource.network('https://example.com/live/dying.flv'), const RecordingConfig());

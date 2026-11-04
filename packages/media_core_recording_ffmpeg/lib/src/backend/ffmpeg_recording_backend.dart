@@ -123,6 +123,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// non-refreshing restart of an expired URL is a backoff loop that always
   /// fails.
   ///
+  /// The refresher may hand back headers with the address, which is how a
+  /// recording moves to another of the room's lines: the platform minted the
+  /// address and the referer that unlocks it together, so a new line asked for
+  /// with the old line's headers answers 403 and the failover looks like the
+  /// stream being down.
+  ///
   /// [diskSpace] reports bytes free in the output directory. Null asks nothing —
   /// pass [FfmpegDiskSpace.probe] to have the platform asked, which is a shell call
   /// on the start path and so is the host's decision rather than this class's.
@@ -1091,14 +1097,28 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     if (refresher != null) {
       final refreshed = await refresher(source);
 
-      if (refreshed == null || StringUtils.isBlank(refreshed)) {
+      if (refreshed == null || StringUtils.isBlank(refreshed.url)) {
         throw StateError(
           'The stream address could not be refreshed for '
           '${source.id ?? FfmpegRecordArguments.redactUrl(source.value)}.',
         );
       }
 
-      url = refreshed;
+      url = refreshed.url;
+      // A host that moved to another line brings that line's headers: the
+      // address and the referer it was minted for are decided together, and
+      // only the host holds both. A null answer keeps the headers of the line
+      // the session already had, because they still fit its address.
+      final headers = refreshed.headers;
+      if (headers != null) {
+        _activeSource = RecordingSource(
+          type: source.type,
+          value: url,
+          id: source.id,
+          title: source.title,
+          headers: headers,
+        );
+      }
     }
 
     await _refuseIfNoRoom(_activeDirectory!);

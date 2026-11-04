@@ -1396,7 +1396,7 @@ void main() {
           urlRefresher: (source) async {
             refreshes++;
 
-            return 'https://example.com/live/fresh.flv';
+            return (url: 'https://example.com/live/fresh.flv', headers: null);
           },
         );
         await backend.initialize();
@@ -1408,6 +1408,38 @@ void main() {
         expect(refreshes, 1);
         final arguments = runner.executions.last.arguments;
         expect(arguments[arguments.indexOf('-i') + 1], 'https://example.com/live/fresh.flv');
+      });
+
+      test('the headers a fresh line brings ride the re-opening', () async {
+        // Moving to another of the room's lines is a new address minted for a
+        // new referer. Replaying the first line's headers at it answers 403, and
+        // the viewer reads a working line as a stream that is down.
+        final runner = _FakeExecutor()..onStart = _writeOutput;
+        final backend = live(
+          runner,
+          urlRefresher: (source) async => (
+            url: 'https://cdn-b.example.com/live.flv',
+            headers: const <String, String>{'Referer': 'https://room-b.example/'},
+          ),
+        );
+        await backend.initialize();
+        await backend.start(
+          const RecordingSource(
+            type: RecordingSourceType.network,
+            value: 'https://cdn-a.example.com/live.flv',
+            id: 'room-1',
+            headers: <String, String>{'Referer': 'https://room-a.example/'},
+          ),
+          const RecordingConfig(),
+        );
+
+        runner.executions.first.finish(255);
+        await _settle();
+
+        final arguments = runner.executions.last.arguments;
+        expect(arguments[arguments.indexOf('-i') + 1], 'https://cdn-b.example.com/live.flv');
+        expect(arguments[arguments.indexOf('-headers') + 1], contains('referer: https://room-b.example/'));
+        expect(backend.state.status, RecordingStatus.recording);
       });
 
       test('a source the host cannot refresh ends the recording', () async {
