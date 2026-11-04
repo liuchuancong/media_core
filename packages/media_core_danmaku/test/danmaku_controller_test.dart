@@ -313,6 +313,25 @@ void main() {
       expect(sink.messages.single.text, 'this is fine');
     });
 
+    test('suppresses a word the host handed over as a compiled pattern', () async {
+      await ready();
+      controller.policy = DanmakuFilterPolicy(blockedPatterns: <RegExp>[RegExp(r'\d+折')]);
+
+      transport.listener!.onDanmakuMessage(chat(text: '全场5折'));
+      transport.listener!.onDanmakuMessage(chat(text: '全场折'));
+
+      expect(sink.messages.single.text, '全场折');
+    });
+
+    test('runs a pattern over only the bounded head of a long message', () async {
+      final policy = DanmakuFilterPolicy(blockedPatterns: <RegExp>[RegExp(r'推广$')]);
+      final past = '${'a' * DanmakuFilterPolicy.patternMatchLength}推广';
+      const within = 'a推广';
+
+      expect(policy.allows(chat(text: past)), isTrue);
+      expect(policy.allows(chat(text: within)), isFalse);
+    });
+
     test('suppresses blocked viewers case-insensitively', () async {
       await ready();
       controller.policy = DanmakuFilterPolicy(blockedUsers: <String>['  Troll ']);
