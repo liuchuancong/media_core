@@ -96,7 +96,9 @@ enum _StopIntent { none, stop, cancel, stall }
 /// journal, so nothing is overwritten and the whole recording is the list of
 /// them in order. A run that lasted is not counted against the limit: a stream
 /// that drops once an hour and recovers every time is a recording, not a failing
-/// one.
+/// one — and it is re-opened at once, because the backoff is there to stop the
+/// backend hammering a source that never came up, not to widen the hole a
+/// working one left behind.
 ///
 /// Two things the re-open cannot fix are watched separately. A stalled input
 /// (bytes arriving, or nothing arriving, with no media time advancing) trips
@@ -1042,7 +1044,15 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         return;
       }
 
-      if (lastEnded >= config.healthyAfter) {
+      // A run that got going is a working source that dropped, not a source
+      // that refuses to start, and the backoff exists for the second: the
+      // attempt is already bounded by the limit below. Waiting here only widens
+      // the hole the drop left in the recording - with the app's own 30 s base,
+      // an hour-long run that ends at a CDN rotation would lose fifteen seconds
+      // of broadcast before it asked for a fresh address at all.
+      final healthyRun = lastEnded >= config.healthyAfter;
+
+      if (healthyRun) {
         _consecutiveQuickFailures = 0;
       } else {
         _consecutiveQuickFailures++;
@@ -1054,11 +1064,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         return;
       }
 
-      final delay = RetryUtils.backoff(
-        _consecutiveQuickFailures,
-        base: config.restartBackoff,
-        max: config.restartBackoffMax,
-      );
+      final delay = healthyRun
+          ? Duration.zero
+          : RetryUtils.backoff(_consecutiveQuickFailures, base: config.restartBackoff, max: config.restartBackoffMax);
 
       _log.warning(
         'the recording source ended; re-opening it',

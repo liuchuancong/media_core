@@ -1370,6 +1370,35 @@ void main() {
         expect(backend.state.status, RecordingStatus.recording);
       });
 
+      test('a run that got going is re-opened without waiting the backoff', () async {
+        // The backoff is there to stop the backend hammering a source that never
+        // came up. A run that streamed past healthyAfter and then died at the CDN
+        // is the opposite case: every second spent waiting is a second of the
+        // broadcast that is not being recorded.
+        final runner = _FakeExecutor()..onStart = _writeOutput;
+        final backend = live(
+          runner,
+          config: recovering.copyWith(
+            healthyAfter: const Duration(seconds: 2),
+            restartBackoff: const Duration(seconds: 30),
+            restartBackoffMax: const Duration(seconds: 30),
+          ),
+        );
+        await backend.initialize();
+        await backend.start(_source(), const RecordingConfig());
+
+        runner.lastStatistics!(const FfmpegStatistics(timeMs: 3000, sizeBytes: 64));
+        runner.executions.first.finish(255);
+        await _settle();
+
+        expect(
+          runner.executions.length,
+          2,
+          reason: 'with the backoff still in front of it, the second attempt would be 15 s away',
+        );
+        expect(backend.state.status, RecordingStatus.recording);
+      });
+
       test('quick failures give up and name the attempts', () async {
         final runner = _FakeExecutor()..onStart = _writeOutput;
         final backend = live(runner, config: recovering.copyWith(restartLimit: 2));
