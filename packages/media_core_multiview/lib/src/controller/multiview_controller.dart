@@ -203,7 +203,7 @@ final class MultiviewController {
     _config = config;
 
     if (config.layout.capacity != previousCapacity) {
-      _log.debug(
+      _log.info(
         'resizing the wall',
         fields: <String, Object?>{
           'from': previousCapacity,
@@ -231,7 +231,11 @@ final class MultiviewController {
       final removed = _cells.sublist(capacity);
       _cells = _cells.sublist(0, capacity);
       for (final cell in removed) {
-        unawaited(_releaseCell(cell.index));
+        unawaited(
+          _releaseCell(cell.index).catchError((Object error) {
+            _log.warning('cell release failed during wall resize', error: error, fields: {'index': cell.index});
+          }),
+        );
       }
       return;
     }

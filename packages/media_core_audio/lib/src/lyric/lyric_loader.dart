@@ -5,6 +5,7 @@ import 'package:media_core_audio/src/lyric/lyric_parser.dart';
 import 'package:media_core_audio/src/source/music_source.dart';
 import 'package:media_core_audio/src/source/music_source_registry.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Supplies raw lyric material for a track.
 ///
@@ -43,6 +44,8 @@ final class LyricLoader {
   final MusicSourceRegistry? _registry;
   final List<LyricProvider> _providers;
   final LyricParser _parser = const LyricParser();
+
+  final LogModule _log = MediaCoreLog.of(LogCategory.audio);
 
   final Map<String, LyricDocument> _cache = <String, LyricDocument>{};
   final Map<String, Completer<LyricDocument>> _inFlight = <String, Completer<LyricDocument>>{};
@@ -91,6 +94,7 @@ final class LyricLoader {
 
           if (!document.isEmpty) {
             _store(key, document);
+            _log.info('lyric loaded', fields: <String, Object?>{'track': track.title, 'sourceId': track.sourceId});
           }
 
           if (!completer.isCompleted) {
@@ -122,8 +126,9 @@ final class LyricLoader {
 
     try {
       await load(track);
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Prefetch never surfaces an error; the on-demand load will.
+      _log.debug('lyric prefetch failed', fields: {'error': error.toString()});
     }
   }
 

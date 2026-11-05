@@ -9,7 +9,7 @@ import 'package:media_core_cast_dlna/src/infrastructure/description/description_
 import 'package:media_core_cast_dlna/src/infrastructure/description/device_description_parser.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/discovery/ssdp/ssdp_client.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/discovery/ssdp/ssdp_message.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// A device whose description could not be fetched or parsed.
 ///
@@ -130,7 +130,7 @@ final class DlnaDiscoveryManager {
     try {
       _subscription = _ssdp.messages.listen(_onMessage);
       await _ssdp.start();
-      DlnaLog.info(DlnaLogCategory.discovery, 'discovery started');
+      MediaCoreLog.info(LogCategory.network, 'discovery started');
     } on Object catch (error) {
       _state = DlnaDiscoveryState.error;
       await _subscription?.cancel();
@@ -162,7 +162,7 @@ final class DlnaDiscoveryManager {
     _failedDescriptions.clear();
     _fetching.clear();
     _state = DlnaDiscoveryState.stopped;
-    DlnaLog.info(DlnaLogCategory.discovery, 'discovery stopped');
+    MediaCoreLog.info(LogCategory.network, 'discovery stopped');
     _emitDevices();
   }
 
@@ -266,8 +266,8 @@ final class DlnaDiscoveryManager {
         _registry.addOrUpdate(device);
         _usnToUdn[usn] = device.udn;
         _failedDescriptions.remove(usn);
-        DlnaLog.info(
-          DlnaLogCategory.discovery,
+        MediaCoreLog.info(
+          LogCategory.network,
           wasKnown ? 'device re-resolved' : 'device found',
           fields: <String, Object?>{'device': device.udn, 'name': device.friendlyName},
         );
@@ -285,8 +285,8 @@ final class DlnaDiscoveryManager {
         return;
       }
       _failedDescriptions[usn] = _now();
-      DlnaLog.warning(
-        DlnaLogCategory.discovery,
+      MediaCoreLog.warning(
+        LogCategory.network,
         'device description failed',
         error: error,
         fields: <String, Object?>{'usn': usn, 'location': location},
@@ -307,7 +307,7 @@ final class DlnaDiscoveryManager {
     _usnToUdn.removeWhere((usn, udn) => usn == id || udn == canonical);
     final gone = _registry.remove(canonical);
     if (gone != null) {
-      DlnaLog.info(DlnaLogCategory.discovery, 'device lost', fields: <String, Object?>{'device': canonical});
+      MediaCoreLog.info(LogCategory.network, 'device lost', fields: <String, Object?>{'device': canonical});
       _removed.add(canonical);
       _emitDevices();
     }

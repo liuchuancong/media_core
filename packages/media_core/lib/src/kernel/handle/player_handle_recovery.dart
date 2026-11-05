@@ -239,8 +239,9 @@ extension PlayerHandleRecovery on PlayerHandle {
         // that is still holding the broken stream.
         try {
           await _runtime.adapter.close();
-        } on Object catch (_) {
+        } on Object catch (error) {
           // Releasing an already released backend is not a reason to abort.
+          MediaCoreLog.debug(LogCategory.player, 'close before reopen failed', error: error);
         }
 
         _backendReady = false;
@@ -408,8 +409,13 @@ extension PlayerHandleRecovery on PlayerHandle {
           // subscription: there is nothing to roll back.
           try {
             await nextAdapter.dispose();
-          } on Object catch (_) {
+          } on Object catch (cleanupError) {
             // Best-effort cleanup of the failed replacement adapter.
+            MediaCoreLog.debug(
+              LogCategory.player,
+              'replacement adapter cleanup failed',
+              error: cleanupError,
+            );
           }
         }
 

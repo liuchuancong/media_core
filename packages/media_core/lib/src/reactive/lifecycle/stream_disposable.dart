@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// A small lifecycle manager for disposable asynchronous resources.
@@ -175,8 +176,9 @@ class StreamDisposable {
     for (final subscription in subscriptions) {
       try {
         await subscription.cancel();
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Cleanup should continue even when one subscription fails.
+        MediaCoreLog.debug(LogCategory.general, 'disposable cleanup failed', error: error);
       }
     }
   }
@@ -201,8 +203,9 @@ class StreamDisposable {
     for (final sink in sinks) {
       try {
         await sink.close();
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Cleanup should continue.
+        MediaCoreLog.debug(LogCategory.general, 'disposable cleanup failed', error: error);
       }
     }
   }
@@ -218,8 +221,9 @@ class StreamDisposable {
         if (!subject.isClosed) {
           await subject.close();
         }
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Cleanup should continue.
+        MediaCoreLog.debug(LogCategory.general, 'disposable cleanup failed', error: error);
       }
     }
   }
@@ -233,8 +237,9 @@ class StreamDisposable {
     for (final cleanup in cleanups) {
       try {
         await cleanup();
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Cleanup should continue.
+        MediaCoreLog.debug(LogCategory.general, 'disposable cleanup failed', error: error);
       }
     }
   }

@@ -30,6 +30,11 @@ dependencies:
   media_core:
     ^0.1.0
 
+  # Client-call and permission-ask failures are logged under the general
+  # category.
+  media_core_logging:
+    ^0.1.0
+
   # The vocabulary a job is described in (`BackgroundNotification`,
   # `BackgroundJobKind`, `BackgroundProgress`) and the process protection this
   # package deliberately does not own on iOS/macOS/Windows.

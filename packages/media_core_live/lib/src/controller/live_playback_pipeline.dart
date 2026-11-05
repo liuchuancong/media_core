@@ -91,7 +91,9 @@ extension _LivePlaybackPipeline on LivePlaybackController {
     // can still arrive. The cancels in [_releaseHandle] are awaited, because
     // that is the boundary where the player itself goes away.
     unawaited(_adapterSub?.cancel());
-    _adapterSub = handle.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
+    _adapterSub = handle.adapterEvents.listen(_onAdapterEvent, onError: (Object error) {
+      MediaCoreLog.warning(LogCategory.recovery, 'adapter event stream errored', error: error);
+    });
 
     unawaited(_backendSub?.cancel());
     _backendSub = handle.backendChanges.listen((change) {
@@ -100,7 +102,9 @@ extension _LivePlaybackPipeline on LivePlaybackController {
     });
 
     if (_audioOnly) {
-      unawaited(handle.setAudioOnly(audioOnly: true));
+      unawaited(handle.setAudioOnly(audioOnly: true).catchError((Object error) {
+        MediaCoreLog.debug(LogCategory.player, 'setAudioOnly failed after attach', error: error);
+      }));
     }
   }
 
@@ -125,10 +129,13 @@ extension _LivePlaybackPipeline on LivePlaybackController {
     watchdogs.updateCapabilities(null);
 
     if (handle != null) {
+      MediaCoreLog.info(LogCategory.player, 'live playback closed', fields: <String, Object?>{'backend': handle.backendId});
+
       try {
         await kernel.release(handle.id);
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Best-effort release of an engine that may already be gone.
+        MediaCoreLog.debug(LogCategory.player, 'engine release failed', error: error, fields: {'id': handle.id});
       }
     }
   }
@@ -179,9 +186,15 @@ extension _LivePlaybackPipeline on LivePlaybackController {
       unawaited(
         handle.play().then(
           (_) {
+            MediaCoreLog.info(
+              LogCategory.recovery,
+              'playback reasserted after unexpected pause',
+              fields: <String, Object?>{'backend': backendId, 'line': _lineAddress(_currentSource)},
+            );
             watchdogs.reportRecoveryResult(resumed: true);
           },
-          onError: (Object _) {
+          onError: (Object error) {
+            MediaCoreLog.warning(LogCategory.recovery, 'reassert play failed', error: error);
             watchdogs.reportRecoveryResult(resumed: false);
           },
         ),

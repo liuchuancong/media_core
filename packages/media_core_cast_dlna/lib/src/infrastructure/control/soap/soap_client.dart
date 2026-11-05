@@ -8,7 +8,7 @@ import 'package:media_core_cast_dlna/src/domain/exceptions/dlna_exception.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/control/soap/soap_fault_parser.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/control/soap/soap_request_builder.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/control/soap/soap_response_parser.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// The outcome of one executed UPnP action.
 final class SoapActionResult {
@@ -88,16 +88,16 @@ final class SoapClient {
     try {
       response = await _transport.post(service.controlUrl, request.headers, request.body).timeout(timeout);
     } on TimeoutException catch (error) {
-      DlnaLog.warning(
-        DlnaLogCategory.soap,
+      MediaCoreLog.warning(
+        LogCategory.network,
         'action timed out',
         error: error,
         fields: <String, Object?>{'action': action, 'timeout': timeout.inMilliseconds},
       );
       throw DlnaTimeoutException('device did not answer $action within ${timeout.inSeconds}s', cause: error);
     } on SocketException catch (error) {
-      DlnaLog.warning(
-        DlnaLogCategory.soap,
+      MediaCoreLog.warning(
+        LogCategory.network,
         'control endpoint unreachable',
         error: error,
         fields: <String, Object?>{'action': action},
@@ -116,8 +116,8 @@ final class SoapClient {
       if (fault.code == UpnpErrorCode.invalidAction) {
         throw DlnaUnsupportedActionException(description: fault.errorDescription, cause: fault);
       }
-      DlnaLog.warning(
-        DlnaLogCategory.soap,
+      MediaCoreLog.warning(
+        LogCategory.network,
         'device refused action',
         fields: <String, Object?>{'action': action, 'code': fault.code.rawValue},
       );

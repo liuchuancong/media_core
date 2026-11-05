@@ -7,6 +7,7 @@ import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/models/source/player_source.dart';
 import 'package:media_core/src/renderer/view/video_zoom_controller.dart';
 import 'package:media_core/src/screenshot/screenshot_surface.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Application-facing video widget for a [PlayerHandle].
 ///
@@ -354,7 +355,16 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
     _desired = null;
 
     if (attached != null) {
-      unawaited(attached.detach());
+      unawaited(
+        attached.detach().catchError((Object error, StackTrace stackTrace) {
+          MediaCoreLog.warning(
+            LogCategory.renderer,
+            'surface detach failed',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }),
+      );
     }
   }
 
@@ -386,11 +396,34 @@ final class _MediaPlayerViewState extends State<MediaPlayerView> {
       _attached = desired;
 
       if (previous != null) {
-        unawaited(previous.detach());
+        unawaited(
+          previous.detach().catchError((Object error, StackTrace stackTrace) {
+            MediaCoreLog.warning(
+              LogCategory.renderer,
+              'surface detach failed',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }),
+        );
       }
 
       if (desired != null) {
-        unawaited(desired.attach());
+        MediaCoreLog.info(
+          LogCategory.renderer,
+          previous != null ? 'surface switched' : 'surface attached',
+        );
+
+        unawaited(
+          desired.attach().catchError((Object error, StackTrace stackTrace) {
+            MediaCoreLog.warning(
+              LogCategory.renderer,
+              'surface attach failed',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }),
+        );
       }
     });
   }

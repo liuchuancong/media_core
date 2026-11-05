@@ -73,7 +73,9 @@ extension _LiveWatchdogArms on LiveWatchdogs {
 
     try {
       handler(LiveWatchdogRecoveryAction.reassertPlay);
-    } on Object catch (_) {
+    } on Object catch (error) {
+      MediaCoreLog.warning(LogCategory.recovery, 'pause-resume recovery handler threw', error: error);
+
       if (!_isWatchdogGenerationCurrent(generation)) {
         return;
       }

@@ -326,10 +326,11 @@ final class PlaybackPoolOrchestrator {
     _disposed = true;
     try {
       await _enqueue(_releaseAllLocked);
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A pool that cannot hand its players back is still disposed: the caller
       // has no recovery for a kernel that refuses to release, and leaving the
       // orchestrator usable would only repeat the failure.
+      _log.warning('pool dispose: kernel release failed', error: error);
     }
     _memory.withdraw(_memoryKey);
   }

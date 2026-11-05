@@ -10,6 +10,7 @@ import 'package:media_core_audio/src/permission/audio_permission_service.dart';
 import 'package:media_core_audio/src/player/audio_playback_controller.dart';
 import 'package:media_core_audio/src/player/audio_playback_state.dart';
 import 'package:media_core_audio/src/track/music_track.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Drives a desktop lyric overlay from an [AudioPlaybackController].
 ///
@@ -71,6 +72,8 @@ final class DesktopLyricController {
 
   /// Whether romanization is shown above translation.
   final bool swapSecondary;
+
+  final LogModule _log = MediaCoreLog.of(LogCategory.audio);
 
   final DesktopLyricTransport _transport;
   final AudioPermissionService _permissions;
@@ -174,6 +177,8 @@ final class DesktopLyricController {
     await _reloadLyric(force: true);
     _push(force: true);
 
+    _log.info('desktop lyric overlay shown');
+
     return true;
   }
 
@@ -189,6 +194,8 @@ final class DesktopLyricController {
 
     unawaited(_transport.setLevels(momentary: -70, shortTerm: -70, active: false));
     await _transport.hide();
+
+    _log.info('desktop lyric overlay hidden');
   }
 
   /// Shows the overlay when hidden and vice versa.
@@ -301,11 +308,15 @@ final class DesktopLyricController {
     }
 
     unawaited(
-      _transport.setLevels(
-        momentary: levels.momentary,
-        shortTerm: levels.shortTerm,
-        active: _visible && _playing,
-      ),
+      _transport
+          .setLevels(
+            momentary: levels.momentary,
+            shortTerm: levels.shortTerm,
+            active: _visible && _playing,
+          )
+          .catchError((Object error) {
+            MediaCoreLog.log(LogLevel.debug, LogCategory.audio, 'desktop lyric push failed', error: error);
+          }),
     );
   }
 
@@ -327,7 +338,13 @@ final class DesktopLyricController {
     if (state.playing != _playing) {
       _playing = state.playing;
       if (!_playing) {
-        unawaited(_transport.setLevels(momentary: -70, shortTerm: -70, active: false));
+        unawaited(
+          _transport
+              .setLevels(momentary: -70, shortTerm: -70, active: false)
+              .catchError((Object error) {
+                MediaCoreLog.log(LogLevel.debug, LogCategory.audio, 'desktop lyric push failed', error: error);
+              }),
+        );
       }
     }
 
@@ -367,27 +384,37 @@ final class DesktopLyricController {
       _appliedOffset = player.lyricOffset;
       _timeline.setDocument(document);
       _push(force: true);
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A lyric that cannot be loaded leaves the overlay showing its
       // placeholder; the music keeps playing.
+      _log.warning('desktop lyric load failed', error: error);
     }
   }
 
   void _onAction(DesktopLyricAction action) {
     switch (action) {
       case DesktopLyricAction.previous:
-        unawaited(player.previous());
+        unawaited(_runAction(player.previous()));
       case DesktopLyricAction.toggle:
-        unawaited(player.toggle());
+        unawaited(_runAction(player.toggle()));
       case DesktopLyricAction.next:
-        unawaited(player.next());
+        unawaited(_runAction(player.next()));
       case DesktopLyricAction.close:
-        unawaited(hide());
+        unawaited(_runAction(hide()));
       case DesktopLyricAction.lock:
-        unawaited(setLocked(locked: true));
+        unawaited(_runAction(setLocked(locked: true)));
       case DesktopLyricAction.unlock:
-        unawaited(setLocked(locked: false));
+        unawaited(_runAction(setLocked(locked: false)));
     }
+  }
+
+  /// Runs an overlay-triggered transport action, logging (but not rethrowing)
+  /// failures — the actions were initiated by the overlay window, so there is
+  /// no caller to surface them to.
+  Future<void> _runAction(Future<void> action) {
+    return action.catchError((Object error) {
+      _log.warning('desktop lyric action failed', error: error);
+    });
   }
 
   /// Pushes the current reading to the overlay.
@@ -427,7 +454,11 @@ final class DesktopLyricController {
 
     _lastPushed = state;
 
-    unawaited(_transport.update(state));
+    unawaited(
+      _transport.update(state).catchError((Object error) {
+        MediaCoreLog.log(LogLevel.debug, LogCategory.audio, 'desktop lyric push failed', error: error);
+      }),
+    );
   }
 
   /// Whether a push would change nothing a viewer could see.

@@ -73,7 +73,13 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         // contract. The caller asks for immediate effect by letting the
         // handle rebuild the engine.
         outcomes.add(EngineOptionOutcome.stagedForNextOpen);
-      } on Object catch (_) {
+      } on Object catch (error) {
+        MediaCoreLog.warning(
+          LogCategory.player,
+          'engine option apply failed',
+          error: error,
+          fields: <String, Object?>{'key': option.key},
+        );
         outcomes.add(EngineOptionOutcome.unsupported);
       }
     }
@@ -133,6 +139,10 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// Dedup of repeated error reports: a tick in the error state would
   /// otherwise re-fail the adapter on every listener callback.
   String? _lastReportedError;
+
+  /// The URI of the source that was last opened successfully, so the close
+  /// path can report which source it just released.
+  String? _openedUri;
 
   Duration _lastDuration = Duration.zero;
   Duration _lastPosition = Duration.zero;
@@ -279,6 +289,8 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       'opened source',
       fields: <String, Object?>{'uri': source.uri.toString(), 'live': _liveSource, 'autoPlay': _autoPlay},
     );
+
+    _openedUri = source.uri.toString();
   }
 
   @override
@@ -331,6 +343,14 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     _lastReportedError = null;
     _lastPosition = Duration.zero;
     _lastDuration = Duration.zero;
+
+    MediaCoreLog.info(
+      LogCategory.renderer,
+      'closed source',
+      fields: <String, Object?>{if (_openedUri != null) 'uri': _openedUri},
+    );
+    _openedUri = null;
+
     await _player.reset();
   }
 

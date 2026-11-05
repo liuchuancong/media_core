@@ -469,6 +469,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     player
       ..volume = 0.0
       ..dispose();
+
+    _log.info('fvp engine released');
   }
 
   /// `avio.headers` takes CRLF-terminated lines; values that would inject extra
@@ -785,6 +787,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       _sizeNotifier.value = size;
 
       emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
+
+      _log.info('video texture attached', fields: <String, Object?>{'uri': _currentUrl});
     } on Object catch (error) {
       // The attach runs unawaited from the open path and the media-status
       // stream; an engine error escaping here would surface as an unhandled

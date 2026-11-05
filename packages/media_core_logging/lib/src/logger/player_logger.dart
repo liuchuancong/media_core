@@ -295,8 +295,14 @@ final class PlayerLogger {
   }
 
   /// Emits a debug-level diagnostic record.
-  void debug(LogCategory category, String message, {Map<String, Object?> fields = const {}}) {
-    log(LogLevel.debug, category, message, fields: fields);
+  void debug(
+    LogCategory category,
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+    Map<String, Object?> fields = const {},
+  }) {
+    log(LogLevel.debug, category, message, error: error, stackTrace: stackTrace, fields: fields);
   }
 
   /// Emits an informational diagnostic record.

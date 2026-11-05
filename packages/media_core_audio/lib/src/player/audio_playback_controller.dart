@@ -594,6 +594,7 @@ final class AudioPlaybackController {
       }
 
       _bind(handle);
+      _log.info('audio engine acquired', fields: <String, Object?>{'backend': config.backendId, 'playerId': handle.id});
 
       return handle;
     } on Object catch (error) {
@@ -965,8 +966,10 @@ final class AudioPlaybackController {
     if (handle != null) {
       try {
         await _kernel.release(handle.id);
-      } on Object catch (_) {
+        _log.info('audio engine released');
+      } on Object catch (error) {
         // Releasing an engine that is already gone is not an error here.
+        _log.warning('engine release failed during dispose', error: error);
       }
     }
 

@@ -2,9 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:media_core/media_core.dart' hide PipController;
 import 'package:media_core_pip/src/driver/overlay_pip.dart';
 import 'package:media_core_pip/src/driver/system_pip.dart';
 import 'package:pip_kit/pip_kit.dart';
+
+/// Seam over pip_kit's controller singleton (the iOS side), injectable so the
+/// sequencing around it can be tested without a device.
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
 /// Seam over pip_kit's controller singleton (the iOS side), injectable so the
 /// sequencing around it can be tested without a device.
@@ -146,7 +151,8 @@ final class OverlayPipSystemPip implements SystemPip {
         case TargetPlatform.windows:
           return false;
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
+      _log.warning('pip availability probe failed', error: error);
       return false;
     }
   }
@@ -168,7 +174,8 @@ final class OverlayPipSystemPip implements SystemPip {
         case TargetPlatform.windows:
           return SystemPipStatus.unavailable;
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
+      _log.warning('pip status probe failed', error: error);
       return SystemPipStatus.unavailable;
     }
   }
@@ -230,7 +237,8 @@ final class OverlayPipSystemPip implements SystemPip {
         // the viewer returns; a refusal is reported, never retried in a loop.
         granted = await _overlayWindow.requestPermission() ?? false;
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
+      _log.warning('pip overlay permission check failed', error: error);
       granted = false;
     }
     if (!granted) {
@@ -260,6 +268,8 @@ final class OverlayPipSystemPip implements SystemPip {
       rethrow;
     }
 
+    _log.info('pip overlay window shown', fields: <String, Object?>{'size': size});
+
     _statuses.add(SystemPipStatus.enabled);
     return SystemPipStatus.enabled;
   }
@@ -283,6 +293,7 @@ final class OverlayPipSystemPip implements SystemPip {
     if (!accepted) {
       return SystemPipStatus.unavailable;
     }
+    _log.info('ios system pip entered', fields: <String, Object?>{'autoEnter': trigger == SystemPipTrigger.onLeaveApp});
     _statuses.add(SystemPipStatus.enabled);
     return SystemPipStatus.enabled;
   }
@@ -305,8 +316,9 @@ final class OverlayPipSystemPip implements SystemPip {
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         await _pipKit.disarm();
       }
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Teardown is best effort: the engine may already be gone with the app.
+      _log.debug('pip overlay teardown failed', error: error);
     }
     await _link?.dispose();
     _link = null;

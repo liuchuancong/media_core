@@ -337,6 +337,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   @override
   Future<void> onInitialize(PlayerAdapterContext context) async {
     _player = _injectedPlayer ?? mk.Player(configuration: playerConfiguration ?? const mk.PlayerConfiguration());
+    MediaCoreLog.info(LogCategory.lifecycle, 'media_kit player created');
 
     // The device budget must be known before the video controller and the
     // native property contract are built, because both branch on it. It now
@@ -466,6 +467,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // the first tick must reach the UI at once instead of waiting out a gap.
     _positionThrottle.reset();
     _hasOpened = true;
+
+    MediaCoreLog.info(LogCategory.player, 'opened source', fields: <String, Object?>{'uri': source.uri.toString(), 'live': _liveSource});
 
     if (audioOnly) {
       await _applyAudioOnly(true);
@@ -714,6 +717,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       await _player?.dispose();
     }
 
+    MediaCoreLog.info(LogCategory.lifecycle, 'media_kit player disposed');
+
     _player = null;
     _videoController = null;
   }
@@ -731,8 +736,9 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       // un-suppressing an already-open player restores an audible track -
       // without it the player stays silent until the next open.
       await player.setAudioTrack(suppressed ? mk.AudioTrack.no() : mk.AudioTrack.auto());
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Best-effort; some builds reject track selection before open.
+      MediaCoreLog.warning(LogCategory.audio, 'audio track suppression failed', error: error);
     }
   }
 
@@ -744,8 +750,14 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (_audioOutputSuppressed) {
       try {
         await player.setAudioTrack(mk.AudioTrack.no());
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Best-effort.
+        MediaCoreLog.warning(
+          LogCategory.audio,
+          'audio track suppression failed',
+          error: error,
+          fields: <String, Object?>{'stage': 'afterOpen'},
+        );
       }
     }
   }

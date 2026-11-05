@@ -211,6 +211,11 @@ final class FfmpegRecordingRemuxer {
       final stale = File(partialPath);
       if (stale.existsSync()) stale.deleteSync();
     } on Object catch (error) {
+      _log.error(
+        'the concat list could not be written',
+        error: error,
+        fields: <String, Object?>{'output': outputPath},
+      );
       return FfmpegRemuxResult.failed(outputPath: outputPath, error: error);
     }
 
@@ -382,7 +387,8 @@ final class FfmpegRecordingRemuxer {
   Future<int?> _awaitExit(FfmpegExecution execution) async {
     try {
       return await execution.exitCode;
-    } on Object catch (_) {
+    } on Object catch (error) {
+      _log.debug('duration probe failed', error: error);
       return null;
     }
   }

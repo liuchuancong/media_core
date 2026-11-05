@@ -82,9 +82,16 @@ extension _HandleAdapterBridge on PlayerHandle {
     if (!identical(previous, next)) {
       try {
         await previous.dispose();
-      } on Object catch (_) {
+      } on Object catch (error, stackTrace) {
         // A backend that refuses to release must not fail the swap that
         // already succeeded.
+        MediaCoreLog.warning(
+          LogCategory.player,
+          'outgoing adapter dispose failed during swap',
+          error: error,
+          stackTrace: stackTrace,
+          fields: <String, Object?>{'backend': previous.id},
+        );
       }
     }
   }
@@ -281,6 +288,14 @@ extension _HandleAdapterBridge on PlayerHandle {
       if (_disposed) {
         return;
       }
+
+      MediaCoreLog.warning(
+        LogCategory.playback,
+        'loop restart failed',
+        error: error,
+        stackTrace: stackTrace,
+        fields: <String, Object?>{'backend': _registration.id},
+      );
 
       reportFailure(
         RecoveryFailure.fromMessage(

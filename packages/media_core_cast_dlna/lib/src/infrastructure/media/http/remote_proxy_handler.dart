@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/remote_proxy_registry.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Serves proxied remote resources to renderers.
 ///
@@ -58,8 +58,8 @@ final class RemoteProxyHandler {
       upstreamUrl = upstream;
       await _streamUpstream(request, upstream, registration.upstreamHeaders, upstreamClient);
     } on Object catch (error) {
-      DlnaLog.warning(
-        DlnaLogCategory.mediaServer,
+      MediaCoreLog.warning(
+        LogCategory.network,
         'proxy upstream failed',
         error: error,
         fields: <String, Object?>{'host': upstreamUrl?.host ?? ''},
@@ -83,7 +83,9 @@ final class RemoteProxyHandler {
     final upstreamResponse = await upstreamRequest.close().timeout(const Duration(seconds: 10));
     if (upstreamResponse.statusCode != HttpStatus.ok) {
       request.response.statusCode = HttpStatus.badGateway;
-      await upstreamResponse.drain<void>().catchError((Object _) {});
+      await upstreamResponse.drain<void>().catchError((Object error) {
+        MediaCoreLog.debug(LogCategory.network, 'upstream drain failed', error: error);
+      });
       await request.response.close();
       return;
     }
@@ -152,7 +154,9 @@ final class RemoteProxyHandler {
     }
 
     if (isHead) {
-      await upstreamResponse.drain<void>().catchError((Object _) {});
+      await upstreamResponse.drain<void>().catchError((Object error) {
+        MediaCoreLog.debug(LogCategory.network, 'upstream drain failed', error: error);
+      });
       await request.response.close();
       return;
     }

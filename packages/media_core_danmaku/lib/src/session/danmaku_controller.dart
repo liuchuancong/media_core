@@ -199,7 +199,11 @@ final class DanmakuController {
       _emit(state.copyWith(installed: true, transportId: transport.id));
       return;
     }
-    unawaited(replaceTransport(transport));
+    // Fire-and-forget: a failing replacement would otherwise surface as an
+    // uncaught zone error, so it is logged instead.
+    unawaited(replaceTransport(transport).catchError((Object error) {
+      MediaCoreLog.warning(LogCategory.danmaku, 'async transport replacement failed', error: error);
+    }));
   }
 
   /// Replaces the installed transport, tearing down the current session.
@@ -210,7 +214,10 @@ final class DanmakuController {
   Future<void> replaceTransport(DanmakuTransport transport) {
     final request = ++_requestEpoch;
     return _serialize(() async {
-      if (request != _requestEpoch) return;
+      if (request != _requestEpoch) {
+        MediaCoreLog.debug(LogCategory.danmaku, 'transport replacement superseded by a newer request', fields: {'epoch': request});
+        return;
+      }
       await _disconnectInternal(clearRenderer: true);
       if (request != _requestEpoch) return;
       _transport = transport;
@@ -421,6 +428,11 @@ final class DanmakuController {
     _sessionReady = true;
     _sink.onRoomChanged(room?.roomId);
     _notice(DanmakuNotice.connected);
+    MediaCoreLog.info(
+      LogCategory.danmaku,
+      'danmaku session connected',
+      fields: <String, Object?>{'platform': room?.platform, 'room': key, 'transport': transport.id},
+    );
     _emit(
       state.copyWith(
         phase: DanmakuSessionPhase.connected,
@@ -534,6 +546,7 @@ final class DanmakuController {
   /// when none began.
   Future<void> _disconnectInternal({required bool clearRenderer, bool tearDownTransport = true}) async {
     final transport = _transport;
+    final previousKey = _sessionKey;
     // Increment first: every outstanding callback guard fails immediately,
     // before teardown awaits anything.
     _sessionToken++;
@@ -545,6 +558,11 @@ final class DanmakuController {
     _sink.onRoomChanged(null);
     if (clearRenderer) _sink.clearRendered();
     _emit(state.copyWith(phase: DanmakuSessionPhase.closed, clearRoom: true, generation: _sessionToken));
+    MediaCoreLog.info(
+      LogCategory.danmaku,
+      'danmaku session stopped',
+      fields: <String, Object?>{'room': previousKey, 'clearRenderer': clearRenderer},
+    );
     if (transport == null || !tearDownTransport) return;
     await _stopTransport(transport);
   }

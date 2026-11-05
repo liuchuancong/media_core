@@ -733,8 +733,15 @@ final class PlayerHandle implements RecoveryTarget {
         // controller, geometry controller and both bindings.
         try {
           await _runtime.dispose();
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
           // Disposal continues even when the backend refuses.
+          MediaCoreLog.warning(
+            LogCategory.lifecycle,
+            'runtime dispose failed',
+            error: error,
+            stackTrace: stackTrace,
+            fields: <String, Object?>{'player': _player.id.value},
+          );
         }
 
         // Handle-scoped modules.

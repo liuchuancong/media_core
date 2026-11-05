@@ -4,6 +4,7 @@ import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:media_core_audio/src/local/audio_tag.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Reads the tags of local audio files without decoding their audio.
 ///
@@ -18,6 +19,8 @@ import 'package:media_core_audio/src/local/audio_tag.dart';
 final class AudioTagReader {
   /// Creates a reader.
   const AudioTagReader({this.maxMetadataBytes = 16 * 1024 * 1024, this.maxPictureBytes = 24 * 1024 * 1024});
+
+  static final LogModule _log = MediaCoreLog.of(LogCategory.audio);
 
   /// Cap on one metadata block, so a corrupt length cannot allocate a file's
   /// whole size. A cover lives in its own block and uses [maxPictureBytes].
@@ -39,8 +42,9 @@ final class AudioTagReader {
       final source = _FileSource(handle, await handle.length());
 
       return await _parse(source, _extensionOf(file.path), includePicture);
-    } on Object {
+    } on Object catch (error) {
       // A missing, locked or unreadable file has no tags to report.
+      _log.debug('tag read failed', fields: {'file': file.path, 'error': error.toString()});
       return AudioTag.empty;
     } finally {
       await handle?.close();

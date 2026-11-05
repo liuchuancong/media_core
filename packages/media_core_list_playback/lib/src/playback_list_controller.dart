@@ -250,7 +250,9 @@ final class PlaybackListController {
   void updateItems(List<PlaybackListItem> items) {
     _ensureNotDisposed();
     _items = List<PlaybackListItem>.unmodifiable(items);
-    _poolItemsSync = _syncPoolItems().catchError((Object _) {});
+    _poolItemsSync = _syncPoolItems().catchError((Object error) {
+      _log.warning('pool sync after updateItems failed', error: error);
+    });
 
     final currentId = _state.item?.id;
     if (currentId != null) {
@@ -382,6 +384,15 @@ final class PlaybackListController {
         await pool?.onVisibilityChanged(previousIndex, 0);
       }
       _lastOpenedIndex = index;
+      _log.info(
+        'list item opened',
+        fields: <String, Object?>{
+          'from': previousIndex,
+          'to': index,
+          'itemId': item.id,
+          'throughPool': pool != null,
+        },
+      );
 
       final resumedFrom = await _resume(item);
       if (_disposed || _index != index) {
@@ -447,6 +458,7 @@ final class PlaybackListController {
       return;
     }
     await _store.save(item.id, player.position);
+    _log.info('position saved', fields: <String, Object?>{'itemId': item.id, 'positionMs': player.position.inMilliseconds});
   }
 
   /// Forgets every remembered position.
@@ -464,7 +476,9 @@ final class PlaybackListController {
     if (_disposed) {
       return;
     }
-    await savePosition().catchError((Object _) {});
+    await savePosition().catchError((Object error) {
+      _log.warning('could not save position during dispose', error: error);
+    });
     _disposed = true;
 
     // Nobody will settle the chain now: release the callers awaiting it.
@@ -530,7 +544,12 @@ final class PlaybackListController {
 
   /// Saves the outgoing item, then opens the target.
   Future<void> _switchTo(int index) async {
-    await savePosition();
+    // Best-effort: a failing save must not stop the switch from happening.
+    try {
+      await savePosition();
+    } on Object catch (error) {
+      _log.warning('could not save outgoing position before switch', error: error);
+    }
     await open(index: index);
   }
 

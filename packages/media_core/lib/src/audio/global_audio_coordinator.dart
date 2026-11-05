@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:media_core/src/audio/audio_coordinator.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Global coordinator for audio ownership across multiple playback sessions.
@@ -76,6 +77,11 @@ final class GlobalAudioCoordinator {
     } catch (error) {
       // The channel is not left silent: the previous owner is re-granted, so
       // a failed claim restores what was interrupted rather than muting it.
+      MediaCoreLog.warning(
+        LogCategory.player,
+        'audio focus claim failed, previous owner restored',
+        error: error,
+      );
       final previous = _coordinators.contains(_owner) ? _owner : null;
       _owner = null;
       _ownerSubject.add(null);
@@ -111,7 +117,11 @@ final class GlobalAudioCoordinator {
     if (owner != null) {
       // The platform focus outlives this bookkeeping; leaving it held keeps
       // the channel exclusive to a session that no longer has an arbiter.
-      unawaited(owner.abandonFocus());
+      unawaited(
+        owner.abandonFocus().catchError((Object error) {
+          MediaCoreLog.debug(LogCategory.player, 'abandonFocus failed', error: error);
+        }),
+      );
     }
   }
 }

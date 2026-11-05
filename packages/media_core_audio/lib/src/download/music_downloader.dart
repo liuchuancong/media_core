@@ -388,7 +388,11 @@ final class MusicDownloader {
 
     _cancelled.add(taskId);
 
-    FFmpegKit.cancel(session);
+    try {
+      FFmpegKit.cancel(session);
+    } on Object catch (error) {
+      MediaCoreLog.warning(LogCategory.error, 'ffmpeg cancel failed', error: error, fields: {'taskId': taskId});
+    }
   }
 
   /// Whether [taskId] was cancelled and is waiting for ffmpeg to confirm.
@@ -405,8 +409,9 @@ final class MusicDownloader {
     for (final session in _sessions.values) {
       try {
         FFmpegKit.cancel(session);
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Best effort: a session that is already gone needs no cancel.
+        MediaCoreLog.warning(LogCategory.error, 'ffmpeg session cancel failed during dispose', error: error);
       }
     }
 

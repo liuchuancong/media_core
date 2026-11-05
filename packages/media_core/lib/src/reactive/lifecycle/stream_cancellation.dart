@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Exception thrown when an asynchronous operation is cancelled.
 class StreamCancelledException implements Exception {
@@ -153,7 +154,9 @@ abstract final class StreamCancellable {
 
     try {
       await Future.any<void>([timerFuture, token.whenCancelled]);
-    } on Object catch (_) {
+    } on Object catch (error) {
+      MediaCoreLog.debug(LogCategory.general, 'cancellation check failed', error: error);
+
       return false;
     }
 

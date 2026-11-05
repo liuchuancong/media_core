@@ -233,6 +233,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
 
       await platform.activate();
       _platformActive = true;
+      _log.info('media session activated');
 
       if (config.processInterruptions) {
         await _bestEffort(() => platform.setAutoHandleInterruptions(true));
@@ -313,6 +314,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     if (_platformActive) {
       _platformActive = false;
       await _bestEffort(fms.FlutterMediaSessionPlatform.instance.deactivate);
+      _log.info('media session deactivated');
     }
 
     _surfaceOwner = null;
@@ -390,6 +392,7 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
         ..publishIdle()
         ..clearMediaItem();
 
+      _log.info('media session detached');
       return;
     }
 
@@ -399,6 +402,8 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
     _surfaceOwner = _sessionIdFor(handle);
     handler.publishMediaItem(_itemFor(handle));
     _publishCurrent(handle);
+
+    _log.info('media session bound', fields: <String, Object?>{'player': handle.id});
 
     _playbackSub = handle.playbackStream.listen(
       (_) => _publishCurrent(handle),

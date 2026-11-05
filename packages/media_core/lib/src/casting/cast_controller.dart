@@ -6,6 +6,7 @@ import 'package:media_core/src/casting/cast_media.dart';
 import 'package:media_core/src/casting/cast_transport.dart';
 import 'package:media_core/src/casting/media_cast_backend.dart';
 import 'package:media_core/src/models/casting/library.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// The app-facing cast session over a [MediaCastBackend].
 ///
@@ -112,6 +113,12 @@ final class CastController extends ChangeNotifier {
 
     final previous = _device;
     if (previous != null && previous.id != target.id) {
+      MediaCoreLog.info(
+        LogCategory.diagnostics,
+        'switching cast device',
+        fields: <String, Object?>{'from': previous.id, 'to': target.id},
+      );
+
       await _stopQuietly(previous);
     }
 
@@ -128,6 +135,8 @@ final class CastController extends ChangeNotifier {
 
       await refresh();
       _startTicker();
+
+      MediaCoreLog.info(LogCategory.diagnostics, 'casting started', fields: <String, Object?>{'device': target.id});
     } on Object {
       // A device that refused the media is not casting: leaving the fields
       // set would report an active session (and stopCasting might later stop
@@ -168,7 +177,16 @@ final class CastController extends ChangeNotifier {
     await backend.seek(target, position);
     _position = CastPosition(position: position, duration: _position.duration, transportState: _state);
     notifyListeners();
-    unawaited(refresh());
+    unawaited(
+      refresh().catchError((Object error, StackTrace stackTrace) {
+        MediaCoreLog.warning(
+          LogCategory.diagnostics,
+          'cast state refresh failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }),
+    );
   }
 
   /// Sets receiver volume, 0..100.
@@ -191,6 +209,13 @@ final class CastController extends ChangeNotifier {
     _state = CastTransportState.noMedia;
     _position = const CastPosition.unknown();
     _stopTicker();
+
+    MediaCoreLog.info(
+      LogCategory.diagnostics,
+      'casting stopped',
+      fields: <String, Object?>{'device': target.id},
+    );
+
     notifyListeners();
   }
 
@@ -209,7 +234,9 @@ final class CastController extends ChangeNotifier {
       final read = await backend.position(target);
       _position = read;
       _state = read.transportState == CastTransportState.unknown ? _state : read.transportState;
-    } on CastException {
+    } on CastException catch (error) {
+      MediaCoreLog.warning(LogCategory.diagnostics, 'cast state refresh failed', error: error);
+
       _state = CastTransportState.unknown;
     }
     if (!_disposed) {
@@ -299,7 +326,16 @@ final class CastController extends ChangeNotifier {
     _ticker = Timer.periodic(positionInterval, (_) {
       if (_state == CastTransportState.playing && !_refreshInFlight) {
         _refreshInFlight = true;
-        unawaited(refresh().whenComplete(() => _refreshInFlight = false));
+        unawaited(
+          refresh().whenComplete(() => _refreshInFlight = false).catchError((Object error, StackTrace stackTrace) {
+            MediaCoreLog.warning(
+              LogCategory.diagnostics,
+              'cast state refresh failed',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }),
+        );
       }
     });
   }

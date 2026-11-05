@@ -268,7 +268,12 @@ final class FullscreenDriver implements KernelPresentationDriver {
   Future<void> _serialize(Future<void> Function() action) {
     final next = _transition.then((_) => action());
     // The chain itself never fails; the caller's future keeps the error.
-    _transition = next.then((_) {}, onError: (Object _) {});
+    _transition = next.then(
+      (_) {},
+      onError: (Object error) {
+        _log.debug('fullscreen transition failed', error: error);
+      },
+    );
 
     return next;
   }
@@ -473,11 +478,13 @@ final class FullscreenDriver implements KernelPresentationDriver {
       _preFullscreenOrientation = null;
       if (orientation != null) {
         await SystemChrome.setPreferredOrientations(orientation);
+        _log.info('orientation restored after fullscreen', fields: <String, Object?>{'orientation': orientation.map((o) => o.name).join(',')});
       } else if (config.restoreMobileOrientation) {
         // The enter captured nothing (no view yet), but a lock the host set
         // during fullscreen is still in force - release it outright rather
         // than leave the device pinned to the fullscreen orientation.
         await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        _log.info('orientation restored after fullscreen', fields: <String, Object?>{'orientation': DeviceOrientation.values.map((o) => o.name).join(',')});
       }
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     }
@@ -510,14 +517,14 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   void _setSystemFullscreen(bool value) {
     if (value != _isSystemFullscreen) {
-      _log.debug('system fullscreen variant changed', fields: <String, Object?>{'active': value});
+      _log.info(value ? 'system fullscreen entered' : 'system fullscreen left', fields: <String, Object?>{'active': value});
     }
     _isSystemFullscreen = value;
   }
 
   void _setWindowFullscreen(bool value) {
     if (value != _isWindowFullscreen) {
-      _log.debug('window fullscreen variant changed', fields: <String, Object?>{'active': value});
+      _log.info(value ? 'window fullscreen entered' : 'window fullscreen left', fields: <String, Object?>{'active': value});
     }
     _isWindowFullscreen = value;
   }

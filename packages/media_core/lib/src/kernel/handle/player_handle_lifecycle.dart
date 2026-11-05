@@ -134,8 +134,9 @@ extension PlayerHandleLifecycle on PlayerHandle {
 
         try {
           await _runtime.adapter.close();
-        } on Object catch (_) {
+        } on Object catch (error) {
           // Closing an already released backend is harmless here.
+          MediaCoreLog.debug(LogCategory.lifecycle, 'close during dispose failed', error: error);
         }
 
         _backendReady = false;
@@ -206,8 +207,15 @@ extension PlayerHandleLifecycle on PlayerHandle {
         if (source != null && !_isSourceCurrent(source)) return;
 
         await _runtime.sessionController.pause();
-      } on Object catch (_) {
+      } on Object catch (error, stackTrace) {
         // Backend may already be releasing; deactivation continues.
+        MediaCoreLog.warning(
+          LogCategory.lifecycle,
+          'pause during deactivate failed',
+          error: error,
+          stackTrace: stackTrace,
+          fields: <String, Object?>{'player': _player.id.value},
+        );
       }
 
       if (_disposed) return;
@@ -236,8 +244,9 @@ extension PlayerHandleLifecycle on PlayerHandle {
 
       try {
         await _runtime.adapter.close();
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Recycling must not fail on a broken backend.
+        MediaCoreLog.debug(LogCategory.lifecycle, 'close during recycle failed', error: error);
       }
 
       _backendReady = false;

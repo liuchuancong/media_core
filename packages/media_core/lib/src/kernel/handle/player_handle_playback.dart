@@ -159,8 +159,14 @@ extension PlayerHandlePlayback on PlayerHandle {
         if (!_isOperationCurrent(operationGeneration) || _disposed || !_isSourceCurrent(source)) {
           try {
             await _runtime.adapter.close();
-          } on Object catch (_) {
+          } on Object catch (error) {
             // Best-effort cleanup of the stale open.
+            MediaCoreLog.debug(
+              LogCategory.playback,
+              'stale open cleanup failed',
+              error: error,
+              fields: <String, Object?>{'player': _player.id.value},
+            );
           }
 
           _backendReady = false;
@@ -177,7 +183,15 @@ extension PlayerHandlePlayback on PlayerHandle {
 
             try {
               await _runtime.adapter.close();
-            } on Object catch (_) {}
+            } on Object catch (error) {
+              // Best-effort cleanup of the stale open.
+              MediaCoreLog.debug(
+                LogCategory.playback,
+                'stale open cleanup failed',
+                error: error,
+                fields: <String, Object?>{'player': _player.id.value},
+              );
+            }
 
             return;
           }
@@ -216,7 +230,15 @@ extension PlayerHandlePlayback on PlayerHandle {
 
             try {
               await _runtime.adapter.close();
-            } on Object catch (_) {}
+            } on Object catch (error) {
+              // Best-effort cleanup of the stale open.
+              MediaCoreLog.debug(
+                LogCategory.playback,
+                'stale open cleanup failed',
+                error: error,
+                fields: <String, Object?>{'player': _player.id.value},
+              );
+            }
 
             return;
           }
@@ -232,7 +254,15 @@ extension PlayerHandlePlayback on PlayerHandle {
 
             try {
               await _runtime.adapter.close();
-            } on Object catch (_) {}
+            } on Object catch (error) {
+              // Best-effort cleanup of the stale open.
+              MediaCoreLog.debug(
+                LogCategory.playback,
+                'stale open cleanup failed',
+                error: error,
+                fields: <String, Object?>{'player': _player.id.value},
+              );
+            }
 
             return;
           }

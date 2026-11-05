@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:flutter/painting.dart' show Offset, Rect, Size;
 import 'package:flutter/widgets.dart' show WidgetsBinding;
 
+import 'package:media_core/media_core.dart';
 import 'package:media_core_pip/src/window/desktop_pip_window.dart';
 import 'package:media_core_pip/src/window/pip_window.dart';
+
+/// One monitor's usable area, id'd for remembered-bounds matching.
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
 /// One monitor's usable area, id'd for remembered-bounds matching.
 final class PipWorkArea {
@@ -387,6 +391,8 @@ final class DisplayAwarePipWindow implements PipWindow {
 
     _savedSnapshot = normal;
     _compact = true;
+
+    _log.info('desktop pip window entered', fields: <String, Object?>{'size': placement.size});
   }
 
   Future<void> _exit() async {
@@ -404,6 +410,8 @@ final class DisplayAwarePipWindow implements PipWindow {
     }
     _savedSnapshot = null;
     _compact = false;
+
+    _log.info('desktop pip window restored');
   }
 
   Future<void> _rollbackToNormal(PipWindow window, PipWindowSnapshot normal) async {
@@ -413,7 +421,9 @@ final class DisplayAwarePipWindow implements PipWindow {
     for (final step in steps) {
       try {
         await step();
-      } on Object catch (_) {}
+      } on Object catch (error) {
+        _log.warning('pip rollback to normal failed', error: error);
+      }
     }
   }
 
@@ -422,7 +432,9 @@ final class DisplayAwarePipWindow implements PipWindow {
     for (final step in steps) {
       try {
         await step();
-      } on Object catch (_) {}
+      } on Object catch (error) {
+        _log.warning('pip rollback to compact failed', error: error);
+      }
     }
   }
 
@@ -453,7 +465,9 @@ final class DisplayAwarePipWindow implements PipWindow {
           .whenComplete(() {
             _opQueue.remove(result);
           })
-          .catchError((_) {}),
+          .catchError((Object error) {
+            _log.debug('pip operation queue entry failed', error: error);
+          }),
     );
     return result;
   }

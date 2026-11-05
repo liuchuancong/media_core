@@ -2,6 +2,8 @@ import 'package:media_core/media_core.dart';
 
 import 'package:media_core_native/src/platform/media_core_native_platform.dart';
 
+final LogModule _log = MediaCoreLog.of(LogCategory.general);
+
 /// The channel method a probe is requested through.
 ///
 /// Kept next to the parser because the two are one contract: the native side
@@ -155,7 +157,8 @@ Future<PlatformProbeReport> readPlatformReport(MediaCoreNativePlatform platform)
     final payload = await platform.invoke<Object?>(kProbeMethod);
 
     return PlatformProbeReport.fromPayload(payload);
-  } on Object catch (_) {
+  } on Object catch (error) {
+    _log.debug('platform probe failed; reporting unknown', error: error);
     return PlatformProbeReport.unknown;
   }
 }

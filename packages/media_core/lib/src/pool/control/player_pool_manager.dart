@@ -7,6 +7,7 @@ import 'package:media_core/src/models/pool/library.dart';
 import 'package:media_core/src/pool/alloc/player_pool_allocator.dart';
 import 'package:media_core/src/pool/alloc/player_pool_recycler.dart';
 import 'package:media_core/src/pool/model/player_pool_config.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Manages player pool runtime.
@@ -126,6 +127,12 @@ final class PlayerPoolManager {
 
     _publish();
 
+    MediaCoreLog.info(
+      LogCategory.pool,
+      'player allocated from pool',
+      fields: <String, Object?>{'player': player.value},
+    );
+
     return player;
   }
 
@@ -166,6 +173,12 @@ final class PlayerPoolManager {
     _syncCounts();
 
     _publish();
+
+    MediaCoreLog.info(
+      LogCategory.pool,
+      'player returned to pool',
+      fields: <String, Object?>{'player': playerId.value},
+    );
 
     return true;
   }

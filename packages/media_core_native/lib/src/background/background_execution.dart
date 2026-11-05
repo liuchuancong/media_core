@@ -376,6 +376,7 @@ final class BackgroundExecution {
         return (session: null, refusal: BackgroundExecutionRefusal.serviceRefused);
       }
 
+      _log.info('background execution session acquired', fields: <String, Object?>{'id': id, 'wakeLock': wakeLock});
       return (session: BackgroundExecutionSession._(id), refusal: null);
     } on PlatformException catch (error) {
       // The native side refused: no service, no declaration, a platform that
@@ -429,7 +430,11 @@ final class BackgroundExecution {
     }
 
     try {
-      return await _channel.invokeMethod<bool>('keepAlive/acquire') ?? false;
+      final acquired = await _channel.invokeMethod<bool>('keepAlive/acquire') ?? false;
+      if (acquired) {
+        _log.info('audio keep-alive acquired');
+      }
+      return acquired;
     } on PlatformException catch (error) {
       _log.warning('keep-alive acquire refused', error: error);
       return false;
@@ -448,6 +453,7 @@ final class BackgroundExecution {
 
     try {
       await _channel.invokeMethod<void>('keepAlive/release');
+      _log.info('audio keep-alive released');
     } on PlatformException catch (error) {
       // Nothing on the platform side to stop; the keep-alive never started.
       _log.warning('keep-alive release failed', error: error);
@@ -519,7 +525,9 @@ final class BackgroundExecution {
       _report,
       // No binding is not an event: a platform that cannot answer this has taken
       // nothing back, which is what the empty stream already says.
-      onError: (Object _) {},
+      onError: (Object error) {
+        _log.warning('background status channel error', error: error);
+      },
       cancelOnError: false,
     );
   }
@@ -551,6 +559,7 @@ final class BackgroundExecution {
     // the status view stays empty instead of crashing the caller.
     // ignore: avoid_catching_errors
     on FlutterError {
+      _log.debug('no services binding; background status unavailable');
       return false;
     }
   }
@@ -712,6 +721,7 @@ final class BackgroundExecutionSession implements BackgroundExecutionLease {
 
     try {
       await BackgroundExecution._channel.invokeMethod<void>('release', <String, Object?>{'id': id});
+      _log.info('background execution session released', fields: <String, Object?>{'id': id});
     } on PlatformException {
       // A platform that already tore the session down (process death, service
       // killed) is a released session.

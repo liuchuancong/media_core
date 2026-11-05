@@ -280,7 +280,9 @@ final class FeedPlayerController {
           // dispose() ran during the creation and released the handle it
           // could see - which was not this one. Give it back here, or the
           // player leaks with nothing left referencing it.
-          unawaited(kernel.release(created.id));
+          unawaited(kernel.release(created.id).catchError((Object error) {
+            _log.warning('dispose-race release of a freshly created player failed', error: error);
+          }));
 
           return;
         }
@@ -306,10 +308,16 @@ final class FeedPlayerController {
         return;
       }
 
+      final previousIndex = _attachedIndex;
       _attachedIndex = index;
+      _log.info(
+        'feed item attached',
+        fields: <String, Object?>{'from': previousIndex, 'to': index, 'throughPool': pool != null},
+      );
       _applyPendingPauseOrPlay();
 
       if (preloadAhead && index + 1 < _items.length) {
+        _log.info('prefetching next item', fields: <String, Object?>{'index': index, 'next': index + 1});
         kernel.preload(_items[index + 1]);
       }
     } on Object catch (error) {
@@ -355,6 +363,7 @@ final class FeedPlayerController {
       }
       await activePool.onVisibilityChanged(index, 1);
       if (previousIndex >= 0 && previousIndex != index) {
+        _log.info('pool visibility handoff', fields: <String, Object?>{'enter': index, 'leave': previousIndex});
         await activePool.onVisibilityChanged(previousIndex, 0);
       }
 
@@ -376,6 +385,10 @@ final class FeedPlayerController {
       _handle = pooled is KernelPoolPlayerHandle ? pooled.handle : null;
       _reattachTransport();
       _attachedIndex = index;
+      _log.info(
+        'feed item attached',
+        fields: <String, Object?>{'from': previousIndex, 'to': index, 'throughPool': pool != null},
+      );
       _applyPendingPauseOrPlay();
     } on Object catch (error) {
       MediaCoreLog.error(
@@ -425,7 +438,11 @@ final class FeedPlayerController {
     if (_pauseDuringOpen) {
       _pauseDuringOpen = false;
       _setItemState(FeedItemState.paused);
-      unawaited(_handle?.pause() ?? _pooledPlayer?.pause() ?? Future<void>.value());
+      unawaited(
+        (_handle?.pause() ?? _pooledPlayer?.pause() ?? Future<void>.value()).catchError((Object error) {
+          _log.debug('post-open pause failed', error: error);
+        }),
+      );
 
       return;
     }
@@ -488,15 +505,20 @@ final class FeedPlayerController {
     final transport = _transportSubscription;
     _transportSubscription = null;
     _transportSource = null;
-    if (transport != null) unawaited(transport.cancel());
+    if (transport != null) {
+      unawaited(transport.cancel().catchError((Object error) {
+        _log.debug('transport cancel failed', error: error);
+      }));
+    }
 
     // With a pool the handle is the pool's to take back: releasing it here
     // would return a player that another page is about to be shown on.
     if (handle != null && pool == null) {
       try {
         await kernel.release(handle.id);
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Best-effort release.
+        _log.warning('feed player release failed during dispose', error: error, fields: {'id': handle.id});
       }
     }
 
@@ -536,7 +558,11 @@ final class FeedPlayerController {
 
     final previous = _transportSubscription;
     _transportSubscription = null;
-    if (previous != null) unawaited(previous.cancel());
+    if (previous != null) {
+      unawaited(previous.cancel().catchError((Object error) {
+        _log.debug('transport cancel failed', error: error);
+      }));
+    }
 
     if (stream == null) return;
 

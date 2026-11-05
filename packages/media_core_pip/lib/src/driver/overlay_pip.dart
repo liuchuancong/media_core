@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:media_core/media_core.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
 
 /// Thin seam over the static `flutter_overlay_window` API, so the rest of the
 /// package can be driven by tests and a host can swap the backend.
@@ -168,7 +171,12 @@ final class OverlayPipLink {
   Future<void> open(Map<String, Object?> payload) async {
     _pendingPayload = payload;
     await _subscription?.cancel();
-    _subscription = window.messages.listen(_handle);
+    _subscription = window.messages.listen(
+      _handle,
+      onError: (Object error) {
+        _log.warning('pip overlay message stream error', error: error);
+      },
+    );
     await window.shareData(payload);
   }
 
@@ -180,7 +188,14 @@ final class OverlayPipLink {
         // The overlay engine just mounted its listener; it missed anything
         // sent earlier, so replay the payload it exists to render.
         final payload = _pendingPayload;
-        if (payload != null) unawaited(window.shareData(payload));
+        if (payload != null) {
+          unawaited(
+            window.shareData(payload).catchError((Object error) {
+              _log.warning('pip overlay payload send failed', error: error);
+              return null;
+            }),
+          );
+        }
       case 'close':
         _lastClosedPosition = event.position;
         onEvent?.call(event);
@@ -210,7 +225,12 @@ final class OverlayPipSession {
       _payload.value = event;
       // The app may have sent its payload before this engine finished booting;
       // answering the handshake makes it replay.
-      unawaited(FlutterOverlayWindow.shareData(OverlayPipMessages.ready()));
+      unawaited(
+        FlutterOverlayWindow.shareData(OverlayPipMessages.ready()).catchError((Object error) {
+          _log.warning('pip overlay payload send failed', error: error);
+          return null;
+        }),
+      );
     });
   }
 

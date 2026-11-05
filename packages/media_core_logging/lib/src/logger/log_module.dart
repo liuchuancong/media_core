@@ -47,8 +47,8 @@ final class LogModule {
       _logger.trace(category, message, fields: fields);
 
   /// Emits a debug record.
-  void debug(String message, {Map<String, Object?> fields = const {}}) =>
-      _logger.debug(category, message, fields: fields);
+  void debug(String message, {Object? error, StackTrace? stackTrace, Map<String, Object?> fields = const {}}) =>
+      _logger.debug(category, message, error: error, stackTrace: stackTrace, fields: fields);
 
   /// Emits an info record.
   void info(String message, {Map<String, Object?> fields = const {}}) =>

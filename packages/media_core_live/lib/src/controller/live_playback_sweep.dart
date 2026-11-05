@@ -65,6 +65,17 @@ extension _LivePlaybackSweep on LivePlaybackController {
     final generation = _playGeneration;
     var first = true;
 
+    MediaCoreLog.info(
+      LogCategory.fallback,
+      'sweep started',
+      fields: <String, Object?>{
+        'lines': _sources.length,
+        'engines': _engines.length,
+        'startAtLine': _sourceIndex,
+        'reopen': startAtCurrent,
+      },
+    );
+
     while (!_disposed && _playbackRequested && generation == _playGeneration) {
       final source = _sources[_sourceIndex];
       final engine = _engines[_engineIndex];
@@ -251,6 +262,14 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     final handle = current;
 
+    if (_currentSource != source) {
+      MediaCoreLog.info(
+        LogCategory.fallback,
+        'line switch: ${_lineAddress(_currentSource)} → ${_lineAddress(source)}',
+        fields: <String, Object?>{'fromLine': _sourceIndex, 'engine': engine},
+      );
+    }
+
     _setState(_liveState(PlayerPlaybackState.opening));
 
     // Recovery is this module's job; the handle's own ladder stays
@@ -351,13 +370,21 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     try {
       staged = await kernel.create(preferredBackend: engine);
-    } on Object catch (_) {
+    } on Object catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.fallback,
+        'staged engine creation failed; re-attached the retired engine',
+        error: error,
+        fields: {'engine': engine},
+      );
       // Creation runs after the retiree's subscription was detached, and the
       // restore path lives in the staging try below - which was never
       // entered. Without restoring here, the still-playing engine loses
       // stall detection and error recovery for good.
       if (previous != null && !previous.disposed && identical(_handle, previous) && _adapterSub == null) {
-        _adapterSub = previous.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
+        _adapterSub = previous.adapterEvents.listen(_onAdapterEvent, onError: (Object error) {
+          MediaCoreLog.debug(LogCategory.player, 'adapter event stream errored during staging', error: error);
+        });
 
         watchdogs.updateCapabilities(previous.adapter.capabilities);
         watchdogs.setVideoExpected(expected: !_audioOnly);
@@ -377,7 +404,9 @@ extension _LivePlaybackSweep on LivePlaybackController {
       if (event case PlayerAdapterErrorEvent(:final message)) {
         _sweepAdapterError ??= message;
       }
-    }, onError: (Object _) {});
+    }, onError: (Object error) {
+      MediaCoreLog.debug(LogCategory.player, 'adapter event stream errored during staging', error: error);
+    });
 
     try {
       staged
@@ -391,8 +420,9 @@ extension _LivePlaybackSweep on LivePlaybackController {
       if (_engineOptions.isNotEmpty) {
         try {
           await staged.applyEngineOptions(_engineOptions);
-        } on Object {
+        } on Object catch (error) {
           // An option the engine refused must not turn into a failed stream.
+          MediaCoreLog.debug(LogCategory.fallback, 'engine refused an engine option', error: error, fields: {'engine': engine});
         }
       }
 
@@ -424,6 +454,12 @@ extension _LivePlaybackSweep on LivePlaybackController {
       // one arm per engine switch too many in the log.
       watchdogs.resetPositionSignal();
 
+      MediaCoreLog.info(
+        LogCategory.fallback,
+        'engine switch committed',
+        fields: <String, Object?>{'from': previous?.backendId, 'to': engine, 'line': _sourceIndex},
+      );
+
       _attach(staged);
 
       // After the commit, not before: cancelling first would open a gap in
@@ -433,8 +469,9 @@ extension _LivePlaybackSweep on LivePlaybackController {
       if (previous != null && !previous.disposed) {
         try {
           await kernel.release(previous.id);
-        } on Object catch (_) {
+        } on Object catch (error) {
           // Best-effort release of the retired engine.
+          MediaCoreLog.debug(LogCategory.player, 'release of the retired engine failed', error: error, fields: {'id': previous.id});
         }
       }
     } on Object catch (_) {
@@ -442,8 +479,9 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
       try {
         await kernel.release(staged.id);
-      } on Object catch (_) {
+      } on Object catch (error) {
         // Best-effort cleanup of the failed staging.
+        MediaCoreLog.debug(LogCategory.player, 'release of the staged engine failed', error: error, fields: {'id': staged.id});
       }
 
       // The retired engine is still the active one after a failed attempt:
@@ -454,7 +492,9 @@ extension _LivePlaybackSweep on LivePlaybackController {
       // is long past, so without this the position stall could never re-arm
       // for a stream that is in fact still running.
       if (previous != null && !previous.disposed && identical(_handle, previous) && _adapterSub == null) {
-        _adapterSub = previous.adapterEvents.listen(_onAdapterEvent, onError: (Object _) {});
+        _adapterSub = previous.adapterEvents.listen(_onAdapterEvent, onError: (Object error) {
+          MediaCoreLog.debug(LogCategory.player, 'adapter event stream errored during staging', error: error);
+        });
 
         watchdogs.updateCapabilities(previous.adapter.capabilities);
         watchdogs.setVideoExpected(expected: !_audioOnly);

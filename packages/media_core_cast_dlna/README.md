@@ -52,7 +52,7 @@ DLNA 的模型一段话能说清：SSDP 用 `LOCATION` 通告设备，那个地�
 - **事件推送优先，轮询保底。** `GenaCallbackServer` 在本机起一个 Token 路由的回调端点，`GenaSubscriber` 走 SUBSCRIBE/续订/退订管理订阅（半生命周期续订，连续三次续订失败即放弃并保持轮询）；`GenaMessageParser` 把 PropertySet 与 AVT `LastChange` 都摊平成变量表，设备推送的状态变化直接并入会话快照。回调按 SID 校验、SEQ 去重、响应体限量——局域网里收到的每一条 NOTIFY 都不是可信输入。订阅失败或到期不续，会话继续用轮询（§14.7），进度条只是变慢，不会断。
 - **厂商怪癖收敛在兼容层，不污染协议代码。** `DeviceCompatibilityRegistry` 按"注册顺序即优先级"解析 `DeviceCompatibilityProfile`（匹配厂商/型号/设备类型），`InstanceID`、`SOAPACTION` 引号、Seek 单位、Play 速度、是否发 DIDL 全部由 profile 声明；标准设备走 `standard` profile（全是规范默认值，零配置），新增一个厂商 = 注册一个 profile，领域模型与协议层一行不动（§9）。profile 内容随真机测试数据填充。
 - **诊断快照随手可取。** `DlnaClient.diagnostics()` 一次返回 §25.3 的快照：设备数、活动会话数、媒体服务器与发现状态、时间戳——调试面板或健康检查不用翻包内部。
-- **日志贯通，默认静默。** 核心各层经纯 Dart 的 `DlnaLog` 发结构化事件（§25 的分类/分级：发现/SSDP/描述/SOAP/GENA/媒体选择/媒体服务器/播放/会话），默认 sink 丢弃、坏 sink 不影响投屏；`DlnaCastBackend` 构造时自动桥接到 media_core 的 `MediaCoreLog`（网络类归 network、播放/会话各归其类）。URL 一律先剥 query/fragment 再入日志——媒体服务器 Token 不进日志（§22.5）。
+- **日志贯通，默认静默。** 核心各层直接经 media_core_logging 的 `MediaCoreLog` 发结构化记录（§25 的分类/分级映射：网络相关类归 `LogCategory.network`、设备/媒体选择归 `LogCategory.source`、播放与会话各归其类），默认级别关闭、宿主显式打开。URL 一律先剥 query/fragment 再入日志——媒体服务器 Token 不进日志（§22.5）。
 - **没有网络也能测。** 每一层都有注入缝隙：`SsdpSource`（脚本化消息流）、`DescriptionFetcher`（直接给 XML）、`SoapTransport`（查表回信封）、`MDnsDiscoverySession`（脚本化 Bonsoir 事件）。默认 `dart:io` 实现由 `dispose()` 关闭自己建的连接池与 socket；宿主传入的对象带走自己的生命周期。
 
 ## 用法

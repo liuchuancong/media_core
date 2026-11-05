@@ -27,7 +27,7 @@
 ## §30 架构约束核验
 
 - Domain 层零 Flutter/Bonsoir/Socket/HTTP 依赖（grep = 0，唯一命中为文档注释）
-- lib 无 print（诊断统一走 `DlnaLog`，默认静默）
+- lib 无 print（诊断统一走 media_core_logging 的 `MediaCoreLog`，默认静默）
 - 无 TODO/FIXME 残留
 - 59 个 lib 文件与入口导出 1:1，无内部泄漏、无悬挂导出
 

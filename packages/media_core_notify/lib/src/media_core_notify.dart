@@ -7,11 +7,15 @@
 /// was only trying to be informative.
 library;
 
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core_notify/src/client/flutter_local_notifications_client.dart';
 import 'package:media_core_notify/src/client/notification_client.dart';
 import 'package:media_core_notify/src/client/notify_event.dart';
 import 'package:media_core_notify/src/jobs/foreground_jobs.dart';
 import 'package:media_core_notify/src/jobs/job_reporting.dart';
+
+/// Decision trail for notifications.
+final LogModule _log = MediaCoreLog.of(LogCategory.general);
 
 /// What a host may ask to be told about.
 ///
@@ -190,11 +194,12 @@ abstract final class MediaCoreNotify {
       await action();
 
       return true;
-    } on Object {
+    } on Object catch (error) {
       // No plugin registered on this platform, the channel refused, the service
       // was not declared. Errors (not just exceptions) land here too: the
       // client rethrows after logging, and this facade promises callers that
       // trying to be informative never throws at them.
+      _log.warning('notify client call failed', error: error);
       return false;
     }
   }
@@ -202,7 +207,8 @@ abstract final class MediaCoreNotify {
   static Future<R> _ask<R>(Future<R> Function() action, {required R fallback}) async {
     try {
       return await action();
-    } on Object {
+    } on Object catch (error) {
+      _log.warning('notify permission ask failed', error: error);
       return fallback;
     }
   }

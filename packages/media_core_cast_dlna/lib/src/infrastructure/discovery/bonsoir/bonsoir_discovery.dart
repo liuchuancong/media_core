@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bonsoir/bonsoir.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// The mDNS service types the auxiliary channel browses by default.
 ///
@@ -145,6 +146,7 @@ final class BonsoirDiscoveryChannel {
       } on Object catch (error) {
         // One broken type must not take the channel down; the failure
         // surfaces on [errors] where a host can log it.
+        MediaCoreLog.debug(LogCategory.network, 'bonsoir event failed', error: error);
         _errors.add(error);
       }
     }
@@ -165,6 +167,7 @@ final class BonsoirDiscoveryChannel {
       try {
         await session.stop();
       } on Object catch (error) {
+        MediaCoreLog.debug(LogCategory.network, 'bonsoir event failed', error: error);
         _errors.add(error);
       }
     }

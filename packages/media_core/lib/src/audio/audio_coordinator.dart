@@ -4,6 +4,7 @@ import 'package:media_core/src/audio/audio_manager.dart' show AudioManager;
 import 'package:media_core/src/audio/audio_session.dart';
 import 'package:media_core/src/models/audio/audio_focus_state.dart';
 import 'package:media_core/src/models/audio/audio_session_state.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Coordinates the relationship between an audio session and audio focus.
@@ -243,7 +244,14 @@ final class AudioCoordinator {
       _sessionActive = false;
 
       _sessionStateSubject.add(AudioSessionState.inactive(generation: generation));
-    } on Object catch (_) {
+    } on Object catch (error, stackTrace) {
+      MediaCoreLog.warning(
+        LogCategory.player,
+        'audio session deactivate failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       _sessionStateSubject.add(AudioSessionState.error(generation: generation));
     }
   }

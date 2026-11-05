@@ -20,7 +20,7 @@ import 'package:media_core_cast_dlna/src/infrastructure/control/soap/soap_client
 import 'package:media_core_cast_dlna/src/infrastructure/description/description_http_fetcher.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/description/device_description_parser.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/description/service_description_parser.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// One cast session against one renderer (§8.3, §28).
 ///
@@ -210,8 +210,8 @@ final class DlnaSessionController implements DlnaSession {
       _monitor.start();
       await _armGena();
       _setConnection(DlnaConnectionState.connected);
-      DlnaLog.info(
-        DlnaLogCategory.session,
+      MediaCoreLog.info(
+        LogCategory.session,
         'session connected',
         fields: <String, Object?>{'device': device.udn, 'session': id},
       );
@@ -242,16 +242,28 @@ final class DlnaSessionController implements DlnaSession {
       }
       try {
         subscriber = await factory(device);
-      } on Object {
+      } on Object catch (error) {
         // Eventing unavailable; the monitor keeps state flowing.
+        MediaCoreLog.warning(
+          LogCategory.session,
+          'eventing subscriber unavailable',
+          error: error,
+          fields: <String, Object?>{'device': device.udn},
+        );
         return;
       }
       _gena = subscriber;
     }
     try {
       await subscriber.subscribe();
-    } on Object {
+    } on Object catch (error) {
       // Eventing unavailable; the monitor keeps state flowing.
+      MediaCoreLog.warning(
+        LogCategory.session,
+        'GENA subscribe failed; polling carries on',
+        error: error,
+        fields: <String, Object?>{'device': device.udn},
+      );
     }
   }
 
@@ -300,7 +312,13 @@ final class DlnaSessionController implements DlnaSession {
       try {
         final description = ServiceDescriptionParser.parse(await fetch(avScpdUrl.toString()));
         _supportedActions = description.actions.keys.toSet();
-      } on Object {
+      } on Object catch (error) {
+        MediaCoreLog.warning(
+          LogCategory.session,
+          'service description fetch failed; actions unrestricted',
+          error: error,
+          fields: <String, Object?>{'device': device.udn},
+        );
         _supportedActions = null;
       }
     }
@@ -309,7 +327,13 @@ final class DlnaSessionController implements DlnaSession {
       try {
         final description = ServiceDescriptionParser.parse(await fetch(rcScpdUrl.toString()));
         _renderingActions = description.actions.keys.toSet();
-      } on Object {
+      } on Object catch (error) {
+        MediaCoreLog.warning(
+          LogCategory.session,
+          'service description fetch failed; actions unrestricted',
+          error: error,
+          fields: <String, Object?>{'device': device.udn},
+        );
         _renderingActions = null;
       }
     }
@@ -425,8 +449,14 @@ final class DlnaSessionController implements DlnaSession {
       final volume = await rendering.getVolume();
       final muted = await rendering.isMuted();
       _setPlayback(_state.copyWith(volume: volume, isMuted: muted, updatedAt: _now()));
-    } on DlnaException {
+    } on DlnaException catch (error) {
       // A volume probe that fails leaves the snapshot alone.
+      MediaCoreLog.debug(
+        LogCategory.session,
+        'volume probe failed',
+        error: error,
+        fields: <String, Object?>{'device': device.udn},
+      );
     }
   }
 
@@ -453,8 +483,8 @@ final class DlnaSessionController implements DlnaSession {
     _queue.cancelPending();
     _monitor.stop();
     _setConnection(DlnaConnectionState.disconnected);
-    DlnaLog.info(
-      DlnaLogCategory.session,
+    MediaCoreLog.info(
+      LogCategory.session,
       'session disconnected',
       fields: <String, Object?>{'device': device.udn, 'session': id},
     );
@@ -492,8 +522,8 @@ final class DlnaSessionController implements DlnaSession {
     try {
       return await _queue.submit(action);
     } on DlnaNetworkException catch (error) {
-      DlnaLog.warning(
-        DlnaLogCategory.session,
+      MediaCoreLog.warning(
+        LogCategory.session,
         'command failed on the network',
         error: error,
         fields: <String, Object?>{'device': device.udn},
@@ -510,8 +540,8 @@ final class DlnaSessionController implements DlnaSession {
       return;
     }
     _recovering = true;
-    DlnaLog.warning(
-      DlnaLogCategory.session,
+    MediaCoreLog.warning(
+      LogCategory.session,
       'device unreachable; recovery started',
       fields: <String, Object?>{'device': device.udn},
     );
@@ -547,19 +577,25 @@ final class DlnaSessionController implements DlnaSession {
         _setPlayback(_state.copyWith(updatedAt: _now()));
         _monitor.start();
         _setConnection(DlnaConnectionState.connected);
-        DlnaLog.info(
-          DlnaLogCategory.session,
+        MediaCoreLog.info(
+          LogCategory.session,
           'session recovered',
           fields: <String, Object?>{'device': device.udn, 'attempt': attempt},
         );
         return;
-      } on Object {
+      } on Object catch (error) {
         // The next attempt (or the failure path below) handles it.
+        MediaCoreLog.debug(
+          LogCategory.session,
+          'recovery attempt failed; retrying',
+          error: error,
+          fields: <String, Object?>{'device': device.udn},
+        );
       }
     }
     _recovering = false;
-    DlnaLog.error(
-      DlnaLogCategory.session,
+    MediaCoreLog.error(
+      LogCategory.session,
       'session recovery exhausted',
       fields: <String, Object?>{'device': device.udn, 'attempts': recoveryPolicy.maxAttempts},
     );
@@ -598,6 +634,11 @@ final class DlnaSessionController implements DlnaSession {
       await subscriber.subscribe();
     } on Object {
       // §14.7: eventing lost; the polling fallback carries on.
+      MediaCoreLog.warning(
+        LogCategory.session,
+        'eventing lost after recovery; polling fallback',
+        fields: <String, Object?>{'device': device.udn},
+      );
     }
   }
 
@@ -617,7 +658,13 @@ final class DlnaSessionController implements DlnaSession {
           updatedAt: _now(),
         ),
       );
-    } on DlnaException {
+    } on DlnaException catch (error) {
+      MediaCoreLog.debug(
+        LogCategory.session,
+        'device state read failed',
+        error: error,
+        fields: <String, Object?>{'device': device.udn},
+      );
       _setPlayback(_state.copyWith(updatedAt: _now()));
     }
   }
@@ -628,8 +675,14 @@ final class DlnaSessionController implements DlnaSession {
     try {
       final transport = await _transport.getTransportInfo();
       _setPlayback(_state.copyWith(transportState: transport.transportState, updatedAt: _now()));
-    } on DlnaException {
+    } on DlnaException catch (error) {
       // The command went out; the state stays as reported before.
+      MediaCoreLog.debug(
+        LogCategory.session,
+        'device state read failed',
+        error: error,
+        fields: <String, Object?>{'device': device.udn},
+      );
     }
   }
 

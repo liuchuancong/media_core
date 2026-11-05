@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flame_barrage/flame_barrage.dart';
+import 'package:media_core/media_core.dart';
 import 'package:media_core_danmaku/src/model/danmaku_message.dart';
-import 'package:media_core_memory/media_core_memory.dart';
 
 /// One message scheduled on a small surface.
 ///
@@ -174,8 +174,15 @@ final class DanmakuOverlaySession {
     // is fire-and-forget: nothing awaits it and the reassignment does not
     // depend on the cancel completing first.
     final previous = _visibilitySubscription;
-    if (previous != null) unawaited(previous.cancel());
-    _visibilitySubscription = visibility.listen(_handleVisibility, onError: (_) {});
+    if (previous != null) {
+      // Fire-and-forget: nothing depends on the cancel completing.
+      unawaited(previous.cancel().catchError((Object error) {
+        MediaCoreLog.debug(LogCategory.danmaku, 'previous visibility subscription cancel failed', error: error);
+      }));
+    }
+    _visibilitySubscription = visibility.listen(_handleVisibility, onError: (Object error) {
+      MediaCoreLog.warning(LogCategory.danmaku, 'visibility stream errored; stopping visibility tracking', error: error);
+    });
   }
 
   /// Stops following the bound surface.
@@ -184,7 +191,12 @@ final class DanmakuOverlaySession {
     // [_handleVisibility] runs synchronously, so no event can slip in between
     // the cancel and the state update.
     final previous = _visibilitySubscription;
-    if (previous != null) unawaited(previous.cancel());
+    if (previous != null) {
+      // Fire-and-forget: nothing depends on the cancel completing.
+      unawaited(previous.cancel().catchError((Object error) {
+        MediaCoreLog.debug(LogCategory.danmaku, 'previous visibility subscription cancel failed', error: error);
+      }));
+    }
     _visibilitySubscription = null;
     _handleVisibility(false);
   }

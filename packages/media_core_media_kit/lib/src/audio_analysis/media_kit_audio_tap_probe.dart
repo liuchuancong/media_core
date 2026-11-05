@@ -172,8 +172,9 @@ final class MediaKitAudioTapProbe {
       // NativePlayer-only API, matched to the observer above.
       // ignore: avoid_dynamic_calls
       (_player.platform as dynamic).unobserveProperty?.call(metadataProperty);
-    } on Object {
+    } on Object catch (error) {
       // The player is going away; nothing left to unobserve.
+      MediaCoreLog.log(LogLevel.debug, LogCategory.audio, 'audio tap unobserve failed', error: error);
     }
   }
 

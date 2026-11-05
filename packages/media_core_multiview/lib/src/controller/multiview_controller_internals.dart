@@ -160,6 +160,7 @@ extension _MultiviewControllerInternals on MultiviewController {
     // Stamp the acquired player onto the cell: hosts resolve the video
     // surface by reading the cell's playerId against the kernel.
     _cells[index].playerId = handle.id;
+    _log.info('cell player acquired', fields: {'index': index});
     return handle;
   }
 
@@ -182,13 +183,15 @@ extension _MultiviewControllerInternals on MultiviewController {
     }
     try {
       await handle.pause();
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A player that refuses to pause still goes back to the pool.
+      _log.debug('cell player pause failed before recycle', error: error, fields: {'index': index});
     }
     await handle.recycle();
     // Back to the host, which may return it from the kernel's instance pool: a
     // wall that keeps switching rooms must not pay for a cold player each time.
     await _players.release(handle);
+    _log.info('cell player released', fields: {'index': index});
   }
 
   void _watchProgress(int index, PoolPlayerHandle handle) {
@@ -196,7 +199,9 @@ extension _MultiviewControllerInternals on MultiviewController {
     _progress[index] = (position: Duration.zero, at: _clock());
     _progressSubscriptions[index] = handle.playbackStream.listen(
       (state) => _noteProgress(index, state.position, alive: state.buffering || state.isPlaying),
-      onError: (_) {},
+      onError: (Object error) {
+        _log.debug('cell playback stream error', error: error, fields: {'index': index});
+      },
     );
   }
 

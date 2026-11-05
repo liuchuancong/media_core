@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:media_core_memory/src/monitor/memory_snapshot.dart';
+
+/// Decision trail for memory sampling.
+final LogModule _log = MediaCoreLog.of(LogCategory.memory);
 
 /// Produces a device memory measurement.
 typedef MemorySnapshotProvider = MemorySnapshot Function();
@@ -74,7 +78,8 @@ final class MemoryMonitor {
 
     try {
       return record(provider());
-    } on Object catch (_) {
+    } on Object catch (error) {
+      _log.debug('memory provider failed', error: error);
       return null;
     }
   }

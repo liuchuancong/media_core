@@ -2,6 +2,7 @@ import 'package:media_core/src/fallback/quality_fallback.dart' show QualityFallb
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/kernel/player_kernel.dart' show PlayerKernel;
 import 'package:media_core/src/models/quality/library.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Switches a live [PlayerHandle] between quality candidates without
 /// losing the viewer's position.
@@ -88,6 +89,17 @@ final class QualitySwitchController {
     try {
       await _apply(candidate, resumeAt, wasPlaying, volume, rate);
       current = candidate;
+
+      MediaCoreLog.info(
+        LogCategory.playback,
+        'quality switched',
+        fields: <String, Object?>{
+          'from': previous?.label,
+          'to': candidate.label,
+          'resumedAtMs': resumeAt.inMilliseconds,
+        },
+      );
+
       return QualitySwitchOutcome.of(
         result: QualitySwitchResult.applied,
         from: previous,
@@ -100,10 +112,16 @@ final class QualitySwitchController {
         try {
           await _apply(previous, resumeAt, wasPlaying, volume, rate);
           restored = true;
-        } on Object catch (_) {
+        } on Object catch (rollbackError, rollbackStackTrace) {
           // The rollback failed too: the handle sits on whatever the
           // last open left it on, and `restored: false` is the whole
           // truth of that.
+          MediaCoreLog.warning(
+            LogCategory.playback,
+            'quality switch rollback failed',
+            error: rollbackError,
+            stackTrace: rollbackStackTrace,
+          );
         }
       }
       return QualitySwitchOutcome.of(

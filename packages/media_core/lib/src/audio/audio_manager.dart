@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:media_core/src/audio/audio_focus.dart';
 import 'package:media_core/src/audio/audio_session.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Coordinates the lifecycle and high-level state of audio playback.
@@ -146,7 +147,14 @@ final class AudioManager {
 
       try {
         await _focus.request();
-      } catch (_) {
+      } on Object catch (error, stackTrace) {
+        MediaCoreLog.warning(
+          LogCategory.player,
+          'audio focus request failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+
         if (activatedSession) {
           _active = false;
           _activeSubject.add(false);
@@ -157,6 +165,8 @@ final class AudioManager {
 
       _focused = true;
       _focusedSubject.add(true);
+
+      MediaCoreLog.info(LogCategory.audio, 'audio session activated with focus');
     });
   }
 
@@ -187,6 +197,8 @@ final class AudioManager {
 
       _focused = false;
       _focusedSubject.add(false);
+
+      MediaCoreLog.info(LogCategory.audio, 'audio focus abandoned');
     });
   }
 
@@ -218,7 +230,14 @@ final class AudioManager {
 
       try {
         await _focus.request();
-      } catch (_) {
+      } on Object catch (error, stackTrace) {
+        MediaCoreLog.warning(
+          LogCategory.player,
+          'audio focus request failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+
         if (activatedSession) {
           _active = false;
           _activeSubject.add(false);
@@ -229,6 +248,8 @@ final class AudioManager {
 
       _focused = true;
       _focusedSubject.add(true);
+
+      MediaCoreLog.info(LogCategory.audio, 'audio session activated with focus');
     });
   }
 
@@ -275,6 +296,8 @@ final class AudioManager {
       _active = false;
       _activeSubject.add(false);
     }
+
+    MediaCoreLog.info(LogCategory.audio, 'audio session deactivated');
 
     if (firstError != null) {
       Error.throwWithStackTrace(firstError, firstStackTrace!);

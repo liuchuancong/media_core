@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:media_core/src/kernel/handle/player_handle.dart';
 import 'package:media_core/src/models/visibility/library.dart';
 import 'package:media_core/src/visibility/visibility_controller.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Wires a [VisibilityController] to a [PlayerHandle]'s lifecycle.
 ///
@@ -77,7 +78,23 @@ final class PlayerVisibilityBinding {
 
     _pausedByInvisibility = true;
 
-    unawaited(_handle.pause());
+    MediaCoreLog.info(
+      LogCategory.visibility,
+      'player paused by visibility',
+      fields: <String, Object?>{'player': _handle.id.value},
+    );
+
+    unawaited(
+      _handle.pause().catchError((Object error, StackTrace stackTrace) {
+        MediaCoreLog.warning(
+          LogCategory.visibility,
+          'visibility pause failed',
+          error: error,
+          stackTrace: stackTrace,
+          fields: <String, Object?>{'player': _handle.id.value},
+        );
+      }),
+    );
   }
 
   void _resumeAfterInvisibility() {
@@ -87,7 +104,23 @@ final class PlayerVisibilityBinding {
 
     _pausedByInvisibility = false;
 
-    unawaited(_handle.play());
+    MediaCoreLog.info(
+      LogCategory.visibility,
+      'player resumed by visibility',
+      fields: <String, Object?>{'player': _handle.id.value},
+    );
+
+    unawaited(
+      _handle.play().catchError((Object error, StackTrace stackTrace) {
+        MediaCoreLog.warning(
+          LogCategory.visibility,
+          'visibility resume failed',
+          error: error,
+          stackTrace: stackTrace,
+          fields: <String, Object?>{'player': _handle.id.value},
+        );
+      }),
+    );
   }
 
   /// Stops following visibility.

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:media_core_logging/media_core_logging.dart';
+
 /// Stream related utilities.
 abstract final class StreamUtils {
   StreamUtils._();
@@ -66,7 +68,9 @@ abstract final class StreamUtils {
   static Future<T?> firstOrNull<T>(Stream<T> stream) async {
     try {
       return await stream.first;
-    } on Object catch (_) {
+    } on Object catch (error) {
+      MediaCoreLog.debug(LogCategory.general, 'firstElement failed', error: error);
+
       return null;
     }
   }
@@ -75,7 +79,9 @@ abstract final class StreamUtils {
   static Future<T?> lastOrNull<T>(Stream<T> stream) async {
     try {
       return await stream.last;
-    } on Object catch (_) {
+    } on Object catch (error) {
+      MediaCoreLog.debug(LogCategory.general, 'lastElement failed', error: error);
+
       return null;
     }
   }

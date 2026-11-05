@@ -362,6 +362,14 @@ class FfmpegLiveRecordingWatcher {
       _probeFailures++;
       _lastProbeError = error;
 
+      if (_probeFailures < maxConsecutiveProbeFailures) {
+        MediaCoreLog.of(LogCategory.recording).debug(
+          'room status probe failed',
+          error: error,
+          fields: <String, Object?>{'failures': _probeFailures},
+        );
+      }
+
       if (_probeFailures >= maxConsecutiveProbeFailures) {
         _running = false;
         MediaCoreLog.of(LogCategory.recording).error(
@@ -386,6 +394,10 @@ class FfmpegLiveRecordingWatcher {
         _recheckSoon = false;
       }
 
+      MediaCoreLog.of(LogCategory.recording).info(
+        'room no longer live; watch session ended',
+        fields: <String, Object?>{'room': source.value, 'recordings': _recordings.length},
+      );
       _endSession();
 
       return;
@@ -398,6 +410,10 @@ class FfmpegLiveRecordingWatcher {
     _title = status.title ?? _title;
 
     if (_liveSince == null) {
+      MediaCoreLog.of(LogCategory.recording).info(
+        'room went live; starting recording',
+        fields: <String, Object?>{'room': source.value, 'title': _title},
+      );
       _liveSince = DateTime.now();
       _recordings = <FfmpegRecordingOutcome>[];
       _announce();
@@ -425,6 +441,7 @@ class FfmpegLiveRecordingWatcher {
       // A start that threw is not a reason to stop watching: the room is live, and
       // the next poll asks again. An almost-start is exactly the case that deserves
       // the short re-check delay.
+      MediaCoreLog.of(LogCategory.recording).warning('recording start failed; will re-check', error: error);
       _lastProbeError = error;
       _recheckSoon = true;
     }

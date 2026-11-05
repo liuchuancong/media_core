@@ -418,15 +418,31 @@ final class PlayerKernel with WidgetsBindingObserver {
     if (effectiveSource != null) {
       try {
         await handle.open(effectiveSource, autoPlay: config.autoPlay);
-      } catch (_) {
+      } catch (error) {
         // The caller never received the handle, so leaving it registered would
         // strand a live player in the pool and in every coordinator - one that
         // `acquire()` could later hand out. Release it and rethrow.
         await release(handle.id);
 
+        MediaCoreLog.info(
+          LogCategory.player,
+          'create open failed; releasing player',
+          fields: <String, Object?>{'player': handle.id.value, 'error': error.toString()},
+        );
+
         rethrow;
       }
     }
+
+    MediaCoreLog.info(
+      LogCategory.player,
+      'player created',
+      fields: <String, Object?>{
+        'player': handle.id.value,
+        'backend': registration.id,
+        'opened': effectiveSource != null,
+      },
+    );
 
     return handle;
   }
@@ -468,6 +484,12 @@ final class PlayerKernel with WidgetsBindingObserver {
       case DirectPlan():
       case CompositePlan():
         final handle = await create(config: config, source: source.toPlayerSource(), preferredBackend: registration.id);
+
+        MediaCoreLog.info(
+          LogCategory.player,
+          'player created',
+          fields: <String, Object?>{'player': handle.id.value, 'backend': registration.id, 'opened': true},
+        );
 
         return handle;
 
@@ -618,6 +640,7 @@ final class PlayerKernel with WidgetsBindingObserver {
   /// kernel.attachAudio(session);
   /// ```
   void attachAudio(KernelAudioDriver driver) {
+    MediaCoreLog.info(LogCategory.audio, 'audio driver attached');
     _audioDriver = driver;
     final active = _activeHandle;
     if (active != null) {
@@ -627,6 +650,7 @@ final class PlayerKernel with WidgetsBindingObserver {
 
   /// Detaches the audio capability driver.
   void detachAudio() {
+    MediaCoreLog.info(LogCategory.audio, 'audio driver detached');
     final driver = _audioDriver;
     _audioDriver = null;
     if (driver != null && _activeHandle != null) {
@@ -653,6 +677,7 @@ final class PlayerKernel with WidgetsBindingObserver {
 
   /// Detaches the presentation driver.
   void detachPresentation() {
+    MediaCoreLog.info(LogCategory.presentation, 'presentation driver detached');
     presentationDriver = null;
   }
 
@@ -895,7 +920,17 @@ final class PlayerKernel with WidgetsBindingObserver {
             continue;
           }
 
-          unawaited(handle.deactivate());
+          unawaited(
+            handle.deactivate().catchError((Object error, StackTrace stackTrace) {
+              MediaCoreLog.warning(
+                LogCategory.lifecycle,
+                'background deactivate failed',
+                error: error,
+                stackTrace: stackTrace,
+                fields: <String, Object?>{'player': handle.id.value},
+              );
+            }),
+          );
         }
       case AppLifecycleState.resumed:
         // Back in the foreground: the players are addressable again, which is

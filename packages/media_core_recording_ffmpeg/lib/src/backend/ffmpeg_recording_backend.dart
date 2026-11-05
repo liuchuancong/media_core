@@ -1100,6 +1100,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         // A re-opening that never started produces no exit code, so this pass is
         // the only record of it - counting it as a quick failure is what bounds
         // the loop.
+        _log.warning('relaunch failed; retrying recovery', error: error);
         cause = error.toString();
         lastEnded = Duration.zero;
         code = null;
@@ -1302,7 +1303,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       'the input stopped advancing',
       fields: <String, Object?>{'silentFor': config.stallTimeout.inSeconds, 'session': identityHashCode(execution)},
     );
-    unawaited(execution.cancel());
+    unawaited(execution.cancel().catchError((Object error) {
+      _log.warning('ffmpeg process cancel failed', error: error);
+    }));
   }
 
   Future<int?> _awaitExit(FfmpegExecution execution) async {
@@ -1316,12 +1319,15 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         'the recording process did not report its exit in time',
         fields: <String, Object?>{'session': identityHashCode(execution)},
       );
-      unawaited(execution.cancel());
+      unawaited(execution.cancel().catchError((Object error) {
+        _log.warning('ffmpeg process cancel failed', error: error);
+      }));
 
       return null;
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A process that cannot be reaped is still gone; the caller's intent
       // already decided the outcome.
+      _log.warning('ffmpeg process exit could not be reaped', error: error);
       return null;
     } finally {
       if (identical(_execution, execution)) {

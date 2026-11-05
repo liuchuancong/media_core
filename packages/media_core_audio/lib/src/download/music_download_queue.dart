@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:media_core/media_core.dart' show IdGenerator, LogCategory, MediaCoreLog;
+import 'package:media_core/media_core.dart' show IdGenerator, LogCategory, LogLevel, MediaCoreLog;
 import 'package:media_core/media_core.dart'
     show MediaJobKind, MediaJobOutcome, MediaJobReporting, MediaJobStart;
 import 'package:media_core_audio/src/download/hls_playlist.dart';
@@ -162,6 +162,7 @@ final class MusicDownloadQueue {
     }
 
     _emit(task);
+    MediaCoreLog.info(LogCategory.audio, 'music download enqueued', fields: <String, Object?>{'taskId': taskId, 'outputPath': request.outputPath});
     unawaited(_drain());
 
     return task;
@@ -478,6 +479,7 @@ final class MusicDownloadQueue {
           // The ffmpeg path reports a failure by returning, not throwing; the
           // last attempt has to publish it or the row keeps its "running"
           // snapshot forever.
+          MediaCoreLog.warning(LogCategory.audio, 'music download failed', fields: <String, Object?>{'taskId': task.id, 'attempt': outcome.attempt});
           _emit(outcome);
 
           return;
@@ -499,9 +501,14 @@ final class MusicDownloadQueue {
         if (resolver != null) {
           try {
             request = await resolver();
-          } on Object catch (_) {
+          } on Object catch (error) {
             // Resolution failed: keep the previous request and let the next
             // attempt report the download error.
+            MediaCoreLog.warning(
+              LogCategory.error,
+              'download url resolve failed, retrying stale request',
+              error: error,
+            );
           }
         }
 
@@ -999,7 +1006,8 @@ final class MusicDownloadQueue {
   static Future<bool> _hasContent(String path) async {
     try {
       return await File(path).length() > 0;
-    } on Object {
+    } on Object catch (error) {
+      MediaCoreLog.log(LogLevel.debug, LogCategory.error, 'cache probe failed', error: error, fields: {'path': path});
       return false;
     }
   }
@@ -1031,7 +1039,8 @@ final class MusicDownloadQueue {
           .trim();
 
       return text.isEmpty ? null : text;
-    } on Object {
+    } on Object catch (error) {
+      MediaCoreLog.warning(LogCategory.error, 'download lyric parse failed, embedding raw text', error: error);
       return raw;
     }
   }
@@ -1077,11 +1086,22 @@ final class MusicDownloadQueue {
       }
     }
 
-    return updated.copyWith(
+    final finalized = updated.copyWith(
       status: MusicDownloadStatus.completed,
       finishedAt: DateTime.now(),
       lyricPath: lyricPath,
     );
+    MediaCoreLog.info(
+      LogCategory.audio,
+      'music download completed',
+      fields: <String, Object?>{'taskId': finalized.id, 'path': request.outputPath, 'bytes': finalized.bytesTotal},
+    );
+    MediaCoreLog.info(
+      LogCategory.audio,
+      'music download finalized',
+      fields: <String, Object?>{'taskId': finalized.id, 'tagsEmbedded': request.isDirectTransfer},
+    );
+    return finalized;
   }
 
   /// Starts queued tasks while a slot is free.
@@ -1232,17 +1252,19 @@ final class MusicDownloadQueue {
           ),
         );
       }
-    } on Object {
+    } on Object catch (error) {
       // A notification is how the viewer finds out; it is not the download.
+      MediaCoreLog.log(LogLevel.debug, LogCategory.general, 'job report failed', error: error);
     }
   }
 
   static Future<void> _deleteIfExists(String path) async {
     try {
       await File(path).delete();
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Nothing to delete is the common case; a failure here is not worth
       // failing the UI action that asked for it.
+      MediaCoreLog.log(LogLevel.debug, LogCategory.error, 'scratch file delete failed', error: error, fields: {'path': path});
     }
   }
 

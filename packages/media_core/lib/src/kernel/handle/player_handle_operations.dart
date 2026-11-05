@@ -223,8 +223,9 @@ extension PlayerHandleOperations on PlayerHandle {
   Future<void> _drainOperations() async {
     try {
       await _operation;
-    } on Object catch (_) {
+    } on Object catch (error) {
       // The queue itself already preserves later operations.
+      MediaCoreLog.debug(LogCategory.player, 'operation drained with error', error: error);
     }
   }
 

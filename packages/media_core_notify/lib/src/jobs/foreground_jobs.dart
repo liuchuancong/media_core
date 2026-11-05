@@ -299,6 +299,7 @@ abstract final class ForegroundJobs {
 
       if (line.showing) {
         line.showing = false;
+        _log.info('foreground job line cleared', fields: <String, Object?>{'id': line.id});
         unawaited(_clear(line.id));
       }
 
@@ -403,11 +404,16 @@ abstract final class ForegroundJobs {
       return;
     }
 
+    final wasShowing = line.showing;
     line
       ..showing = true
       ..title = title
       ..body = body
       ..fractionPercent = aggregate == null ? null : ((aggregate.fraction ?? 0) * 100).round();
+
+    if (!wasShowing) {
+      _log.info('foreground job line shown', fields: <String, Object?>{'id': line.id, 'title': first.title});
+    }
   }
 
   static Future<void> _clear(int id) async {

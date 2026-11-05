@@ -222,8 +222,13 @@ extension PlayerHandleEngineOptions on PlayerHandle {
           // subscription: there is nothing to roll back.
           try {
             await nextAdapter.dispose();
-          } on Object catch (_) {
+          } on Object catch (cleanupError) {
             // Best-effort cleanup of the failed replacement.
+            MediaCoreLog.debug(
+              LogCategory.player,
+              'engine option replacement cleanup failed',
+              error: cleanupError,
+            );
           }
         }
 

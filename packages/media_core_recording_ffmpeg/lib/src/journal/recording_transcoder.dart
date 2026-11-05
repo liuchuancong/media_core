@@ -269,8 +269,9 @@ final class FfmpegRecordingTranscoder {
         if (partial.existsSync()) {
           partial.deleteSync();
         }
-      } on Object {
+      } on Object catch (error) {
         // A leftover partial file is not a failed transcode.
+        _log.warning('partial transcode file delete failed', error: error);
       }
     }
   }

@@ -212,8 +212,14 @@ final class PipDriver implements KernelPresentationDriver {
 
     final pip = _systemPip ??= OverlayPipSystemPip(overlayTitle: config.title);
     try {
-      _statusSubscription = pip.statusStream.listen(_handleSystemStatus, onError: (_) {});
-    } on Object catch (_) {
+      _statusSubscription = pip.statusStream.listen(
+        _handleSystemStatus,
+        onError: (Object error) {
+          _log.debug('pip status stream error', error: error);
+        },
+      );
+    } on Object catch (error) {
+      _log.debug('pip status stream unavailable', error: error);
       // A platform without the plugin throws when the stream is created rather
       // than reporting unavailability; the driver stays usable either way.
     }

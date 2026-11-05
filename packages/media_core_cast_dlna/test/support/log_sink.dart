@@ -1,43 +1,47 @@
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
-export 'package:media_core_cast_dlna/src/logging/dlna_log.dart'
-    show DlnaLog, DlnaLogCategory, DlnaLogEvent, DlnaLogLevel;
-
-/// A logging destination scripted by tests.
+/// A logging destination scripted by tests: captures the
+/// [PlayerLogRecord]s the package emits through `MediaCoreLog`.
 final class CapturingLogSink {
-  /// Every event delivered, in order.
-  final List<DlnaLogEvent> events = <DlnaLogEvent>[];
+  /// Every record delivered, in order.
+  final List<PlayerLogRecord> records = <PlayerLogRecord>[];
 
-  /// Installs this sink into the package hub.
+  /// Installs this sink into the logging hub.
+  ///
+  /// Logging is opt-in in media_core_logging, so installing also turns
+  /// the level up; [uninstall] restores the default configuration via
+  /// `MediaCoreLog.reset`.
   void install() {
-    DlnaLog.sink = add;
+    MediaCoreLog.reset();
+    MediaCoreLog.level = LogLevel.trace;
+    MediaCoreLog.addSink(add);
   }
 
-  /// Removes this sink from the package hub.
+  /// Removes this sink from the logging hub.
   void uninstall() {
-    DlnaLog.sink = null;
+    MediaCoreLog.reset();
   }
 
   /// The sink function.
-  void add(DlnaLogEvent event) {
-    events.add(event);
+  void add(PlayerLogRecord record) {
+    records.add(record);
   }
 
-  /// The first event matching category and level, or null.
-  DlnaLogEvent? find(DlnaLogCategory category, DlnaLogLevel level, {String? messageContains}) {
-    for (final event in events.reversed) {
-      if (event.category == category && event.level == level) {
-        if (messageContains != null && !event.message.contains(messageContains)) {
+  /// The first record matching category and level, or null.
+  PlayerLogRecord? find(LogCategory category, LogLevel level, {String? messageContains}) {
+    for (final record in records.reversed) {
+      if (record.category == category && record.level == level) {
+        if (messageContains != null && !record.message.contains(messageContains)) {
           continue;
         }
-        return event;
+        return record;
       }
     }
     return null;
   }
 
-  /// Whether any event matches category and level.
-  bool has(DlnaLogCategory category, DlnaLogLevel level, {String? messageContains}) =>
+  /// Whether any record matches category and level.
+  bool has(LogCategory category, LogLevel level, {String? messageContains}) =>
       find(category, level, messageContains: messageContains) != null;
 }
 

@@ -5,7 +5,7 @@ import 'package:media_core_cast_dlna/src/domain/entities/dlna_service.dart';
 import 'package:media_core_cast_dlna/src/domain/exceptions/dlna_exception.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/control/gena/gena_message_parser.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/description/description_http_fetcher.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// The answer a GENA transport produced.
 final class GenaHttpResponse {
@@ -171,8 +171,8 @@ final class GenaSubscriber {
     }
     final granted = _parseTimeout(response.header('timeout')) ?? lifetime;
     _subscription = GenaSubscription(sid: sid, callbackUrl: callbackUrl, expiresAt: _now().add(granted));
-    DlnaLog.info(
-      DlnaLogCategory.gena,
+    MediaCoreLog.info(
+      LogCategory.network,
       'subscribed',
       fields: <String, Object?>{'service': service.serviceType, 'lifetime': granted.inSeconds},
     );
@@ -231,23 +231,29 @@ final class GenaSubscriber {
         expiresAt: _now().add(granted),
       );
       _scheduleRenewal(granted);
-    } on Object {
+    } on Object catch (error) {
       _renewFailures++;
+      MediaCoreLog.warning(
+        LogCategory.session,
+        'subscription renewal failed',
+        error: error,
+        fields: <String, Object?>{'failures': _renewFailures},
+      );
       if (_renewFailures >= 3) {
         // §14.7: give up gracefully; the polling fallback carries on.
         _failed = true;
         _renewal?.cancel();
         _renewal = null;
-        DlnaLog.warning(
-          DlnaLogCategory.gena,
-          'renewals exhausted; falling back to polling',
+        MediaCoreLog.warning(
+          LogCategory.session,
+          'GENA eventing given up; polling fallback',
           fields: <String, Object?>{'service': service.serviceType, 'failures': _renewFailures},
         );
         _onFailed?.call(this);
         return;
       }
-      DlnaLog.warning(
-        DlnaLogCategory.gena,
+      MediaCoreLog.warning(
+        LogCategory.network,
         'renewal failed; retrying',
         fields: <String, Object?>{'service': service.serviceType, 'failures': _renewFailures},
       );
@@ -270,7 +276,11 @@ final class GenaSubscriber {
     if (subscription != null && url != null && !_failed) {
       try {
         await _transport.request('UNSUBSCRIBE', url, <String, String>{'SID': subscription.sid});
-        DlnaLog.info(DlnaLogCategory.gena, 'unsubscribed', fields: <String, Object?>{'service': service.serviceType});
+        MediaCoreLog.info(
+          LogCategory.network,
+          'unsubscribed',
+          fields: <String, Object?>{'service': service.serviceType},
+        );
       } on Object {
         // Best effort: the device may already be gone.
       }

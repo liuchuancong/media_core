@@ -252,7 +252,10 @@ final class DownloadManager {
       if (windingDown.isNotEmpty) {
         await Future.wait(<Future<void>>[for (final completer in windingDown) completer.future])
             .timeout(const Duration(seconds: 5))
-            .catchError((Object _) => <void>[]);
+            .catchError((Object _) {
+          _log.debug('wind-down wait timed out after 5s');
+          return <void>[];
+        });
       }
       await _files.delete(task.filePath);
     }
@@ -332,6 +335,7 @@ final class DownloadManager {
     if (task == null || task.isTerminal) {
       return;
     }
+    _log.info('download cancelled', fields: <String, Object?>{'id': id, 'receivedBytes': task.progress.receivedBytes});
     _retryTimers.remove(id)?.cancel();
     _queue.cancel(task.id, 'cancelled by the viewer');
     _inFlight.remove(task.id);
@@ -522,7 +526,7 @@ final class DownloadManager {
         await _awaitWindDown(task.id, except: windDown);
 
         await _holdLease(task);
-        _log.debug(
+        _log.info(
           'transfer started',
           fields: <String, Object?>{'id': id, 'attempt': task.progress.attempt, 'priority': task.priority.name},
         );
@@ -604,7 +608,10 @@ final class DownloadManager {
 
     return Future.wait(<Future<void>>[for (final completer in windingDown) completer.future])
         .timeout(const Duration(seconds: 5))
-        .catchError((Object _) => <void>[]);
+        .catchError((Object _) {
+      _log.debug('wind-down wait timed out after 5s');
+      return <void>[];
+    });
   }
 
   Future<bool> _transfer(DownloadTask task) async {

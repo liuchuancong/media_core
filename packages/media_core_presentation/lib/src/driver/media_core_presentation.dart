@@ -6,6 +6,8 @@ import 'package:media_core/media_core.dart';
 import 'package:media_core_presentation/src/driver/windows_presentation_driver.dart';
 import 'package:media_core_presentation/src/geometry/presentation_capability_config.dart';
 
+final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
+
 /// Presentation capability driver for the media_core kernel.
 ///
 /// [MediaCorePresentation] implements [KernelPresentationDriver]
@@ -121,7 +123,11 @@ final class MediaCorePresentation implements KernelPresentationDriver {
       // Deliberately not awaited: the kernel's bus is a broadcast stream, so
       // cancel() has already detached this listener when it returns; its
       // future only reports the cancellation itself.
-      unawaited(previous.cancel());
+      unawaited(
+        previous.cancel().catchError((Object error) {
+          _log.debug('presentation event subscription cancel failed', error: error);
+        }),
+      );
     }
     _eventSub = kernel.events.listen((event) {
       final orientation = _orientationFromEvent(event);
@@ -130,7 +136,9 @@ final class MediaCorePresentation implements KernelPresentationDriver {
       }
       _orientation = orientation;
       _desktop?.onVideoSize(_lastWidth, _lastHeight);
-    }, onError: (_) {});
+    }, onError: (Object error) {
+      _log.warning('presentation event stream error', error: error);
+    });
   }
 
   int _lastWidth = 0;
@@ -166,6 +174,7 @@ final class MediaCorePresentation implements KernelPresentationDriver {
     final desktop = _desktop;
     if (desktop != null) {
       await desktop.apply(playerId, request);
+      _log.info('presentation applied', fields: <String, Object?>{'mode': request.mode.name, 'playerId': playerId.value});
       return;
     }
 

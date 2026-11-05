@@ -27,6 +27,11 @@ dependencies:
   media_core_download:
     path: ../media_core_download
 
+  # Desktop-lyric, tag-reader and HLS-probe failures are logged under the
+  # audio category.
+  media_core_logging:
+    path: ../media_core_logging
+
   # Background audio + media notification (lock screen / notification controls)
   # The media surfaces (notification / lock screen / SMTC / MPRIS) and audio
   # focus live in their own capability package now; this module uses them for

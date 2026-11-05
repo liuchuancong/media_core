@@ -23,52 +23,10 @@ import 'package:media_core_cast_dlna/src/infrastructure/control/soap/soap_reques
 import 'package:media_core_cast_dlna/src/infrastructure/description/description_http_fetcher.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/discovery/ssdp/ssdp_client.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/media_http_server.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
 import 'package:media_core_cast_dlna/src/utils/duration_parser.dart';
 import 'package:media_core_cast_dlna/src/utils/mime_type.dart';
 
 final LogModule _log = MediaCoreLog.of(LogCategory.network);
-
-/// Whether the [DlnaLog]-to-MediaCoreLog bridge has been installed;
-/// the bridge is process-wide and installing it twice would double
-/// every core record.
-bool _logBridgeInstalled = false;
-
-/// Routes the core layers' neutral [DlnaLogEvent]s into media_core's
-/// logging hub (§25): categories map onto [LogCategory] (everything
-/// wire-level lands on network; playback and session keep their own),
-/// levels pass through.
-void _installLogBridge() {
-  if (_logBridgeInstalled) {
-    return;
-  }
-  _logBridgeInstalled = true;
-  DlnaLog.sink = (event) {
-    final category = switch (event.category) {
-      DlnaLogCategory.playback => LogCategory.playback,
-      DlnaLogCategory.session => LogCategory.session,
-      DlnaLogCategory.mediaSelection => LogCategory.source,
-      DlnaLogCategory.discovery ||
-      DlnaLogCategory.ssdp ||
-      DlnaLogCategory.deviceDescription ||
-      DlnaLogCategory.soap ||
-      DlnaLogCategory.gena ||
-      DlnaLogCategory.mediaServer ||
-      DlnaLogCategory.compatibility => LogCategory.network,
-    };
-    final log = MediaCoreLog.of(category);
-    switch (event.level) {
-      case DlnaLogLevel.debug:
-        log.debug(event.message, fields: event.fields);
-      case DlnaLogLevel.info:
-        log.info(event.message, fields: event.fields);
-      case DlnaLogLevel.warning:
-        log.warning(event.message, error: event.error, fields: event.fields);
-      case DlnaLogLevel.error:
-        log.error(event.message, error: event.error, fields: event.fields);
-    }
-  };
-}
 
 /// [MediaCastBackend] over DLNA/UPnP: SSDP to find, HTTP+SOAP to
 /// drive.
@@ -104,7 +62,6 @@ class DlnaCastBackend implements MediaCastBackend {
     DlnaDiscoveryOptions? options,
     MediaHttpServer? mediaServer,
   }) {
-    _installLogBridge();
     _manager = DlnaDiscoveryManager(
       ssdp: discovery,
       fetchDescription: fetchDescription,
@@ -165,7 +122,6 @@ class DlnaCastBackend implements MediaCastBackend {
     }
     _started = true;
     _soap = SoapClient(transport: _transport);
-    _installLogBridge();
     _added = _manager.deviceAdded.listen((device) {
       _events.add(DeviceFound(_toCastDevice(device)));
     });
@@ -201,6 +157,7 @@ class DlnaCastBackend implements MediaCastBackend {
   @override
   Future<void> setMedia(CastDevice device, CastMedia media) async {
     final playUrl = await _playableUri(device, media);
+    _log.info('cast media set', fields: <String, Object?>{'device': device.id, 'url': media.url});
     await _call(
       device,
       (service) => SoapRequestBuilder.setUri(
@@ -327,13 +284,19 @@ class DlnaCastBackend implements MediaCastBackend {
   }
 
   @override
-  Future<void> play(CastDevice device) => _call(device, (service) => SoapRequestBuilder.play(service: service));
+  Future<void> play(CastDevice device) async {
+    _log.info('cast started', fields: <String, Object?>{'device': device.id});
+    await _call(device, (service) => SoapRequestBuilder.play(service: service));
+  }
 
   @override
   Future<void> pause(CastDevice device) => _call(device, (service) => SoapRequestBuilder.pause(service: service));
 
   @override
-  Future<void> stop(CastDevice device) => _call(device, (service) => SoapRequestBuilder.stop(service: service));
+  Future<void> stop(CastDevice device) async {
+    _log.info('cast stopped', fields: <String, Object?>{'device': device.id});
+    await _call(device, (service) => SoapRequestBuilder.stop(service: service));
+  }
 
   @override
   Future<void> seek(CastDevice device, Duration position) =>

@@ -6,7 +6,7 @@ import 'package:media_core_cast_dlna/src/infrastructure/media/http/media_resourc
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/remote_proxy_handler.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/remote_proxy_registry.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/network/ip_address_selector.dart';
-import 'package:media_core_cast_dlna/src/logging/dlna_log.dart';
+import 'package:media_core_logging/media_core_logging.dart';
 
 /// Where a media server is in its lifecycle.
 enum MediaServerState {
@@ -104,12 +104,12 @@ final class MediaHttpServer {
       );
     } on Object catch (error) {
       _state = MediaServerState.error;
-      DlnaLog.error(DlnaLogCategory.mediaServer, 'media server failed to start', error: error);
+      MediaCoreLog.error(LogCategory.network, 'media server failed to start', error: error);
       throw MediaServerException('media server could not start', cause: error);
     }
     _state = MediaServerState.running;
-    DlnaLog.info(
-      DlnaLogCategory.mediaServer,
+    MediaCoreLog.info(
+      LogCategory.network,
       'media server started',
       fields: <String, Object?>{'port': boundPort, 'address': _address?.address},
     );
@@ -193,7 +193,7 @@ final class MediaHttpServer {
     _address = null;
     _handler = null;
     _state = MediaServerState.stopped;
-    DlnaLog.info(DlnaLogCategory.mediaServer, 'media server stopped');
+    MediaCoreLog.info(LogCategory.network, 'media server stopped');
   }
 
   void _ensureSweep() {

@@ -1,5 +1,9 @@
 import 'dart:io';
 
+import 'package:media_core_logging/media_core_logging.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.audio);
+
 /// One media segment of an HLS playlist.
 final class HlsSegment {
   /// Creates a segment.
@@ -190,8 +194,9 @@ Future<Set<int>> completedHlsSegments(String directory, List<HlsSegment> segment
     if (!file.existsSync()) continue;
     try {
       if (await file.length() > 0) done.add(index);
-    } on Object {
+    } on Object catch (error) {
       // An unreadable file is simply refetched.
+      _log.debug('hls segment probe failed', fields: {'error': error.toString()});
     }
   }
   return done;

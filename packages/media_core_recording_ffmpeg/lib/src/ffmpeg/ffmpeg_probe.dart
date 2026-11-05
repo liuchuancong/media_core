@@ -1,4 +1,8 @@
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
+import 'package:media_core/media_core.dart';
+
+/// The log module this file reports decisions through.
+final LogModule _log = MediaCoreLog.of(LogCategory.recording);
 
 /// What kind of stream one entry of an [FfmpegMediaInfo] describes.
 enum FfmpegStreamKind {
@@ -197,11 +201,12 @@ final class FFprobeKitFfmpegProbe implements FfmpegProbe {
         size: _intOf(information.size),
         streams: [for (final stream in information.streams) _streamOf(stream)],
       );
-    } on Object catch (_) {
+    } on Object catch (error) {
       // A probe that throws is a probe that has no answer. Verification is
       // something a recording reports, not something that can fail one - and
       // what it can throw is whatever the native binding decides to raise, which
       // is exactly why there is no `on` clause here.
+      _log.debug('recording probe returned no answer', error: error);
       return null;
     }
   }

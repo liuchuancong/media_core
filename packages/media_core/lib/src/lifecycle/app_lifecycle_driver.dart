@@ -113,7 +113,17 @@ final class AppLifecycleDriver with WidgetsBindingObserver {
         onForegrounded?.call(handle);
 
         if (resumeOnForeground && _playbackWanted(handle)) {
-          unawaited(handle.play());
+          unawaited(
+            handle.play().catchError((Object error, StackTrace stackTrace) {
+              MediaCoreLog.warning(
+                LogCategory.lifecycle,
+                'resume play failed',
+                error: error,
+                stackTrace: stackTrace,
+                fields: <String, Object?>{'player': handle.id.value, 'backend': handle.backendId},
+              );
+            }),
+          );
         }
 
         MediaCoreLog.debug(

@@ -316,8 +316,14 @@ abstract final class MediaCoreLog {
   }
 
   /// Emits a debug-level record.
-  static void debug(LogCategory category, String message, {Map<String, Object?> fields = const <String, Object?>{}}) {
-    log(LogLevel.debug, category, message, fields: fields);
+  static void debug(
+    LogCategory category,
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+    Map<String, Object?> fields = const <String, Object?>{},
+  }) {
+    log(LogLevel.debug, category, message, error: error, stackTrace: stackTrace, fields: fields);
   }
 
   /// Emits an info-level record.
