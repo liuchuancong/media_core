@@ -51,9 +51,13 @@ dependency_overrides:
   code_assets: ^2.1.0
   flame_barrage: ^0.0.10
   hooks: ^2.2.0
-  # media_kit_video pins wakelock_plus 1.3.3 while better_player_plus needs
+  # media_kit_video pins wakelock_plus 1.3.3 while better_player needs
   # ^1.7.0; without this the two backends cannot be resolved in one workspace.
   wakelock_plus: ^1.7.0
+  # better_player requires xml ^7; the Predidit media_kit fork declares
+  # ^6.5.0 but imports xml nowhere in its lib/, so the constraint is a
+  # stale declaration and is forced up here.
+  xml: ^7.0.1
 
 melos:
   scripts:

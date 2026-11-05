@@ -1,4 +1,4 @@
-import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player/better_player.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_better_player/src/better_player_adapter.dart';
 
@@ -24,13 +24,13 @@ final class BetterPlayerAdapterFactory implements PlayerAdapterFactory {
   final PlayerAdapterCapabilities capabilities;
 
   /// Player-level configuration handed to every created adapter.
-  final BetterPlayerConfiguration? configuration;
+  final PlayerConfiguration? configuration;
 
   /// Playlist configuration, for the playlist controller better_player exposes.
-  final BetterPlayerPlaylistConfiguration? playlistConfiguration;
+  final PlayerPlaylistConfiguration? playlistConfiguration;
 
   /// Data source opened when a source is not resolved per adapter.
-  final BetterPlayerDataSource? dataSource;
+  final PlayerDataSource? dataSource;
 
   /// Builds the data source for each resolved source, per adapter.
   final BetterPlayerDataSourceBuilder? configureDataSource;
@@ -74,9 +74,9 @@ void registerBetterPlayerFactory(
   DefaultPlayerAdapterFactory factory, {
   String id = kBetterPlayerBackendId,
   PlayerAdapterCapabilities capabilities = BetterPlayerAdapter.defaultCapabilities,
-  BetterPlayerConfiguration? configuration,
-  BetterPlayerPlaylistConfiguration? playlistConfiguration,
-  BetterPlayerDataSource? dataSource,
+  PlayerConfiguration? configuration,
+  PlayerPlaylistConfiguration? playlistConfiguration,
+  PlayerDataSource? dataSource,
   BetterPlayerDataSourceBuilder? configureDataSource,
   void Function(BetterPlayerAdapter adapter)? configure,
 }) {
@@ -99,9 +99,9 @@ void registerBetterPlayerRegistry(
   PlayerAdapterRegistry registry, {
   int priority = 80,
   PlayerAdapterCapabilities capabilities = BetterPlayerAdapter.defaultCapabilities,
-  BetterPlayerConfiguration? configuration,
-  BetterPlayerPlaylistConfiguration? playlistConfiguration,
-  BetterPlayerDataSource? dataSource,
+  PlayerConfiguration? configuration,
+  PlayerPlaylistConfiguration? playlistConfiguration,
+  PlayerDataSource? dataSource,
   BetterPlayerDataSourceBuilder? configureDataSource,
   void Function(BetterPlayerAdapter adapter)? configure,
 }) {

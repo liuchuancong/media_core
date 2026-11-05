@@ -27,11 +27,16 @@ dependencies:
   media_core:
     path: ../media_core
 
+  # Structured logging hub: MediaCoreLog, LogCategory, LogLevel.
+  media_core_logging:
+    path: ../media_core_logging
+
   # @immutable on the value objects.
   meta: ^1.19.0
 
   # Device description and SOAP response documents.
-  xml: ^6.6.1
+  # better_player requires xml ^7; the parsers here are compatible.
+  xml: ^7.0.1
 
 dev_dependencies:
   flutter_lints: ^6.0.0

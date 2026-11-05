@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_better_player/media_core_better_player.dart';
 
-// The package barrel carries the engine too (`better_player_plus` is
+// The package barrel carries the engine too (`better_player` is
 // re-exported from it), so this file does not import the engine directly.
 
 final LogModule _log = MediaCoreLog.of(LogCategory.player);
@@ -13,9 +13,9 @@ final LogModule _log = MediaCoreLog.of(LogCategory.player);
 /// Receives the framework [PlayerSource] and the data source the adapter
 /// mapped from it, returns the one to actually use.
 typedef BetterPlayerDataSourceBuilder =
-    BetterPlayerDataSource Function(PlayerSource source, BetterPlayerDataSource dataSource);
+    PlayerDataSource Function(PlayerSource source, PlayerDataSource dataSource);
 
-/// [PlayerAdapter] implementation backed by better_player_plus —
+/// [PlayerAdapter] implementation backed by better_player —
 /// the  BetterPlayer engine.
 ///
 /// This adapter also owns its video surface: it implements
@@ -67,13 +67,13 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   /// Native better_player configuration, applied verbatim when the
   /// controller is created; null uses the adapter's integration defaults.
-  BetterPlayerConfiguration? configuration;
+  PlayerConfiguration? configuration;
 
   /// Native playlist configuration, passed to the controller verbatim.
-  BetterPlayerPlaylistConfiguration? playlistConfiguration;
+  PlayerPlaylistConfiguration? playlistConfiguration;
 
   /// Native data source used ahead of any opened [PlayerSource].
-  BetterPlayerDataSource? dataSource;
+  PlayerDataSource? dataSource;
 
   /// Last-chance transform applied to every data source before setup.
   BetterPlayerDataSourceBuilder? configureDataSource;
@@ -101,9 +101,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// `handle.rebuildEngine()` — the fresh adapter created by the rebuild
   /// reads this config.
   void updateConfiguration({
-    BetterPlayerConfiguration? configuration,
-    BetterPlayerPlaylistConfiguration? playlistConfiguration,
-    BetterPlayerDataSource? dataSource,
+    PlayerConfiguration? configuration,
+    PlayerPlaylistConfiguration? playlistConfiguration,
+    PlayerDataSource? dataSource,
     BetterPlayerDataSourceBuilder? configureDataSource,
   }) {
     this.configuration = configuration ?? this.configuration;
@@ -260,9 +260,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     } else {
       final base =
           configuration ??
-          const BetterPlayerConfiguration(
+          const PlayerConfiguration(
             handleLifecycle: false,
-            controlsConfiguration: BetterPlayerControlsConfiguration(showControls: false),
+            controlsConfiguration: PlayerControlsConfiguration(showControls: false),
           );
 
       _controller = BetterPlayerController(
@@ -272,12 +272,14 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
       );
     }
 
+    _log.info('better player controller created', fields: <String, Object?>{'injected': injected != null});
+
     controller.addEventsListener(_onEngineEvent);
   }
 
   @override
   bool get engineReportsOpenFailure {
-    if (_controller?.videoPlayerController?.value.hasError == true) {
+    if (_controller?.videoPlayerValue?.hasError == true) {
       return true;
     }
 
@@ -301,8 +303,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     // A controller can be reused for multiple sources. Make sure the
     // value listener is registered exactly once for the current source.
-    final oldVpc = controller.videoPlayerController;
-    oldVpc?.removeListener(_onValueChange);
+    controller.removeVideoListener(_onValueChange);
 
     // Prefer an explicitly configured data source; otherwise map the
     // framework-provided source.
@@ -318,7 +319,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         );
       }
 
-      resolvedDataSource = BetterPlayerDataSource(
+      resolvedDataSource = PlayerDataSource(
         resolved.$1,
         resolved.$2,
         headers: source.hasHeaders ? Map<String, String>.from(source.headers!.values) : null,
@@ -345,14 +346,12 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     // Attach the value listener only after setupDataSource so the first
     // snapshot reflects an initialized controller.
-    final vpc = controller.videoPlayerController;
+    final value = controller.videoPlayerValue;
 
-    if (vpc != null) {
-      vpc
-        ..removeListener(_onValueChange)
-        ..addListener(_onValueChange);
-
-      final value = vpc.value;
+    if (value != null) {
+      controller
+        ..removeVideoListener(_onValueChange)
+        ..addVideoListener(_onValueChange);
 
       _lastPosition = value.position;
       _lastDuration = value.duration;
@@ -378,7 +377,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     if (isDisposed) return;
 
-    // Apply the context config once — nothing in better_player_plus
+    // Apply the context config once — nothing in better_player
     // does this automatically.
     final contextConfig = _context?.config ?? PlayerAdapterConfig.of();
 
@@ -463,7 +462,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   Future<void> onClose() async {
     // Detach the value listener before winding the controller down so a
     // late tick cannot leak into the next source's diff state.
-    controller.videoPlayerController?.removeListener(_onValueChange);
+    controller.removeVideoListener(_onValueChange);
 
     _lastPosition = Duration.zero;
     _lastDuration = null;
@@ -497,7 +496,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
     if (controller != null) {
       controller
-        ..videoPlayerController?.removeListener(_onValueChange)
+        ..removeVideoListener(_onValueChange)
         ..removeEventsListener(_onEngineEvent);
 
       // An injected controller belongs to the host that injected it; a forced
@@ -507,6 +506,8 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         controller.dispose(forceDispose: true);
       }
     }
+
+    _log.info('better player controller disposed');
 
     _context = null;
     _lastPosition = Duration.zero;
@@ -520,7 +521,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   // ---------------------------------------------------------------------------
 
   // Audio-only is not implemented for this engine, and the capability
-  // declaration says so: better_player_plus exposes no video-track
+  // declaration says so: better_player exposes no video-track
   // control at any layer — `setTrack` only picks among adaptive video
   // variants, and the platform channel behind it has no "disable video
   // renderer" method — so the decoder cannot be switched off. The
@@ -535,25 +536,20 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// Maps a [PlayerSource] onto a better_player data-source type + URI.
   ///
   /// Returns `null` for unsupported schemes so [onOpen] can fail
-  /// loudly instead of handing garbage to  BetterPlayer.
-  (BetterPlayerDataSourceType, String)? _resolveSource(PlayerSource source) {
+  /// loudly instead of handing garbage to BetterPlayer.
+  (DataSourceType, String)? _resolveSource(PlayerSource source) {
     if (source.isFile) {
-      return (BetterPlayerDataSourceType.file, source.uri.toFilePath());
+      return (DataSourceType.file, source.uri.toFilePath());
     }
 
     if (source.isNetworkSource) {
-      return (BetterPlayerDataSourceType.network, source.uri.toString());
+      return (DataSourceType.network, source.uri.toString());
     }
 
-    // The installed better_player_plus version exposes:
-    //
-    //   network
-    //   file
-    //   memory
-    //
-    // It does NOT expose an `asset` data-source type. If asset playback
-    // is required later, the asset bytes must first be loaded and passed
-    // through the memory data-source API.
+    // The enum also carries an `asset` member, but the engine throws
+    // UnimplementedError for it (setupDataSource has no asset branch).
+    // If asset playback is required later, the asset bytes must first be
+    // loaded and passed through the memory data-source API.
     if (source.isAsset) {
       return null;
     }
@@ -571,7 +567,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     switch (event.betterPlayerEventType) {
       case BetterPlayerEventType.initialized:
       case BetterPlayerEventType.changedResolution:
-        final size = _controller?.videoPlayerController?.value.size;
+        final size = _controller?.videoPlayerValue?.size;
 
         if (size != null && size.width > 0 && size.height > 0) {
           emitVideoSizeChangedIfChanged(size.width.toInt(), size.height.toInt());
@@ -585,11 +581,11 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       case BetterPlayerEventType.pause:
         // A "pause" that lands while the player is buffering is not a
-        // user-visible pause:  BetterPlayer reports !isPlaying during
+        // user-visible pause: BetterPlayer reports !isPlaying during
         // BUFFERING and replays a matching `play` once the buffer
         // recovers. Dropping it here keeps the latch accurate and lets
         // bufferingStart / bufferingEnd express the stall instead.
-        final buffering = _controller?.videoPlayerController?.value.isBuffering ?? false;
+        final buffering = _controller?.videoPlayerValue?.isBuffering ?? false;
 
         if (buffering) return;
 
@@ -613,7 +609,7 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
         final message = event.parameters?['exception']?.toString() ?? 'BetterPlayer Error';
 
         // BetterPlayer may expose the same native failure both as an
-        // exception event and through videoPlayerController.value.hasError.
+        // exception event and through videoPlayerValue.hasError.
         // Keep one error flowing into media_core for the same message.
         if (_lastReportedError == message) return;
 
@@ -646,11 +642,9 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   void _onValueChange() {
     if (!acceptsEngineEvents) return;
 
-    final vpc = _controller?.videoPlayerController;
+    final v = _controller?.videoPlayerValue;
 
-    if (vpc == null) return;
-
-    final v = vpc.value;
+    if (v == null) return;
 
     // Position.
     if (v.position != _lastPosition) {

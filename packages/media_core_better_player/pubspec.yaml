@@ -1,7 +1,7 @@
 name: media_core_better_player
 description: >-
-  better_player_plus backend adapter for media_core: the shared
-  PlayerAdapter contract on the stock Flutter video_player engines.
+  better_player backend adapter for media_core: the shared
+  PlayerAdapter contract on the BetterPlayer engines.
 version: 0.1.0
 publish_to: none
 repository: https://github.com/liuchuancong/media_core
@@ -14,7 +14,7 @@ environment:
 
 dependencies:
   # The engine this adapter drives.
-  better_player_plus: ^1.4.1
+  better_player: ^1.33.0
 
   flutter:
     sdk: flutter

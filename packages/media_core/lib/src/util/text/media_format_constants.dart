@@ -167,7 +167,7 @@ abstract final class IjkFormats {
   };
 }
 
-/// Coverage of better_player_plus (AndroidX Media3 / ExoPlayer).
+/// Coverage of better_player (AndroidX Media3 / ExoPlayer).
 ///
 /// Verified against Media3's extractor set, which is narrower than
 /// FFmpeg's and — unlike FFmpeg — cannot be extended by a build flag. The
@@ -177,13 +177,13 @@ abstract final class IjkFormats {
 /// - `rtmps`, `rtsps`, `srt`, `tcp`, `ftp`, `ftps`: Media3's data sources
 ///   cover HTTP(S), file, RTSP, RTMP (without TLS) and UDP/RTP; there is no
 ///   SRT, FTP or HTTP-over-TLS-variant data source.
-/// - `asset`: this adapter maps assets to `null` on purpose (the installed
-///   better_player_plus exposes no asset data-source type).
+/// - `asset`: this adapter maps assets to `null` on purpose (better_player's
+///   setupDataSource has no asset branch).
 /// What remains is a container list, not a codec list: Media3 extracts
 /// `ac3`/`eac3`/`flac`/`opus`, but whether a device can *decode* them is a
 /// separate question the declaration cannot answer.
 abstract final class BetterPlayerFormats {
-  /// Containers and manifests better_player_plus opens.
+  /// Containers and manifests better_player opens.
   static const Set<String> supportedFormats = {
     // Common video containers.
     'mp4',
@@ -218,7 +218,7 @@ abstract final class BetterPlayerFormats {
     'flac',
   };
 
-  /// URI schemes better_player_plus accepts.
+  /// URI schemes better_player accepts.
   static const Set<String> supportedProtocols = {
     'http',
     'https',
