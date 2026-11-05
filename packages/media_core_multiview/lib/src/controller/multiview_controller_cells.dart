@@ -28,6 +28,15 @@ extension MultiviewControllerCells on MultiviewController {
       );
     }
 
+    // Opens for one cell are serialized per index: a re-assign racing the
+    // playlist advance a failed open triggered for the same cell would
+    // otherwise acquire two players for one slot and leak one. Cells are
+    // still independent of each other, so a wall fill overlaps freely.
+    await _sequenced(index, () => _assignNow(index, source, playlist: playlist));
+  }
+
+  /// The body of [assign], run inside the cell's operation chain.
+  Future<void> _assignNow(int index, MultiviewCellSource source, {List<MultiviewCellSource>? playlist}) async {
     _log.info(
       'assigning a cell',
       fields: <String, Object?>{
@@ -45,12 +54,15 @@ extension MultiviewControllerCells on MultiviewController {
       _playlists.remove(index);
     }
 
-    cell
+    final cell = _cells[index]
       ..source = source
       ..failure = null
       ..restarts = 0;
+    // No audio pass here: a successful open applies audio itself, and the
+    // offline/failed paths hold no player to re-level. Applying again would
+    // sweep every handle on the wall twice per assignment, which is exactly
+    // the cost a wall fill multiplies by the cell count.
     await _openCell(cell);
-    await _applyAudio();
     _emit();
   }
 
@@ -58,20 +70,21 @@ extension MultiviewControllerCells on MultiviewController {
   Future<void> assignAll(List<MultiviewCellSource> sources) async {
     _ensureNotDisposed();
     final limit = sources.length < _config.effectiveMaxCells ? sources.length : _config.effectiveMaxCells;
-    for (var index = 0; index < limit; index++) {
-      // One dead room must not blank the rest of the wall: a cell that fails
-      // to open already carries its own failure state, so the fill goes on
-      // with the rooms that are live.
-      try {
-        await assign(index, sources[index]);
-      } on Object catch (error) {
-        _log.warning(
-          'wall fill skipped a failing cell',
-          error: error,
-          fields: <String, Object?>{'index': index, 'roomId': sources[index].roomId},
-        );
-      }
-    }
+    // Cells open concurrently: filling a wall one assign at a time pays every
+    // room's resolve + connect latency in sequence, which is most of what a
+    // layout switch waits for. One dead room must not blank the rest of the
+    // wall: each future carries its own catch, so the fill goes on with the
+    // rooms that are live, exactly like the sequential fill did.
+    await Future.wait(<Future<void>>[
+      for (var index = 0; index < limit; index++)
+        assign(index, sources[index]).catchError((Object error) {
+          _log.warning(
+            'wall fill skipped a failing cell',
+            error: error,
+            fields: <String, Object?>{'index': index, 'roomId': sources[index].roomId},
+          );
+        }),
+    ]);
   }
 
   /// Advances [index] to the next source in its playlist, if it has one.
@@ -108,23 +121,35 @@ extension MultiviewControllerCells on MultiviewController {
   /// Clears [index]: stops it and gives its player back.
   Future<void> clear(int index) async {
     _ensureNotDisposed();
-    _cells[index]
-      ..source = null
-      ..qualityLabel = null
-      ..failure = null
-      ..restarts = 0
-      ..status = MultiviewCellStatus.empty;
-    _playlists.remove(index);
-    await _releaseCell(index);
-    _emit();
+    // Sequenced per index so a clear cannot detach a player an in-flight open
+    // for the same cell is still about to attach (that handle would come back
+    // to life as a ghost: playing, but absent from _handles).
+    await _sequenced(index, () async {
+      _cells[index]
+        ..source = null
+        ..qualityLabel = null
+        ..failure = null
+        ..restarts = 0
+        ..status = MultiviewCellStatus.empty;
+      _playlists.remove(index);
+      await _releaseCell(index);
+      _emit();
+    });
   }
 
   /// Clears every cell.
   Future<void> clearAll() async {
     _ensureNotDisposed();
-    for (var index = 0; index < _cells.length; index++) {
-      await clear(index);
-    }
+    // Released concurrently: a wall cleared one cell at a time waits on every
+    // player hand-back in sequence, which is the slow part of a layout
+    // switch. Each clear carries its own catch so one refusing player cannot
+    // strand the rest of the wall still holding its players.
+    await Future.wait(<Future<void>>[
+      for (var index = 0; index < _cells.length; index++)
+        clear(index).catchError((Object error) {
+          _log.warning('clearing a cell failed', error: error, fields: {'index': index});
+        }),
+    ]);
     _audioIndex = null;
     _emit();
   }
@@ -132,13 +157,17 @@ extension MultiviewControllerCells on MultiviewController {
   /// Starts [index] again from its current source.
   Future<void> restartCell(int index) async {
     _ensureNotDisposed();
-    final cell = _cells[index];
-    if (cell.source == null) {
-      return;
-    }
-    await _releaseCell(index);
-    await _openCell(cell);
-    _emit();
+    // Sequenced per index: a restart racing an in-flight assign for the same
+    // cell would release the very player that assign was about to attach.
+    await _sequenced(index, () async {
+      final cell = _cells[index];
+      if (cell.source == null) {
+        return;
+      }
+      await _releaseCell(index);
+      await _openCell(cell);
+      _emit();
+    });
   }
 
   /// Stops [index] but keeps its room assigned.
@@ -148,7 +177,11 @@ extension MultiviewControllerCells on MultiviewController {
     if (handle != null) {
       await handle.pause();
     }
-    _cells[index].status = MultiviewCellStatus.empty;
+    // Paused, not empty: the player stays open (that is what makes resuming
+    // cheap) and the room stays assigned, so an empty status would hide a
+    // held decoder from the budget and the memory report and contradict the
+    // cell's own source.
+    _cells[index].status = MultiviewCellStatus.paused;
     _emit();
   }
 
@@ -238,7 +271,12 @@ extension MultiviewControllerCells on MultiviewController {
   }
 
   Future<void> _applyBudget() async {
-    final crowded = _playingCount > _config.effectiveMaxCells || _pressure.hasPressure;
+    // Counted by decoders held, not by cells playing: a starting, paused or
+    // stopped cell keeps its player open, and counting only the playing ones
+    // let a wall drift past its budget one "not yet playing" cell at a time.
+    // `_handles` is exactly the set of open players - `_releaseCell` detaches
+    // its entry before its first await - so its length is the held count.
+    final crowded = _handles.length > _config.effectiveMaxCells || _pressure.hasPressure;
     _budgetExceeded = crowded;
     if (!crowded) {
       return;
@@ -254,13 +292,24 @@ extension MultiviewControllerCells on MultiviewController {
           'over budget: pausing every cell but the focused one',
           fields: <String, Object?>{'playing': _playingCount, 'budget': _config.effectiveMaxCells, 'severe': severe},
         );
+        // Decisions first, engine calls in parallel: under pressure a wall of
+        // N cells must not wait N serialized pauses to shed its decoders.
+        final pauses = <Future<void>>[];
         for (final cell in _cells) {
           if (cell.index == _focusedIndex || !cell.isPlaying) {
             continue;
           }
-          await _handles[cell.index]?.pause();
-          cell.status = MultiviewCellStatus.empty;
+          final handle = _handles[cell.index];
+          if (handle == null) {
+            continue;
+          }
+          // Paused, not empty: the player stays open and the room assigned,
+          // so the cell stays counted by the budget and resumable instead of
+          // becoming an "empty" slot that quietly holds a decoder.
+          cell.status = MultiviewCellStatus.paused;
+          pauses.add(handle.pause());
         }
+        await Future.wait(pauses);
       case MultiviewBudgetPolicy.letPlatformDrop:
       case MultiviewBudgetPolicy.refuseNewCells:
         _log.debug(
@@ -271,9 +320,19 @@ extension MultiviewControllerCells on MultiviewController {
     }
   }
 
-  bool get _isAtBudget => _playingCount >= _config.effectiveMaxCells;
+  bool get _isAtBudget => _handles.length >= _config.effectiveMaxCells;
 
-  int get _playingCount => _cells.where((cell) => cell.isPlaying).length;
+  int get _playingCount {
+    // A plain loop: this runs on the sweep tick and in the refuse-a-cell log,
+    // and `where(...).length` allocated a fresh iterable every call.
+    var count = 0;
+    for (final cell in _cells) {
+      if (cell.isPlaying) {
+        count++;
+      }
+    }
+    return count;
+  }
 
   // ---------------------------------------------------------------------------
   // Danmaku sessions

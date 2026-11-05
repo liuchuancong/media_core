@@ -7,6 +7,44 @@ extension _MultiviewControllerInternals on MultiviewController {
   // Internals
   // ---------------------------------------------------------------------------
 
+  /// Runs [action] for cell [index] so that operations targeting the same cell
+  /// settle in order instead of overlapping. Two overlapping opens would each
+  /// acquire a player for the index and leak one (the loser is stored over or
+  /// dropped), and a clear landing mid-open would detach a player the open was
+  /// still attaching. Operations for *different* cells still overlap freely -
+  /// that overlap is what keeps a wall fill fast.
+  Future<void> _sequenced(int index, Future<void> Function() action) {
+    if (_runningCellOps.contains(index)) {
+      // Called from inside the operation already running for this cell (the
+      // playlist advance a failed open triggers for its own cell): queueing
+      // would wait for ourselves forever, and this continuation *is* the same
+      // logical operation.
+      return action();
+    }
+    final previous = _cellOps.remove(index);
+    final Future<void> tracked;
+    if (previous == null) {
+      // Registered BEFORE action() runs, not around its returned future: the
+      // synchronous prefix of action() can already descend into a same-index
+      // _sequenced call (an open failing straight into a playlist advance),
+      // and that call must see the cell as running - otherwise it queues
+      // behind this very operation, which is awaiting it, and deadlocks.
+      _runningCellOps.add(index);
+      tracked = action().whenComplete(() => _runningCellOps.remove(index));
+    } else {
+      // A previous operation for this cell is still settling; this one runs
+      // after it and through its error, so one failed open cannot poison the
+      // next operation in the chain. Registered before action() for the same
+      // reason as the direct branch above.
+      tracked = previous.catchError((Object _) {}).then((_) {
+        _runningCellOps.add(index);
+        return action().whenComplete(() => _runningCellOps.remove(index));
+      });
+    }
+    _cellOps[index] = tracked;
+    return tracked;
+  }
+
   Future<void> _openCell(MultiviewCell cell) async {
     final source = cell.source;
     if (source == null) {
@@ -103,7 +141,11 @@ extension _MultiviewControllerInternals on MultiviewController {
       // Rate-limited, or a playlist whose entries all fail cycles forever.
       if (_playlists.containsKey(cell.index)) {
         final last = _lastAdvanceAt[cell.index];
-        final now = DateTime.now();
+        // The injected clock, not DateTime.now(): the stall watchdog and the
+        // stall-side advance gate are already clock-driven, and a wall built
+        // with a deterministic clock would otherwise rate-limit advances
+        // against real wall time.
+        final now = _clock();
 
         if (last == null || now.difference(last) >= config.cellStallTimeout) {
           _lastAdvanceAt[cell.index] = now;
@@ -165,22 +207,30 @@ extension _MultiviewControllerInternals on MultiviewController {
   }
 
   Future<void> _releaseCell(int index) async {
+    // Every per-cell bookkeeping entry is detached synchronously, before the
+    // first await: a resize shrink fires these releases unawaited, so an
+    // assign() to the same index that lands while a release is parked at an
+    // await must not find the old handle still registered in _handles (it
+    // would bind to a player this release is about to pause and recycle), and
+    // a shrink that is followed by a re-grow must not inherit the removed
+    // cell's playlist, volume override or watchdog state.
     final subscription = _progressSubscriptions.remove(index);
-    await subscription?.cancel();
     _progress.remove(index);
     _cellVolumes.remove(index);
     _lastAdvanceAt.remove(index);
     _restartedAt.remove(index);
     final handle = _handles.remove(index);
+    // The cell is captured before any await: a wall that shrinks and re-grows
+    // while this release is parked would otherwise let the deferred
+    // `playerId = null` below land on the NEW cell at this index and hide its
+    // freshly acquired player from the host. A removed index has no cell left
+    // to stamp, so the capture is simply null there.
+    final cell = index < _cells.length ? _cells[index] : null;
+    await subscription?.cancel();
     if (handle == null) {
       return;
     }
-    // A shrink may already have dropped this index from _cells; indexing the
-    // shorter list would throw inside the unawaited release and strand the
-    // player - the leak the bounds check exists to prevent.
-    if (index < _cells.length) {
-      _cells[index].playerId = null;
-    }
+    cell?.playerId = null;
     try {
       await handle.pause();
     } on Object catch (error) {
@@ -212,14 +262,17 @@ extension _MultiviewControllerInternals on MultiviewController {
     }
 
     if (position != previous.position) {
-      _progress[index] = (position: position, at: _clock());
+      // One clock read per event: this handler runs for every transport
+      // update of every cell, so a wall of N players multiplies it.
+      final now = _clock();
+      _progress[index] = (position: position, at: now);
 
       // Stability retires the restart budget: a cell that has played cleanly
       // for a stall window since its last restart is not "one hiccup away
       // from permanent dark" any more.
       final restartedAt = _restartedAt[index];
 
-      if (restartedAt != null && _clock().difference(restartedAt) >= _config.cellStallTimeout) {
+      if (restartedAt != null && now.difference(restartedAt) >= _config.cellStallTimeout) {
         _restartedAt.remove(index);
         final cell = index < _cells.length ? _cells[index] : null;
 
@@ -255,6 +308,7 @@ extension _MultiviewControllerInternals on MultiviewController {
     //   (silent by default) even when it carries an override, otherwise the
     //   whole wall is audible at once and switching the audio focus changes
     //   nothing.
+    final changes = <Future<void>>[];
     for (final cell in _cells) {
       final handle = _handles[cell.index];
       if (handle == null) {
@@ -271,9 +325,16 @@ extension _MultiviewControllerInternals on MultiviewController {
       };
 
       cell.hasAudioFocus = desired > 0;
-      await handle.setVolume(desired);
-      await handle.setMute(muted: desired <= 0);
+      changes
+        ..add(handle.setVolume(desired))
+        ..add(handle.setMute(muted: desired <= 0));
     }
+    // Applied in parallel: every focus switch re-levels every handle on the
+    // wall, and awaiting each engine call in turn is what makes the switch
+    // feel laggy - N cells means N serialized round-trips before the new
+    // focus is actually audible. The decisions above are already final, so
+    // the order the engine sees them in does not matter.
+    await Future.wait(changes);
   }
 
   Future<void> _applyQuality() async {
@@ -353,7 +414,15 @@ extension _MultiviewControllerInternals on MultiviewController {
     await _applyBudget();
   }
 
-  Future<void> _handleStall(MultiviewCell cell) async {
+  Future<void> _handleStall(MultiviewCell cell) {
+    // Sequenced per index: a stall restart racing a host assign for the same
+    // cell would release the player that assign was about to attach, or
+    // re-point it after the attach and leave the cell showing a source that
+    // is not the one it reports.
+    return _sequenced(cell.index, () => _handleStallNow(cell));
+  }
+
+  Future<void> _handleStallNow(MultiviewCell cell) async {
     _log.warning(
       'cell stalled',
       fields: <String, Object?>{

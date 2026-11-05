@@ -111,16 +111,28 @@ extension MultiviewControllerFocus on MultiviewController {
     _ensureNotDisposed();
     _patrol?.cancel();
     _patrol = null;
+    _activePatrolInterval = null;
     _config = _config.copyWith(patrolEnabled: false);
     _emit();
   }
 
   void _startPatrolIfConfigured() {
-    _patrol?.cancel();
-    _patrol = null;
     if (!_config.patrolEnabled || _cells.length <= 1) {
+      _patrol?.cancel();
+      _patrol = null;
+      _activePatrolInterval = null;
       return;
     }
+    // Rebuilt only when there is no timer yet or the interval changed: this
+    // runs on every updateConfig and startPatrol, and recreating the timer
+    // each time would reset the rotation phase - a host that touches the
+    // wall's config faster than the interval would starve the patrol, which
+    // would then wait forever for a first tick that keeps being postponed.
+    if (_patrol != null && _activePatrolInterval == _config.patrolInterval) {
+      return;
+    }
+    _patrol?.cancel();
+    _activePatrolInterval = _config.patrolInterval;
     _patrol = Timer.periodic(_config.patrolInterval, (_) => unawaited(_rotateFocus()));
   }
 

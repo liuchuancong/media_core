@@ -127,10 +127,28 @@ final class MultiviewController {
   /// plays cleanly for a stall window afterwards earns the budget back.
   final Map<int, DateTime> _restartedAt = <int, DateTime>{};
 
+  /// Cell index → the sequenced operation currently settling for that cell.
+  /// Opens and clears for one cell run in order (see `_sequenced`), so a host
+  /// re-assign racing a patrol advance, or a clear racing an open, cannot
+  /// double-acquire a player or detach one that is still being attached.
+  final Map<int, Future<void>> _cellOps = <int, Future<void>>{};
+
+  /// Cell indexes whose sequenced operation is executing right now (as
+  /// opposed to waiting its turn in [_cellOps]); lets the playlist advance a
+  /// failed open triggers for its own cell continue inline instead of
+  /// queueing behind itself.
+  final Set<int> _runningCellOps = <int>{};
+
   final StreamController<MultiviewSnapshot> _snapshotController = StreamController<MultiviewSnapshot>.broadcast();
 
   Timer? _tick;
   Timer? _patrol;
+
+  /// The interval the running [_patrol] timer was created with. The timer is
+  /// rebuilt only when this stops matching the configured interval: recreating
+  /// it on every config touch would reset the rotation phase, and a host that
+  /// adjusts the wall faster than the interval would starve the patrol.
+  Duration? _activePatrolInterval;
 
   /// Whether a progress sweep is still running.
   ///
@@ -259,12 +277,20 @@ final class MultiviewController {
     _tick = null;
     _patrol?.cancel();
     _patrol = null;
+    _activePatrolInterval = null;
 
     _log.debug('releasing the wall', fields: <String, Object?>{'cells': _cells.length, 'playing': _playingCount});
 
-    for (final index in _cells.map((cell) => cell.index).toList()) {
-      await _releaseCell(index);
-    }
+    // Released concurrently: handing back N players one await at a time makes
+    // leaving the wall wait on every engine pause/recycle in sequence. Each
+    // release carries its own catch so one refusing player cannot strand the
+    // remaining cells and danmaku sessions undisposed.
+    await Future.wait(<Future<void>>[
+      for (final cell in _cells)
+        _releaseCell(cell.index).catchError((Object error) {
+          _log.warning('cell release failed during wall dispose', error: error, fields: {'index': cell.index});
+        }),
+    ]);
     for (final cell in _cells) {
       await cell.danmaku?.dispose();
       cell.danmaku = null;
