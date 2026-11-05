@@ -95,6 +95,11 @@ final class MusicDownloadQueue {
   final Map<String, DateTime> _lastSpeedAt = <String, DateTime>{};
   final Map<String, int> _lastSpeedBytes = <String, int>{};
 
+  /// Per-task spacing of the ffmpeg path's update emits; status transitions
+  /// bypass it (see `_runFfmpeg`).
+  final Map<String, DateTime> _lastFfmpegEmitAt = <String, DateTime>{};
+  final Map<String, MusicDownloadStatus> _lastFfmpegStatus = <String, MusicDownloadStatus>{};
+
   bool _disposed = false;
 
   /// Task updates: progress ticks and status changes.
@@ -357,6 +362,8 @@ final class MusicDownloadQueue {
     _lastProgressAt.remove(taskId);
     _lastSpeedAt.remove(taskId);
     _lastSpeedBytes.remove(taskId);
+    _lastFfmpegEmitAt.remove(taskId);
+    _lastFfmpegStatus.remove(taskId);
 
     // The segment cache is scratch space for this task; removing the row makes
     // it unreachable, whether or not the viewer also asked to delete the file.
@@ -387,6 +394,8 @@ final class MusicDownloadQueue {
         _lastProgressAt.remove(id);
         _lastSpeedAt.remove(id);
         _lastSpeedBytes.remove(id);
+        _lastFfmpegEmitAt.remove(id);
+        _lastFfmpegStatus.remove(id);
       }
 
       return remove;
@@ -556,7 +565,11 @@ final class MusicDownloadQueue {
       await _files.delete(path);
     }
 
-    var resume = await _files.length(path) > 0;
+    // `keepPartial` already decides whether a usable partial file is on disk:
+    // either it was kept (resume from its length) or it was deleted / never
+    // existed (transfer from zero). The extra length() here cost a file
+    // system round trip on every attempt.
+    var resume = keepPartial;
 
     while (true) {
       try {
@@ -734,7 +747,22 @@ final class MusicDownloadQueue {
       lyric: task.request.embedLyric ? _downloadLyricText(task.request) : null,
       inputUrl: inputUrl,
       onUpdate: (updated) {
-        if (_isActive(task.id, token)) {
+        if (!_isActive(task.id, token)) {
+          return;
+        }
+
+        // ffmpeg's statistics callback can tick far faster than a progress
+        // bar reads. The direct path throttles through _reportProgress;
+        // mirror the same spacing here instead of emitting every tick to the
+        // update stream. Status transitions always go through, so a
+        // completed/failed snapshot is never withheld.
+        final now = DateTime.now();
+        final lastAt = _lastFfmpegEmitAt[task.id];
+        final statusChanged = updated.status != _lastFfmpegStatus[task.id];
+
+        if (statusChanged || lastAt == null || now.difference(lastAt) >= progressInterval) {
+          _lastFfmpegEmitAt[task.id] = now;
+          _lastFfmpegStatus[task.id] = updated.status;
           _emit(updated);
         }
       },
@@ -813,7 +841,36 @@ final class MusicDownloadQueue {
     }
 
     final directory = _hlsCacheDirectory(request);
+
+    // The cache is keyed by segment index only, and [completedHlsSegments]
+    // trusts existence: a retry that landed on a re-segmented playlist (a
+    // fresh resolver URL, another mirror) would splice the previous
+    // playlist's segments into the rewritten one and produce a corrupt file.
+    // A marker pins the cache to the URL that produced it. Both halves are
+    // best-effort: a marker that cannot be read or written degrades to the
+    // old index-only behaviour rather than failing the download.
+    final marker = File('$directory/source.url');
+    String? previousUrl;
+
+    try {
+      previousUrl = marker.existsSync() ? await marker.readAsString() : null;
+    } on Object catch (error) {
+      MediaCoreLog.log(LogLevel.debug, LogCategory.error, 'hls cache marker read failed', error: error);
+    }
+
+    if (previousUrl != null && previousUrl != request.url) {
+      await _discardHlsCache(request);
+    }
+
     await Directory(directory).create(recursive: true);
+
+    // Written before the segment downloads so an interrupted prepare still
+    // records provenance for the next attempt's cache-reuse decision.
+    try {
+      await marker.writeAsString(request.url, flush: true);
+    } on Object catch (error) {
+      MediaCoreLog.log(LogLevel.debug, LogCategory.error, 'hls cache marker write failed', error: error);
+    }
 
     String? initPath;
 
@@ -1289,6 +1346,8 @@ final class MusicDownloadQueue {
     _inFlight.clear();
     _paused.clear();
     _abandoned.clear();
+    _lastFfmpegEmitAt.clear();
+    _lastFfmpegStatus.clear();
 
     await _downloader.dispose();
     await _transport.dispose();

@@ -229,12 +229,6 @@ final class AudioPlaybackController {
       duration: track.duration ?? Duration.zero,
     );
 
-    final handle = await _ensureHandle();
-
-    if (handle == null || _disposed || operation != _operation) {
-      return;
-    }
-
     if (resetRetry) {
       // A new track is a new error story: the previous one's retry budget must
       // not carry over and silently skip the refresh.
@@ -242,7 +236,9 @@ final class AudioPlaybackController {
     }
 
     try {
-      await _openTrack(handle, track, quality: _quality, operation: operation);
+      // The future is passed, not awaited first: opening then overlaps engine
+      // creation with the source resolution (see _openTrack).
+      await _openTrack(_ensureHandle(), track, quality: _quality, operation: operation);
     } on Object catch (error) {
       await _fail(track, error, operation: operation);
     }
@@ -615,8 +611,13 @@ final class AudioPlaybackController {
   }
 
   /// Resolves a fresh URL (unless a live cache entry is usable) and opens it.
+  ///
+  /// [handleFuture] is the not-yet-awaited kernel acquisition: URL resolution
+  /// and engine creation are independent, so starting the fetch here lets a
+  /// cold first play run them concurrently instead of paying
+  /// acquire-then-resolve one after the other.
   Future<void> _openTrack(
-    PlayerHandle handle,
+    Future<PlayerHandle?> handleFuture,
     MusicTrack track, {
     required MusicQuality quality,
     required int operation,
@@ -628,25 +629,40 @@ final class AudioPlaybackController {
     final resolvedKey = _resolvedKey(track, quality);
     final cached = _resolved[resolvedKey];
 
+    final cacheHit = cached != null && !cached.isExpired() && !_failed.contains(trackKey);
+
+    // Local files never expire and never fail to resolve, so they are not
+    // cached: a re-resolve is a stat, and caching would hide a file the user
+    // just edited or replaced.
+    final resolving = cacheHit ? null : _registry.resolveTrackSource(track, quality: quality);
+
+    // Awaited on every path (before the handle guards) so the in-flight fetch
+    // can never surface as an unhandled error when a superseded open returns
+    // early; both futures already run concurrently, so the order costs
+    // nothing on the happy path.
+    final resolved = resolving == null ? null : await resolving;
+    final handle = await handleFuture;
+
+    if (handle == null || _disposed || operation != _operation) {
+      return;
+    }
+
     final TrackSource source;
 
-    if (cached != null && !cached.isExpired() && !_failed.contains(trackKey)) {
-      source = cached;
-    } else {
-      // Local files never expire and never fail to resolve, so they are not
-      // cached: a re-resolve is a stat, and caching would hide a file the user
-      // just edited or replaced.
-      source = await _registry.resolveTrackSource(track, quality: quality);
-
+    if (resolved != null) {
       if (!track.isLocal) {
         // The other tiers' entries for this track are stale the moment a
         // fresh resolution exists; dropping them keeps the cache bounded by
         // the queue rather than by quality switches.
         _resolved.removeWhere((key, _) => key.startsWith('$trackKey\u0000'));
-        _resolved[resolvedKey] = source;
+        _resolved[resolvedKey] = resolved;
       }
 
       _failed.remove(trackKey);
+
+      source = resolved;
+    } else {
+      source = cached!;
     }
 
     if (_disposed || operation != _operation) {

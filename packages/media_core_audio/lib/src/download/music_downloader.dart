@@ -65,7 +65,7 @@ final class MusicDownloader {
   static Future<void>? _initializing;
 
   final Map<String, FFmpegSession> _sessions = <String, FFmpegSession>{};
-  final Map<String, StringBuffer> _logs = <String, StringBuffer>{};
+  final Map<String, List<String>> _logs = <String, List<String>>{};
 
   bool _disposed = false;
 
@@ -275,7 +275,7 @@ final class MusicDownloader {
 
     onUpdate?.call(running);
 
-    final logs = StringBuffer();
+    final logs = <String>[];
     _logs[task.id] = logs;
 
     final session = FFmpegKit.createSessionFromArguments(buildArguments(task.request, lyric: lyric, inputUrl: inputUrl));
@@ -289,16 +289,14 @@ final class MusicDownloader {
       final message = log.message;
 
       if (message.trim().isNotEmpty) {
-        logs.writeln(message);
+        logs.add(message);
 
         // Bounded: a long download logs thousands of lines and only the tail
-        // is ever useful for diagnosing a failure.
-        final lines = logs.toString().split('\n');
-
-        if (lines.length > config.maxLogLines) {
-          logs
-            ..clear()
-            ..writeln(lines.sublist(lines.length - config.maxLogLines).join('\n'));
+        // is ever useful for diagnosing a failure. The window slides in
+        // place; the previous StringBuffer version copied the whole buffer
+        // (toString + split) for every single log line.
+        if (logs.length > config.maxLogLines) {
+          logs.removeRange(0, logs.length - config.maxLogLines);
         }
       }
     });
@@ -345,7 +343,7 @@ final class MusicDownloader {
         return;
       }
 
-      final tail = logs.toString().trim();
+      final tail = logs.join('\n').trim();
       final reason = _extractError(tail) ?? 'ffmpeg exited with code $code';
 
       MediaCoreLog.warning(

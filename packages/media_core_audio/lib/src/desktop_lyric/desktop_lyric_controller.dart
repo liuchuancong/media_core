@@ -93,6 +93,13 @@ final class DesktopLyricController {
   DesktopLyricState? _lastPushed;
   Duration _appliedOffset = Duration.zero;
 
+  // What the last accepted push was built from; the cheap pre-check in
+  // [_push] compares these instead of allocating a state per tick.
+  LyricLine? _pushedLine;
+  LyricLine? _pushedNextLine;
+  double _pushedProgress = 0;
+  bool _pushedPlaying = false;
+
   /// Track whose lyric is currently loaded.
   ///
   /// Tracked here rather than read back from the player: the reload must fire
@@ -160,6 +167,13 @@ final class DesktopLyricController {
       return false;
     }
 
+    // Load (or take) the lyric before the window appears: the overlay is a
+    // separate window, and one that pops up empty and fills a beat later
+    // reads as a glitch. `_reloadLyric`'s internal push no-ops while
+    // `_visible` is still false, so the loaded content lands with the single
+    // forced push after the window is up.
+    await _reloadLyric(force: true);
+
     final supported = await _transport.show();
 
     if (!supported) {
@@ -174,7 +188,6 @@ final class DesktopLyricController {
       _bind();
     }
 
-    await _reloadLyric(force: true);
     _push(force: true);
 
     _log.info('desktop lyric overlay shown');
@@ -430,6 +443,24 @@ final class DesktopLyricController {
     final reading = _timeline.current;
     final line = reading.line;
     final next = _document.lineAfter(reading.index);
+    final progress = reading.lineProgress;
+    final playing = player.state.playing;
+
+    // Cheap pre-check before any allocation: every path that changes chrome
+    // (style, lock, display options, document, visibility) pushes with
+    // [force], and a document offset copy shares the same [LyricLine]
+    // objects, so line identity plus the frame deltas below cover exactly
+    // what `_sameFrame` would compare — without building the state first.
+    // A 60 Hz position tick then costs four comparisons instead of a
+    // [DesktopLyricState] plus display strings.
+    if (!force &&
+        _lastPushed != null &&
+        identical(line, _pushedLine) &&
+        identical(next, _pushedNextLine) &&
+        playing == _pushedPlaying &&
+        (progress - _pushedProgress).abs() < 0.02) {
+      return;
+    }
 
     final state = DesktopLyricState(
       text: line == null ? '' : _displayText(line.text),
@@ -439,8 +470,8 @@ final class DesktopLyricController {
         swap: _display.swapTranslationAndRomanization,
       ),
       nextLine: next == null ? null : _displayText(next.text),
-      progress: reading.lineProgress,
-      playing: player.state.playing,
+      progress: progress,
+      playing: playing,
       locked: _locked,
       clickThrough: _locked,
       visible: _visible,
@@ -448,30 +479,17 @@ final class DesktopLyricController {
       hasLyrics: !_document.isEmpty,
     );
 
-    if (!force && _lastPushed != null && _sameFrame(_lastPushed!, state)) {
-      return;
-    }
-
     _lastPushed = state;
+    _pushedLine = line;
+    _pushedNextLine = next;
+    _pushedProgress = progress;
+    _pushedPlaying = playing;
 
     unawaited(
       _transport.update(state).catchError((Object error) {
         MediaCoreLog.log(LogLevel.debug, LogCategory.audio, 'desktop lyric push failed', error: error);
       }),
     );
-  }
-
-  /// Whether a push would change nothing a viewer could see.
-  bool _sameFrame(DesktopLyricState a, DesktopLyricState b) {
-    return a.text == b.text &&
-        a.translation == b.translation &&
-        a.nextLine == b.nextLine &&
-        a.playing == b.playing &&
-        a.locked == b.locked &&
-        a.visible == b.visible &&
-        a.hasLyrics == b.hasLyrics &&
-        (b.progress - a.progress).abs() < 0.02 &&
-        identical(a.style, b.style);
   }
 
   String _displayText(String text) => text.trim().isEmpty ? '♪' : text;

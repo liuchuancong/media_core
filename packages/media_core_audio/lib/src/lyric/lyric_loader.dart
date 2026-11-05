@@ -92,8 +92,13 @@ final class LyricLoader {
         (document) {
           _inFlight.remove(key);
 
+          // Empty documents are cached too: "no lyric" is a stable fact for
+          // most local tracks, and skipping the store made every play start
+          // and prefetch re-walk the provider chain for the same song. A
+          // [force] load still bypasses the cache.
+          _store(key, document);
+
           if (!document.isEmpty) {
-            _store(key, document);
             _log.info('lyric loaded', fields: <String, Object?>{'track': track.title, 'sourceId': track.sourceId});
           }
 

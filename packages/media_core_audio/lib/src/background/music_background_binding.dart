@@ -65,6 +65,10 @@ final class MusicBackgroundBinding {
   /// do not re-send an unchanged queue.
   String? _publishedQueueSignature;
 
+  /// Signature of the last media item published, for the same reason: the
+  /// item changes with the track (or its real duration), never per tick.
+  String? _publishedItemSignature;
+
   bool _attached = false;
   bool _disposed = false;
 
@@ -115,6 +119,10 @@ final class MusicBackgroundBinding {
     audio.skipToQueueItemHandler = null;
     audio.setSpeedHandler = null;
 
+    // A re-attach must republish the surface from scratch: detach cleared it.
+    _publishedQueueSignature = null;
+    _publishedItemSignature = null;
+
     unawaited(_stateSub?.cancel());
     _stateSub = null;
 
@@ -161,6 +169,7 @@ final class MusicBackgroundBinding {
     final track = state.track;
 
     if (track == null) {
+      _publishedItemSignature = null;
       handler
         ..publishIdle()
         ..clearMediaItem();
@@ -168,7 +177,17 @@ final class MusicBackgroundBinding {
       return;
     }
 
-    handler.publishMediaItem(_itemFor(track, state));
+    // The state stream emits per position tick, and `MediaSessionValue.add`
+    // has no change detection: republishing the item every tick re-maps it
+    // and fans a platform-channel update out to the surfaces for data that
+    // only changes with the track (or when the engine first reports the real
+    // duration). The queue below already carries the same signature idea.
+    final itemSignature = '${track.sourceId}\u0000${track.id}\u0000${state.duration.inMilliseconds}';
+
+    if (itemSignature != _publishedItemSignature) {
+      _publishedItemSignature = itemSignature;
+      handler.publishMediaItem(_itemFor(track, state));
+    }
 
     if (state.queueLength > 0) {
       // The queue reaches the platform only when it actually changed: the
