@@ -277,18 +277,22 @@ abstract final class ForegroundJobs {
     BackgroundServiceOwner.jobOwners.forEach(_repaintOne);
   }
 
-  /// Whole-percent aggregate progress of [owner]'s sessions, or null when
-  /// none carries a fraction.
-  static int? _fractionPercentFor(BackgroundServiceOwner owner) {
-    final aggregate = _aggregateProgress(sessionsFor(owner));
-
-    return aggregate == null ? null : ((aggregate.fraction ?? 0) * 100).round();
-  }
-
   static void _repaintOne(BackgroundServiceOwner owner) {
+    final sessions = sessionsFor(owner);
+
+    // Nothing running and nothing on the shade. Without this guard, every
+    // change event of every feature allocated a bookkeeping line here only
+    // for the empty branch below to remove it again. `sessionsFor` builds and
+    // sorts a fresh list on every call, so it is taken once and reused by
+    // everything under this repaint rather than re-queried per read.
+    if (sessions.isEmpty && !_lines.containsKey(owner)) {
+      return;
+    }
+
     final line = _lineFor(owner);
-    final title = titleFor(owner);
-    final body = bodyFor(owner);
+    final first = sessions.isEmpty ? null : sessions.first;
+    final title = first?.title;
+    final body = first == null ? null : _compose(first, sessions.length - 1);
 
     if (title == null) {
       // Nothing to show: the window closes with the line rather than staying open
@@ -308,7 +312,10 @@ abstract final class ForegroundJobs {
 
     if ((line.showing || line.dismissed) && line.title == title && line.body == body) {
       final drawn = line.fractionPercent;
-      final current = _fractionPercentFor(owner);
+      // Whole percents only - that is what the platform draws. The aggregate
+      // comes from the sessions already read above.
+      final aggregate = _aggregateProgress(sessions);
+      final current = aggregate == null ? null : ((aggregate.fraction ?? 0) * 100).round();
 
       if (line.dismissed || drawn == current) {
         // Same words and the same (or absent) bar: another feature's change
@@ -320,9 +327,9 @@ abstract final class ForegroundJobs {
 
       // Text identical but the bar moved: a host whose description is static
       // while its fraction advances would otherwise freeze the drawn progress
-      // forever. Whole percents only - that is what the platform draws.
+      // forever.
       line.fractionPercent = current;
-      unawaited(_flush(owner, line, title, body));
+      unawaited(_flush(owner, line, title, body, sessions));
       line.gap?.cancel();
       line.gap = Timer(postGap, () => _onDeadline(owner, line));
 
@@ -342,7 +349,7 @@ abstract final class ForegroundJobs {
     // Not claimed before the platform answers. A repost the plugin refused leaves
     // nothing on the shade, and a line that believed it was up would compare its
     // own text against what nobody ever saw and never try again.
-    unawaited(_flush(owner, line, title, body));
+    unawaited(_flush(owner, line, title, body, sessions));
 
     line.gap = Timer(postGap, () => _onDeadline(owner, line));
   }
@@ -361,15 +368,25 @@ abstract final class ForegroundJobs {
     }
   }
 
-  static Future<void> _flush(BackgroundServiceOwner owner, _Line line, String? title, String? body) async {
+  /// Posts [owner]'s line from the [sessions] snapshot the repaint read.
+  ///
+  /// The snapshot is the caller's, not a fresh read: `_flush` runs inside the
+  /// same synchronous change event, so a second `sessionsFor` here would build
+  /// and sort exactly the same list again.
+  static Future<void> _flush(
+    BackgroundServiceOwner owner,
+    _Line line,
+    String? title,
+    String? body,
+    List<BackgroundRequest> sessions,
+  ) async {
     final client = MediaCoreNotify.client;
-    final first = _firstFor(owner);
+    final first = sessions.isEmpty ? null : sessions.first;
 
     if (client == null || first == null || title == null) {
       return;
     }
 
-    final sessions = sessionsFor(owner);
     final others = sessions.length - 1;
     final aggregate = _aggregateProgress(sessions);
 
