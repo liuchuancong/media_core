@@ -716,7 +716,8 @@ Future<void> _untilPlayRequested(FakePlayerAdapter adapter) async {
 /// stands in for a stream that is actually advancing. It seeks the adapters
 /// rather than `controller.handle`, because the handle is only published once
 /// verification has already passed — during the sweep it is still staged.
-/// Verification polls every 250 ms inside its deadline, which this covers.
+/// Verification wakes on each transport update and re-checks on a short
+/// cadence inside its deadline, both of which this covers.
 Future<void> _pumpPosition(Iterable<FakePlayerAdapter> adapters, {Duration window = const Duration(seconds: 4)}) async {
   final deadline = DateTime.now().add(window);
   var position = const Duration(seconds: 1);

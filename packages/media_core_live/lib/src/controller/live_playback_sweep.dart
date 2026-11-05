@@ -94,6 +94,19 @@ extension _LivePlaybackSweep on LivePlaybackController {
         );
 
         first = false;
+
+        // A candidate that failed because the playback it belonged to was
+        // superseded or stopped is not a candidate failure: it has no
+        // successor in this sweep. Advancing the ledger here used to move
+        // `_sourceIndex` past the line a queued switchLine had already
+        // chosen, and an exhausted report after that would describe a
+        // playback the user had already replaced. A superseding play of
+        // exactly this playback needs no advance either — its own sweep
+        // starts the ladder again (or is dropped by the duplicate guard
+        // after this sweep commits).
+        if (_abandoned(generation)) {
+          return;
+        }
       }
 
       if (!await _nextCandidate()) {
@@ -124,31 +137,65 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     final nextEngine = _engines[_engineIndex + 1];
 
-    var nextSources = _sources;
-    var resumeAt = _sweepStart;
+    // The refresh below is an await a newer command can overtake, so the
+    // candidate move it feeds is fenced on the play generation: a refresh —
+    // or a failure of one — that lands after play, switchLine, retry, pause,
+    // close or dispose belongs to a playback that no longer exists, and
+    // adopting it anyway would overwrite the ledger the newer command just
+    // wrote. The queued task would then sweep the stale lines, not the
+    // requested ones, because `_startPlayback` scores its engine order from
+    // `_sources.first`.
+    final generation = _playGeneration;
 
+    // Creating the next engine's player does not depend on the refresh
+    // answer — a player is source-agnostic — so it starts now and overlaps
+    // the resolver's round-trip instead of running after it. Engine switches
+    // happen on the failure paths a viewer is staring at, and the create is
+    // the part of the switch the round-trip used to sit in front of. The
+    // prefetch is consumed by the immediately following `_openOnStaged`
+    // (nothing awaits between this return and that call), or released by the
+    // fence below when this sweep is superseded while the refresh runs.
     final resolver = onEngineFallbackSources;
 
     if (resolver != null) {
+      final prefetched = kernel.create(preferredBackend: nextEngine)..ignore();
+      _engineSwitchPlayer = prefetched;
+    }
+
+    var nextSources = _sources;
+    var resumeAt = _sweepStart;
+
+    if (resolver != null) {
+      var refreshed = const <PlayerSource>[];
+      var refreshFailed = false;
+
       try {
-        final refreshed = await resolver(nextEngine, _sources);
-
-        if (refreshed.isNotEmpty) {
-          nextSources = List<PlayerSource>.unmodifiable(refreshed);
-          resumeAt = 0;
-
-          MediaCoreLog.info(
-            LogCategory.fallback,
-            'engine switch sources refreshed by the caller',
-            fields: <String, Object?>{'nextEngine': nextEngine, 'lines': nextSources.length},
-          );
-        }
+        refreshed = await resolver(nextEngine, _sources);
       } on Object catch (error) {
+        refreshFailed = true;
+
         MediaCoreLog.warning(
           LogCategory.fallback,
           'engine switch source refresh failed — reusing the current lines',
           error: error,
           fields: <String, Object?>{'nextEngine': nextEngine},
+        );
+      }
+
+      if (_abandoned(generation)) {
+        await _discardPrefetchedEngine();
+
+        return true;
+      }
+
+      if (!refreshFailed && refreshed.isNotEmpty) {
+        nextSources = List<PlayerSource>.unmodifiable(refreshed);
+        resumeAt = 0;
+
+        MediaCoreLog.info(
+          LogCategory.fallback,
+          'engine switch sources refreshed by the caller',
+          fields: <String, Object?>{'nextEngine': nextEngine, 'lines': nextSources.length},
         );
       }
     }
@@ -170,6 +217,31 @@ extension _LivePlaybackSweep on LivePlaybackController {
     _sourceIndex = resumeAt;
 
     return true;
+  }
+
+  /// Releases an engine-switch prefetch its sweep will no longer consume.
+  ///
+  /// Reached only when the generation fence in [_nextCandidate] saw the
+  /// playback move while the refresh round-trip ran; the created player is
+  /// idle (nothing was opened on it), so releasing it is all the unwind
+  /// there is.
+  Future<void> _discardPrefetchedEngine() async {
+    final prefetched = _engineSwitchPlayer;
+    _engineSwitchPlayer = null;
+
+    if (prefetched == null) {
+      return;
+    }
+
+    try {
+      final staged = await prefetched;
+
+      if (!staged.disposed) {
+        await kernel.release(staged.id);
+      }
+    } on Object {
+      // The create itself failed — there is nothing to release.
+    }
   }
 
   /// Offers [onRecoverySources] the lines that just died and adopts what it
@@ -290,7 +362,12 @@ extension _LivePlaybackSweep on LivePlaybackController {
 
     await handle.open(source);
 
-    if (_abandoned(generation)) {
+    // Same fencing as the staged path applies after its open: a superseding
+    // play of exactly this playback wants this candidate committed, so the
+    // attempt runs on — abandoning it here would make the queued duplicate
+    // re-open a source this open has already consumed. Any other supersede
+    // (another line, pause, close) leaves the handle for the newer command.
+    if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
       return;
     }
 
@@ -299,9 +376,12 @@ extension _LivePlaybackSweep on LivePlaybackController {
     // The step that separates "opened" from "playing": without it an
     // engine that accepts a source but never delivers a frame reads as
     // success and the sweep stops on a frozen player.
-    await _verifyPlayback(handle, source);
+    await _verifyPlayback(handle, source, generation: generation, engine: engine);
 
-    if (_abandoned(generation)) {
+    // Same rule as the staged tail: a superseding play of exactly this
+    // playback is answered by committing, not by skipping the bookkeeping
+    // that lets its duplicate guard recognise what is already playing.
+    if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
       return;
     }
 
@@ -369,7 +449,16 @@ extension _LivePlaybackSweep on LivePlaybackController {
     final PlayerHandle staged;
 
     try {
-      staged = await kernel.create(preferredBackend: engine);
+      // Consume the player the sweep created for this engine while the
+      // source-refresh round-trip ran (see `_nextCandidate`). With no
+      // resolver there is no prefetch and this creates here, as before.
+      // `kernel.create` takes the engine as a preference, so consuming a
+      // prefetch made for this exact engine id is the same ask the inline
+      // create made.
+      final pending = _engineSwitchPlayer;
+      _engineSwitchPlayer = null;
+
+      staged = await (pending ?? kernel.create(preferredBackend: engine));
     } on Object catch (error) {
       MediaCoreLog.warning(
         LogCategory.fallback,
@@ -437,7 +526,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
       }
 
       await staged.play();
-      await _verifyPlayback(staged, source);
+      await _verifyPlayback(staged, source, generation: generation, engine: engine);
 
       if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
         throw StateError('Staged engine $engine was abandoned mid-verify.');
@@ -504,7 +593,13 @@ extension _LivePlaybackSweep on LivePlaybackController {
       rethrow;
     }
 
-    if (_abandoned(generation)) {
+    // The commit above already happened, so a superseded generation only
+    // skips the bookkeeping — unless the superseder is a play of exactly
+    // this playback, in which case the bookkeeping IS the answer: writing
+    // `_currentSource` here is what lets `_startPlayback`'s duplicate guard
+    // drop the queued duplicate instead of re-opening a source this commit
+    // just consumed.
+    if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
       return;
     }
 
@@ -537,7 +632,12 @@ extension _LivePlaybackSweep on LivePlaybackController {
   /// Silence at this point is not evidence of death, because there is no
   /// signal that says "still probing" — no position and no buffering
   /// report exist until the demuxer has finished opening.
-  Future<void> _verifyPlayback(PlayerHandle handle, PlayerSource source) async {
+  Future<void> _verifyPlayback(
+    PlayerHandle handle,
+    PlayerSource source, {
+    required int generation,
+    required String engine,
+  }) async {
     final window = watchdogs.sourceReadyTimeout;
 
     // Zero turns the deadline off, and verification *is* that deadline.
@@ -548,34 +648,73 @@ extension _LivePlaybackSweep on LivePlaybackController {
     final until = DateTime.now().add(window);
     var last = handle.playbackStream.value.position;
 
-    while (DateTime.now().isBefore(until)) {
-      if (_disposed || !_playbackRequested) {
-        throw StateError('Playback verification abandoned: playback was stopped.');
+    // The wait below ends on the transport's own updates instead of sleeping
+    // a fixed slice between polls: the first position advance is declared the
+    // moment the engine reports it, not up to one poll interval later — a
+    // fixed tax the old loop put on every candidate's happy path, including
+    // the first one a viewer is staring at. The wait is still bounded, so the
+    // abandonment and adapter-error checks keep their cadence when the engine
+    // has gone fully silent. A dropped wakeup is harmless: every iteration
+    // re-reads the mirror's current value, so the decision is
+    // level-triggered, not edge-triggered.
+    var wake = Completer<void>();
+    final updates = handle.playbackStream.listen((_) {
+      if (!wake.isCompleted) {
+        wake.complete();
       }
+    });
 
-      final adapterError = _sweepAdapterError;
+    try {
+      while (DateTime.now().isBefore(until)) {
+        // Superseded or stopped mid-verification: this sweep is done
+        // waiting. The check used to test only `_playbackRequested`, so a
+        // play or line switch — which keeps it true — left the dead
+        // candidate sitting out its whole window while the queued command
+        // waited behind the sweep task; the open the user asked for started
+        // late by up to `sourceReadyTimeout`. A play of exactly this
+        // playback is the exception, with the same fencing the open path
+        // applies: committing the staged player is the correct answer to it.
+        if (_abandoned(generation) && !_supersededBySamePlayback(engine, source)) {
+          throw StateError('Playback verification abandoned: playback was stopped.');
+        }
 
-      if (adapterError != null) {
-        throw StateError('${_lineAddress(source)} on ${handle.backendId} failed while verifying: $adapterError');
+        final adapterError = _sweepAdapterError;
+
+        if (adapterError != null) {
+          throw StateError('${_lineAddress(source)} on ${handle.backendId} failed while verifying: $adapterError');
+        }
+
+        final position = handle.playbackStream.value.position;
+
+        // A reopen restarts the demuxer clock: the mirror still holds the
+        // previous playback's position (18s of the old session, say), and
+        // the fresh stream starts near zero. Without re-baselining, every
+        // new sample is "smaller than last" and a perfectly healthy reopen
+        // is condemned as frozen at the stale value.
+        if (position < last) {
+          last = position;
+          continue;
+        }
+
+        if (position > last) {
+          return;
+        }
+
+        final remaining = until.difference(DateTime.now());
+
+        if (remaining <= Duration.zero) {
+          break;
+        }
+
+        await wake.future.timeout(
+          remaining < _verifyCheckEvery ? remaining : _verifyCheckEvery,
+          onTimeout: () {},
+        );
+
+        wake = Completer<void>();
       }
-
-      final position = handle.playbackStream.value.position;
-
-      // A reopen restarts the demuxer clock: the mirror still holds the
-      // previous playback's position (18s of the old session, say), and
-      // the fresh stream starts near zero. Without re-baselining, every
-      // new sample is "smaller than last" and a perfectly healthy reopen
-      // is condemned as frozen at the stale value.
-      if (position < last) {
-        last = position;
-        continue;
-      }
-
-      if (position > last) {
-        return;
-      }
-
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+    } finally {
+      await updates.cancel();
     }
 
     throw StateError(
@@ -636,3 +775,8 @@ String? _lineAddress(PlayerSource? source) {
 
   return uri == null ? null : '${uri.host}${uri.path}';
 }
+
+/// How often verification re-checks its abandonment and adapter-error
+/// conditions while no transport update arrives. Only a fully silent engine
+/// ever waits this long: any transport update ends the wait at once.
+const Duration _verifyCheckEvery = Duration(milliseconds: 100);

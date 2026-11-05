@@ -217,6 +217,20 @@ final class LiveWatchdogs {
       return;
     }
 
+    // A different engine may or may not report position: wait for its first
+    // event before judging it. The reset belongs to both directions of the
+    // capability change; it used to sit below the loss branch's early
+    // return, so a switch from a frame-reporting engine to one without (or
+    // to a released adapter, bound as null) kept the previous engine's
+    // position signal — and a possibly armed position stall — attached to an
+    // adapter that is going away.
+    _hasPositionSignal = false;
+    _cancelPositionStall();
+
+    // Only the frame-progress signal is capability-gated. Re-evaluate
+    // it so a live subscription never outlives a change of declaration
+    // in either direction. Other watchdogs derive from state
+    // transitions and are not affected by capability changes.
     if (!nowSupported) {
       _cancelVideoFrameStall();
       return;
@@ -225,11 +239,6 @@ final class LiveWatchdogs {
     if (_playing && !_buffering && _presentationVisible && _videoExpected) {
       _armVideoFrameStall();
     }
-
-    // A different engine may or may not report position: wait for its first
-    // event before judging it.
-    _hasPositionSignal = false;
-    _cancelPositionStall();
   }
 
   /// Whether the bound adapter declares a decoded-frame heartbeat.

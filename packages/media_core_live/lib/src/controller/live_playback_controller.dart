@@ -135,6 +135,15 @@ final class LivePlaybackController {
   /// sweep that re-opened line 0 behind the first one's back.
   String? _sweepAdapterError;
 
+  /// The player created for the sweep's next engine while the engine-fallback
+  /// source refresh was still in flight.
+  ///
+  /// Set by `_nextCandidate` and consumed by the immediately following staged
+  /// open — no await lies between the two, so the field never outlives one
+  /// candidate transition. A sweep superseded while the refresh ran releases
+  /// the prefetch instead of consuming it.
+  Future<PlayerHandle>? _engineSwitchPlayer;
+
   /// Bumped by [play] and [close]. A sweep captures it when it starts and
   /// abandons itself if it moved meanwhile.
   int _playGeneration = 0;
