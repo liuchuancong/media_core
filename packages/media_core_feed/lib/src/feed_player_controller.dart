@@ -92,6 +92,13 @@ final class FeedPlayerController {
 
   final List<PlayerSource> _items = <PlayerSource>[];
 
+  /// Unmodifiable view of [_items] handed out by [items].
+  ///
+  /// Rebuilt once per [load] instead of on every read: a host that touches
+  /// `items` per frame (builders do) would otherwise pay an O(n) copy each
+  /// time on a list that can hold a whole feed.
+  List<PlayerSource> _itemsView = const <PlayerSource>[];
+
   PlayerHandle? _handle;
   PoolPlayerHandle? _pooledPlayer;
 
@@ -128,11 +135,11 @@ final class FeedPlayerController {
   StreamSubscription<PlayerTransportState>? _transportSubscription;
 
   /// The stream currently forwarded into [_transportController], for
-  /// identity-only re-attachment.
+  /// equality-only re-attachment.
   Object? _transportSource;
 
   /// All items of the feed.
-  List<PlayerSource> get items => List<PlayerSource>.unmodifiable(_items);
+  List<PlayerSource> get items => _itemsView;
 
   /// Index of the item currently attached to the player, `-1` before [load].
   int get currentIndex => _index;
@@ -179,6 +186,13 @@ final class FeedPlayerController {
       ..addAll(items);
     _index = -1;
 
+    // A pause queued for the previous list's in-flight open belongs to that
+    // open, not to whatever this load attaches next.
+    _pauseDuringOpen = false;
+
+    final itemsView = List<PlayerSource>.unmodifiable(_items);
+    _itemsView = itemsView;
+
     _reportMemory();
     _log.debug(
       'feed loaded',
@@ -186,7 +200,7 @@ final class FeedPlayerController {
     );
 
     final activePool = pool;
-    _poolItemsSync = activePool?.setItems(List<PlayerSource>.unmodifiable(_items));
+    _poolItemsSync = activePool?.setItems(itemsView);
 
     return showIndex(initialIndex.clamp(0, items.isEmpty ? 0 : items.length - 1));
   }
@@ -364,8 +378,27 @@ final class FeedPlayerController {
       await activePool.onVisibilityChanged(index, 1);
       if (previousIndex >= 0 && previousIndex != index) {
         _log.info('pool visibility handoff', fields: <String, Object?>{'enter': index, 'leave': previousIndex});
-        await activePool.onVisibilityChanged(previousIndex, 0);
+        // Not awaited on purpose. The enter reconcile above already stood the
+        // previous item down (the pool pauses its former active before it
+        // starts the new one), so the leave report only trims the pool's
+        // visibility ledger - nothing in it can affect this attach. Awaiting
+        // it queued a second serialized reconcile - neighbour warm opens
+        // included - in front of the visible page taking its player on every
+        // swipe. Ordering still holds: the pool runs its operations FIFO, so
+        // this lands ahead of any reconcile a later swipe triggers.
+        unawaited(
+          activePool.onVisibilityChanged(previousIndex, 0).then((_) {}, onError: (Object error, StackTrace stackTrace) {
+            _log.debug('pool leave report failed', error: error, stackTrace: stackTrace);
+          }),
+        );
       }
+
+      // The pool now believes `index` is on screen, so this attach owes the
+      // ledger a matching leave. Record that before the staleness check: when
+      // the viewer moved on while the reports were in flight, the next attach
+      // reads `_attachedIndex` to report the leave - leaving it unset kept a
+      // swiped-past item at full visibility in the pool forever.
+      _attachedIndex = index;
 
       if (_disposed || _index != index) {
         // The user kept swiping while this page was opening.
@@ -384,7 +417,6 @@ final class FeedPlayerController {
       _pooledPlayer = pooled;
       _handle = pooled is KernelPoolPlayerHandle ? pooled.handle : null;
       _reattachTransport();
-      _attachedIndex = index;
       _log.info(
         'feed item attached',
         fields: <String, Object?>{'from': previousIndex, 'to': index, 'throughPool': pool != null},
@@ -452,6 +484,12 @@ final class FeedPlayerController {
 
   /// Resumes the visible item.
   Future<void> play() async {
+    // A play issued while an open was still in flight cancels a pause that was
+    // queued for that same open: whichever control the viewer pressed last
+    // wins. Without this, pause-then-play during an open landed paused when
+    // the open completed - the stale pause outranked the newer play.
+    _pauseDuringOpen = false;
+
     await (_handle?.play() ?? _pooledPlayer?.play());
 
     if (!_disposed) {
@@ -546,14 +584,21 @@ final class FeedPlayerController {
 
   /// Points the transport stream at the player that is now visible.
   ///
-  /// Idempotent by stream identity, and a handle's `playbackStream` is a
-  /// `ValueStream`, so one attachment also delivers the current value — that is
-  /// what makes a duration appear without waiting for the next tick.
+  /// Idempotent by stream equality: a handle's `playbackStream` hands out a
+  /// fresh wrapper object on every read (rxdart's `BehaviorSubject.stream` and
+  /// Dart's broadcast controllers both do, and both define those wrappers to
+  /// compare equal through the stream they wrap), so the comparison must be
+  /// `==`, not `identical()` - an identity check never matched, and every
+  /// attach, even one landing back on the player already listened to, rebuilt
+  /// the subscription and replayed the current value downstream as a
+  /// duplicate. A handle's `playbackStream` is a `ValueStream`, so one
+  /// attachment also delivers the current value — that is what makes a
+  /// duration appear without waiting for the next tick.
   void _reattachTransport() {
     if (_disposed) return;
 
     final stream = _handle?.playbackStream ?? _pooledPlayer?.playbackStream;
-    if (identical(_transportSource, stream)) return;
+    if (_transportSource == stream) return;
     _transportSource = stream;
 
     final previous = _transportSubscription;

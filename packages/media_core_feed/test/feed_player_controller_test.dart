@@ -27,6 +27,12 @@ final class _PoolHandle implements PoolPlayerHandle {
   @override
   bool isDisposed = false;
 
+  /// How many times the transport stream gained a listener.
+  ///
+  /// A broadcast controller fires `onListen` again after its last listener was
+  /// cancelled, so this counts subscriptions, not just the first one.
+  int transportListens = 0;
+
   @override
   Future<void> open(PlayerSource source, {bool autoPlay = false}) async {
     final gate = openGate;
@@ -63,7 +69,8 @@ final class _PoolHandle implements PoolPlayerHandle {
   @override
   Stream<PlayerTransportState> get playbackStream => _transport.stream;
 
-  final StreamController<PlayerTransportState> _transport = StreamController<PlayerTransportState>.broadcast();
+  late final StreamController<PlayerTransportState> _transport =
+      StreamController<PlayerTransportState>.broadcast(onListen: () => transportListens++);
 }
 
 final class _PoolHost implements PoolPlayerHost {
@@ -224,6 +231,42 @@ void main() {
 
       expect(controller.currentIndex, -1);
       expect(host.handles, isEmpty);
+    });
+
+    test('a play issued while an open is in flight outranks the pause before it', () async {
+      // The first attach is suspended on a gated open; a pause now queues a
+      // post-open pause, and the play after it must cancel that so the last
+      // user intent is the one that lands.
+      host.gate = Completer<void>();
+      final loading = controller.load(_items(3));
+      expect(controller.itemState, FeedItemState.opening);
+
+      await controller.pause();
+      expect(controller.itemState, FeedItemState.paused);
+
+      await controller.play();
+
+      host.gate!.complete();
+      await loading;
+
+      expect(controller.itemState, FeedItemState.playing, reason: 'the last user intent wins');
+      expect(
+        host.handles.first.isPlaying,
+        isTrue,
+        reason: 'no stale post-open pause may stop the engine the viewer asked to play',
+      );
+    });
+
+    test('reloading the same index keeps the transport subscription', () async {
+      await controller.load(_items(2));
+      expect(host.handles.first.transportListens, 1);
+
+      // The refresh re-opens the item behind index 0 on the same player, so
+      // re-attaching must not cancel and rebuild a subscription to a stream it
+      // is already listening to (and replay its current value as a duplicate).
+      await controller.load(<PlayerSource>[_source('refreshed')]);
+
+      expect(host.handles.first.transportListens, 1, reason: 'the re-attach landed on the already-listened stream');
     });
   });
 
