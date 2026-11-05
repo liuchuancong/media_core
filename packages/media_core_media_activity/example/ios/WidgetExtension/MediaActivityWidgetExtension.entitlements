@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Both the Runner and this extension must carry the SAME App Group or
+	     the artwork hand-off (and any container read) silently fails. The id
+	     must match MediaActivityAttributes.appGroupId in the pod's Shared
+	     subspec (spec §12.2). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.media_core.media_activity</string>
+	</array>
+</dict>
+</plist>

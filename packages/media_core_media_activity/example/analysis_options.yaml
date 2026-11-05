@@ -1,0 +1,10 @@
+# The workspace's canonical configuration lives at the repository root; this file
+# only points at it. A package may add rules here, and may not weaken the shared
+# set — an exception needs a record in docs/decisions/.
+analyzer:
+  exclude:
+    - build/**
+    # Xcode project files and the Widget Extension reference sources are not
+    # Dart; the extension Swift is compiled on macOS only.
+    - ios/**
+include: ../../../analysis_options.yaml
