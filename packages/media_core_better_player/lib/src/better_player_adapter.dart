@@ -128,25 +128,38 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       // better_player has no key/value surface: a small set of options maps
       // onto live controller commands, everything else needs a rebuild.
-      switch (option.key) {
-        case 'volume':
-          await controller.setVolume((option.value as num?)?.toDouble() ?? 1.0);
-          outcomes.add(EngineOptionOutcome.appliedLive);
+      // The controller commands throw StateError while no source was ever
+      // set up (the engine behind them does not exist yet), so the live
+      // application is guarded and answers needsRebuild instead of letting
+      // the throw escape the outcomes contract.
+      try {
+        switch (option.key) {
+          case 'volume':
+            await controller.setVolume((option.value as num?)?.toDouble() ?? 1.0);
+            outcomes.add(EngineOptionOutcome.appliedLive);
 
-        case 'speed':
-          await controller.setSpeed((option.value as num?)?.toDouble() ?? 1.0);
-          outcomes.add(EngineOptionOutcome.appliedLive);
+          case 'speed':
+            await controller.setSpeed((option.value as num?)?.toDouble() ?? 1.0);
+            outcomes.add(EngineOptionOutcome.appliedLive);
 
-        case 'looping':
-          await controller.setLooping(option.value == true);
-          outcomes.add(EngineOptionOutcome.appliedLive);
+          case 'looping':
+            await controller.setLooping(option.value == true);
+            outcomes.add(EngineOptionOutcome.appliedLive);
 
-        case 'mixWithOthers':
-          controller.setMixWithOthers(option.value == true);
-          outcomes.add(EngineOptionOutcome.appliedLive);
+          case 'mixWithOthers':
+            controller.setMixWithOthers(option.value == true);
+            outcomes.add(EngineOptionOutcome.appliedLive);
 
-        default:
-          outcomes.add(EngineOptionOutcome.needsRebuild);
+          default:
+            outcomes.add(EngineOptionOutcome.needsRebuild);
+        }
+      } on Object catch (error) {
+        _log.warning(
+          'engine option apply failed; the option needs a rebuilt engine',
+          error: error,
+          fields: <String, Object?>{'key': option.key},
+        );
+        outcomes.add(EngineOptionOutcome.needsRebuild);
       }
     }
 
@@ -381,7 +394,12 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // does this automatically.
     final contextConfig = _context?.config ?? PlayerAdapterConfig.of();
 
-    if (contextConfig.volume != 1.0) {
+    // Volume is owned by onAfterOpen, which applies the final value in every
+    // path (suppressed opens get 0.0). Writing the context volume here too
+    // duplicated a platform round-trip on every open and, worse, pushed an
+    // audible volume into the engine mid-setup on a suppressed open before
+    // onAfterOpen silenced it.
+    if (!audioOutputSuppressed && contextConfig.volume != 1.0) {
       await controller.setVolume(contextConfig.volume);
     }
 
@@ -425,7 +443,15 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onStop() async {
-    await controller.pause();
+    // better_player throws StateError from pause() when no source was ever
+    // set up and from seekTo() when the video never initialized, so a stop
+    // issued on a failed or still-initializing source must treat the engine
+    // calls as best-effort cleanup instead of letting the error escape.
+    try {
+      await controller.pause();
+    } on Object catch (error) {
+      _log.warning('pause failed during stop', error: error);
+    }
 
     if (isDisposed) return;
 
@@ -437,7 +463,12 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     // restarts the DVR window or is rejected outright.
     if (_liveSource) return;
 
-    await controller.seekTo(Duration.zero);
+    try {
+      await controller.seekTo(Duration.zero);
+    } on Object catch (error) {
+      // Best-effort cleanup, mirroring onClose.
+      _log.warning('seek failed during stop', error: error);
+    }
   }
 
   @override
@@ -469,7 +500,13 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     _lastReportedError = null;
     _playingNow = false;
 
-    await controller.pause();
+    // pause() throws StateError when the controller never received a data
+    // source (no engine behind it); closing such an adapter is still fine.
+    try {
+      await controller.pause();
+    } on Object catch (error) {
+      _log.warning('pause failed during close', error: error);
+    }
 
     if (isDisposed) return;
 
@@ -486,11 +523,12 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<void> onDispose() async {
-    // better_player returns early from dispose() when autoDispose is false,
-    // and this adapter sets it false to own the lifecycle itself. Without
-    // forceDispose the native  BetterPlayer survives — decoder, surface and
-    // audio included — so the next engine switch fights it for the hardware
-    // decoder and a closed room keeps playing behind the UI.
+    // better_player's dispose() returns early unless autoDispose is true or
+    // forceDispose is passed; the adapter cannot rely on either host-supplied
+    // or default configuration setting autoDispose, so the teardown always
+    // forces it. Without forceDispose the native BetterPlayer survives —
+    // decoder, surface and audio included — so the next engine switch fights
+    // it for the hardware decoder and a closed room keeps playing behind the UI.
     final controller = _controller;
     _controller = null;
 
@@ -600,7 +638,14 @@ final class BetterPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
       case BetterPlayerEventType.bufferingEnd:
         _bufferingNow = false;
-        emitBuffering(buffering: false, resumePlaying: state.playing);
+        // Resume from the play latch, not from `state.playing`: the base is
+        // in the buffering state here, so `state.playing` is always false and
+        // every recovered stall would publish paused while the engine is
+        // about to resume. The matching engine `play` event is then swallowed
+        // by the _playingNow latch, so the wrong paused state would persist
+        // until the next user pause/play. The latch is accurate because the
+        // stall's own pause event was dropped above.
+        emitBuffering(buffering: false, resumePlaying: _playingNow);
 
       case BetterPlayerEventType.finished:
         emitCompleted();
