@@ -30,6 +30,11 @@ final class GenaCallbackServer {
   final Map<String, _GenaRoute> _routes = <String, _GenaRoute>{};
   bool _running = false;
 
+  /// The start currently in flight, so concurrent subscribers join the
+  /// same binding instead of the fast ones returning early and
+  /// registering routes against a server that is not listening yet.
+  Future<void>? _startFuture;
+
   /// Whether the server accepts NOTIFYs.
   bool get isRunning => _running;
 
@@ -42,21 +47,32 @@ final class GenaCallbackServer {
   /// How many callback routes are registered.
   int get routeCount => _routes.length;
 
-  /// Starts the server. Idempotent.
-  Future<void> start() async {
+  /// Starts the server. Idempotent, and single-flight: callers during a
+  /// start await the one in progress.
+  Future<void> start() {
     if (_running) {
-      return;
+      return Future<void>.value();
     }
-    _address = await _addressSelector();
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
-    _server = server;
-    server.listen(
-      _handle,
-      onError: (Object _) {
-        // Per-connection noise; the listening socket carries on.
-      },
-      cancelOnError: false,
-    );
+    return _startFuture ??= _startNow();
+  }
+
+  Future<void> _startNow() async {
+    try {
+      _address = await _addressSelector();
+      final server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+      _server = server;
+      server.listen(
+        _handle,
+        onError: (Object _) {
+          // Per-connection noise; the listening socket carries on.
+        },
+        cancelOnError: false,
+      );
+    } on Object {
+      // Allow a later retry to run a fresh start.
+      _startFuture = null;
+      rethrow;
+    }
     _running = true;
   }
 
@@ -85,10 +101,18 @@ final class GenaCallbackServer {
 
   /// Stops the server and drops every route.
   Future<void> stop() async {
+    if (_startFuture != null && !_running) {
+      try {
+        await _startFuture;
+      } on Object {
+        // The start failed; there is nothing bound to stop.
+      }
+    }
     if (!_running) {
       return;
     }
     _running = false;
+    _startFuture = null;
     _routes.clear();
     await _server?.close(force: true);
     _server = null;

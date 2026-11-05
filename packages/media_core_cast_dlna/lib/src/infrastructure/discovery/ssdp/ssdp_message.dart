@@ -19,6 +19,11 @@ final class SsdpMessage {
   /// Header names lower-cased, values trimmed.
   final Map<String, String> headers;
 
+  // Compiled once: every datagram on a busy LAN walks these, and
+  // re-compiling a pattern per packet is waste on the hot receive path.
+  static final RegExp _lineBreak = RegExp(r'\r?\n');
+  static final RegExp _maxAge = RegExp(r'max-age\s*=\s*(\d+)');
+
   /// Parses an SSDP datagram payload.
   ///
   /// Returns null when the datagram is not an SSDP message at all —
@@ -30,7 +35,7 @@ final class SsdpMessage {
     // costs nothing and keeps a stack that answers with LF-only line
     // endings from being invisible; a leading blank line (buffered
     // reads do this) must not hide the request line either.
-    final lines = payload.split(RegExp(r'\r?\n'));
+    final lines = payload.split(_lineBreak);
     if (lines.every((line) => line.trim().isEmpty)) {
       return null;
     }
@@ -99,7 +104,7 @@ final class SsdpMessage {
   /// beats long.
   Duration get cacheLifetime {
     final raw = headers['cache-control'] ?? '';
-    final match = RegExp(r'max-age\s*=\s*(\d+)').firstMatch(raw);
+    final match = _maxAge.firstMatch(raw);
     final seconds = match == null ? null : int.tryParse(match.group(1)!);
     return Duration(seconds: seconds ?? SsdpConstants.defaultCacheLifetime.inSeconds);
   }

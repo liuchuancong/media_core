@@ -108,6 +108,11 @@ final class DlnaSessionController implements DlnaSession {
 
   static int _counter = 0;
 
+  /// This session's identity, fixed at construction. A getter that
+  /// incremented the counter on every read would hand a different id to
+  /// every log line and every consumer that compared ids.
+  final String _id = 'dlna-session-${_counter++}';
+
   DlnaDevice _device;
 
   /// The renderer this session plays on.
@@ -162,7 +167,7 @@ final class DlnaSessionController implements DlnaSession {
         );
 
   @override
-  String get id => 'dlna-session-${_counter++}';
+  String get id => _id;
 
   @override
   DlnaConnectionState get connectionState => _connectionState;
@@ -301,41 +306,52 @@ final class DlnaSessionController implements DlnaSession {
   ///
   /// A device whose SCPD cannot be read is not refused — it just loses
   /// the local pre-flight and fails at the wire like every other
-  /// non-declaring device.
+  /// non-declaring device. The two documents are independent reads, so
+  /// they load concurrently instead of doubling the connect path's
+  /// round-trip count.
   Future<void> _loadSupportedActions() async {
     final fetch = fetchScpd;
     if (fetch == null) {
       return;
     }
+    await Future.wait<void>(<Future<void>>[_loadAvTransportActions(fetch), _loadRenderingControlActions(fetch)]);
+  }
+
+  Future<void> _loadAvTransportActions(DescriptionFetcher fetch) async {
     final avScpdUrl = device.avTransport?.scpdUrl;
-    if (avScpdUrl != null) {
-      try {
-        final description = ServiceDescriptionParser.parse(await fetch(avScpdUrl.toString()));
-        _supportedActions = description.actions.keys.toSet();
-      } on Object catch (error) {
-        MediaCoreLog.warning(
-          LogCategory.session,
-          'service description fetch failed; actions unrestricted',
-          error: error,
-          fields: <String, Object?>{'device': device.udn},
-        );
-        _supportedActions = null;
-      }
+    if (avScpdUrl == null) {
+      return;
     }
+    try {
+      final description = ServiceDescriptionParser.parse(await fetch(avScpdUrl.toString()));
+      _supportedActions = description.actions.keys.toSet();
+    } on Object catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.session,
+        'service description fetch failed; actions unrestricted',
+        error: error,
+        fields: <String, Object?>{'device': device.udn},
+      );
+      _supportedActions = null;
+    }
+  }
+
+  Future<void> _loadRenderingControlActions(DescriptionFetcher fetch) async {
     final rcScpdUrl = device.renderingControl?.scpdUrl;
-    if (rcScpdUrl != null) {
-      try {
-        final description = ServiceDescriptionParser.parse(await fetch(rcScpdUrl.toString()));
-        _renderingActions = description.actions.keys.toSet();
-      } on Object catch (error) {
-        MediaCoreLog.warning(
-          LogCategory.session,
-          'service description fetch failed; actions unrestricted',
-          error: error,
-          fields: <String, Object?>{'device': device.udn},
-        );
-        _renderingActions = null;
-      }
+    if (rcScpdUrl == null) {
+      return;
+    }
+    try {
+      final description = ServiceDescriptionParser.parse(await fetch(rcScpdUrl.toString()));
+      _renderingActions = description.actions.keys.toSet();
+    } on Object catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.session,
+        'service description fetch failed; actions unrestricted',
+        error: error,
+        fields: <String, Object?>{'device': device.udn},
+      );
+      _renderingActions = null;
     }
   }
 
@@ -440,15 +456,29 @@ final class DlnaSessionController implements DlnaSession {
 
   /// Reads the device's volume and mute into the snapshot without
   /// touching the command queue.
+  ///
+  /// The two reads are independent, so they go out together. An answer
+  /// whose probe started before a newer write landed on the snapshot is
+  /// dropped: a volume the user set while the probe was in flight must
+  /// not be overwritten by the stale value the device was still
+  /// holding.
   Future<void> readVolumeState() async {
     final rendering = _rendering;
     if (rendering == null) {
       return;
     }
+    final observedAt = _now();
     try {
-      final volume = await rendering.getVolume();
-      final muted = await rendering.isMuted();
-      _setPlayback(_state.copyWith(volume: volume, isMuted: muted, updatedAt: _now()));
+      // Future.wait with the default eagerError waits for both futures
+      // before surfacing the first error, so a failing probe cannot
+      // strand the sibling's error unhandled.
+      final answers = await Future.wait<Object?>(<Future<Object?>>[rendering.getVolume(), rendering.isMuted()]);
+      if (_disposed || observedAt.isBefore(_state.updatedAt)) {
+        return;
+      }
+      _setPlayback(
+        _state.copyWith(volume: answers[0]! as int, isMuted: answers[1]! as bool, updatedAt: _now()),
+      );
     } on DlnaException catch (error) {
       // A volume probe that fails leaves the snapshot alone.
       MediaCoreLog.debug(
@@ -560,7 +590,12 @@ final class DlnaSessionController implements DlnaSession {
       if (attempt > 1 && recoveryPolicy.retryDelay > Duration.zero) {
         await Future<void>.delayed(recoveryPolicy.retryDelay);
       }
-      if (_disposed) {
+      // A disconnect (or a dispose) that landed while this loop was
+      // between attempts must not be overridden by a later attempt
+      // succeeding: the user asked for silence, not a resurrected
+      // session. Only the state [DlnaConnectionState.reconnecting]
+      // means recovery still owns the connection.
+      if (_disposed || _connectionState != DlnaConnectionState.reconnecting) {
         _recovering = false;
         return;
       }
@@ -573,6 +608,10 @@ final class DlnaSessionController implements DlnaSession {
         // Reachability probe: the first command after recovery must not
         // be the one discovering the device is still gone.
         await _transport.getTransportInfo();
+        if (_disposed || _connectionState != DlnaConnectionState.reconnecting) {
+          _recovering = false;
+          return;
+        }
         _recovering = false;
         _setPlayback(_state.copyWith(updatedAt: _now()));
         _monitor.start();
@@ -592,6 +631,10 @@ final class DlnaSessionController implements DlnaSession {
           fields: <String, Object?>{'device': device.udn},
         );
       }
+    }
+    if (_disposed || _connectionState != DlnaConnectionState.reconnecting) {
+      _recovering = false;
+      return;
     }
     _recovering = false;
     MediaCoreLog.error(
@@ -643,12 +686,24 @@ final class DlnaSessionController implements DlnaSession {
   }
 
   /// One device read: transport state plus position, merged into the
-  /// snapshot. A silent device leaves the snapshot untouched except for
-  /// its freshness — one missed poll must not flash a UI to "unknown".
+  /// snapshot. The two reads are independent and go out together, so a
+  /// poll costs one round-trip span instead of two. A silent device
+  /// leaves the snapshot untouched except for its freshness — one
+  /// missed poll must not flash a UI to "unknown" — and an answer whose
+  /// read started before a newer write landed (a seek's follow-up, a
+  /// GENA push) is dropped rather than rolling the playhead back.
   Future<void> _readState() async {
+    final observedAt = _now();
     try {
-      final transport = await _transport.getTransportInfo();
-      final position = await _transport.getPositionInfo();
+      final answers = await Future.wait<Object?>(<Future<Object?>>[
+        _transport.getTransportInfo(),
+        _transport.getPositionInfo(),
+      ]);
+      final transport = answers[0]! as AvTransportState;
+      final position = answers[1]! as AvTransportPosition;
+      if (_disposed || observedAt.isBefore(_state.updatedAt)) {
+        return;
+      }
       _setPlayback(
         _state.copyWith(
           transportState: transport.transportState,
@@ -665,6 +720,9 @@ final class DlnaSessionController implements DlnaSession {
         error: error,
         fields: <String, Object?>{'device': device.udn},
       );
+      if (_disposed) {
+        return;
+      }
       _setPlayback(_state.copyWith(updatedAt: _now()));
     }
   }
@@ -686,7 +744,17 @@ final class DlnaSessionController implements DlnaSession {
     }
   }
 
+  /// The monitor's timer fires regardless of whether the previous read
+  /// finished (its `onTick` is synchronous), so without this guard a
+  /// device slower than the cadence would stack reads forever — each
+  /// paying a SOAP round trip and each able to land out of order.
+  bool _readInFlight = false;
+
   void _onMonitorTick() {
-    unawaited(_readState());
+    if (_readInFlight) {
+      return;
+    }
+    _readInFlight = true;
+    unawaited(_readState().whenComplete(() => _readInFlight = false));
   }
 }

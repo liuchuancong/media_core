@@ -103,8 +103,13 @@ final class SsdpClient implements SsdpSource {
   RawDatagramSocket? _socket;
   Timer? _searchTimer;
   final Map<String, Timer> _expiry = <String, Timer>{};
-  final StreamController<SsdpDatagram> _incoming = StreamController<SsdpDatagram>.broadcast();
-  final StreamController<SsdpMessage> _messages = StreamController<SsdpMessage>.broadcast();
+  StreamController<SsdpDatagram> _incoming = StreamController<SsdpDatagram>.broadcast();
+  StreamController<SsdpMessage> _messages = StreamController<SsdpMessage>.broadcast();
+
+  /// The encoded M-SEARCH datagram per target; the bytes never change
+  /// between cycles, so they are built once instead of re-encoded (and
+  /// copied out of `List<int>` into a fresh `Uint8List`) every interval.
+  List<Uint8List>? _searchPayloads;
 
   bool _started = false;
   bool _closed = false;
@@ -121,10 +126,20 @@ final class SsdpClient implements SsdpSource {
   Stream<SsdpMessage> get messages => _messages.stream;
 
   /// Starts listening, sends the first search cycle and repeats it.
+  ///
+  /// Idempotent while running, and runnable again after [stop]: a
+  /// consumer is allowed to run start/stop cycles, so a stopped client
+  /// rebuilds the stream controllers [stop] closed instead of leaving
+  /// discovery silently dead after the first cycle.
   @override
   Future<void> start() async {
-    if (_closed || _started) {
+    if (_started) {
       return;
+    }
+    if (_closed) {
+      _incoming = StreamController<SsdpDatagram>.broadcast();
+      _messages = StreamController<SsdpMessage>.broadcast();
+      _closed = false;
     }
     _started = true;
 
@@ -167,14 +182,17 @@ final class SsdpClient implements SsdpSource {
       return;
     }
     final address = InternetAddress(SsdpConstants.multicastAddress);
-    for (var i = 0; i < searchTargets.length; i++) {
+    final payloads = _searchPayloads ??= <Uint8List>[
+      for (final target in searchTargets) Uint8List.fromList(SsdpSearch.build(target, mx: mx)),
+    ];
+    for (var i = 0; i < payloads.length; i++) {
       if (i > 0 && interTargetDelay > Duration.zero) {
         await Future<void>.delayed(interTargetDelay);
       }
       if (_closed) {
         return;
       }
-      socket.send(Uint8List.fromList(SsdpSearch.build(searchTargets[i], mx: mx)), address, SsdpConstants.port);
+      socket.send(payloads[i], address, SsdpConstants.port);
     }
   }
 

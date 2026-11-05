@@ -22,13 +22,27 @@ import 'package:media_core_logging/media_core_logging.dart';
 /// except a rewritten playlist text.
 final class RemoteProxyHandler {
   /// Creates a handler.
-  const RemoteProxyHandler(this._registry);
+  RemoteProxyHandler(this._registry);
 
   final RemoteProxyRegistry _registry;
 
+  /// One upstream client for the handler's lifetime. Proxied traffic is
+  /// bursty — a live manifest refreshes every few seconds and its
+  /// segments chase it — and a client per request tore down every
+  /// connection after one use, paying a fresh TCP (and TLS) handshake
+  /// for every playlist, segment and range fetch.
+  HttpClient? _upstreamClient;
+
+  HttpClient get _client => _upstreamClient ??= HttpClient();
+
+  /// Closes the pooled upstream connections.
+  void close() {
+    _upstreamClient?.close(force: true);
+    _upstreamClient = null;
+  }
+
   /// Serves one request; never throws into the accept loop.
   Future<void> handle(HttpRequest request) async {
-    HttpClient? upstreamClient;
     Uri? upstreamUrl;
     try {
       final segments = request.uri.pathSegments;
@@ -43,9 +57,8 @@ final class RemoteProxyHandler {
       }
 
       if (segments.length == 2 && registration.isPlaylist) {
-        upstreamClient = HttpClient();
         upstreamUrl = registration.upstream;
-        await _servePlaylist(request, registration, upstreamClient);
+        await _servePlaylist(request, registration);
         return;
       }
 
@@ -54,9 +67,8 @@ final class RemoteProxyHandler {
         await _respond(request, HttpStatus.notFound);
         return;
       }
-      upstreamClient = HttpClient();
       upstreamUrl = upstream;
-      await _streamUpstream(request, upstream, registration.upstreamHeaders, upstreamClient);
+      await _streamUpstream(request, upstream, registration.upstreamHeaders);
     } on Object catch (error) {
       MediaCoreLog.warning(
         LogCategory.network,
@@ -69,16 +81,14 @@ final class RemoteProxyHandler {
       } on Object {
         // The renderer vanished mid-answer; nothing further to do.
       }
-    } finally {
-      upstreamClient?.close(force: true);
     }
   }
 
   /// Fetches the HLS manifest and rewrites every child reference into a
   /// proxy URL. The rewritten text is served whole — playlists are
   /// small, and a live manifest refresh simply rewrites again.
-  Future<void> _servePlaylist(HttpRequest request, RemoteProxyRegistration registration, HttpClient client) async {
-    final upstreamRequest = await client.openUrl('GET', registration.upstream).timeout(const Duration(seconds: 10));
+  Future<void> _servePlaylist(HttpRequest request, RemoteProxyRegistration registration) async {
+    final upstreamRequest = await _client.openUrl('GET', registration.upstream).timeout(const Duration(seconds: 10));
     registration.upstreamHeaders.forEach(upstreamRequest.headers.set);
     final upstreamResponse = await upstreamRequest.close().timeout(const Duration(seconds: 10));
     if (upstreamResponse.statusCode != HttpStatus.ok) {
@@ -127,14 +137,9 @@ final class RemoteProxyHandler {
   /// Relays an upstream answer: method, Range header and the
   /// registration's headers go up; status, content headers and the body
   /// stream come back.
-  Future<void> _streamUpstream(
-    HttpRequest request,
-    Uri url,
-    Map<String, String> upstreamHeaders,
-    HttpClient client,
-  ) async {
+  Future<void> _streamUpstream(HttpRequest request, Uri url, Map<String, String> upstreamHeaders) async {
     final isHead = request.method.toUpperCase() == 'HEAD';
-    final upstreamRequest = await client
+    final upstreamRequest = await _client
         .openUrl(isHead ? 'HEAD' : request.method, url)
         .timeout(const Duration(seconds: 15));
     upstreamHeaders.forEach(upstreamRequest.headers.set);

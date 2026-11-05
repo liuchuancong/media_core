@@ -49,8 +49,17 @@ final class DlnaSessionManager {
       _transport = http;
     }
     _client = SoapClient(transport: _transport, timeout: timeout);
-    _fetchScpd = fetchScpd ?? HttpDescriptionFetcher(timeout: timeout).call;
-    _ownedFetcher = fetchScpd == null ? HttpDescriptionFetcher(timeout: timeout) : null;
+    if (fetchScpd != null) {
+      _fetchScpd = fetchScpd;
+      _ownedFetcher = null;
+    } else {
+      // One fetcher instance, owned and closed by [dispose]; wrapping
+      // its call in the SCPD memo keeps a second cast to the same TV
+      // from re-downloading static service documents over the LAN.
+      final http = HttpDescriptionFetcher(timeout: timeout);
+      _ownedFetcher = http;
+      _fetchScpd = _cachedScpdFetch(http.call);
+    }
     _providedCallbackServer = callbackServer;
     compatibilityRegistry = compatibility ?? DeviceCompatibilityRegistry();
     if (genaTransport != null) {
@@ -88,10 +97,41 @@ final class DlnaSessionManager {
   HttpGenaTransport? _ownedGenaTransport;
 
   final Map<String, DlnaSessionController> _sessions = <String, DlnaSessionController>{};
+
+  /// Connects currently in flight, by device UDN. Two concurrent
+  /// `connect` calls for one device must not build two stacked command
+  /// queues on the same renderer — the loser would keep polling and
+  /// holding a GENA route while invisible to [sessions].
+  final Map<String, Future<DlnaSession>> _connecting = <String, Future<DlnaSession>>{};
+
+  /// SCPD bodies fetched this manager's lifetime, keyed by URL. An SCPD
+  /// is a static model document a device serves unchanged; re-fetching
+  /// it on every cast is two LAN round trips bought for nothing.
+  /// Bounded so a long-lived manager roaming many devices cannot grow
+  /// it without limit.
+  final Map<String, String> _scpdCache = <String, String>{};
+
+  static const int _maxCachedScpds = 32;
+
   final Map<String, Uri> _genaCallbacks = <String, Uri>{};
   bool _disposed = false;
 
   GenaCallbackServer get _callbackServer => _providedCallbackServer ?? (_ownedCallbackServer ??= GenaCallbackServer());
+
+  /// The SCPD loader the default fetcher is wrapped in.
+  DescriptionFetcher _cachedScpdFetch(DescriptionFetcher fetch) {
+    return (String url) async {
+      final cached = _scpdCache[url];
+      if (cached != null) {
+        return cached;
+      }
+      final body = await fetch(url);
+      if (_scpdCache.length < _maxCachedScpds) {
+        _scpdCache[url] = body;
+      }
+      return body;
+    };
+  }
 
   /// The active sessions, in creation order.
   List<DlnaSession> get sessions => List<DlnaSession>.unmodifiable(_sessions.values);
@@ -100,6 +140,9 @@ final class DlnaSessionManager {
   DlnaSession? sessionFor(DlnaDevice device) => _sessions[device.udn];
 
   /// Connects to [device], or returns its existing active session.
+  ///
+  /// Concurrent connects for the same device single-flight onto one
+  /// controller: the first builds it, the rest await the same future.
   Future<DlnaSession> connect(DlnaDevice device) async {
     if (_disposed) {
       throw const DlnaSessionException('session manager is disposed');
@@ -112,6 +155,10 @@ final class DlnaSessionManager {
     if (existing != null) {
       return existing;
     }
+    final inFlight = _connecting[device.udn];
+    if (inFlight != null) {
+      return await inFlight;
+    }
     final session = DlnaSessionController(
       device: device,
       client: _client,
@@ -121,13 +168,36 @@ final class DlnaSessionManager {
       profile: compatibilityRegistry.profileFor(device),
       genaFactory: enableGena ? _buildGenaSubscriber : null,
     );
+    final connecting = _connect(session);
+    _connecting[device.udn] = connecting;
+    try {
+      final connected = await connecting;
+      return connected;
+    } finally {
+      if (identical(_connecting[device.udn], connecting)) {
+        // Map.remove hands the stored future back; every caller that
+        // holds it is already awaiting it, so the returned value is
+        // deliberately dropped here.
+        final Object? removed = _connecting.remove(device.udn);
+        assert(removed != null || _connecting.isEmpty, 'the map was already cleared');
+      }
+    }
+  }
+
+  /// Runs one controller's connect to completion and registers it,
+  /// unless the manager was disposed while the connect was in flight.
+  Future<DlnaSession> _connect(DlnaSessionController session) async {
     try {
       await session.connect();
     } on Object {
       await session.dispose();
       rethrow;
     }
-    _sessions[device.udn] = session;
+    if (_disposed) {
+      await session.dispose();
+      throw const DlnaSessionException('session manager is disposed');
+    }
+    _sessions[session.device.udn] = session;
     return session;
   }
 
@@ -192,6 +262,8 @@ final class DlnaSessionManager {
       await session.dispose();
     }
     _sessions.clear();
+    _connecting.clear();
+    _scpdCache.clear();
     _genaCallbacks.clear();
     _ownedFetcher?.close();
     _ownedTransport?.close();

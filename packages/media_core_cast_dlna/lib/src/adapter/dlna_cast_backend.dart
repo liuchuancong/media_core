@@ -23,6 +23,7 @@ import 'package:media_core_cast_dlna/src/infrastructure/control/soap/soap_reques
 import 'package:media_core_cast_dlna/src/infrastructure/description/description_http_fetcher.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/discovery/ssdp/ssdp_client.dart';
 import 'package:media_core_cast_dlna/src/infrastructure/media/http/media_http_server.dart';
+import 'package:media_core_cast_dlna/src/logging/loggable_url.dart';
 import 'package:media_core_cast_dlna/src/utils/duration_parser.dart';
 import 'package:media_core_cast_dlna/src/utils/mime_type.dart';
 
@@ -157,7 +158,11 @@ class DlnaCastBackend implements MediaCastBackend {
   @override
   Future<void> setMedia(CastDevice device, CastMedia media) async {
     final playUrl = await _playableUri(device, media);
-    _log.info('cast media set', fields: <String, Object?>{'device': device.id, 'url': media.url});
+    // The URL is token-bearing by construction here: local media went
+    // through the media server's random access token, header-gated
+    // remote media through the proxy's. The query is stripped before it
+    // reaches a sink.
+    _log.info('cast media set', fields: <String, Object?>{'device': device.id, 'url': loggableUrl(Uri.parse(media.url))});
     await _call(
       device,
       (service) => SoapRequestBuilder.setUri(

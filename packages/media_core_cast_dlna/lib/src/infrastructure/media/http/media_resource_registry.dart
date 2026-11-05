@@ -41,11 +41,16 @@ final class MediaRegistration {
   /// When a renderer last touched this resource.
   DateTime lastAccessAt;
 
+  /// The size read on first use. Every request and every range parse
+  /// needs the size; a stat per request is pure overhead for a file
+  /// that does not change while it is registered.
+  int? _cachedSize;
+
   /// The registry key: token + id, the two path segments.
   String get key => '$token/$id';
 
   /// The byte size of the file.
-  int get size => file.lengthSync();
+  int get size => _cachedSize ??= file.lengthSync();
 
   /// Whether the registration is past its expiry.
   bool get isExpired => expiresAt != null && DateTime.now().isAfter(expiresAt!);

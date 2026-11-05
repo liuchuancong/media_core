@@ -63,6 +63,12 @@ final class MediaHttpServer {
   Timer? _sweepTimer;
   MediaHttpHandler? _handler;
 
+  /// The start currently in flight. Concurrent callers (two casts
+  /// preparing at once) must all await the same binding instead of the
+  /// fast ones returning early and registering against a half-bound
+  /// server.
+  Future<void>? _startFuture;
+
   MediaServerState _state = MediaServerState.idle;
 
   /// Where this server is in its lifecycle.
@@ -82,11 +88,17 @@ final class MediaHttpServer {
 
   InternetAddress? _address;
 
-  /// Starts the server. Idempotent.
-  Future<void> start() async {
-    if (isRunning || _state == MediaServerState.starting) {
-      return;
+  /// Starts the server. Idempotent, and single-flight: callers during a
+  /// start join the one in progress rather than returning before the
+  /// socket is actually bound.
+  Future<void> start() {
+    if (isRunning) {
+      return Future<void>.value();
     }
+    return _startFuture ??= _startNow();
+  }
+
+  Future<void> _startNow() async {
     _state = MediaServerState.starting;
     try {
       _address = await _addressSelector();
@@ -104,6 +116,8 @@ final class MediaHttpServer {
       );
     } on Object catch (error) {
       _state = MediaServerState.error;
+      // Allow a later retry to run a fresh start.
+      _startFuture = null;
       MediaCoreLog.error(LogCategory.network, 'media server failed to start', error: error);
       throw MediaServerException('media server could not start', cause: error);
     }
@@ -180,14 +194,26 @@ final class MediaHttpServer {
 
   /// Stops the server and drops every registration.
   Future<void> stop() async {
+    // A stop racing an in-flight start waits for the binding first;
+    // otherwise dispose during a prepare would leave the freshly bound
+    // server running.
+    if (_state == MediaServerState.starting && _startFuture != null) {
+      try {
+        await _startFuture;
+      } on Object {
+        // The start failed; there is nothing bound to stop.
+      }
+    }
     if (!isRunning && _state != MediaServerState.error) {
       return;
     }
     _state = MediaServerState.stopping;
+    _startFuture = null;
     _sweepTimer?.cancel();
     _sweepTimer = null;
     _registry.clear();
     _remoteRegistry.clear();
+    _remoteHandler.close();
     await _server?.close(force: true);
     _server = null;
     _address = null;
