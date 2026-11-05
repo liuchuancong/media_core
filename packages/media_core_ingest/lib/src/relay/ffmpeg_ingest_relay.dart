@@ -328,6 +328,7 @@ final class FfmpegIngestRelay {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _log.info('ingest relay closed', fields: <String, Object?>{'source': source});
     await _execution.stop();
     await _server.close(force: true);
     await _deleteQuietly(_directory);
@@ -336,8 +337,9 @@ final class FfmpegIngestRelay {
   static Future<void> _deleteQuietly(Directory directory) async {
     try {
       if (directory.existsSync()) await directory.delete(recursive: true);
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Staging cleanup is best-effort: the OS temp sweeper is the backstop.
+      _log.warning('staging cleanup failed', error: error, fields: <String, Object?>{'directory': directory.path});
     }
   }
 }

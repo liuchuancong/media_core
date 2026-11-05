@@ -26,6 +26,10 @@ enum IngestNeed {
 
   /// The provider hands out cookies with the manifest that its children inherit.
   sessionCookies,
+
+  /// The child bodies themselves are obfuscated (for example Bigo's
+  /// per-segment XOR), so a manifest rewrite alone cannot make them playable.
+  segmentTransform,
 }
 
 /// How an input reaches the player.

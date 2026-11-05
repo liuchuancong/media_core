@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_core_ingest/media_core_ingest.dart';
@@ -130,6 +131,31 @@ void main() {
       final response = await (await client.getUrl(relay.inputUri.replace(path: '/wrong/root.m3u8'))).close();
       expect(response.statusCode, HttpStatus.notFound);
       await response.drain<void>();
+    } finally {
+      client.close(force: true);
+    }
+  });
+
+  test('the manifest observer and child transform see the served bytes', () async {
+    String? observed;
+    final relay = await LoopbackIngestRelay.start(
+      source: upstream.media,
+      onManifest: (manifest, body) => observed = body,
+      childTransform: (child, body) => Uint8List.fromList([for (final byte in body) byte ^ 0x77]),
+    );
+    addTearDown(relay.close);
+
+    final manifest = await _get(relay.inputUri);
+    expect(observed, contains('#EXTM3U'));
+    final segment = RegExp(r'http://127\.0\.0\.1:\d+/[a-z0-9]+/r[0-9a-z]+\.mp4').firstMatch(manifest);
+    expect(segment, isNotNull);
+
+    final client = HttpClient();
+    try {
+      final response = await (await client.getUrl(Uri.parse(segment!.group(0)!))).close();
+      expect(response.statusCode, HttpStatus.ok);
+      final bytes = await response.fold<List<int>>(<int>[], (all, chunk) => all..addAll(chunk));
+      expect(bytes, everyElement(0x5a ^ 0x77));
     } finally {
       client.close(force: true);
     }

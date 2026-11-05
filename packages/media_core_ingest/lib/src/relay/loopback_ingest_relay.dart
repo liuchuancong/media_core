@@ -9,6 +9,15 @@ import 'package:media_core_logging/media_core_logging.dart';
 
 final LogModule _log = MediaCoreLog.of(LogCategory.network);
 
+/// Rewrites one child's bytes before the player reads them (Bigo's scrambled
+/// segments are the observed case). The callback sees the upstream child URI
+/// and the complete body; it must answer the body to serve.
+typedef IngestChildTransform = Uint8List Function(Uri child, Uint8List body);
+
+/// Observes every manifest body served, before it is rewritten. Hosts use it
+/// to learn what the children need (Bigo reads the protection seed here).
+typedef IngestManifestObserver = void Function(Uri manifest, String body);
+
 /// Rewrites an HLS manifest tree so every child is an absolute loopback URL.
 ///
 /// The player then resolves nothing itself: it is handed
@@ -34,6 +43,8 @@ final class LoopbackIngestRelay {
     required int maximumManifestBytes,
     required Uri Function(Uri)? childUriPolicy,
     required bool sessionCookies,
+    required IngestChildTransform? childTransform,
+    required IngestManifestObserver? onManifest,
   }) : _server = server,
        _client = client,
        _headers = headers,
@@ -42,6 +53,8 @@ final class LoopbackIngestRelay {
        _childIdleTimeout = childIdleTimeout,
        _maximumManifestBytes = maximumManifestBytes,
        _childUriPolicy = childUriPolicy,
+       _childTransform = childTransform,
+       _onManifest = onManifest,
        _cookies = sessionCookies ? HlsSessionCookies() : null {
     _children['root.m3u8'] = _Child(uri: upstream, manifest: true);
   }
@@ -71,6 +84,8 @@ final class LoopbackIngestRelay {
     String? rootManifest,
     Uri Function(Uri)? childUriPolicy,
     bool sessionCookies = false,
+    IngestChildTransform? childTransform,
+    IngestManifestObserver? onManifest,
     String Function(Uri url)? findProxy,
     Duration manifestTimeout = const Duration(seconds: 15),
     Duration childIdleTimeout = const Duration(seconds: 10),
@@ -92,6 +107,8 @@ final class LoopbackIngestRelay {
       childIdleTimeout: childIdleTimeout,
       maximumManifestBytes: maximumManifestBytes,
       childUriPolicy: childUriPolicy,
+      childTransform: childTransform,
+      onManifest: onManifest,
       sessionCookies: sessionCookies,
     );
     server.listen(relay._handle, onError: (Object _) {}, cancelOnError: false);
@@ -113,6 +130,8 @@ final class LoopbackIngestRelay {
   final Duration _childIdleTimeout;
   final int _maximumManifestBytes;
   final Uri Function(Uri)? _childUriPolicy;
+  final IngestChildTransform? _childTransform;
+  final IngestManifestObserver? _onManifest;
   final HlsSessionCookies? _cookies;
 
   final Map<String, _Child> _children = <String, _Child>{};
@@ -166,11 +185,8 @@ final class LoopbackIngestRelay {
     } on Object catch (error) {
       // A failed child is the player's error to report: closing the response
       // with a status keeps it from waiting forever.
-      _log.warning('child fetch failed', error: error, fields: <String, Object?>{
-        'child': name,
-        'upstream': child.uri,
-      });
-      await _fail(request, HttpStatus.badGateway);
+      _log.warning('child fetch failed', error: error, fields: <String, Object?>{'child': name, 'upstream': child.uri});
+      await _fail(request, HttpStatus.badGateway, child: name);
     }
   }
 
@@ -183,12 +199,13 @@ final class LoopbackIngestRelay {
       final upstream = await _open('GET', manifest);
       if (upstream.statusCode != HttpStatus.ok) {
         await upstream.drain<void>();
-        await _fail(request, upstream.statusCode);
+        await _fail(request, upstream.statusCode, child: name);
         return;
       }
       body = await _readManifest(upstream);
     }
     if (_closed) return;
+    _onManifest?.call(manifest, body);
     final rewritten = _rewrite(body, manifest);
     final response = request.response
       ..statusCode = HttpStatus.ok
@@ -306,6 +323,10 @@ final class LoopbackIngestRelay {
   }
 
   Future<void> _proxyChild(HttpRequest request, Uri upstream) async {
+    if (_childTransform != null) {
+      await _proxyTransformedChild(request, upstream);
+      return;
+    }
     // The child idle timeout is a gap between bytes, not a total budget: a live
     // segment can be large and a large one is not a stalled one. What must not
     // happen is the relay waiting forever on an upstream that accepted the
@@ -345,6 +366,71 @@ final class LoopbackIngestRelay {
     await target.close();
   }
 
+  /// Serves one transformed child. The body is buffered because the transform
+  /// needs the whole child; a Range request is answered from the transformed
+  /// bytes rather than from the upstream (the upstream range would address the
+  /// scrambled form).
+  Future<void> _proxyTransformedChild(HttpRequest request, Uri upstream) async {
+    final response = await _open('GET', upstream).timeout(_childIdleTimeout);
+    if (_closed) {
+      await response.drain<void>();
+      return;
+    }
+    if (response.statusCode != HttpStatus.ok) {
+      await response.drain<void>();
+      await _fail(request, response.statusCode);
+      return;
+    }
+    final builder = BytesBuilder(copy: false);
+    await response.timeout(_childIdleTimeout).forEach(builder.add);
+    final body = _childTransform!(upstream, builder.takeBytes());
+    final range = _rangeOf(request.headers.value(HttpHeaders.rangeHeader), body.length);
+    if (range == null && request.headers.value(HttpHeaders.rangeHeader) != null) {
+      await _fail(request, HttpStatus.requestedRangeNotSatisfiable);
+      return;
+    }
+    final start = range?.$1 ?? 0;
+    final end = range?.$2 ?? body.length - 1;
+    final bytes = range == null ? body : body.sublist(start, end + 1);
+    final target = request.response
+      ..bufferOutput = false
+      ..statusCode = range == null ? HttpStatus.ok : HttpStatus.partialContent
+      ..headers.contentType = response.headers.contentType
+      ..headers.set(HttpHeaders.acceptRangesHeader, 'bytes')
+      ..headers.set(HttpHeaders.contentLengthHeader, '${bytes.length}');
+    if (range != null) target.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/${body.length}');
+    target.add(bytes);
+    await target.close();
+  }
+
+  /// The inclusive byte range of [header] within [length]; null for a missing
+  /// or unusable header. The caller distinguishes "no header" from a bad one.
+  static (int, int)? _rangeOf(String? header, int length) {
+    if (header == null) return null;
+    final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(header);
+    if (match == null) return null;
+    final rawStart = match.group(1) ?? '';
+    final rawEnd = match.group(2) ?? '';
+    if (rawStart.isEmpty && rawEnd.isEmpty) return null;
+    final int start;
+    final int end;
+    if (rawStart.isEmpty) {
+      final suffix = int.tryParse(rawEnd);
+      if (suffix == null || suffix <= 0) return null;
+      start = (length - suffix).clamp(0, length);
+      end = length - 1;
+    } else {
+      final parsedStart = int.tryParse(rawStart);
+      if (parsedStart == null) return null;
+      start = parsedStart;
+      final parsedEnd = rawEnd.isEmpty ? length - 1 : int.tryParse(rawEnd);
+      if (parsedEnd == null) return null;
+      end = parsedEnd.clamp(0, length - 1);
+    }
+    if (start < 0 || start >= length || start > end) return null;
+    return (start, end);
+  }
+
   Future<HttpClientResponse> _open(String method, Uri uri, {String? range}) async {
     // The policy and the cookie jar describe the *upstream* contract, so they
     // apply to the request we make, never to the loopback URL the player sees.
@@ -369,14 +455,17 @@ final class LoopbackIngestRelay {
     return response;
   }
 
-  Future<void> _fail(HttpRequest request, int status) async {
+  Future<void> _fail(HttpRequest request, int status, {String? child}) async {
     final target = request.response;
     try {
       // A status can only be chosen while the headers are still unsent; a body
       // that already started cannot take one back.
       target.statusCode = status;
-    } on Object catch (_) {
+    } on Object catch (error) {
       // Mid-body failure: the answer is a clean end, not a status.
+      _log.warning('upstream body fetch failed mid-stream', error: error, fields: <String, Object?>{
+        'child': ?child,
+      });
     }
     try {
       // Closing is what the player waits for. Skipping it (the old shape: the
@@ -386,8 +475,9 @@ final class LoopbackIngestRelay {
       // "this segment ended early" - which it reports as a stream failure and
       // retries as one.
       await target.close();
-    } on Object catch (_) {
+    } on Object catch (error) {
       // The player closed the connection first; nothing left to answer.
+      _log.debug('response close failed', fields: <String, Object?>{'error': error.toString()});
     }
   }
 
@@ -395,6 +485,7 @@ final class LoopbackIngestRelay {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _log.info('loopback relay closed', fields: <String, Object?>{'port': _server.port});
     _children.clear();
     _byUpstream.clear();
     _client.close(force: true);

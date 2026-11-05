@@ -16,6 +16,7 @@ void main() {
         IngestNeed.absolutePathChildren,
         IngestNeed.childToken,
         IngestNeed.sessionCookies,
+        IngestNeed.segmentTransform,
       ]) {
         final plan = resolveIngestPlan(needs: <IngestNeed>{need});
         expect(plan.strategy, IngestStrategy.manifestRelay, reason: need.name);

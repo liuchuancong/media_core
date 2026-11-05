@@ -1,5 +1,9 @@
 import 'dart:io';
 
+import 'package:media_core_logging/media_core_logging.dart';
+
+final LogModule _log = MediaCoreLog.of(LogCategory.network);
+
 /// Bounded, in-memory cookies for one HLS relay, never a browser/account jar.
 ///
 /// Deliberately pin even Domain cookies to the issuing origin. A playlist may
@@ -39,14 +43,17 @@ class HlsSessionCookies {
       final Cookie cookie;
       try {
         cookie = Cookie.fromSetCookieValue(value);
-      } on FormatException {
+      } on FormatException catch (error) {
+        _log.debug('malformed Set-Cookie value dropped', fields: <String, Object?>{'error': error.toString()});
         continue;
         // Malformed cookie values surface as an ArgumentError from dart:io;
         // dropping the one bad value is the intended handling.
         // ignore: avoid_catching_errors
-      } on ArgumentError {
+      } on ArgumentError catch (error) {
+        _log.debug('malformed Set-Cookie value dropped', fields: <String, Object?>{'error': error.toString()});
         continue;
-      } on HttpException {
+      } on HttpException catch (error) {
+        _log.debug('malformed Set-Cookie value dropped', fields: <String, Object?>{'error': error.toString()});
         continue;
       }
       if (cookie.name.isEmpty) continue;
