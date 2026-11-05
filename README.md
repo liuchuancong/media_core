@@ -1,5 +1,7 @@
 # media_core
 
+> 🌏 English version: [README_EN.md](README_EN.md)
+
 跨平台可复用的 Flutter 播放器核心：**一个与平台无关的编排层** + **按能力拆分的包**。
 
 核心包（`packages/media_core`）内含 46 个模块，负责播放最难的那部分——会话与代际、命令串行化、
