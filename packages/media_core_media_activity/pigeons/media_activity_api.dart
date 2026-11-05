@@ -5,7 +5,7 @@
 //   dart run pigeon --input pigeons/media_activity_api.dart
 //
 // The generated pair lands in lib/src/platform/media_activity_api.g.dart and
-// ios/Classes/media_activity_api.g.swift. Hand-written code wraps the
+// ios/Classes/Plugin/media_activity_api.g.swift. Hand-written code wraps the
 // generated types; nothing else may edit the .g files.
 //
 // Time rules (spec §6.1): every duration and position crosses the bridge in
@@ -18,7 +18,9 @@ import 'package:pigeon/pigeon.dart';
 @ConfigurePigeon(
   PigeonOptions(
     dartOut: 'lib/src/platform/media_activity_api.g.dart',
-    swiftOut: 'ios/Classes/media_activity_api.g.swift',
+    // The generated Swift is Flutter-dependent, so it must live in the
+    // Plugin subspec — the Widget Extension links only Shared.
+    swiftOut: 'ios/Classes/Plugin/media_activity_api.g.swift',
     dartOptions: DartOptions(),
     swiftOptions: SwiftOptions(),
   ),

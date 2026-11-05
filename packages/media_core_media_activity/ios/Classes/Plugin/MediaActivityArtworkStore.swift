@@ -10,10 +10,11 @@ import UIKit
 /// system surfaces and cleans up ones no live activity references.
 struct MediaActivityArtworkStore {
     /// App Group id the host must add to both the Runner and the Widget
-    /// Extension entitlements (spec §12.2).
+    /// Extension entitlements (spec §12.2). Shared with the extension through
+    /// `MediaActivityAttributes.appGroupId` so both sides cannot drift.
     private let appGroupId: String
 
-    init(appGroupId: String = "group.media_core.media_activity") {
+    init(appGroupId: String = MediaActivityAttributes.appGroupId) {
         self.appGroupId = appGroupId
     }
 
@@ -29,7 +30,10 @@ struct MediaActivityArtworkStore {
             return nil
         }
 
-        let directory = container.appendingPathComponent("MediaActivity/Artwork", isDirectory: true)
+        let directory = container.appendingPathComponent(
+            MediaActivityAttributes.artworkDirectory,
+            isDirectory: true
+        )
 
         try? FileManager.default.createDirectory(
             at: directory,
