@@ -41,6 +41,13 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
   /// Runtime options merged over [_options], keyed by (domain, key).
   final Map<(String, String), EngineOption> _runtimeOptions = <(String, String), EngineOption>{};
 
+  /// Whether the `enable-snapshot` host option has been written to this
+  /// player. Host-category options live in the plugin's per-player store
+  /// and survive `reset()` natively, unlike the format/codec options the
+  /// engine frees on reset — so this one is written once per player,
+  /// not re-written on every open.
+  bool _snapshotEnabled = false;
+
   /// The effective option list for the next open.
   List<EngineOption> get _effectiveOptions {
     return <EngineOption>[..._options, ..._runtimeOptions.values];
@@ -53,38 +60,44 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
 
   @override
   Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
-    final outcomes = <EngineOptionOutcome>[];
+    // One platform-channel write per option, each keeping its own
+    // outcome. The writes are independent of each other, so they are
+    // issued together instead of serialized; the channel still
+    // dispatches them in submission order, and a live instance simply
+    // stages what it reads at the next prepareAsync.
+    return await Future.wait<EngineOptionOutcome>(<Future<EngineOptionOutcome>>[
+      for (final option in options) _applySingleEngineOption(option),
+    ]);
+  }
 
-    for (final option in options) {
-      final category = _fijkCategoryOf(option.domain);
+  /// Writes one engine option and reports its own outcome; a rejected
+  /// write is logged and answered as unsupported instead of failing the
+  /// whole batch.
+  Future<EngineOptionOutcome> _applySingleEngineOption(EngineOption option) async {
+    final category = _fijkCategoryOf(option.domain);
 
-      if (category == null) {
-        outcomes.add(EngineOptionOutcome.unsupported);
-
-        continue;
-      }
-
-      try {
-        await _player.setOption(category, option.key, _fijkOptionValue(option.value));
-
-        // ijkplayer accepts the write on a live instance but consumes most
-        // options at the next prepareAsync: the current stream keeps its
-        // old settings until the next open, which is exactly the staged
-        // contract. The caller asks for immediate effect by letting the
-        // handle rebuild the engine.
-        outcomes.add(EngineOptionOutcome.stagedForNextOpen);
-      } on Object catch (error) {
-        MediaCoreLog.warning(
-          LogCategory.player,
-          'engine option apply failed',
-          error: error,
-          fields: <String, Object?>{'key': option.key},
-        );
-        outcomes.add(EngineOptionOutcome.unsupported);
-      }
+    if (category == null) {
+      return EngineOptionOutcome.unsupported;
     }
 
-    return outcomes;
+    try {
+      await _player.setOption(category, option.key, _fijkOptionValue(option.value));
+
+      // ijkplayer accepts the write on a live instance but consumes most
+      // options at the next prepareAsync: the current stream keeps its
+      // old settings until the next open, which is exactly the staged
+      // contract. The caller asks for immediate effect by letting the
+      // handle rebuild the engine.
+      return EngineOptionOutcome.stagedForNextOpen;
+    } on Object catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.player,
+        'engine option apply failed',
+        error: error,
+        fields: <String, Object?>{'key': option.key},
+      );
+      return EngineOptionOutcome.unsupported;
+    }
   }
 
   /// Maps an option domain onto an ijkplayer option category.
@@ -240,28 +253,38 @@ final class FlvLzcPlayerAdapter extends PlayerAdapterBase implements PlayerVideo
     }
     if (isDisposed) return;
 
-    // The caller's options, verbatim, plus the two contract requirements:
-    // the source's own headers (a PlayerSource field, translated into
-    // ijkplayer's format-option string) and the snapshot host option the
-    // adapter's screenshot capability depends on. Everything else is the
-    // caller's to decide.
-    for (final option in _effectiveOptions) {
-      final category = _fijkCategoryOf(option.domain);
+    // ijkplayer frees its native option storage on `reset()`, so —
+    // unlike mpv, whose options are player state and which the
+    // media_kit adapter writes once — every format/codec/player option
+    // must be re-written on every open. The writes are independent of
+    // each other, though: they are issued together rather than as one
+    // serialized platform-channel round trip per option (the channel
+    // still dispatches them in submission order), and Future.wait
+    // surfaces the first failure in submission order once all settle.
+    final writes = <Future<void>>[
+      for (final option in _effectiveOptions)
+        if (_fijkCategoryOf(option.domain) case final int category)
+          _player.setOption(category, option.key, _fijkOptionValue(option.value)),
+    ];
 
-      if (category == null) continue;
-
-      await _player.setOption(category, option.key, _fijkOptionValue(option.value));
-    }
-
+    // The source's own headers (a PlayerSource field, translated into
+    // ijkplayer's format-option string) ride the same batch.
     if (source.hasHeaders) {
       for (final entry in FijkHelper.sourceHeaderOptions(source.headers!.values).entries) {
-        await _player.setOption(FijkOption.formatCategory, entry.key, entry.value);
+        writes.add(_player.setOption(FijkOption.formatCategory, entry.key, entry.value));
       }
     }
 
     // IJKPlayer refuses `snapshot` unless the host enables it, and a
-    // screenshot request arrives long after the open that writes options.
-    await _player.setOption(FijkOption.hostCategory, 'enable-snapshot', 1);
+    // screenshot request arrives long after the open that writes
+    // options. The host option store survives `reset()`, so the write
+    // happens once per player.
+    if (!_snapshotEnabled) {
+      _snapshotEnabled = true;
+      writes.add(_player.setOption(FijkOption.hostCategory, 'enable-snapshot', 1));
+    }
+
+    await Future.wait<void>(writes);
     if (isDisposed) return;
 
     // A new data source starts a fresh prepare path, so re-assert
