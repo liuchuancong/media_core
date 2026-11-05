@@ -272,6 +272,13 @@ final class DownloadManager {
       return;
     }
 
+    // A retry timer left armed under a task the viewer just resumed fires into
+    // the middle of this registration: the task is still `stopped` while
+    // `_register` waits for the previous attempt's slot, so the timer's own
+    // guard passes and it re-registers the same task this call is registering.
+    // pause(), remove() and retry() cancel it; resuming by hand must too.
+    _retryTimers.remove(id)?.cancel();
+
     // A paused download left the core queue *cancelled*, and a cancelled core
     // task cannot be queued again — resuming has to register a fresh one. This
     // is the same reason the retry path re-registers rather than re-queues, and
@@ -364,6 +371,7 @@ final class DownloadManager {
       _lastProgressAt.remove(task.id.value);
       _lastSpeedAt.remove(task.id.value);
       _lastSpeedReceived.remove(task.id.value);
+      _leaseNotifiedAt.remove(task.id.value);
       _startsAnnounced.remove(task.id.value);
       _queue.remove(task.id);
     }
@@ -615,11 +623,15 @@ final class DownloadManager {
   }
 
   Future<bool> _transfer(DownloadTask task) async {
-    var resumable = await _files.length(task.filePath) > 0;
+    // One stat per attempt, not three: each `length` on the dart:io sink is an
+    // existence check plus a stat call, and the size does not change between
+    // the log line and the transfer.
+    final localBytes = await _files.length(task.filePath);
+    var resumable = localBytes > 0;
     if (resumable) {
       _log.debug(
         'partial file found; resuming after verification',
-        fields: <String, Object?>{'id': task.id.value, 'localBytes': await _files.length(task.filePath)},
+        fields: <String, Object?>{'id': task.id.value, 'localBytes': localBytes},
       );
     }
     while (true) {
@@ -687,6 +699,10 @@ final class DownloadManager {
     // A server that ignores Range answers 200 with the whole body: appending it
     // would duplicate everything already on disk, so the file restarts.
     if (startByte > 0 && !response.isPartial) {
+      // The body about to be thrown away still owns a connection. Left
+      // undrained, the socket hangs open while the server keeps streaming a
+      // file nobody is reading, and the client's pool cannot reuse it.
+      await response.byteStream.drain<void>().catchError((Object _) {});
       await _files.truncate(task.filePath, 0);
       startByte = 0;
       response = await _transport.fetch(_requestFor(task, 0));

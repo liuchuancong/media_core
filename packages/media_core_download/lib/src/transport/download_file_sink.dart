@@ -43,10 +43,14 @@ final class IoDownloadFileSink implements DownloadFileSink {
       return const <int>[];
     }
     final length = await file.length();
-    final start = length - count;
-    if (start < 0) {
+    if (length <= 0) {
       return const <int>[];
     }
+    // A file shorter than [count] still has a tail — the whole file, which the
+    // contract above promises ("or fewer when the file is shorter"). Returning
+    // nothing here would make a resume verification compare an empty tail and
+    // reject a partial file that was actually fine.
+    final start = length > count ? length - count : 0;
     final handle = await file.open();
     try {
       await handle.setPosition(start);
