@@ -111,7 +111,15 @@ final class LoopbackIngestRelay {
       onManifest: onManifest,
       sessionCookies: sessionCookies,
     );
-    server.listen(relay._handle, onError: (Object _) {}, cancelOnError: false);
+    server.listen(
+      relay._handle,
+      onError: (Object error) {
+        // Server-socket errors are mostly player disconnects while the relay
+        // closes; they never kill the relay, but they were invisible before.
+        _log.debug('loopback server error', fields: <String, Object?>{'port': server.port, 'error': error.toString()});
+      },
+      cancelOnError: false,
+    );
     if (rootManifest != null) {
       relay._servedBodies['root.m3u8'] = rootManifest;
     }
@@ -121,6 +129,8 @@ final class LoopbackIngestRelay {
   static final Random _random = Random.secure();
   static final RegExp _uriAttribute = RegExp('URI="([^"]+)"', caseSensitive: false);
   static final RegExp _manifestPath = RegExp(r'(\.m3u8|/(master_)?playlist)$', caseSensitive: false);
+  // Compiled once: `_rangeOf` runs on every ranged request a player makes.
+  static final RegExp _rangeHeader = RegExp(r'bytes=(\d*)-(\d*)');
 
   final HttpServer _server;
   final HttpClient _client;
@@ -133,6 +143,14 @@ final class LoopbackIngestRelay {
   final IngestChildTransform? _childTransform;
   final IngestManifestObserver? _onManifest;
   final HlsSessionCookies? _cookies;
+
+  /// The caller's own `Cookie` header, resolved once and case-insensitively.
+  ///
+  /// HTTP header names are case-insensitive but the caller's header map is not,
+  /// so an exact `headers['cookie']` lookup misses a caller that spelled it
+  /// `Cookie` — and the merge in `_open` exists precisely so the origin's
+  /// rolling cookies cannot evict that session cookie.
+  late final String? _callerCookieHeader = _cookieHeaderOf(_headers);
 
   final Map<String, _Child> _children = <String, _Child>{};
 
@@ -155,6 +173,16 @@ final class LoopbackIngestRelay {
 
   /// Whether [close] has run; a closed relay is no longer a usable input.
   bool get isClosed => _closed;
+
+  /// The [headers] entry whose name is a cookie header, compared without case.
+  static String? _cookieHeaderOf(Map<String, String> headers) {
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == HttpHeaders.cookieHeader && entry.value.trim().isNotEmpty) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
 
   static String _newSecret() {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -196,7 +224,12 @@ final class LoopbackIngestRelay {
     if (preloaded != null) {
       body = preloaded;
     } else {
-      final upstream = await _open('GET', manifest);
+      // The manifest carries the same deadline the children have: the client's
+      // `connectionTimeout` only bounds the TCP connect, and the body timeout in
+      // `_readManifest` starts only once the headers are in, so an origin that
+      // accepts the request and then never answers would hold the player's very
+      // first request open forever.
+      final upstream = await _open('GET', manifest).timeout(_manifestTimeout);
       if (upstream.statusCode != HttpStatus.ok) {
         await upstream.drain<void>();
         await _fail(request, upstream.statusCode, child: name);
@@ -259,7 +292,10 @@ final class LoopbackIngestRelay {
 
   /// Registers [raw] (resolved against [manifest]) and returns its loopback URL.
   String? _localUrl(Uri manifest, String raw) {
-    final resolved = Uri.tryParse(raw) == null ? null : manifest.resolve(raw);
+    // Parse once: `Uri.resolve` re-parses its string argument, and every child
+    // line of every manifest refresh pays for this.
+    final parsed = Uri.tryParse(raw);
+    final resolved = parsed == null ? null : manifest.resolveUri(parsed);
     if (resolved == null ||
         !const <String>{'http', 'https'}.contains(resolved.scheme.toLowerCase()) ||
         resolved.host.isEmpty ||
@@ -407,7 +443,7 @@ final class LoopbackIngestRelay {
   /// or unusable header. The caller distinguishes "no header" from a bad one.
   static (int, int)? _rangeOf(String? header, int length) {
     if (header == null) return null;
-    final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(header);
+    final match = _rangeHeader.firstMatch(header);
     if (match == null) return null;
     final rawStart = match.group(1) ?? '';
     final rawEnd = match.group(2) ?? '';
@@ -443,7 +479,7 @@ final class LoopbackIngestRelay {
     // The caller's own cookie (a login session) merges with what the origin
     // handed out: replacing it wholesale lets rolling CDN tokens evict the
     // session cookie, and child requests start failing 403 mid-stream.
-    final cookie = _cookies?.headerFor(upstream, initialHeader: _headers[HttpHeaders.cookieHeader]);
+    final cookie = _cookies?.headerFor(upstream, initialHeader: _callerCookieHeader);
     if (cookie != null) {
       request.headers.set(HttpHeaders.cookieHeader, cookie);
     }

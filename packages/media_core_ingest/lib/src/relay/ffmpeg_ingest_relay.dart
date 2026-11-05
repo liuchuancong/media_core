@@ -320,8 +320,21 @@ final class FfmpegIngestRelay {
         ? ContentType('application', 'vnd.apple.mpegurl')
         : ContentType('video', 'mp2t');
     request.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    await request.response.addStream(file.openRead());
-    await request.response.close();
+    try {
+      await request.response.addStream(file.openRead());
+      await request.response.close();
+    } on Object catch (error) {
+      // `delete_segments` can remove a segment between the existence check and
+      // the read, and the player can hang up mid-file. Either way the answer is
+      // a clean end of what was already sent - not an abandoned socket the
+      // reader reports as a dead relay.
+      _log.warning('ingest file serve failed', error: error, fields: <String, Object?>{'file': name});
+      try {
+        await request.response.close();
+      } on Object catch (_) {
+        // The player closed first; nothing left to answer.
+      }
+    }
   }
 
   /// Stops FFmpeg, the port and the staging directory.
