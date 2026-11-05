@@ -192,19 +192,32 @@ extension _LivePlaybackSweep on LivePlaybackController {
         return;
       }
 
+      // The line the viewer is on, in the list that replaced it. A refresh is
+      // a new answer from the platform, not a re-sort of the old one: its own
+      // preference order can put another CDN at index 0, and a signed query
+      // changes every round-trip, so host and path are what names a line
+      // across the two. Without this a stall moves the viewer to the platform's
+      // first line — and the host's line mirror follows `sourceIndex`, so the
+      // picker starts reporting a line nobody chose.
+      final watched = _lineAddress(_currentSource ?? (_sources.isEmpty ? null : _sources[_sourceIndex]));
       _sources = List<PlayerSource>.unmodifiable(refreshed);
-      // The refreshed list arrives in preference order, so the line to try
-      // first is index 0 — and the engine-switch resume point follows it,
-      // having been the line the user was watching before the refresh.
-      _sourceIndex = 0;
-      _sweepStart = 0;
+      final resumed = watched == null ? -1 : refreshed.indexWhere((source) => _lineAddress(source) == watched);
+      final resume = resumed < 0 ? 0 : resumed;
+
+      _sourceIndex = resume;
+      _sweepStart = resume;
 
       _reportMemory();
 
       MediaCoreLog.info(
         LogCategory.recovery,
         'recovery sources refreshed by the caller',
-        fields: <String, Object?>{'lines': _sources.length, 'first': _lineAddress(_sources.first)},
+        fields: <String, Object?>{
+          'lines': _sources.length,
+          'first': _lineAddress(_sources.first),
+          'resumeAtLine': resume,
+          'keptLine': resumed >= 0,
+        },
       );
     } on Object catch (error) {
       MediaCoreLog.warning(

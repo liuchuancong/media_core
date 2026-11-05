@@ -362,6 +362,53 @@ void main() {
       await kernel.dispose();
     }, timeout: const Timeout(Duration(seconds: 60)));
 
+    test('the line the viewer chose survives a refresh that reorders the plan', () async {
+      // A refresh is a fresh answer from the platform, and its order is the
+      // platform's own business: the viewer's pick has to be found again in it
+      // instead of being traded for whatever now comes first. The signature
+      // changes on every round-trip, so host and path are what name a line
+      // across the two lists — and the host mirrors `sourceIndex` into its own
+      // line picker, so a silent jump back to index 0 is a line nobody chose.
+      final adapters = {'engine-a': _fake('engine-a')};
+      final kernel = _kernel(adapters);
+      final controller = _controller(
+        kernel,
+        onRecoverySources: (_) async => [
+          _line('https://cdn-primary.example/live.flv?sign=303'),
+          _line('https://cdn-backup.example/live.flv?sign=303'),
+        ],
+      );
+
+      final failures = <PlayerFailure>[];
+      final subscription = controller.onError.listen(failures.add);
+
+      final requested = controller.play(
+        _request([
+          'https://cdn-primary.example/live.flv?sign=101',
+          'https://cdn-backup.example/live.flv?sign=101',
+        ], allowEngineFallback: false),
+      );
+      await _pumpPosition(adapters.values);
+      await requested;
+
+      final switched = controller.switchLine(1);
+      await _pumpPosition(adapters.values);
+      await switched;
+
+      expect(controller.sourceIndex, 1);
+
+      adapters['engine-a']!.emitError('Server returned 403 Forbidden');
+      await _pumpPosition(adapters.values);
+
+      expect(controller.sourceIndex, 1, reason: 'the picked line is index 1 of the refreshed plan too');
+      expect(adapters['engine-a']!.openedSources.last.uri.host, 'cdn-backup.example');
+      expect(failures, isEmpty);
+
+      await subscription.cancel();
+      await controller.dispose();
+      await kernel.dispose();
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
     test('an answer that lands after a newer play is discarded', () async {
       // The refresh is the recovery's only await that a user command can
       // overtake. Adopting a late answer would swap the lines out from under
