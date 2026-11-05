@@ -775,7 +775,10 @@ base class MediaSessionDriver implements KernelAudioDriver, MediaBackgroundSessi
       'skipToPrevious' => handler.skipToPrevious(),
       'rewind' => handler.rewind(),
       'fastForward' => handler.fastForward(),
-      'seekTo' => handler.seek(action.seekPosition ?? Duration.zero),
+      // A seekTo without a position carries no datum: reading the missing
+      // field as "the beginning" would yank playback to zero because a
+      // platform event was malformed. It is dropped instead.
+      'seekTo' when action.seekPosition != null => handler.seek(action.seekPosition!),
       _ => Future<void>.value(),
     };
 

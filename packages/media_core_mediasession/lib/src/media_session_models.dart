@@ -163,7 +163,17 @@ final class MediaSessionValue<T> {
   T get value => _value;
 
   /// Replaces the value and tells every listener.
+  ///
+  /// Re-adding the instance already held notifies nobody: the surfaces are
+  /// state, so a listener holds exactly what would be re-sent. This is what
+  /// keeps a second `publishIdle` or a `clearMediaItem` with nothing to clear
+  /// from driving the whole publish chain again. A new instance with equal
+  /// content still goes through, so every real publish keeps arriving.
   void add(T next) {
+    if (identical(next, _value)) {
+      return;
+    }
+
     _value = next;
     _changes.add(next);
   }
