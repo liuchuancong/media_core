@@ -124,6 +124,10 @@ final class MemoryRegistry {
   MemoryReport report({MemorySnapshot? device}) {
     _ensureNotDisposed();
 
+    // Each total walks every account and every contributor, so they are read
+    // once rather than once per consumer below.
+    final totalBytes = this.totalBytes;
+    final totalItems = this.totalItems;
     final pressure = _budget.pressureFor(totalBytes);
 
     final snapshots =
