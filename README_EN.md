@@ -193,7 +193,7 @@ Registration is uniform: `kernel.registerBackend(const XxxAdapterFactory().regis
 | Playback (any of the five backends)      | ✅      | ✅    | ✅    | ✅              | ✅                         |
 | System media surface (notifications / lock screen / SMTC) | ✅ | ✅ | ✅ | ✅ | ⏳ pending MPRIS |
 | Capability probes (hardware decode / device / system features) | ✅ | ✅ | ✅ | ✅ | ✅ (per-codec pending libva) |
-| System PiP / picture-in-picture          | ✅ overlay handoff | ✅ pip_kit | ⏳ | — in-app mini window | — in-app mini window |
+| System PiP / picture-in-picture          | ✅ overlay handoff | ✅ pip_kit | in-app mini window ✅ · system PiP ⏳ | — in-app mini window | — in-app mini window |
 | Desktop lyrics window                    | ✅      | —    | ✅    | ✅              | ✅                         |
 
 ## Documentation
