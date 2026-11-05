@@ -35,6 +35,7 @@ workspace:
   - packages/media_core_download
   - packages/media_core_multiview
   - packages/media_core_ingest
+  - packages/media_core_media_activity
   - example
 dev_dependencies:
   kareki: ^0.7.0

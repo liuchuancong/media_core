@@ -1,0 +1,12 @@
+# The workspace's canonical configuration lives at the repository root; this file
+# only points at it. A package may add rules here, and may not weaken the shared
+# set — an exception needs a record in docs/decisions/.
+analyzer:
+  exclude:
+    - ios/**
+    # Pigeon's input declares bare `final` fields on purpose (the codegen
+    # owns the constructors), so the analyzer must not score it as Dart.
+    - pigeons/**
+    # Pigeon output is generated and formatted by the codegen tool.
+    - lib/src/platform/media_activity_api.g.dart
+include: ../../analysis_options.yaml

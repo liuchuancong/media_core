@@ -1,0 +1,33 @@
+name: media_core_media_activity
+description: >-
+  iOS Media Activity backend for media_core: lock-screen lyrics and Dynamic
+  Island through ActivityKit Live Activities, plus Now Playing information and
+  remote commands through MediaPlayer. Flutter stays the media data source;
+  this package owns the iOS system-adapter layer.
+version: 0.1.0
+publish_to: none
+repository: https://github.com/liuchuancong/media_core
+issue_tracker: https://github.com/liuchuancong/media_core/issues
+resolution: workspace
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  # Type-safe Flutter <-> Swift protocol for the activity bridge; the
+  # generated pair lands in lib/src/platform/ and ios/Classes/.
+  pigeon: ^29.0.8
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: MediaActivityPlugin
