@@ -134,6 +134,12 @@ final class MediaCorePresentation implements KernelPresentationDriver {
       if (orientation == null) {
         return;
       }
+      // Renderer events repeat the same frame geometry for as long as the
+      // stream runs; only the first of a run needs to reach the desktop
+      // driver, the rest would be identical field writes on every event.
+      if (orientation == _orientation) {
+        return;
+      }
       _orientation = orientation;
       _desktop?.onVideoSize(_lastWidth, _lastHeight);
     }, onError: (Object error) {

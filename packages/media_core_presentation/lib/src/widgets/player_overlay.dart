@@ -267,30 +267,43 @@ class _MediaPlayerOverlayState extends State<MediaPlayerOverlay> {
   @override
   Widget build(BuildContext context) {
     final showControls = _controlsShown;
-    final stageHeight = MediaQuery.of(context).size.height;
-    final topStrip = widget.topStripHeight ?? (stageHeight * 0.15);
-    final bottomStrip = widget.bottomStripHeight ?? (stageHeight * 0.22);
 
-    return MouseRegion(
-      opaque: false,
-      onEnter: widget.hoverMode ? (_) => _onHover(true) : null,
-      onExit: widget.hoverMode ? (_) => _onHover(false) : null,
-      onHover: widget.hoverMode ? (_) => _onPointerMove() : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.deferToChild,
-        onTap: widget.onTap,
-        child: Stack(
-          fit: StackFit.passthrough,
-          children: [
-            // Video surface.
-            Positioned.fill(child: widget.child),
+    // Strip heights are fractions of the *stage* - this widget's own box -
+    // not of the screen: outside fullscreen the overlay covers only the
+    // video slot, and measuring MediaQuery there sized the strips off the
+    // window and mis-scaled every slot geometry. An unbounded height
+    // (slivers, unlayouted parents) falls back to the screen size.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxHeight = constraints.maxHeight;
+        final stageHeight = maxHeight.isFinite && maxHeight > 0
+            ? maxHeight
+            : MediaQuery.of(context).size.height;
+        final topStrip = widget.topStripHeight ?? (stageHeight * 0.15);
+        final bottomStrip = widget.bottomStripHeight ?? (stageHeight * 0.22);
 
-            // Layer slots.
-            for (final (index, layer) in widget.layers.indexed)
-              _buildSlot(layer, index: index, showControls: showControls, topStrip: topStrip, bottomStrip: bottomStrip),
-          ],
-        ),
-      ),
+        return MouseRegion(
+          opaque: false,
+          onEnter: widget.hoverMode ? (_) => _onHover(true) : null,
+          onExit: widget.hoverMode ? (_) => _onHover(false) : null,
+          onHover: widget.hoverMode ? (_) => _onPointerMove() : null,
+          child: GestureDetector(
+            behavior: HitTestBehavior.deferToChild,
+            onTap: widget.onTap,
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                // Video surface.
+                Positioned.fill(child: widget.child),
+
+                // Layer slots.
+                for (final (index, layer) in widget.layers.indexed)
+                  _buildSlot(layer, index: index, showControls: showControls, topStrip: topStrip, bottomStrip: bottomStrip),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -154,6 +154,37 @@ void main() {
     expect(tester.widget<FittedBox>(find.byType(FittedBox)).fit, BoxFit.cover);
   });
 
+  testWidgets('overlay: strip heights are fractions of the stage, not of the screen', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              height: 200,
+              child: MediaPlayerOverlay(
+                hoverMode: false,
+                layers: [
+                  PlayerOverlayLayer(slot: PlayerOverlaySlot.top, builder: _anyContent),
+                ],
+                child: ColoredBox(color: Colors.black),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The overlay covers a 200px stage on an 800x600 test screen. The top
+    // strip is 15% of the *stage* (30px); measured off the screen it would
+    // have been 90px - taller than the video slot it sits in.
+    final positioned = tester.widget<Positioned>(
+      find.ancestor(of: find.text('content'), matching: find.byType(Positioned)).first,
+    );
+    expect(positioned.height, 30.0);
+  });
+
   test('kernel presentation shortcuts throw without driver', () async {
     final kernel = PlayerKernel();
     addTearDown(kernel.dispose);
