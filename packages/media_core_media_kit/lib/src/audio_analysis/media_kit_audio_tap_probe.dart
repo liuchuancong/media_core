@@ -245,6 +245,15 @@ final class MediaKitAudioTapProbe {
   }
 }
 
+/// The astats level pattern behind [parseAstatsMetadata], compiled once.
+///
+/// The parser runs at the astats callback rate — the audio frame rate, tens
+/// of times a second — and compiling this pattern on every call was the
+/// dominant per-frame cost B2 measures, not the matching itself.
+final RegExp _astatsLevelPattern = RegExp(
+  r'lavfi\.astats\.(Overall|\d+)\.(RMS_level|Peak_level)=(-?inf|nan|[-+]?\d+(?:\.\d+)?)',
+);
+
 /// Parses one `af-metadata` string into level readings.
 ///
 /// The string arrives as `+lavfi.astats.Overall.RMS_level=-23.1
@@ -252,9 +261,6 @@ final class MediaKitAudioTapProbe {
 /// entries cannot be split on `+`. `-inf` reads as negative infinity, `nan`
 /// and anything unparsable as "no reading".
 AudioTapLevelFrame? parseAstatsMetadata(String raw) {
-  final pattern = RegExp(
-    r'lavfi\.astats\.(Overall|\d+)\.(RMS_level|Peak_level)=(-?inf|nan|[-+]?\d+(?:\.\d+)?)',
-  );
   var overallRms = false;
   var overallPeak = false;
   double? rms;
@@ -263,7 +269,7 @@ AudioTapLevelFrame? parseAstatsMetadata(String raw) {
   final channelRms = <int, double?>{};
   final channelPeak = <int, double?>{};
 
-  for (final match in pattern.allMatches(raw)) {
+  for (final match in _astatsLevelPattern.allMatches(raw)) {
     final value = switch (match.group(3)) {
       '-inf' => double.negativeInfinity,
       'inf' => double.infinity,

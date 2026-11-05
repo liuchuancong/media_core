@@ -194,6 +194,22 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// never replaces a tuning the host asked for.
   final Set<String> _hostOptionKeys = <String>{};
 
+  /// Whether [mpvLiveOpenDefaults] has already been written to this player.
+  ///
+  /// mpv options persist across `loadfile` — they are player state, not
+  /// per-load state — and nothing else writes them (media_kit sets its own
+  /// table once at player creation, then never again), so the table only
+  /// needs to reach the engine once.
+  bool _liveOpenDefaultsApplied = false;
+
+  /// Whether the composite side channels hold state this adapter wrote.
+  ///
+  /// The `audio-files` / `sub-files` lists, `audio-delay` and the external
+  /// fetch headers are player-global and survive every load; this flag lets
+  /// the next open pay for resetting them only after a composite source
+  /// actually wrote some. See [_resetCompositeSideChannels].
+  bool _compositeSideChannelsUsed = false;
+
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _hasOpened = false;
@@ -360,34 +376,46 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _observeLoudness();
 
     // Options the caller pushed before this adapter was initialized ride
-    // along to the engine's first moment.
-    for (final option in consumeStashedEngineOptions()) {
+    // along to the engine's first moment. The writes are independent, so
+    // they are issued together and media_kit's command lock executes them
+    // in the order listed, instead of paying one awaited round trip per
+    // option before the engine can open anything.
+    final stashed = consumeStashedEngineOptions();
+    if (stashed.isNotEmpty) {
       // A key the caller named is theirs, not a default's: the live-open
       // table leaves anything written by name alone.
-      _hostOptionKeys.add(option.key);
-      await _applyNativeOption(option);
+      _hostOptionKeys.addAll(stashed.map((option) => option.key));
+      await Future.wait(<Future<bool>>[
+        for (final EngineOption option in stashed) _applyNativeOption(option),
+      ]);
     }
   }
 
   @override
   Future<List<EngineOptionOutcome>> onApplyEngineOptions(List<EngineOption> options) async {
-    final outcomes = <EngineOptionOutcome>[];
+    // mpv takes property writes on a running player through
+    // `NativePlayer.setProperty`; the request is delivered to the live
+    // instance and the engine applies what its runtime allows. An
+    // option the engine refuses is reported as unsupported rather than
+    // applied, so the caller can rebuild the player with it instead of
+    // assuming the tuning landed. A list value is not a property write:
+    // see [mpvListOptionCommands].
+    //
+    // The writes are independent, so they are all issued before the first
+    // is awaited — the host applies several options on the open path, and
+    // one awaited round trip per option delayed the open for nothing.
+    // media_kit's command lock still executes them in the order listed,
+    // and each outcome lands back at its option's index.
+    _hostOptionKeys.addAll(options.map((option) => option.key));
 
-    for (final option in options) {
-      // mpv takes property writes on a running player through
-      // `NativePlayer.setProperty`; the request is delivered to the live
-      // instance and the engine applies what its runtime allows. An
-      // option the engine refuses is reported as unsupported rather than
-      // applied, so the caller can rebuild the player with it instead of
-      // assuming the tuning landed. A list value is not a property write:
-      // see [mpvListOptionCommands].
-      _hostOptionKeys.add(option.key);
-      final applied = await _applyNativeOption(option);
+    final applied = await Future.wait(<Future<bool>>[
+      for (final EngineOption option in options) _applyNativeOption(option),
+    ]);
 
-      outcomes.add(applied ? EngineOptionOutcome.appliedLive : EngineOptionOutcome.unsupported);
-    }
-
-    return outcomes;
+    return <EngineOptionOutcome>[
+      for (final bool ok in applied)
+        if (ok) EngineOptionOutcome.appliedLive else EngineOptionOutcome.unsupported,
+    ];
   }
 
   /// Normalizes a scalar option value into mpv's string dialect.
@@ -410,10 +438,27 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _hasDecodedVideoFrame = false;
     _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
 
+    // Whatever a previous composite source left in mpv's side channels
+    // (external tracks, alignment delay, request headers) is player-global
+    // and would otherwise reach this load. See [_resetCompositeSideChannels].
+    if (_compositeSideChannelsUsed) await _resetCompositeSideChannels();
+
     // The properties a live input needs are set here rather than at creation
     // because they describe the input, not the player, and the player outlives
     // the room whose stream it opens next.
     if (_liveSource) await _applyLiveOpenDefaults();
+
+    // A suppressed room must not blip audio between the load starting and
+    // [onAfterOpen] re-applying the mute: mpv reads `aid` at track selection,
+    // so writing it before the load covers the whole window.
+    if (_audioOutputSuppressed) {
+      try {
+        await player.setAudioTrack(mk.AudioTrack.no());
+      } on Object catch (error) {
+        // Best-effort; some builds reject track selection before open.
+        MediaCoreLog.warning(LogCategory.audio, 'audio track suppression failed', error: error);
+      }
+    }
 
     final hook = beforeOpen;
     if (hook != null) await hook(player, source);
@@ -421,14 +466,54 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
   /// Writes [mpvLiveOpenDefaults] except where the caller has named the key.
   ///
+  /// Written once per player: mpv options persist across `loadfile`, and
+  /// nothing but this table ever writes them, so re-writing the same five
+  /// values on every live open was five serialized native writes on the
+  /// open path bought for nothing. The first live open pays for the table;
+  /// the writes themselves are independent, so they are issued together and
+  /// media_kit's command lock keeps the listed order — the same shape
+  /// media_kit's own player-creation path uses.
+  ///
   /// A rejected property is logged by [_setNativeProperty] and is not fatal:
   /// an mpv build without the option opens the stream on its own budget, which
   /// is what happened before this table existed.
   Future<void> _applyLiveOpenDefaults() async {
-    for (final entry in mpvLiveOpenDefaults.entries) {
-      if (_hostOptionKeys.contains(entry.key)) continue;
-      await _setNativeProperty(entry.key, entry.value);
-    }
+    if (_liveOpenDefaultsApplied) return;
+    _liveOpenDefaultsApplied = true;
+
+    await Future.wait(<Future<bool>>[
+      for (final entry in mpvLiveOpenDefaults.entries)
+        if (!_hostOptionKeys.contains(entry.key)) _setNativeProperty(entry.key, entry.value),
+    ]);
+  }
+
+  /// Returns mpv's composite side channels to engine defaults.
+  ///
+  /// The side channel works by writing player-global mpv state: the
+  /// `audio-files` / `sub-files` lists, `audio-delay`, and the request
+  /// headers (`http-header-fields`, `user-agent`) that every external
+  /// fetch uses. mpv carries all of it across `loadfile`, and media_kit's
+  /// own load hook only ever *sets* headers for a source that has them —
+  /// it never clears — so without this reset the next source inherited the
+  /// previous room's external tracks (whose dead URLs were fetched on
+  /// every open), its alignment delay, and, when it opened without headers
+  /// of its own, its Referer and Cookie.
+  ///
+  /// Runs before a load, once any of this state was ever written; sources
+  /// that never used the side channel pay nothing.
+  Future<void> _resetCompositeSideChannels() async {
+    _compositeSideChannelsUsed = false;
+
+    await Future.wait(<Future<bool>>[
+      _runNativeCommand(<String>['change-list', 'audio-files', 'clr', '']),
+      _runNativeCommand(<String>['change-list', 'sub-files', 'clr', '']),
+      _runNativeCommand(<String>['change-list', 'http-header-fields', 'clr', '']),
+      _setNativeProperty('audio-delay', '0'),
+      // mpv's documented default; the composite path overwrote it for its
+      // own external fetches and neither value must leak into the next
+      // source's requests.
+      _setNativeProperty('user-agent', 'libmpv'),
+    ]);
   }
 
   @override
@@ -510,6 +595,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       }
 
       if (firstAudio) {
+        _compositeSideChannelsUsed = true;
         await _applyAudioAlignment(native, timeline, videoEntry);
         firstAudio = false;
       }
@@ -518,6 +604,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       // options, not the per-Media httpHeaders the primary open() carried, so
       // mirror the track's request headers onto the player first (Referer /
       // Cookie via http-header-fields; User-Agent via its own option).
+      _compositeSideChannelsUsed = true;
       await _applyTrackNetworkHeaders(native, track.headers?.values ?? const <String, String>{});
       await _sideChannelAppend(native, 'audio-files', url, track);
     }
@@ -534,6 +621,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
         _warnNoSideChannel();
         return;
       }
+      _compositeSideChannelsUsed = true;
       await _applyTrackNetworkHeaders(native, track.headers?.values ?? const <String, String>{});
       await _sideChannelAppend(native, 'sub-files', url, track);
     }
@@ -596,7 +684,30 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   Future<void> _applyTrackNetworkHeaders(dynamic native, Map<String, String> headers) async {
     if (headers.isEmpty) return;
 
-    final sanitized = HttpHeaderSanitizer.sanitize(headers);
+    final Map<String, String> sanitized;
+    try {
+      // HttpHeaderSanitizer refuses a header it cannot send rather than
+      // rewriting it — the framework's single rule. This path is best-effort
+      // like the rest of the side channel: the refusal must keep these
+      // headers off the wire, not abort the whole open the primary video is
+      // waiting on, so the error is logged loudly and the essence attaches
+      // without them (a CDN that required one will 403 on the stream
+      // prefix, which the error path reports).
+      sanitized = HttpHeaderSanitizer.sanitize(headers);
+    }
+    // HttpHeaderError extends ArgumentError, so the lint objects to the
+    // catch; refusing this particular Error is the framework's documented
+    // contract (see HttpHeaderSanitizer) and the repo-wide pattern.
+    // ignore: avoid_catching_errors
+    on HttpHeaderError catch (error) {
+      MediaCoreLog.warning(
+        LogCategory.network,
+        'side-channel request headers were refused: ${error.message}; the '
+        'essence will be fetched without them',
+        error: error,
+      );
+      return;
+    }
     final userAgent = sanitized.remove('user-agent');
 
     if (userAgent != null) {
@@ -865,7 +976,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _subscriptions.add(s.height.listen(_onHeight));
 
-    _subscriptions.add(s.error.listen(_onError));
+    // mpv's log lines reach the adapter twice: on `error` as bare text and
+    // on `log` with the mpv prefix attached. The prefix is what makes honest
+    // classification possible — see [_onLog].
+    _subscriptions.add(s.log.listen(_onLog));
 
     _subscriptions.add(s.buffer.listen(_onBuffer));
 
@@ -933,10 +1047,30 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       //
       // Do not replace this with position / width / height changes:
       // those signals do not prove that video frames are progressing.
-      // ignore: avoid_dynamic_calls
-      (native as dynamic).observeProperty?.call(property, (dynamic value) async {
-        _onNativeFrameSignal(property, value?.toString() ?? '');
-      });
+      //
+      // The observe call completes asynchronously and can fail on its own
+      // future (a disposed player, or the already-observed error an
+      // injected shared player answers with); routing the future keeps that
+      // failure inside this handler instead of escaping the try/catch as an
+      // unhandled zone error.
+      final observation =
+          // observeProperty lives on the concrete NativePlayer surface, not
+          // on the shared platform type; probing dynamically matches the
+          // loudness observer below.
+          // ignore: avoid_dynamic_calls
+          (native as dynamic).observeProperty?.call(property, (dynamic value) async {
+            _onNativeFrameSignal(property, value?.toString() ?? '');
+          }) as Future<void>?;
+      unawaited(
+        observation?.catchError((Object error, StackTrace stackTrace) {
+          MediaCoreLog.warning(
+            LogCategory.renderer,
+            'observeProperty failed: $error',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }),
+      );
     } on Object catch (error, stackTrace) {
       MediaCoreLog.warning(
         LogCategory.renderer,
@@ -994,11 +1128,27 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       // the frame-heartbeat observer above. Its listener is
       // `Future<void> Function(String)`: mpv formats the observed
       // property before handing it over, so af-metadata arrives as a
-      // `+key=value` string rather than a map.
-      // ignore: avoid_dynamic_calls
-      (native as dynamic).observeProperty?.call('af-metadata', (dynamic value) async {
-        _onLoudnessMetadata(value?.toString() ?? '');
-      });
+      // `+key=value` string rather than a map. The future is routed the
+      // same way the heartbeat observer routes its own, so an async
+      // failure lands in this handler instead of the zone.
+      final observation =
+          // observeProperty lives on the concrete NativePlayer surface, not
+          // on the shared platform type; probing dynamically matches the
+          // frame-heartbeat observer above.
+          // ignore: avoid_dynamic_calls
+          (native as dynamic).observeProperty?.call('af-metadata', (dynamic value) async {
+            _onLoudnessMetadata(value?.toString() ?? '');
+          }) as Future<void>?;
+      unawaited(
+        observation?.catchError((Object error, StackTrace stackTrace) {
+          MediaCoreLog.warning(
+            LogCategory.audio,
+            'observeProperty af-metadata failed: $error',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }),
+      );
     } on Object catch (error, stackTrace) {
       MediaCoreLog.warning(
         LogCategory.audio,
@@ -1014,24 +1164,35 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (!_hasOpened || !_playingNow) return;
     if (value.isEmpty) return;
 
-    final momentary = _r128Value(value, 'lavfi.r128.M');
-    final shortTerm = _r128Value(value, 'lavfi.r128.S');
-    if (momentary == null || shortTerm == null) return;
-
+    // Gate on the publish cadence before parsing: astats reports at the
+    // audio frame rate — tens of callbacks a second — and parsing each one
+    // only to discard it against the clock below spent the meter's budget
+    // on readings nobody sees.
     final now = _loudnessClock.elapsedMilliseconds;
     if (now - _lastLoudnessMs < loudnessIntervalMs) {
       return;
     }
+
+    final momentary = _r128Value(value, _r128MomentaryPattern);
+    final shortTerm = _r128Value(value, _r128ShortTermPattern);
+    if (momentary == null || shortTerm == null) return;
+
     _lastLoudnessMs = now;
 
     emitLoudnessChanged(momentary: momentary, shortTerm: shortTerm);
   }
 
-  /// Reads one ebur128 value out of mpv's map string form,
-  /// `+lavfi.r128.M=-23.1+lavfi.r128.S=-23.4`. The sign can belong to
-  /// the value itself, so entries cannot just be split on `+`.
-  double? _r128Value(String metadata, String key) {
-    final match = RegExp('${RegExp.escape(key)}=([-+]?[0-9]*\\.?[0-9]+)').firstMatch(metadata);
+  /// The ebur128 keys arrive as `+lavfi.r128.M=-23.1+lavfi.r128.S=-23.4`;
+  /// the sign can belong to the value itself, so entries cannot just be
+  /// split on `+`. The patterns are compiled once: the callback that runs
+  /// them fires at the audio frame rate, and compiling a RegExp per call
+  /// was the meter's dominant cost.
+  static final RegExp _r128MomentaryPattern = RegExp(r'lavfi\.r128\.M=([-+]?[0-9]*\.?[0-9]+)');
+  static final RegExp _r128ShortTermPattern = RegExp(r'lavfi\.r128\.S=([-+]?[0-9]*\.?[0-9]+)');
+
+  /// Reads one ebur128 value out of mpv's map string form with [pattern].
+  double? _r128Value(String metadata, RegExp pattern) {
+    final match = pattern.firstMatch(metadata);
     if (match == null) return null;
     return double.tryParse(match.group(1)!);
   }
@@ -1053,6 +1214,11 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _playingNow = false;
 
+    // The end-of-file flag belongs to an open generation; media_kit carries
+    // the same global stream across reopen, and a late EOF from the source
+    // being torn down must not publish "completed" for the next one.
+    if (!_hasOpened) return;
+
     emitCompleted();
   }
 
@@ -1060,6 +1226,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (_bufferingNow == buffering) return;
 
     _bufferingNow = buffering;
+
+    // media_kit replays buffering=false on stop(); during a reopen that
+    // replay belongs to the previous generation. The latch is still updated
+    // above — otherwise the next real transition would be swallowed as a
+    // duplicate — but nothing is published for a source that is not open.
+    if (!_hasOpened) return;
 
     emitBuffering(buffering: buffering, resumePlaying: buffering ? null : _playingNow);
   }
@@ -1128,10 +1300,51 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     emitVideoSizeChangedIfChanged(w, h);
   }
 
-  void _onError(String message) {
-    MediaCoreLog.warning(LogCategory.error, message);
+  /// Classifies one mpv log line at error level.
+  ///
+  /// media_kit feeds its `error` stream from these very lines, text-only:
+  /// it forwards prefixes `file`, `ffmpeg` (only `tcp:` text), `vd`, `ad`,
+  /// `cplayer` and `stream`. Subscribing to `log` instead reproduces that
+  /// exact set while keeping the prefix, which is what the classification
+  /// needs.
+  ///
+  /// `vd` / `ad` are demoted to log-only. Those prefixes name decoder
+  /// output for individual frames or packets, which mpv recovers from by
+  /// itself — and `vd` is exactly how the hardware decoder failure this
+  /// adapter configures (`hwdec-software-fallback: 1`) reports its own
+  /// fallback to software. Reporting every such line as an engine failure
+  /// condemned healthy streams: the live open verification treats any
+  /// adapter error as a failed candidate (a needless engine switch), and a
+  /// line during idle playback triggered a full recovery reopen. Real
+  /// stalls are the watchdogs' job; load-path failures (file, stream,
+  /// ffmpeg network, cplayer) still fail the engine as before.
+  void _onLog(mk.PlayerLog log) {
+    if (log.level != 'error') return;
 
-    reportEngineError(message: message);
+    switch (log.prefix) {
+      case 'vd':
+      case 'ad':
+        // A decode error on one frame or packet; mpv keeps playing.
+        MediaCoreLog.warning(
+          LogCategory.player,
+          'mpv decode error (non-fatal): ${log.text}',
+          fields: <String, Object?>{'prefix': log.prefix},
+        );
+      case 'file':
+      case 'stream':
+      case 'cplayer':
+        MediaCoreLog.warning(LogCategory.error, log.text);
+        reportEngineError(message: log.text);
+      case 'ffmpeg':
+        // The http:// error of any kind — media_kit's own selection rule.
+        if (!log.text.startsWith('tcp:')) return;
+        MediaCoreLog.warning(LogCategory.error, log.text);
+        reportEngineError(message: log.text);
+      default:
+        // Prefixes media_kit's error stream never delivered stay
+        // unreported, exactly as before.
+        break;
+    }
   }
 
   void _onBuffer(Duration buffered) {
