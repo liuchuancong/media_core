@@ -63,6 +63,8 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
   /// Replaces [videoConfig] and publishes the new fit when it changed.
   set videoConfig(FvpVideoConfig value) {
     _videoConfig = value;
+    // Keep the plain getter on the same fit the notifier carries.
+    _videoFit = value.fit;
     if (_fitNotifier.value != value.fit) {
       _fitNotifier.value = value.fit;
     }
@@ -180,6 +182,11 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     if (result < 0) {
       _hasOpened = false;
       _openFailed = true;
+
+      // A failed open leaves the previous source's poller behind: its
+      // _player != player guard makes each tick a no-op, but the timer would
+      // still wake up twice a second until the next successful open or stop.
+      _stopPositionPolling();
 
       // A failed open must not leave a latched spinner behind: later engine
       // statuses are gated out by the open window, so nothing else clears it.
@@ -378,9 +385,39 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       player.setProperty(entry.key, entry.value);
     }
 
+    // Engine options staged before this engine existed join it now: the
+    // base's stash holds options applied before initialize(), the adapter
+    // map holds options applied between opens (last value wins), matching
+    // the stagedForNextOpen outcomes reported by onApplyEngineOptions.
+    final stashed = consumeStashedEngineOptions();
+
+    for (final option in stashed) {
+      _applyStagedOption(player, option);
+    }
+
+    for (final option in _pendingEngineOptions.values) {
+      _applyStagedOption(player, option);
+    }
+
+    _pendingEngineOptions.clear();
+
     _bind(player);
 
     return player;
+  }
+
+  /// Writes one staged option into a fresh engine; a failure is logged and
+  /// dropped rather than failing the open that is about to use the engine.
+  void _applyStagedOption(mdk.Player player, EngineOption option) {
+    try {
+      _applyEngineOption(player, option);
+    } on Object catch (error) {
+      _log.warning(
+        'staged engine option failed to apply',
+        error: error,
+        fields: <String, Object?>{'key': option.key},
+      );
+    }
   }
 
   /// Engine options received while no engine instance exists.
@@ -460,6 +497,14 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
     _subscriptions.clear();
 
+    // The texture belongs to the outgoing engine: its native surface dies
+    // with the player below. Clearing it here is what lets the next open
+    // attach a fresh texture — an open-to-open transition without an
+    // intervening close would otherwise leave the old (already released)
+    // texture id in the notifier, and every _attachTexture for the new
+    // engine would return at the "texture exists" guard.
+    await _releaseTexture();
+
     final player = _player;
 
     _player = null;
@@ -473,13 +518,20 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
     _log.info('fvp engine released');
   }
 
+  /// Characters that make a header name unusable in a CRLF line: CR/LF would
+  /// inject extra lines, ':' would split the name from its value.
+  static final RegExp _invalidHeaderName = RegExp(r'[\r\n:]');
+
+  /// Characters that make a header value unusable in a CRLF line.
+  static final RegExp _invalidHeaderValue = RegExp(r'[\r\n]');
+
   /// `avio.headers` takes CRLF-terminated lines; values that would inject extra
   /// header lines are dropped.
   static String encodeHeaders(Map<String, String> headers) {
     final buffer = StringBuffer();
 
     headers.forEach((name, value) {
-      if (name.isEmpty || RegExp(r'[\r\n:]').hasMatch(name) || RegExp(r'[\r\n]').hasMatch(value)) {
+      if (name.isEmpty || _invalidHeaderName.hasMatch(name) || _invalidHeaderValue.hasMatch(value)) {
         return;
       }
 
@@ -616,8 +668,15 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
 
       final buffered = player.buffered();
 
+      // Compare before snapshotting: libmdk returns a stable buffered lead
+      // most ticks, and copying the metrics object 2x/second for an unchanged
+      // value is pure per-tick allocation.
       if (buffered > 0) {
-        updateMetrics((metrics) => metrics.copyWith(buffered: Duration(milliseconds: buffered)));
+        final bufferedRange = Duration(milliseconds: buffered);
+
+        if (bufferedRange != metrics.buffered) {
+          updateMetrics((metrics) => metrics.copyWith(buffered: bufferedRange));
+        }
       }
 
       final volume = player.volume;
@@ -765,7 +824,14 @@ final class FvpPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
       // A source without a video stream: the engine still plays audio, and there
       // is nothing to paint.
       if (size == null || size.width <= 0 || size.height <= 0) {
-        if (size == null) await _retryGeometryOnce(player);
+        // The retry must run after this attach window closes: it ends by
+        // calling _attachTexture again, and a retry awaited from inside the
+        // try block would have that call (and the media-status driven re-attach
+        // firing mid-retry) dropped by the _attachingTexture guard below — the
+        // re-prepared source would then play audio with no texture forever.
+        // Scheduling it unawaited lets the finally clause clear the flag
+        // first; the trailing attach stays idempotent either way.
+        if (size == null) unawaited(_retryGeometryOnce(player));
         return;
       }
 
