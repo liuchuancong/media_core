@@ -459,6 +459,7 @@ final class PipDriver implements KernelPresentationDriver {
             'x'
             '$_videoHeight',
         'alwaysOnTop': true,
+        'visibleOnAllSpaces': config.visibleOnAllSpaces,
         'skipTaskbar': config.skipTaskbar,
         'lockAspectRatio': config.lockAspectRatio,
         'minSize': '${config.minWidth.round()}x${config.minHeight.round()}',
@@ -480,6 +481,10 @@ final class PipDriver implements KernelPresentationDriver {
       resizable: true,
       skipTaskbar: config.skipTaskbar,
       title: config.title,
+      // Float over every workspace so the viewer can keep watching while
+      // working in another app (including its fullscreen spaces); Windows
+      // ignores this — its compact window is already topmost.
+      visibleOnAllSpaces: config.visibleOnAllSpaces,
     );
 
     // Committed only after a successful apply: a stored phantom snapshot

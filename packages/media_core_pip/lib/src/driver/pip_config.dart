@@ -21,6 +21,7 @@ final class PipConfig {
     this.title = 'media_core PiP',
     this.restoreWindowOnExit = true,
     this.lockAspectRatio = true,
+    this.visibleOnAllSpaces = true,
     this.fallbackOrientation = VideoOrientation.landscape,
     this.requestSourceRectHint = true,
   });
@@ -64,6 +65,15 @@ final class PipConfig {
   /// side the shape does not match.
   final bool lockAspectRatio;
 
+  /// Whether the desktop small window floats over every workspace / desktop.
+  ///
+  /// On by default (macOS `CanJoinAllSpaces`, Linux sticky): a picture-
+  /// in-picture window the viewer cannot see while working in another app —
+  /// including its fullscreen spaces — misses the point of the feature.
+  /// Windows ignores the flag (no spaces concept; the compact window is
+  /// already topmost). Leaving PiP always restores the captured value.
+  final bool visibleOnAllSpaces;
+
   /// Orientation assumed when the video size is unknown.
   final VideoOrientation fallbackOrientation;
 
@@ -88,6 +98,7 @@ final class PipConfig {
     String? title,
     bool? restoreWindowOnExit,
     bool? lockAspectRatio,
+    bool? visibleOnAllSpaces,
     VideoOrientation? fallbackOrientation,
     bool? requestSourceRectHint,
   }) {
@@ -101,6 +112,7 @@ final class PipConfig {
       title: title ?? this.title,
       restoreWindowOnExit: restoreWindowOnExit ?? this.restoreWindowOnExit,
       lockAspectRatio: lockAspectRatio ?? this.lockAspectRatio,
+      visibleOnAllSpaces: visibleOnAllSpaces ?? this.visibleOnAllSpaces,
       fallbackOrientation: fallbackOrientation ?? this.fallbackOrientation,
       requestSourceRectHint: requestSourceRectHint ?? this.requestSourceRectHint,
     );

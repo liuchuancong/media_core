@@ -45,6 +45,7 @@ final class WindowManagerPipWindow implements PipWindow {
       alwaysOnTop: window.isAlwaysOnTop,
       resizable: window.isResizable,
       skipTaskbar: !window.isVisibleInTaskbar,
+      visibleOnAllSpaces: window.isVisibleOnAllWorkspaces,
       title: window.title ?? '',
     );
   }
@@ -58,6 +59,7 @@ final class WindowManagerPipWindow implements PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    required bool visibleOnAllSpaces,
   }) async {
     final window = _current;
     if (window == null) {
@@ -65,6 +67,10 @@ final class WindowManagerPipWindow implements PipWindow {
     }
     window
       ..isAlwaysOnTop = alwaysOnTop
+      // Float over every workspace/desktop: the compact window's job is to
+      // stay watchable while the viewer works elsewhere, including in an
+      // app's fullscreen space. Restore puts the captured value back.
+      ..isVisibleOnAllWorkspaces = visibleOnAllSpaces
       ..isResizable = resizable
       // A null ratio means the host unlocked the shape. The OS aspect lock has
       // to be released explicitly (zero releases it), or a lock left by an
@@ -86,6 +92,7 @@ final class WindowManagerPipWindow implements PipWindow {
     }
     window
       ..isAlwaysOnTop = snapshot.alwaysOnTop
+      ..isVisibleOnAllWorkspaces = snapshot.visibleOnAllSpaces
       ..isResizable = snapshot.resizable
       ..isVisibleInTaskbar = !snapshot.skipTaskbar
       ..title = snapshot.title

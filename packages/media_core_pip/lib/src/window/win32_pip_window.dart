@@ -105,6 +105,9 @@ final class Win32PipWindow implements PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    // Windows has no workspaces concept — HWND_TOPMOST already floats the
+    // compact window over everything — so the flag is accepted and ignored.
+    required bool visibleOnAllSpaces,
   }) async {
     final hwnd = _windowHandle;
     // The driver already sizes the window from the video's shape; an

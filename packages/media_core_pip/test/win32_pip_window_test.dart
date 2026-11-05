@@ -55,6 +55,8 @@ void main() {
       resizable: false,
       skipTaskbar: true,
       title: 'Pure Live',
+      // Windows has no spaces concept; the flag is accepted and ignored.
+      visibleOnAllSpaces: true,
     );
     await window.setAlwaysOnTop(value: false);
     await window.setMinimumSize(const Size(960, 540));

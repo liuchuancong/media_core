@@ -43,6 +43,7 @@ final class _FakeInnerWindow implements PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    required bool visibleOnAllSpaces,
   }) async {
     final failure = failOnApply;
     if (failure != null) {
@@ -149,6 +150,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       expect(display.isCompact, isTrue);
@@ -177,6 +179,7 @@ void main() {
         resizable: true,
         skipTaskbar: true,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       expect(inner.lastSkipTaskbar, isTrue);
@@ -194,6 +197,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       expect(inner.lastSize, const Size(320, 180));
@@ -215,6 +219,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       // The scale carries as the remembered long side (360); the short side
@@ -235,6 +240,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       // Replacing the null with the requested size's ratio is exactly what
@@ -257,6 +263,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       // …must come back squashed. Re-deriving the video's 16:9 here would undo
@@ -276,6 +283,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       // The scale carries as the remembered long side (380); the height
@@ -300,6 +308,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       expect(inner.lastAlwaysOnTop, isTrue);
@@ -315,6 +324,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       await display.restore(
@@ -344,6 +354,7 @@ void main() {
           resizable: true,
           skipTaskbar: false,
           title: 'Test',
+          visibleOnAllSpaces: true,
         ),
         throwsA(isA<StateError>()),
       );
@@ -370,6 +381,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
       await display.startDragging();
       expect(inner.dragCount, 1);
@@ -385,6 +397,7 @@ void main() {
         resizable: true,
         skipTaskbar: false,
         title: 'Test',
+        visibleOnAllSpaces: true,
       );
 
       await display.setAlwaysOnTop(value: true);

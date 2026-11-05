@@ -55,6 +55,7 @@ final class _FakePipWindow implements PipWindow {
   bool alwaysOnTop = false;
   bool resizable = true;
   bool skipTaskbar = false;
+  bool visibleOnAllSpaces = false;
   String title = 'Pure Live';
 
   int captureCount = 0;
@@ -69,6 +70,7 @@ final class _FakePipWindow implements PipWindow {
   Object? minimumSizeError;
   bool? lastAlwaysOnTop;
   bool? lastResizable;
+  bool? lastVisibleOnAllSpaces;
 
   @override
   Future<PipWindowSnapshot> capture() async {
@@ -78,6 +80,7 @@ final class _FakePipWindow implements PipWindow {
       alwaysOnTop: alwaysOnTop,
       resizable: resizable,
       skipTaskbar: skipTaskbar,
+      visibleOnAllSpaces: visibleOnAllSpaces,
       title: title,
     );
   }
@@ -91,12 +94,14 @@ final class _FakePipWindow implements PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    required bool visibleOnAllSpaces,
   }) async {
     lastSize = size;
     lastPosition = position;
     lastAspectRatio = aspectRatio;
     lastAlwaysOnTop = alwaysOnTop;
     lastResizable = resizable;
+    lastVisibleOnAllSpaces = visibleOnAllSpaces;
   }
 
   @override
@@ -212,9 +217,26 @@ void main() {
       expect(window.captureCount, 1);
       expect(window.lastAlwaysOnTop, isTrue);
       expect(window.lastResizable, isTrue);
+      // The default config floats the compact window over every workspace.
+      expect(window.lastVisibleOnAllSpaces, isTrue);
       expect(window.lastAspectRatio, closeTo(16 / 9, 0.001));
       // Landscape video: wide window, height derived from the ratio.
       expect(window.lastSize, const Size(320, 180));
+      expect(driver.isPip, isTrue);
+    });
+
+    test('a config that stays in its workspace does not set the cross-space flag', () async {
+      driver = PipDriver(
+        platform: PipPlatform.desktop,
+        desktopWindow: window,
+        config: const PipConfig(visibleOnAllSpaces: false),
+      );
+      await driver.initialize();
+      driver.onVideoSize(1920, 1080);
+
+      await driver.apply(_player(), PresentationRequest.pip());
+
+      expect(window.lastVisibleOnAllSpaces, isFalse);
       expect(driver.isPip, isTrue);
     });
 

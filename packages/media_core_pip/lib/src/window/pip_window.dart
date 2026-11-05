@@ -13,6 +13,7 @@ final class PipWindowSnapshot {
     required this.resizable,
     required this.skipTaskbar,
     required this.title,
+    this.visibleOnAllSpaces = false,
     this.titleBarStyle,
   });
 
@@ -21,6 +22,11 @@ final class PipWindowSnapshot {
 
   /// Whether the window was kept above the other apps' windows.
   final bool alwaysOnTop;
+
+  /// Whether the window floated on every workspace (macOS) or desktop
+  /// (Linux) before entering PiP, so [PipWindow.restore] can put it back.
+  /// Always false on Windows, which has no spaces concept.
+  final bool visibleOnAllSpaces;
 
   /// Whether the viewer could resize the window by dragging an edge.
   final bool resizable;
@@ -54,6 +60,10 @@ abstract interface class PipWindow {
   /// Applies the small-window state.
   ///
   /// [aspectRatio] locks the window to the video's shape when non-null.
+  /// [visibleOnAllSpaces] floats the compact window over every workspace /
+  /// desktop (macOS `CanJoinAllSpaces`, Linux sticky) so it stays visible
+  /// while the viewer is in another app — including its fullscreen spaces.
+  /// Backends without a spaces concept (Windows) ignore it.
   Future<void> applySmallWindow({
     required Size size,
     required Offset position,
@@ -62,6 +72,7 @@ abstract interface class PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    required bool visibleOnAllSpaces,
   });
 
   /// Restores a previously captured state.

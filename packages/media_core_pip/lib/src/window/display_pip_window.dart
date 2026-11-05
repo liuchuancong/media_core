@@ -296,10 +296,11 @@ final class DisplayAwarePipWindow implements PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    required bool visibleOnAllSpaces,
   }) {
     // The ratio travels unchanged: null is the host asking for a freely
     // resizable shape, and only the placement math below needs a concrete one.
-    return _serialize(() => _enter(aspectRatio, size, alwaysOnTop, skipTaskbar));
+    return _serialize(() => _enter(aspectRatio, size, alwaysOnTop, skipTaskbar, visibleOnAllSpaces));
   }
 
   @override
@@ -307,7 +308,13 @@ final class DisplayAwarePipWindow implements PipWindow {
     return _serialize(_exit);
   }
 
-  Future<void> _enter(double? shapeAspectRatio, Size requestedSize, bool alwaysOnTopOverride, bool skipTaskbar) async {
+  Future<void> _enter(
+    double? shapeAspectRatio,
+    Size requestedSize,
+    bool alwaysOnTopOverride,
+    bool skipTaskbar,
+    bool visibleOnAllSpaces,
+  ) async {
     if (_compact) return;
     final window = this.window;
     final normal = await window.capture();
@@ -396,6 +403,7 @@ final class DisplayAwarePipWindow implements PipWindow {
         // backend in this placement policy.
         skipTaskbar: skipTaskbar,
         title: normal.title,
+        visibleOnAllSpaces: visibleOnAllSpaces,
       );
       final landedId = pipDisplayIdForPosition(displays, placement.topLeft) ?? current.id;
       writeSavedBounds?.call(placement.size, placement.topLeft, landedId);

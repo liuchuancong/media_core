@@ -54,6 +54,7 @@ final class _FakeDesktopWindow implements PipWindow {
     required bool resizable,
     required bool skipTaskbar,
     required String title,
+    required bool visibleOnAllSpaces,
   }) async {}
 
   @override
