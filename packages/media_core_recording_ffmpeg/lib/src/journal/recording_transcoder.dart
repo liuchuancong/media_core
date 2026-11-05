@@ -207,6 +207,12 @@ final class FfmpegRecordingTranscoder {
     );
 
     final inputDuration = await _probeOf()?.durationOf(inputPath);
+    // Built once: FFmpeg reports statistics a few times a second, and neither
+    // the file name nor its regular expression changes between reports —
+    // compiling one per report is an allocation a long encode repeats for
+    // nothing.
+    final inputName = inputPath.split(RegExp(r'[/\\]')).last;
+    final memoryNote = 'transcode of $inputName';
 
     try {
       final executor = _executorOf();
@@ -214,12 +220,7 @@ final class FfmpegRecordingTranscoder {
       final execution = await executor.start(
         arguments: arguments,
         onStatistics: (statistics) {
-          _memory.report(
-            _memoryKey,
-            items: 1,
-            bytes: statistics.sizeBytes,
-            note: 'transcode of ${inputPath.split(RegExp(r'[/\\]')).last}',
-          );
+          _memory.report(_memoryKey, items: 1, bytes: statistics.sizeBytes, note: memoryNote);
           if (onProgress != null) {
             final total = inputDuration?.inMilliseconds ?? 0;
             onProgress(total > 0 ? (statistics.timeMs / total).clamp(0.0, 1.0) : null);

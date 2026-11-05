@@ -244,6 +244,16 @@ final class FfmpegRecordingRemuxer {
       '-c',
       'copy',
       ...target.outputArguments,
+      // The output muxer is this target's choice, not the partial file's
+      // extension: the partial always ends in `.mp4`, so letting FFmpeg pick
+      // from the name would write MP4 bytes into what is renamed to `.mkv` or
+      // `.ts` for the other two targets.
+      '-f',
+      switch (target) {
+        FfmpegRemuxTarget.mp4 => 'mp4',
+        FfmpegRemuxTarget.matroska => 'matroska',
+        FfmpegRemuxTarget.mpegTs => 'mpegts',
+      },
       partialPath,
     ]);
 
@@ -258,6 +268,9 @@ final class FfmpegRecordingRemuxer {
     );
 
     final totalInputBytes = segments.fold<int>(0, (sum, segment) => sum + segment.bytes);
+    // Built once: FFmpeg reports statistics a few times a second, and the note
+    // string does not change between reports.
+    final memoryNote = 'remux of ${manifest.prefix}';
     var completed = false;
 
     try {
@@ -266,7 +279,7 @@ final class FfmpegRecordingRemuxer {
       final execution = await executor.start(
         arguments: arguments,
         onStatistics: (statistics) {
-          _memory.report(_memoryKey, items: 1, bytes: statistics.sizeBytes, note: 'remux of ${manifest.prefix}');
+          _memory.report(_memoryKey, items: 1, bytes: statistics.sizeBytes, note: memoryNote);
           if (onProgress != null) {
             onProgress(totalInputBytes > 0 ? (statistics.sizeBytes / totalInputBytes).clamp(0.0, 1.0) : null);
           }

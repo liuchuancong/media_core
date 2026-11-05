@@ -908,15 +908,21 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       return;
     }
     // The watchdog counts silence between *advances*, not between reports: a
-    // stalled input keeps sending statistics that repeat the last figures, and a
-    // timer reset by those would never fire.
-    if (statistics.timeMs > _lastMediaTime.inMilliseconds || statistics.sizeBytes > _lastBytes) {
+    // stalled input keeps sending statistics that repeat the last figures, and
+    // a timer reset by those would never fire.
+    final advanced = statistics.timeMs > _lastMediaTime.inMilliseconds || statistics.sizeBytes > _lastBytes;
+    if (advanced) {
       _stallTicks = 0;
     }
     _lastMediaTime = Duration(milliseconds: statistics.timeMs);
     _lastBytes = statistics.sizeBytes;
     _lastStatistics = statistics;
-    _memory.report(_memoryKey, items: 1, bytes: _lastBytes, note: 'recording, ${_totalMediaTime.inSeconds}s written');
+    // Reported on an advance only: the entry replaces rather than accumulates,
+    // so re-writing identical figures — and rebuilding the note string — twice
+    // a second is work a stalled input repeats for nothing.
+    if (advanced) {
+      _memory.report(_memoryKey, items: 1, bytes: _lastBytes, note: 'recording, ${_totalMediaTime.inSeconds}s written');
+    }
     if (_state.status != RecordingStatus.recording) {
       return;
     }
@@ -1091,7 +1097,14 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
         return;
       } on Object catch (error) {
-        if (_intent != _StopIntent.none || error is FfmpegRecordingDiskFullException) {
+        if (_intent != _StopIntent.none) {
+          // stop() or cancel() decided the ending while this re-open was in
+          // flight, and their verdict is already published; finishing here
+          // would emit a second terminal state under theirs.
+          return;
+        }
+
+        if (error is FfmpegRecordingDiskFullException) {
           await _finish(cause: error.toString(), exitCode: code);
 
           return;

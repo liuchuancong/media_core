@@ -387,6 +387,13 @@ class FfmpegLiveRecordingWatcher {
       return;
     }
 
+    if (!_running) {
+      // stop() ran while the probe was in flight. Starting a recording now
+      // would hand the process to a watch nobody is watching any more: the
+      // state subscription is gone, so its end would reach no one.
+      return;
+    }
+
     if (!status.isLive) {
       // The wait shortens only while the restart is plausible; past
       // that, this room is closed and the ordinary interval is the honest one.
@@ -435,6 +442,15 @@ class FfmpegLiveRecordingWatcher {
         ),
         config,
       );
+      if (!_running) {
+        // stop() ran while the start was in flight and could not end this
+        // process — it did not exist yet when stop looked for one. Ending it
+        // here is what keeps a stopped watcher from leaving a recording
+        // running with nobody watching it.
+        await _backend.stop();
+
+        return;
+      }
       _recording = true;
       _recordingStartedAt = DateTime.now();
     } on Object catch (error) {
