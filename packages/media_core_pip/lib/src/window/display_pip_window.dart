@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:media_core/media_core.dart';
 import 'package:media_core_pip/src/window/desktop_pip_window.dart';
 import 'package:media_core_pip/src/window/pip_window.dart';
+import 'package:media_core_pip/src/window/win32_pip_window.dart';
 
 /// One monitor's usable area, id'd for remembered-bounds matching.
 final LogModule _log = MediaCoreLog.of(LogCategory.presentation);
@@ -271,6 +272,20 @@ final class DisplayAwarePipWindow implements PipWindow {
 
   @override
   Future<PipWindowSnapshot> capture() => window.capture();
+
+  /// Stops the wrapped backend's background work.
+  ///
+  /// The win32 backend keeps a periodic snap timer running while compact, and
+  /// the [PipWindow] interface has no dispose of its own — so a host that
+  /// tears down a driver over this wrapper needs this call to reach the inner
+  /// backend's timer (or that timer keeps polling bounds forever). Backends
+  /// without background work make this a no-op.
+  Future<void> dispose() async {
+    final inner = _windowInstance;
+    if (inner is Win32PipWindow) {
+      await inner.dispose();
+    }
+  }
 
   @override
   Future<void> applySmallWindow({

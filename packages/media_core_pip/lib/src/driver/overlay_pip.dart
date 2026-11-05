@@ -189,6 +189,11 @@ final class OverlayPipLink {
         // sent earlier, so replay the payload it exists to render.
         final payload = _pendingPayload;
         if (payload != null) {
+          // Exactly one replay per link. The overlay engine answers `ready`
+          // for every media payload it receives, so a payload parked here
+          // forever would turn the handshake into an endless media/ready
+          // ping-pong across the channel (two crossings per cycle, no exit).
+          _pendingPayload = null;
           unawaited(
             window.shareData(payload).catchError((Object error) {
               _log.warning('pip overlay payload send failed', error: error);
@@ -222,6 +227,17 @@ final class OverlayPipSession {
     FlutterOverlayWindow.overlayListener.listen((message) {
       final event = OverlayPipMessages.parse(message);
       if (event == null || event.type != 'media') return;
+      final current = _payload.value;
+      // The app replays the payload for our ready handshake and re-enables
+      // can re-send it; a payload identical to what is already shown must not
+      // notify listeners again — the overlay player would re-open the source
+      // (a visible restart) for content it is already playing.
+      if (current != null &&
+          current.url == event.url &&
+          current.position == event.position &&
+          current.map['title'] == event.map['title']) {
+        return;
+      }
       _payload.value = event;
       // The app may have sent its payload before this engine finished booting;
       // answering the handshake makes it replay.
@@ -232,6 +248,17 @@ final class OverlayPipSession {
         }),
       );
     });
+    // Announce the listener the moment it exists, before any media arrives.
+    // A payload the app sent while this engine was still booting was dropped,
+    // and a ready that only ever answers a received media payload can never
+    // recover it — the app would have nothing to react to. With the app
+    // replaying at most once per link, this announce cannot start a loop.
+    unawaited(
+      FlutterOverlayWindow.shareData(OverlayPipMessages.ready()).catchError((Object error) {
+        _log.warning('pip overlay payload send failed', error: error);
+        return null;
+      }),
+    );
   }
 
   /// The singleton of this overlay engine.

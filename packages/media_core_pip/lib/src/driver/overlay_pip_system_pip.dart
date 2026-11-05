@@ -279,6 +279,7 @@ final class OverlayPipSystemPip implements SystemPip {
       return SystemPipStatus.unavailable;
     }
     _ensureListening();
+    final armedOnly = trigger == SystemPipTrigger.onLeaveApp;
     // The picture stays in this app's player layer, so no media handoff is
     // needed here — the iOS path ignores [media] entirely.
     final accepted = await _pipKit.enter(
@@ -287,15 +288,19 @@ final class OverlayPipSystemPip implements SystemPip {
         aspectRatio: _aspectRatioOf(width, height),
         // Arming auto-entry before the navigation is what makes "swipe home
         // keeps the video floating" work.
-        autoEnter: trigger == SystemPipTrigger.onLeaveApp,
+        autoEnter: armedOnly,
       ),
     );
     if (!accepted) {
       return SystemPipStatus.unavailable;
     }
-    _log.info('ios system pip entered', fields: <String, Object?>{'autoEnter': trigger == SystemPipTrigger.onLeaveApp});
-    _statuses.add(SystemPipStatus.enabled);
-    return SystemPipStatus.enabled;
+    _log.info('ios system pip entered', fields: <String, Object?>{'autoEnter': armedOnly});
+    // Arming is not the window being up: for onLeaveApp the shrink happens on
+    // the next navigation, and until pip_kit reports the window open the
+    // honest status is `automatic`, not `enabled`.
+    final status = armedOnly ? SystemPipStatus.automatic : SystemPipStatus.enabled;
+    _statuses.add(status);
+    return status;
   }
 
   @override

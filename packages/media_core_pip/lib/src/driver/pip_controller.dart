@@ -221,6 +221,18 @@ final class PipSessionController {
       );
     }
 
+    // Already carrying this exact player: a second enter is a no-op, not a
+    // second transition. Re-applying would duplicate the session event for
+    // listeners (and the window work behind it) for a state that did not
+    // change.
+    if (isActive && _playerId == playerId) {
+      _log.debug(
+        'enter skipped: already carrying this player',
+        fields: <String, Object?>{'playerId': playerId.value, 'reason': reason},
+      );
+      return;
+    }
+
     _log.info(
       'entering pip',
       fields: <String, Object?>{
@@ -342,6 +354,11 @@ final class PipSessionController {
 
   /// Reports the carried surface.
   void _reportMemory({required bool active, PlayerId? playerId}) {
+    // Dispose withdraws this key; a transition still in flight when dispose
+    // ran must not re-register it and leave a phantom surface on the ledger.
+    if (_disposed) {
+      return;
+    }
     _memory.report(
       _memoryKey,
       items: active ? 1 : 0,

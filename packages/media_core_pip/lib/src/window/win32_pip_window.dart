@@ -184,6 +184,13 @@ final class Win32PipWindow implements PipWindow {
   }
 
   void _snapTick() {
+    final aspectRatio = _aspectRatio;
+    if (aspectRatio == null) {
+      // Unlocked shape: the tick has nothing to align, so skip the bounds
+      // read entirely instead of paying a synchronous FFI call (plus the
+      // Rect allocation it makes) every 150 ms for a result no one uses.
+      return;
+    }
     final hwnd = _windowHandle;
     final bounds = Win32WindowFfi.bounds(hwnd);
     if (bounds == null || bounds.width <= 0 || bounds.height <= 0) return;
@@ -196,9 +203,6 @@ final class Win32PipWindow implements PipWindow {
     }
     _stableTicks++;
     if (_stableTicks < 2) return;
-
-    final aspectRatio = _aspectRatio;
-    if (aspectRatio == null) return;
 
     double targetWidth;
     double targetHeight;

@@ -7,6 +7,7 @@ import 'package:media_core_pip/src/driver/overlay_pip_system_pip.dart';
 import 'package:media_core_pip/src/driver/pip_config.dart';
 import 'package:media_core_pip/src/driver/system_pip.dart';
 import 'package:media_core_pip/src/window/desktop_pip_window.dart';
+import 'package:media_core_pip/src/window/display_pip_window.dart';
 import 'package:media_core_pip/src/window/pip_window.dart';
 import 'package:media_core_pip/src/window/win32_pip_window.dart';
 
@@ -142,6 +143,17 @@ final class PipDriver implements KernelPresentationDriver {
 
   PlayerId? _lastPlayerId;
 
+  /// Tail of the in-flight transition chain.
+  ///
+  /// Enters and exits run one at a time: a second enter that overtakes the
+  /// first would capture the already-compact window as its "normal" snapshot
+  /// (the exit would then replay the compact window back), and an exit that
+  /// raced a pending enter used to observe `_isPip == false` and vanish,
+  /// leaving the window compact while the state machine believed it normal.
+  /// The tail itself is kept failure-free so one broken transition cannot
+  /// poison every later one.
+  Future<void> _transitionTail = Future<void>.value();
+
   final StreamController<bool> _pipChanges = StreamController<bool>.broadcast();
 
   StreamSubscription<SystemPipStatus>? _statusSubscription;
@@ -254,9 +266,9 @@ final class PipDriver implements KernelPresentationDriver {
 
     switch (request.mode) {
       case PresentationMode.pip:
-        await _enterPip(playerId);
+        await _enqueueTransition(() => _enterPip(playerId));
       case PresentationMode.normal:
-        await _leavePip(playerId);
+        await _enqueueTransition(() => _leavePip(playerId));
       case PresentationMode.fullscreen:
       case PresentationMode.windowFullscreen:
       case PresentationMode.floating:
@@ -269,6 +281,24 @@ final class PipDriver implements KernelPresentationDriver {
           'belongs to another driver (see PresentationDriverChain).',
         );
     }
+  }
+
+  /// Runs one transition after every transition already in flight.
+  ///
+  /// Cheap no-ops stay cheap: an enter or exit that arrives out of order
+  /// waits for the running one and then hits the `_isPip` guard, instead of
+  /// interleaving window captures with it.
+  Future<void> _enqueueTransition(Future<void> Function() operation) {
+    final run = _transitionTail.then((_) {
+      // A transition queued before dispose must not touch the window after
+      // the driver let go of it.
+      if (_disposed) {
+        throw StateError('PipDriver has been disposed.');
+      }
+      return operation();
+    });
+    _transitionTail = run.then((_) {}, onError: (Object error) {});
+    return run;
   }
 
   @override
@@ -284,9 +314,14 @@ final class PipDriver implements KernelPresentationDriver {
     await _systemPip?.dispose();
 
     // The win32 backend owns a periodic snap timer the window interface has
-    // no dispose for; it must not outlive this driver.
+    // no dispose for; it must not outlive this driver. A placement wrapper
+    // builds its backend lazily, so its own dispose is what reaches the
+    // inner timer — without this branch a wrapped Win32PipWindow keeps its
+    // 150 ms bounds poll alive past the driver's death.
     final desktop = _desktopWindow;
     if (desktop is Win32PipWindow) {
+      await desktop.dispose();
+    } else if (desktop is DisplayAwarePipWindow) {
       await desktop.dispose();
     }
 
@@ -307,7 +342,10 @@ final class PipDriver implements KernelPresentationDriver {
       throw StateError('PipDriver has been disposed.');
     }
 
-    await _leavePip(_lastPlayerId ?? _systemPlayerId);
+    // Serialized like every other transition: an exit issued while an enter
+    // is still running must land after it, or it would observe `_isPip ==
+    // false` and leave the window compact with the state claiming normal.
+    await _enqueueTransition(() => _leavePip(_lastPlayerId ?? _systemPlayerId));
   }
 
   /// Enters PiP when it is not active, leaves otherwise.
@@ -324,7 +362,7 @@ final class PipDriver implements KernelPresentationDriver {
       return;
     }
 
-    await _enterPip(_lastPlayerId ?? _systemPlayerId);
+    await _enqueueTransition(() => _enterPip(_lastPlayerId ?? _systemPlayerId));
   }
 
   // ---------------------------------------------------------------------------
