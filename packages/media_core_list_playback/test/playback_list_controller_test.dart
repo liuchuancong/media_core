@@ -61,6 +61,30 @@ List<PlaybackListItem> _items(int count) => List<PlaybackListItem>.generate(
   (index) => PlaybackListItem(id: 'item$index', source: _source('item$index')),
 );
 
+/// A store whose writes stall until the test releases them: a persistent
+/// store's round-trip is the latency a switch must not wait behind.
+final class _GatedSaveStore implements PlaybackProgressStore {
+  _GatedSaveStore(this._inner, {required Completer<void> gate}) : _gate = gate;
+
+  final PlaybackProgressStore _inner;
+  final Completer<void> _gate;
+
+  @override
+  Future<Duration?> positionOf(String itemId) => _inner.positionOf(itemId);
+
+  @override
+  Future<void> clear(String itemId) => _inner.clear(itemId);
+
+  @override
+  Future<void> clearAll() => _inner.clearAll();
+
+  @override
+  Future<void> save(String itemId, Duration position) async {
+    await _gate.future;
+    await _inner.save(itemId, position);
+  }
+}
+
 void main() {
   _poolTests();
 
@@ -323,6 +347,47 @@ void main() {
 
       expect(await store.positionOf('item0'), const Duration(minutes: 5));
     });
+
+    test('a slow store write does not delay the switch', () async {
+      final gate = Completer<void>();
+      final store = _GatedSaveStore(InMemoryPlaybackProgressStore(), gate: gate);
+      final controller = buildController(store: store);
+      addTearDown(controller.dispose);
+      await controller.open();
+      player.position = const Duration(minutes: 3);
+
+      await controller.next();
+
+      // The switch settled on the incoming row while the outgoing write was
+      // still in flight: the open never waits for the store.
+      expect(controller.state.item?.id, 'item1');
+      expect(player.opened.last, 'item1');
+      gate.complete();
+      // Let the stalled write drain before reading the store back.
+      await Future<void>.delayed(Duration.zero);
+      expect(await store.positionOf('item0'), const Duration(minutes: 3));
+    });
+
+    test('dispose during a pending open saves the outgoing item', () async {
+      final store = InMemoryPlaybackProgressStore();
+      final controller = buildController(store: store);
+      await controller.open();
+
+      // The open of row 1 is still loading when the list is torn down: the
+      // final save must attribute the player to the item it is still bound
+      // to, not to the incoming row it never finished opening.
+      player.openGate = Completer<void>();
+      final pending = controller.jumpTo(1);
+      player.position = const Duration(minutes: 4);
+
+      await controller.dispose();
+      player.openGate!.complete();
+      player.openGate = null;
+      await pending;
+
+      expect(await store.positionOf('item0'), const Duration(minutes: 4));
+      expect(await store.positionOf('item1'), isNull, reason: 'the superseded open must not write a position');
+    });
   });
 
   group('InMemoryPlaybackProgressStore', () {
@@ -543,6 +608,29 @@ void _poolTests() {
       controller.updateItems(_items(2));
 
       expect(pool.sources.length, 2);
+    });
+
+    test('a refresh mid-open re-aims the chain at the kept row', () async {
+      build();
+      await controller.open();
+
+      // The open of row 2 is waiting on the pool when a refresh inserts a row
+      // above it: the item the viewer asked for now lives at index 3, and
+      // index 2 names a stranger. The stale leg must stand down and the chain
+      // must land on the item at its new coordinate - not bind whoever moved
+      // into row 2.
+      final jump = controller.jumpTo(2);
+      controller.updateItems(<PlaybackListItem>[
+        PlaybackListItem(id: 'fresh', source: _source('fresh')),
+        ..._items(4),
+      ]);
+      await jump;
+
+      expect(controller.state.index, 3);
+      expect(controller.state.item?.id, 'item2');
+      expect(controller.state.opening, isFalse);
+      final active = (controller.player as _PooledListPlayer).handle as _PoolHandle;
+      expect(active.openedSource, 'item2', reason: 'the bound handle must play the item the state names');
     });
 
     test('needs a factory to drive pooled handles', () {

@@ -155,7 +155,12 @@ final class PlaybackListController {
        _player = player,
        _items = List<PlaybackListItem>.unmodifiable(items),
        _store = store ?? InMemoryPlaybackProgressStore(config: config) {
-    _poolItemsSync = _syncPoolItems();
+    // Swallowed here, not left dangling: nobody awaits this future unless an
+    // open comes through the pool, and a pool that refuses the initial
+    // hand-off must not surface as an unhandled async error before that.
+    _poolItemsSync = _syncPoolItems().catchError((Object error) {
+      _log.warning('initial pool sync failed', error: error);
+    });
   }
 
   /// This instance's key in the shared account: a module can have several
@@ -249,21 +254,43 @@ final class PlaybackListController {
   /// item is kept by id when it survives the change and playback is left alone.
   void updateItems(List<PlaybackListItem> items) {
     _ensureNotDisposed();
+    final previous = _items;
     _items = List<PlaybackListItem>.unmodifiable(items);
-    _poolItemsSync = _syncPoolItems().catchError((Object error) {
-      _log.warning('pool sync after updateItems failed', error: error);
-    });
+    // A same-list refresh (every source compares equal, in order) would only
+    // buy a redundant reconcile on the pool's serial queue: `setItems` keeps
+    // the ratios and assignments of unchanged indexes, so there is nothing
+    // for the hand-off to correct. The pool's `_sources` are also replaced
+    // synchronously before its reconcile runs, so a skipped sync can never
+    // leave it holding a stale list.
+    if (!_sameSources(previous, _items)) {
+      _poolItemsSync = _syncPoolItems().catchError((Object error) {
+        _log.warning('pool sync after updateItems failed', error: error);
+      });
+    }
 
     final currentId = _state.item?.id;
     if (currentId != null) {
       final index = _items.indexWhere((item) => item.id == currentId);
       if (index >= 0) {
         _index = index;
+        if (_openChain != null) {
+          // An open leg is in flight toward the old coordinates. It will bail
+          // on the re-pointed cursor (the pool path also re-checks the row it
+          // is about to bind), and the chain then re-aims at this new
+          // coordinate. Re-pointing the marker would make that re-aim look
+          // already-settled and swallow it - the marker only means "a leg
+          // opened this row" once a leg actually did. The stale coordinate is
+          // dropped instead; the pool's own reconcile (from the hand-off
+          // above) demotes whatever the superseded leg left open.
+          _lastOpenedIndex = null;
+        } else {
+          // No leg is running: the old coordinate now names a different item,
+          // the re-pointed one names the item still on screen.
+          _lastOpenedIndex = index;
+        }
         // `copyWith` preserves `opening: true` from an in-flight leg that may
         // never settle against the new coordinates; the row shown is the
-        // current one and it is not opening. The stand-down coordinate follows
-        // the re-pointed index - the old coordinate now names a different item.
-        _lastOpenedIndex = index;
+        // current one and it is not opening.
         _emit(_state.copyWith(index: index, count: _items.length, opening: false));
         return;
       }
@@ -273,13 +300,33 @@ final class PlaybackListController {
     // stranger in the new list.
     _lastOpenedIndex = null;
 
+    // Keep the cursor inside the new list so navigation continues from the
+    // row the state below names, rather than from an index that no longer
+    // exists.
+    _index = _index.clamp(0, _items.isEmpty ? 0 : _items.length - 1);
+
     _emit(
-      PlaybackListState(
-        index: _index.clamp(0, _items.isEmpty ? 0 : _items.length - 1),
-        count: _items.length,
-        item: _items.isEmpty ? null : _items[_index.clamp(0, _items.length - 1)],
-      ),
+      PlaybackListState(index: _index, count: _items.length, item: _items.isEmpty ? null : _items[_index]),
     );
+  }
+
+  /// Whether [next] carries the same sources, in the same order, as [current].
+  ///
+  /// Sources compare by value, ids are irrelevant here: the pool is keyed on
+  /// sources alone.
+  bool _sameSources(List<PlaybackListItem> current, List<PlaybackListItem> next) {
+    if (identical(current, next)) {
+      return true;
+    }
+    if (current.length != next.length) {
+      return false;
+    }
+    for (var i = 0; i < current.length; i++) {
+      if (current[i].source != next[i].source) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Opens the item at [index], resuming it when progress was remembered.
@@ -343,6 +390,10 @@ final class PlaybackListController {
     // landed while the open chain was queued makes it stale, and indexing
     // first would turn that into a RangeError nobody signed up for.
     if (index >= _items.length) {
+      // Hand the chain back to the live cursor rather than ending it on a row
+      // that no longer exists: `updateItems` may have re-pointed the viewer
+      // while this leg sat queued.
+      _rearmSupersededLeg(index);
       return;
     }
 
@@ -366,7 +417,8 @@ final class PlaybackListController {
     try {
       // The viewer may have moved on while this call was queued behind the
       // pool hand-off: opening a row nobody is looking at costs a decode.
-      if (_disposed || _index != index) {
+      if (_superseded(index, item)) {
+        _rearmSupersededLeg(index);
         return;
       }
       await _openItem(item, index);
@@ -374,7 +426,8 @@ final class PlaybackListController {
       // Checked here, not later: a superseded (or post-dispose) leg must not
       // stand down the previous row, mark this one opened, or seek it - all
       // of which act on a row nobody is looking at any more.
-      if (_disposed || _index != index) {
+      if (_superseded(index, item)) {
+        _rearmSupersededLeg(index);
         return;
       }
 
@@ -395,9 +448,10 @@ final class PlaybackListController {
       );
 
       final resumedFrom = await _resume(item);
-      if (_disposed || _index != index) {
+      if (_superseded(index, item)) {
         // A newer request owns the state now; clearing `opening` here would
         // flash the row the viewer just moved onto as if it had finished.
+        _rearmSupersededLeg(index);
         return;
       }
       _emit(_state.copyWith(opening: false, resumedFrom: resumedFrom));
@@ -407,11 +461,51 @@ final class PlaybackListController {
         error: error,
         fields: <String, Object?>{'index': index, 'itemId': item.id},
       );
-      if (_disposed || _index != index) {
+      if (_superseded(index, item)) {
+        _rearmSupersededLeg(index);
         return;
       }
       _emit(_state.copyWith(opening: false, error: error));
     }
+  }
+
+  /// Whether the running open leg has been overtaken and must not touch the
+  /// player or the state any more.
+  ///
+  /// A leg is overtaken when a newer request moved the cursor, or when
+  /// `updateItems` shifted or dropped rows so [index] no longer names [item].
+  /// Both are checked against the live values, not the ones captured at leg
+  /// start.
+  bool _superseded(int index, PlaybackListItem item) {
+    if (_disposed || _index != index) {
+      return true;
+    }
+    return _indexNoLongerNamesItem(index, item);
+  }
+
+  /// Whether [index] no longer names [item] in the current list.
+  ///
+  /// `updateItems` can shift or drop rows while an open leg waits on the
+  /// pool; after the shift the leg's index points at a stranger, and
+  /// standing down, seeking or reporting through it would act on an item the
+  /// viewer never asked for. `PlaybackListItem` compares by id, which is the
+  /// item's identity.
+  bool _indexNoLongerNamesItem(int index, PlaybackListItem item) {
+    return index >= _items.length || _items[index].id != item.id;
+  }
+
+  /// Re-aims an idle chain at the live cursor after a leg stood down because
+  /// `updateItems` moved it without a queued request naming a new one.
+  ///
+  /// A newer request that overtook the leg already set `_openTarget`, so this
+  /// leaves it alone; only an idle chain is re-armed. Pool-only: without a
+  /// pool the leg opened the captured item by identity, so the open it
+  /// finished is already the right one and re-arming would only restart it.
+  void _rearmSupersededLeg(int index) {
+    if (_disposed || pool == null || _index == index || _openTarget != null) {
+      return;
+    }
+    _openTarget = _index;
   }
 
   /// Moves to the next item. A no-op at the end of the list.
@@ -450,15 +544,34 @@ final class PlaybackListController {
   /// Call when the viewer leaves the list, so returning later resumes here.
   Future<void> savePosition() async {
     _ensureNotDisposed();
-    // The pairing, not the emitted state: mid-switch the state already names
-    // the incoming item while the bound player still sits on the outgoing
-    // one, and saving under the wrong id overwrites real remembered progress.
-    final item = _boundItem;
-    if (item == null || !config.resumeEnabled || _player == null) {
+    final captured = _capturedProgress();
+    if (captured == null) {
       return;
     }
-    await _store.save(item.id, player.position);
-    _log.info('position saved', fields: <String, Object?>{'itemId': item.id, 'positionMs': player.position.inMilliseconds});
+    final (id, position) = captured;
+    await _store.save(id, position);
+    _log.info('position saved', fields: <String, Object?>{'itemId': id, 'positionMs': position.inMilliseconds});
+  }
+
+  /// The (item id, position) pair a progress write must record, read
+  /// synchronously.
+  ///
+  /// The pairing, not the emitted state: mid-switch the state already names
+  /// the incoming item while the bound player still sits on the outgoing
+  /// one, and saving under the wrong id overwrites real remembered progress.
+  /// Reading synchronously also lets a caller capture first and write later,
+  /// so the store round-trip can run beside a switch instead of in front of
+  /// it - once `open` rebinds the player, the old position is unreadable.
+  (String, Duration)? _capturedProgress() {
+    final item = _boundItem;
+    if (item == null || !config.resumeEnabled) {
+      return null;
+    }
+    final current = _player;
+    if (current == null) {
+      return null;
+    }
+    return (item.id, current.position);
   }
 
   /// Forgets every remembered position.
@@ -476,10 +589,23 @@ final class PlaybackListController {
     if (_disposed) {
       return;
     }
-    await savePosition().catchError((Object error) {
-      _log.warning('could not save position during dispose', error: error);
-    });
+    // The flag goes up before the final save: an open leg that is mid-flight
+    // bails at its next check instead of rebinding the player while the last
+    // position is being read, and a switch that arrives from here on is
+    // refused by the ordinary disposed checks instead of racing the teardown.
+    // The capture is inlined rather than going through [savePosition], whose
+    // guard refuses a disposed controller.
     _disposed = true;
+    try {
+      final captured = _capturedProgress();
+      if (captured != null) {
+        final (id, position) = captured;
+        await _store.save(id, position);
+        _log.info('position saved', fields: <String, Object?>{'itemId': id, 'positionMs': position.inMilliseconds});
+      }
+    } on Object catch (error) {
+      _log.warning('could not save position during dispose', error: error);
+    }
 
     // Nobody will settle the chain now: release the callers awaiting it.
     _openTarget = null;
@@ -506,6 +632,13 @@ final class PlaybackListController {
     final activePool = pool;
     if (activePool == null) {
       await player.open(item.source);
+      // The open above is a long await: dispose or an `updateItems` re-point
+      // can land inside it, and binding afterwards would attribute the player
+      // to an item nobody is waiting for any more. `_openAt` bails on the
+      // same check right after, so nothing is lost by not binding.
+      if (_superseded(index, item)) {
+        return;
+      }
       _boundItem = item;
       return;
     }
@@ -530,7 +663,21 @@ final class PlaybackListController {
   ) async {
     // The pool must know the item before it can be asked to play it.
     await _poolItemsSync;
+    // Each await below is a point where `updateItems` can replace the list:
+    // after a refresh or a reorder, [index] can name a different row than the
+    // one this leg was asked to open. Opening (and then binding) by a stale
+    // index would put another item's player under this item's name and later
+    // seek it with this item's remembered position - the stale-coordinate
+    // family the pool itself guards against when it re-checks `openedSource`.
+    // The first check stops a wasted open of the stranger's row; the second
+    // closes the window the visibility await reopens.
+    if (_indexNoLongerNamesItem(index, item)) {
+      throw StateError('The list changed while item ${item.id} was opening at index $index.');
+    }
     await activePool.onVisibilityChanged(index, 1);
+    if (_indexNoLongerNamesItem(index, item)) {
+      throw StateError('The list changed while item ${item.id} was opening at index $index.');
+    }
     final handle = activePool.handleFor(index);
     if (handle == null) {
       _log.error(
@@ -544,11 +691,20 @@ final class PlaybackListController {
 
   /// Saves the outgoing item, then opens the target.
   Future<void> _switchTo(int index) async {
-    // Best-effort: a failing save must not stop the switch from happening.
-    try {
-      await savePosition();
-    } on Object catch (error) {
-      _log.warning('could not save outgoing position before switch', error: error);
+    // The pair is captured synchronously - the bound player still sits on the
+    // outgoing item here, and `open` below rebinds it. The store write is then
+    // left running beside the open instead of in front of it: a persistent
+    // store's round-trip must not delay the item the viewer swiped to. The
+    // write is for the outgoing id, which nothing in the open path reads, and
+    // a failing save must not stop the switch from happening.
+    final captured = _capturedProgress();
+    if (captured != null) {
+      final (id, position) = captured;
+      unawaited(
+        _store.save(id, position).catchError((Object error) {
+          _log.warning('could not save outgoing position before switch', error: error);
+        }),
+      );
     }
     await open(index: index);
   }
