@@ -202,11 +202,18 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
   @override
   Future<void> apply(PlayerId playerId, PresentationRequest request) {
-    return _serialize(() async {
-      if (_disposed) {
-        throw StateError('FullscreenDriver has been disposed.');
-      }
-    _lastPlayerId = playerId;
+    return _serialize(() => _applyNow(playerId, request));
+  }
+
+  // The body of one serialized transition. Only ever runs under [_serialize]:
+  // an exit that arrives while an enter is between its platform calls would
+  // read half-set flags and no-op - or a double-enter re-captures bounds and
+  // double-fires hooks - so each transition observes the settled state of
+  // the last.
+  Future<void> _applyNow(PlayerId playerId, PresentationRequest request) async {
+    if (_disposed) {
+      throw StateError('FullscreenDriver has been disposed.');
+    }
     final wasAnyFullscreen = isAnyFullscreen;
 
     _log.info(
@@ -226,6 +233,10 @@ final class FullscreenDriver implements KernelPresentationDriver {
 
     switch (request.mode) {
       case PresentationMode.fullscreen:
+        // Served modes record the caller. exitFullscreen reports its exit
+        // lifecycle under the last player that actually drove a transition,
+        // so a request this driver refuses must not clobber that record.
+        _lastPlayerId = playerId;
         if (!wasAnyFullscreen) {
           await _fire(PresentationLifecyclePhase.beforeEnter, playerId, PresentationMode.fullscreen);
         }
@@ -234,6 +245,7 @@ final class FullscreenDriver implements KernelPresentationDriver {
           await _fire(PresentationLifecyclePhase.afterEnter, playerId, PresentationMode.fullscreen);
         }
       case PresentationMode.windowFullscreen:
+        _lastPlayerId = playerId;
         if (!wasAnyFullscreen) {
           await _fire(PresentationLifecyclePhase.beforeEnter, playerId, PresentationMode.windowFullscreen);
         }
@@ -242,6 +254,7 @@ final class FullscreenDriver implements KernelPresentationDriver {
           await _fire(PresentationLifecyclePhase.afterEnter, playerId, PresentationMode.windowFullscreen);
         }
       case PresentationMode.normal:
+        _lastPlayerId = playerId;
         await _leaveWithLifecycle(playerId, wasAnyFullscreen);
       case PresentationMode.pip:
       case PresentationMode.floating:
@@ -256,7 +269,6 @@ final class FullscreenDriver implements KernelPresentationDriver {
     }
 
     _notifyIfChanged(wasAnyFullscreen);
-    });
   }
 
   /// Tail-serialized transitions: an exit that arrives while an enter is
@@ -284,6 +296,14 @@ final class FullscreenDriver implements KernelPresentationDriver {
       return;
     }
     _disposed = true;
+
+    // Let an in-flight transition settle before restoring: a dispose that
+    // runs under an enter would restore the window first and then be taken
+    // fullscreen again by that transition's tail, stranding a fullscreen
+    // window behind a disposed driver. Queued transitions started after
+    // this point fail fast on the disposed check; the chain itself never
+    // fails, so this await cannot throw.
+    await _transition;
 
     // Leaving the platform state behind on dispose would strand a desktop
     // window in fullscreen after the host has torn the player down. The
@@ -316,27 +336,38 @@ final class FullscreenDriver implements KernelPresentationDriver {
         throw StateError('FullscreenDriver has been disposed.');
       }
 
-      final wasAnyFullscreen = isAnyFullscreen;
-      await _leaveWithLifecycle(_lastPlayerId ?? _togglePlayerId, wasAnyFullscreen);
-      _notifyIfChanged(wasAnyFullscreen);
+      await _exitNow();
     });
+  }
+
+  // The settled-state exit shared by [exitFullscreen] and the leave half of
+  // [toggleFullscreen]. Only ever runs under [_serialize].
+  Future<void> _exitNow() async {
+    final wasAnyFullscreen = isAnyFullscreen;
+    await _leaveWithLifecycle(_lastPlayerId ?? _togglePlayerId, wasAnyFullscreen);
+    _notifyIfChanged(wasAnyFullscreen);
   }
 
   /// Enters system fullscreen when no fullscreen is active, leaves otherwise.
   ///
-  /// Entering goes through [apply] so the transition is logged and the fit
-  /// strategy is resolved exactly like a chain-driven enter.
+  /// Entering logs and resolves the fit strategy exactly like a chain-driven
+  /// enter (the body of [apply]). The enter/leave *decision* is made inside
+  /// the serialized transition: decided outside, a toggle that fires while
+  /// another transition is still in flight reads a stale `isAnyFullscreen`,
+  /// and both halves of a rapid double-tap queue the same branch instead of
+  /// an enter followed by a leave.
   Future<void> toggleFullscreen() async {
     if (_disposed) {
       throw StateError('FullscreenDriver has been disposed.');
     }
 
-    if (isAnyFullscreen) {
-      await exitFullscreen();
-      return;
-    }
-
-    await apply(_togglePlayerId, PresentationRequest.fullscreen());
+    await _serialize(() async {
+      if (isAnyFullscreen) {
+        await _exitNow();
+        return;
+      }
+      await _applyNow(_togglePlayerId, PresentationRequest.fullscreen());
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -476,17 +507,34 @@ final class FullscreenDriver implements KernelPresentationDriver {
       // under a landscape-held viewer.
       final orientation = _preFullscreenOrientation;
       _preFullscreenOrientation = null;
+      // The orientation lock and the system-UI bars are independent platform
+      // services, so both calls are issued before either is awaited: the exit
+      // costs one platform round-trip instead of two, and the messages still
+      // reach the channel in the same order.
+      Future<void> orientationRestore;
+      List<DeviceOrientation>? restoredOrientation;
       if (orientation != null) {
-        await SystemChrome.setPreferredOrientations(orientation);
-        _log.info('orientation restored after fullscreen', fields: <String, Object?>{'orientation': orientation.map((o) => o.name).join(',')});
+        restoredOrientation = orientation;
+        orientationRestore = SystemChrome.setPreferredOrientations(orientation);
       } else if (config.restoreMobileOrientation) {
         // The enter captured nothing (no view yet), but a lock the host set
         // during fullscreen is still in force - release it outright rather
         // than leave the device pinned to the fullscreen orientation.
-        await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-        _log.info('orientation restored after fullscreen', fields: <String, Object?>{'orientation': DeviceOrientation.values.map((o) => o.name).join(',')});
+        restoredOrientation = DeviceOrientation.values;
+        orientationRestore = SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+      } else {
+        orientationRestore = Future<void>.value();
       }
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+      final systemUiRestore = SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      );
+      await orientationRestore;
+      await systemUiRestore;
+      final restored = restoredOrientation;
+      if (restored != null) {
+        _log.info('orientation restored after fullscreen', fields: <String, Object?>{'orientation': restored.map((o) => o.name).join(',')});
+      }
     }
     _preFullscreenBounds = null;
     _setSystemFullscreen(false);

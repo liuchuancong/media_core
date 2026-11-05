@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/painting.dart' show Rect;
 import 'package:flutter/services.dart' show MethodCall, SystemChannels, SystemUiMode;
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +28,27 @@ final class _FakeFullscreenWindow implements FullscreenWindow {
     setCount++;
     fullscreen = value;
     lastRestoreBounds = restoreBounds;
+  }
+}
+
+/// A window whose `setFullscreen` parks inside the platform call until
+/// [gate] completes, so a test can fire another transition mid-flight.
+final class _GatedFullscreenWindow implements FullscreenWindow {
+  final Completer<void> gate = Completer<void>();
+  bool fullscreen = false;
+  int setCount = 0;
+
+  @override
+  Future<bool> get isFullscreen async => fullscreen;
+
+  @override
+  Future<Rect> captureBounds() async => const Rect.fromLTWH(0, 0, 640, 480);
+
+  @override
+  Future<void> setFullscreen({required bool value, Rect? restoreBounds}) async {
+    setCount++;
+    await gate.future;
+    fullscreen = value;
   }
 }
 
@@ -90,6 +113,26 @@ void main() {
       expect(window.setCount, 1);
     });
 
+    test('a toggle racing an in-flight enter queues a leave, not a second enter', () async {
+      final gated = _GatedFullscreenWindow();
+      final local = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: gated);
+      addTearDown(local.dispose);
+      await local.initialize();
+
+      final entering = local.toggleFullscreen();
+      // The enter is still parked inside the window call; a decision read at
+      // call time would see "not fullscreen" and queue a second enter, so a
+      // double-tap would enter and stay.
+      final leaving = local.toggleFullscreen();
+
+      gated.gate.complete();
+      await entering;
+      await leaving;
+
+      expect(gated.setCount, 2, reason: 'one enter, one leave');
+      expect(gated.fullscreen, isFalse, reason: 'the second toggle must observe the settled enter and leave');
+    });
+
     test('dispose leaves the platform state behind', () async {
       final local = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: window);
       await local.initialize();
@@ -98,6 +141,23 @@ void main() {
       await local.dispose();
 
       expect(window.fullscreen, isFalse);
+    });
+
+    test('dispose waits out an in-flight enter before restoring', () async {
+      final gated = _GatedFullscreenWindow();
+      final local = FullscreenDriver(platform: FullscreenPlatform.desktop, desktopWindow: gated);
+      await local.initialize();
+
+      final entering = local.apply(_player(), PresentationRequest.fullscreen());
+      // Let the enter reach the gated window call, then tear down under it.
+      await Future<void>.delayed(Duration.zero);
+      final tearing = local.dispose();
+
+      gated.gate.complete();
+      await entering;
+      await tearing;
+
+      expect(gated.fullscreen, isFalse, reason: 'the restore must run after the settled enter, not before it');
     });
   });
 
@@ -378,6 +438,38 @@ void main() {
 
       expect(window.setCount, 1);
       expect(driver.isSystemFullscreen, isTrue);
+    });
+
+    test('a refused request does not steal the exit lifecycle playerId', () async {
+      final playerIds = <PlayerId>[];
+      PresentationLifecycleHook recordExit(PresentationLifecyclePhase phase) {
+        return (PresentationLifecycleEvent event) async {
+          if (phase == PresentationLifecyclePhase.afterExit) {
+            playerIds.add(event.playerId);
+          }
+        };
+      }
+
+      final driver = FullscreenDriver(
+        platform: FullscreenPlatform.desktop,
+        desktopWindow: _FakeFullscreenWindow(),
+        lifecycleHooks: PresentationLifecycleHooks(afterExit: recordExit(PresentationLifecyclePhase.afterExit)),
+      );
+      addTearDown(driver.dispose);
+      await driver.initialize();
+
+      final owner = PlayerId('fullscreen-owner');
+      await driver.apply(owner, PresentationRequest.fullscreen());
+      // A request this driver refuses must not replace the player record the
+      // direct exitFullscreen path reports its lifecycle under.
+      await expectLater(
+        driver.apply(PlayerId('wrong-driver'), PresentationRequest.pip()),
+        throwsA(isA<UnsupportedError>()),
+      );
+
+      await driver.exitFullscreen();
+
+      expect(playerIds, <PlayerId>[owner]);
     });
   });
 
