@@ -7,6 +7,9 @@ import 'package:media_core_ui/src/common/player_control_actions.dart';
 import 'package:media_core_ui/src/common/player_controls_style.dart';
 import 'package:media_core_ui/src/common/player_controls_theme.dart';
 
+/// Decision trail for the controls.
+final LogModule _log = MediaCoreLog.of(LogCategory.playback);
+
 /// What every control set shares: playback state, actions and visibility.
 ///
 /// One controller drives one player. The bars (iOS, Android, desktop) are
@@ -408,10 +411,19 @@ final class PlayerControlsController extends ChangeNotifier {
   }
 
   /// Seeks to [position].
+  ///
+  /// Every caller inside this package fires this and drops the future (the
+  /// drag release, the tap-to-jump, the keyboard shortcuts), so a seek the
+  /// engine refuses would otherwise escape as an uncaught zone error with no
+  /// feedback anywhere. It is caught here and logged: the thumb has already
+  /// moved under the viewer's hand, and there is nothing actionable a caller
+  /// could do with the failure.
   Future<void> seekTo(Duration position) {
     revealControls();
 
-    return handle.seek(_clampPosition(position));
+    return handle.seek(_clampPosition(position)).catchError((Object error) {
+      _log.warning('seek failed', error: error);
+    });
   }
 
   /// Seeks by [offset] from the current position.
