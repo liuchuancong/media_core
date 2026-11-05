@@ -2,14 +2,15 @@
 
 跨平台可复用的 Flutter 播放器核心：**一个与平台无关的编排层** + **按能力拆分的包**。
 
-核心包（`packages/media_core`）内含 40 个模块，负责播放最难的那部分——会话与代际、命令串行化、
-恢复决策、池化、事件归一化——但不含任何平台代码、UI 或主题。工作区共 24 个包：4 个后端适配、15 个能力包（含 UI、系统媒体面与平台探针）、日志与内存两个
-基础设施包，以及被 vendor 进来的 media_kit。
+核心包（`packages/media_core`）内含 46 个模块，负责播放最难的那部分——会话与代际、命令串行化、
+恢复决策、池化、事件归一化——但不含任何平台代码、UI 或主题。工作区共 26 个包：1 个内核 +
+4 个视频后端 + 1 个纯音频后端 + 15 个能力包（UI、系统媒体面、直播编排、弹幕……）+ 5 个基础设施
+（日志、内存、平台探针、win32 工具、回环摄取）。
 
-> 📐 完整分层架构（模块职责、挂载点、数据流、恢复决策流）：[中文](docs/zh-Hans/architecture.md) ·
-> [English](docs/en/architecture.md)
+> 📐 完整分层架构（模块职责、挂载点、数据流、恢复决策流）：[中文](doc/zh-Hans/architecture.md) ·
+> [English](doc/en/architecture.md)
 >
-> 📚 各模块文档：`docs/zh-Hans/`（另有 [English](docs/en/README.md) 与 [繁體中文](docs/zh-Hant/README.md)）
+> 📚 各模块文档：`doc/zh-Hans/`（另有 [English](doc/en/README.md) 与 [繁體中文](doc/zh-Hant/README.md)）
 
 ## 30 秒接入
 
@@ -23,7 +24,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKitPlayerAdapter.ensureInitialized();
 
-  // 系统媒体面（通知 / 锁屏 / SMTC / MPRIS）：一行，之后每个播放器自动上通知。
+  // 系统媒体面（通知 / 锁屏 / SMTC）：一行，之后每个播放器自动上通知。
   await MediaSessionBootstrap.enable();
 
   final kernel = PlayerKernel()..registerBackend(const MediaKitAdapterFactory().registration());
@@ -58,7 +59,7 @@ MediaCorePlayerView(handle: handle, style: PlayerControlsStyle.neumorphic)  // �
 PlayerSource ─┐
               │   SourceService（解析 / 校验 / 探测）
               ▼
-PlayerKernel ──▶ PlayerAdapterSelector ──▶ PlayerAdapterRegistry（media_kit / ijk / video_player / fvp）
+PlayerKernel ──▶ PlayerAdapterSelector ──▶ PlayerAdapterRegistry（media_kit / ijk / better_player / fvp）
     │                按协议、格式、直播能力、优先级打分选出后端
     │
     └── PlayerHandle（单个播放器的门面，公开操作的唯一入口）
@@ -107,19 +108,22 @@ adapter 报错后，唯一决策点 `RecoveryLadder` 按梯级推进，每一步
 | 包                              | 能力         | 一句话                                                                                                                         |
 | ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `media_core_ui`               | 播放器 UI    | **六套设计语言**（material / cupertino / fluent / macos / yaru / neumorphic）共用一层控制逻辑；含双指/双击缩放与截图按钮 |
-| `media_core_mediasession`     | 系统媒体面   | 通知 / 锁屏 / SMTC / MPRIS + 音频焦点；**进程内一次 `enable()`，之后所有播放器自动挂载**                               |
-| `media_core_native`           | 平台能力探针 | 编解码硬解与分辨率上限、内存/核数、系统特性，以及**后台保活**（前台服务/唤醒锁、防休眠）；五平台实现，答案随每个 session 与适配器下发 |
+| `media_core_mediasession`     | 系统媒体面   | 通知 / 锁屏 / SMTC + 音频焦点；**进程内一次 `enable()`，之后所有播放器自动挂载**（Linux 待 `flutter_media_session` 的 MPRIS） |
+| `media_core_native`           | 平台能力探针 | 编解码硬解与分辨率上限、内存/核数、系统特性，以及**后台保活**（前台服务/唤醒锁/keep-alive）；五平台实现，答案随每个 session 与适配器下发 |
 | `media_core_live`             | 直播         | 线路/引擎扫描、卡顿看门狗、宿主节奏的即时 retry（跑在单槽任务队列上）                                                                      |
 | `media_core_feed`             | 抖音式上下滑 | 共用一个播放器换源、滑动吸附、下一项预载                                                                                       |
 | `media_core_list_playback`    | 列表播放     | 单窗口上/下滑切换，按条目记忆进度，返回时续播                                                                                  |
 | `media_core_multiview`        | 多画面同看   | 监控式视频墙：逐格健康度、唯一音频归属、解码预算、逐格弹幕、巡更轮巡、逐格列表                                                 |
 | `media_core_danmaku`          | 弹幕         | 传输契约 + 消息归一化 + 去重/积压闸门 + 内容过滤 + 会话围栏                                                                    |
 | `media_core_audio`            | 音乐         | 音源注册与解析（签名 URL 带过期）、队列与四种播放模式、歌词（LRC/翻译/逐字）、桌面歌词原生窗口、下载（ffmpeg）                 |
+| `media_core_cast_dlna`        | 投屏         | DLNA/UPnP 后端：SSDP 发现、GENA 事件（丢失自动退回轮询）、SOAP 命令、本地媒体服务（带 Range 与令牌门禁）                      |
+| `media_core_ingest`           | 摄取         | 本地回环 HTTP 代理：HLS 重写、Cookie 池、子段变换（应对混淆的直播子段），供播放器无跨域地消费                                   |
 | `media_core_recording_ffmpeg` | 录播         | FFmpegKit 分段 MPEG-TS 录制 + CSV 日志；失败只丢几秒而非整场；进程默认取后台保活会话（熄屏继续录）                              |
 | `media_core_download`         | 下载         | 有界并发队列、断点续传（先校验再续）、重试预算与进度                                                                           |
 | `media_core_presentation`     | 呈现接缝     | 窗口级驱动契约 + 通用浮层舞台（槽位 / 悬停显隐），窗口类包共用                                                               |
 | `media_core_fullscreen`       | 全屏         | 系统全屏与窗口级全屏两种变体，含横竖屏适配策略                                                                                 |
-| `media_core_pip`              | 画中画       | 桌面置顶小窗（可锁宽高比）+ Android/iOS 系统 PiP（`native_picture_in_picture` 接管式）；移动端"能进不能出"是平台事实，如实返回                    |
+| `media_core_pip`              | 画中画       | 桌面置顶小窗（可锁宽高比）+ Android 悬浮窗接管 + iOS 系统 PiP（pip_kit）；移动端"能进不能出"是平台事实，如实返回                |
+| `media_core_notify`           | 任务通知     | 前台运行行 + 任务进度/结果通知（下载、录制各自一条运行线），Android 上由前台服务持有                                          |
 | `media_core_logging`          | 分级日志     | 全局枢纽：分级/分类开关、多 sink（控制台/内存环/文件轮转）、作用域字段                                                         |
 | `media_core_memory`           | 内存记账     | 按贡献者申报求和 + 设备实测快照；预算阈值驱动的四级压力                                                                        |
 
@@ -132,11 +136,13 @@ adapter 报错后，唯一决策点 `RecoveryLadder` 按梯级推进，每一步
 
 ### 分级日志与内存
 
-日志默认**完全静默**（`LogLevel.nothing`），由宿主开启；分类与模块一一对应，排查单个问题时只调高那一类：
+日志默认**完全静默**（`LogLevel.nothing`），由宿主开启；打开 info 级即可拿到完整的关键里程碑
+（播放器创建/换源、引擎与线路切换、恢复决策、任务起止），排查单个问题时只调高那一类：
 
 ```dart
-MediaCoreLog.level = LogLevel.debug;
-MediaCoreLog.setCategoryLevel(LogCategory.pool, LogLevel.trace);
+MediaCoreLog.level = LogLevel.info;                            // 关键里程碑
+MediaCoreLog.level = LogLevel.debug;                           // 加上 best-effort 清理等细节
+MediaCoreLog.setCategoryLevel(LogCategory.live, LogLevel.trace);
 final ring = MediaCoreLog.attachMemorySink(capacity: 500);
 LogScope.run({'roomId': room.id}, () => player.open(source));   // 该作用域内每条日志都带房间号
 ```
@@ -151,26 +157,28 @@ provider）。没有 Dart API 能报出解码器/纹理占了多少字节，所�
 | ---------------------------- | ---------------------------------- | ------------------------------ | ------------------------------------------------------------------------- |
 | `media_core_media_kit`     | media_kit（vendor 在本仓库）       | `MediaKitAdapterFactory`     | 协议/格式覆盖最广，默认首选；自带解码策略（按设备能力决定硬解或直接软解） |
 | `media_core_ijk_player`    | ijk（`flv_lzc`）                 | `IjkPlayerAdapterFactory`    | FLV / H.265，移动端                                                       |
-| `media_core_better_player` | better_player_plus（video_player） | `BetterPlayerAdapterFactory` | 轻量、纯 Flutter 生态                                                     |
+| `media_core_better_player` | better_player 1.33（联邦化：Media3 / AVPlayer / libmpv / Shaka） | `BetterPlayerAdapterFactory` | 一套 API 通吃全平台；Android 走 Media3，桌面与 web 覆盖补齐 |
 | `media_core_fvp`           | fvp（libmdk）                      | `FvpAdapterFactory`          | 另一条桌面/移动解码路径                                                   |
+| `media_core_mpv_audio`     | mpv（纯音频）                      | `MpvAudioAdapterFactory`     | 音频后端：不解码视频面，后台音乐/播客场景                                  |
 
 注册方式统一：`kernel.registerBackend(const XxxAdapterFactory().registration())`。
 
 ## 平台支持
 
-|                                          | Android | iOS           | macOS | Windows         | Linux                      |
-| ---------------------------------------- | ------- | ------------- | ----- | --------------- | -------------------------- |
-| 播放（四个后端任选）                     | ✅      | ✅            | ✅    | ✅              | ✅                         |
-| 系统媒体面（通知 / 锁屏 / SMTC / MPRIS） | ✅      | ✅            | ✅    | ✅              | ✅                         |
-| 能力探针（硬解 / 设备 / 系统特性）       | ✅      | ✅            | ✅    | ✅              | ✅（逐编解码器待接 libva） |
-| 系统 PiP                                 | ✅      | ⏳ 需帧投递层 | ⏳    | — 用应用内小窗 | — 用应用内小窗            |
-| 桌面歌词窗口                             | ✅      | —            | ✅    | ✅              | ✅                         |
+|                                          | Android | iOS   | macOS | Windows         | Linux                      |
+| ---------------------------------------- | ------- | ----- | ----- | --------------- | -------------------------- |
+| 播放（五个后端任选）                     | ✅      | ✅    | ✅    | ✅              | ✅                         |
+| 系统媒体面（通知 / 锁屏 / SMTC）         | ✅      | ✅    | ✅    | ✅              | ⏳ 待 MPRIS                |
+| 能力探针（硬解 / 设备 / 系统特性）       | ✅      | ✅    | ✅    | ✅              | ✅（逐编解码器待接 libva） |
+| 系统 PiP / 画中画                        | ✅ 悬浮窗接管 | ✅ pip_kit | ⏳ | — 用应用内小窗 | — 用应用内小窗            |
+| 桌面歌词窗口                             | ✅      | —    | ✅    | ✅              | ✅                         |
 
 ## 文档
 
-- 中文：[docs/zh-Hans/README.md](docs/zh-Hans/README.md) · 架构：[architecture.md](docs/zh-Hans/architecture.md)
-- English: [docs/en/README.md](docs/en/README.md) · Architecture: [architecture.md](docs/en/architecture.md)
-- 繁體中文：[docs/zh-Hant/README.md](docs/zh-Hant/README.md)
+- 中文：[doc/zh-Hans/README.md](doc/zh-Hans/README.md) · 架构：[architecture.md](doc/zh-Hans/architecture.md)
+- English: [doc/en/README.md](doc/en/README.md) · Architecture: [architecture.md](doc/en/architecture.md)
+- 繁體中文：[doc/zh-Hant/README.md](doc/zh-Hant/README.md)
+- 后台运行时（前台服务 / 保活 / 设备清单）：[doc/media_core_background_runtime_architecture.md](doc/media_core_background_runtime_architecture.md)
 
 包级细节：媒体面在 `packages/media_core_mediasession/README.md`，探针契约在
 `packages/media_core_native/README.md`，权限与平台清单在 `packages/media_core_audio/doc/permissions.md`。
@@ -188,18 +196,23 @@ provider）。没有 Dart API 能报出解码器/纹理占了多少字节，所�
 
 ```text
 packages/
-  media_core/                       核心：40 个模块 + 编排层（kernel / handle / runtime）
+  media_core/                       核心：46 个模块 + 编排层（kernel / handle / runtime）
   media_core_media_kit/             media_kit 适配（默认后端）
   media_core_ijk_player/            ijk (flv_lzc) 适配
-  media_core_better_player/         video_player 适配
+  media_core_better_player/         better_player 1.33 适配（全平台联邦化）
   media_core_fvp/                   fvp (libmdk) 适配
+  media_core_mpv_audio/             mpv 纯音频适配
   media_core_native/                平台能力探针（android / ios / macos / linux / windows）
+  media_core_win32/                 Win32 FFI 工具（窗口枚举 / 几何 / 全屏）
   media_core_ui/                    六套设计语言的控件
-  media_core_mediasession/          通知 / 锁屏 / SMTC / MPRIS + 音频焦点
+  media_core_mediasession/          通知 / 锁屏 / SMTC + 音频焦点
+  media_core_notify/                任务运行行与进度/结果通知
   media_core_audio/                 音乐：音源 / 队列 / 歌词 / 桌面歌词 / 下载
+  media_core_cast_dlna/             DLNA/UPnP 投屏
+  media_core_ingest/                本地回环摄取代理（HLS 重写 / Cookie 池 / 子段变换）
   media_core_presentation/          呈现接缝（窗口驱动契约 + 浮层舞台）
   media_core_fullscreen/            全屏（两种变体 + 方向策略）
-  media_core_pip/                   画中画（桌面小窗 + Android/iOS 系统 PiP）
+  media_core_pip/                   画中画（桌面小窗 + Android 悬浮窗 + iOS 系统 PiP）
   media_core_danmaku/               弹幕
   media_core_live/                  直播编排
   media_core_feed/                  抖音式上下滑
@@ -209,14 +222,14 @@ packages/
   media_core_download/              下载（队列 + 续传 + 重试）
   media_core_logging/               分级日志
   media_core_memory/                内存记账
-example</* */s/example/                   示例 App：9 个可运行页面 + 14 个模块速览
+example/                            示例 App：10 个可运行页面 + 模块速览
 ```
 
-`media_kit`、`media_kit_video` 与 `fvp` 不随本仓库分发：前两个按 `packages/media_core_media_kit` 里固定的 ref
-从 `Predidit/media-kit` 取，`fvp` 取 pub.dev 的 `^0.38.1`。所以这里**没有** PureLive 分支的那些补丁
+`media_kit`、`media_kit_video` 不随本仓库分发：按 `packages/media_core_media_kit` 里固定的 ref
+从 `Predidit/media-kit` 取。所以这里**没有** PureLive 分支的那些补丁
 （`setVideoOutputEnabled`、Windows 的 `frameRevision` 等），适配器不得依赖它们。
 
 示例应用把上面每一件都做成可点、可看的面：`player`（生命周期与操作记录）、`live`（多线路与引擎回退）、
 `feed`（上下滑）、`media-session`（自动挂载的系统媒体面）、`ui-styles`（六套风格实时切换 + 缩放 + 截图）、
 `music`（音源 → 队列 → 歌词 → 桌面歌词 → 下载）、`multiview`（视频墙）、`presentation`（全屏 / PiP / 浮窗 / 弹幕）、
-`memory`（内存仪表盘），外加模块速览里打印出来的平台探针报告与纯逻辑演示。
+`memory`（内存仪表盘）、`audio-tap`（音频分析），外加模块速览里打印出来的平台探针报告与纯逻辑演示。
