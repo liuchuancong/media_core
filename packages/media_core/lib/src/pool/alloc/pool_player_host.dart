@@ -121,7 +121,13 @@ final class KernelPoolPlayerHost implements PoolPlayerHost {
       // `kernel.release` here would dispose it, so nothing would ever be
       // reused and every take would pay for a cold player - which is exactly
       // what the pool exists to avoid.
-      await handle.handle.recycle();
+      //
+      // No `recycle()` here on purpose: the caller recycles before releasing
+      // (the pool orchestrator's `_releaseAssignment` does), and recycling a
+      // second time only drove the engine's close again and republished
+      // duplicate stopped/idle transitions on every hand-back. `PlayerKernel.
+      // acquire` recycles on the way out, which keeps the "clean for reuse"
+      // guarantee for any release path that skipped it.
       kernel.pool.release(handle.handle.id);
 
       return;

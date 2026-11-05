@@ -231,13 +231,39 @@ extension PlayerHandleLifecycle on PlayerHandle {
   Future<void> recycle() {
     _ensureNotDisposed();
 
+    // A handle with no source, no ready backend and an idle session is already
+    // in exactly the state a recycle produces (a previous recycle, or a
+    // handle that never opened). Re-running the reset from there would only
+    // drive the engine's close a second time - every close on a closed
+    // backend still reaches the engine's `onClose` - and republish duplicate
+    // stopped/idle transitions plus a generation bump nobody can consume.
+    // The pool hands players back and forth with a recycle on each side, so
+    // this guard is what turns "two or three engine closes per reuse" into
+    // one. Everything else - a source open, a failed open, a ready backend, a
+    // session left `stopped` by close - takes the full path below, unchanged.
+    final hadSource = _currentSource != null;
+    final needsReset =
+        hadSource ||
+        _backendReady ||
+        _runtime.session.state.status != SessionStatus.idle;
+
     _invalidateOperations();
 
     _currentSource = null;
     _backendReady = false;
     playIntent = false;
     _ladder.reset();
-    _announceSource(null);
+
+    if (!needsReset) {
+      return Future<void>.value();
+    }
+
+    if (hadSource) {
+      // Announce the change, not the reset: a caller that already closed (or
+      // recycled) this handle already saw the null announcement, and a second
+      // one is a duplicate emission on `sourceChanges`.
+      _announceSource(null);
+    }
 
     return _enqueue(() async {
       if (_disposed) return;

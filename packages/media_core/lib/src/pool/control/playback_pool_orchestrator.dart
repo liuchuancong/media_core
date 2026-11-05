@@ -220,11 +220,21 @@ final class PlaybackPoolOrchestrator {
   /// not restart what is playing. Everything else is released.
   Future<PlaybackPoolPlan> setItems(List<PlayerSource> sources) {
     _ensureNotDisposed();
+    final previous = List<PlayerSource>.of(_sources);
     _sources
       ..clear()
       ..addAll(sources);
 
-    _ratios.removeWhere((index, _) => index >= _sources.length);
+    // Visibility is reported per *index*, so after a refresh or an insertion a
+    // ratio kept from the previous list describes a different item - or no
+    // item - behind that index. Keeping those entries let the stale number
+    // decide the next active item and autoplay something the viewer never
+    // reported. Entries whose source at that index is unchanged keep theirs,
+    // which is what lets a same-list refresh keep the current item playing
+    // without waiting for the scroll view to report again.
+    bool stale(int index) => index >= _sources.length || _sources[index] != previous[index];
+    _ratios.removeWhere((index, _) => stale(index));
+    _reportOrder.removeWhere((index, _) => stale(index));
     return _enqueue(() async {
       final stale = _assignments.values.where((assignment) => assignment.index >= _sources.length).toList();
       for (final assignment in stale) {
@@ -558,6 +568,13 @@ final class PlaybackPoolOrchestrator {
         error: error,
         fields: <String, Object?>{'index': index, 'playerId': handle.id},
       );
+      // The handle may be a re-point of an assignment that still names the old
+      // index. The player is about to leave this pool's ledger, so that row
+      // must leave with it: keeping it would let a later reconcile resume - or
+      // re-point - a player the host has already taken back, and two owners
+      // driving one decoder is exactly the double-play this pool exists to
+      // prevent.
+      _assignments.remove(handle.id);
       await _host.release(handle);
 
       rethrow;
@@ -579,10 +596,14 @@ final class PlaybackPoolOrchestrator {
           await existing.handle.open(_sources[index], autoPlay: false);
           existing
             ..openedSource = _sources[index]
-            ..openedFor = _now;
-          if (existing.role != PooledItemRole.idle) {
-            warming.add(index);
-          }
+            ..openedFor = _now
+            // The player now holds an open, paused source *for this item*, so
+            // its role is `warming` whatever it was. Reporting it as `idle`
+            // under-counts the warm window and leaves it outside the warm
+            // budget, which is how a pool quietly holds one player more than
+            // `warmSize` promised.
+            ..role = PooledItemRole.warming;
+          warming.add(index);
           continue;
         }
         if (existing.role == PooledItemRole.active) {
@@ -616,6 +637,9 @@ final class PlaybackPoolOrchestrator {
           'warm open timed out; the player goes back',
           fields: <String, Object?>{'index': index, 'playerId': handle.id, 'timeoutMs': timeout?.inMilliseconds},
         );
+        // Same bookkeeping as the active failure path: a re-pointed handle's
+        // old assignment row must not outlive the player it names.
+        _assignments.remove(handle.id);
         await _host.release(handle);
         continue;
       } on Object catch (error) {
@@ -627,6 +651,7 @@ final class PlaybackPoolOrchestrator {
           error: error,
           fields: <String, Object?>{'index': index, 'playerId': handle.id},
         );
+        _assignments.remove(handle.id);
         await _host.release(handle);
         continue;
       }
@@ -790,9 +815,24 @@ final class PlaybackPoolOrchestrator {
     if (assignment.handle.isDisposed) {
       return;
     }
-    await assignment.handle.pause();
+    try {
+      await assignment.handle.pause();
+    } on Object catch (error) {
+      // A handle can legitimately refuse to pause: one that was already
+      // recycled (the stand-down path) holds no open source, and a handle
+      // implementation is free to reject commands on such a player. Letting
+      // the throw escape here would abort the reconcile *after* the ledger
+      // row was dropped but *before* the host got the player back - the
+      // player would sit in the host's pool as taken, unreusable and never
+      // disposed. Release continues instead.
+      _log.debug(
+        'release: pausing the player failed; releasing it anyway',
+        error: error,
+        fields: <String, Object?>{'playerId': assignment.handle.id, 'role': assignment.role.name},
+      );
+    }
     if (_config.enableRecycle) {
-      // Back to the host, which may return it from the kernel's instance pool.
+      // Back to the host, which may return it to the kernel's instance pool.
       await assignment.handle.recycle();
       await _host.release(assignment.handle);
       return;
@@ -828,9 +868,18 @@ final class PlaybackPoolOrchestrator {
   }
 
   PlaybackPoolPlan _buildPlan(Set<int> playing, Set<int> warming, Set<int> released) {
+    // One pass over the (small) assignment ledger instead of a linear
+    // `_findAssignment` scan per list item: a feed can hold thousands of
+    // sources and a plan is built on every visibility report, so the per-item
+    // scan made the plan cost O(items x players) at scroll frequency.
+    final byIndex = <int, _Assignment>{};
+    for (final assignment in _assignments.values) {
+      byIndex[assignment.index] = assignment;
+    }
+
     final items = <PooledItemState>[];
     for (var index = 0; index < _sources.length; index++) {
-      final assignment = _findAssignment(index);
+      final assignment = byIndex[index];
       items.add(
         PooledItemState(
           index: index,
