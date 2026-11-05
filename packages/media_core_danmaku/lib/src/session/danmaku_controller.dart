@@ -199,6 +199,11 @@ final class DanmakuController {
       _emit(state.copyWith(installed: true, transportId: transport.id));
       return;
     }
+    // Re-installing the instance that is already installed is a no-op. The
+    // replacement path tears the live session down (socket stop, filter clear,
+    // rendered history drop), and paying that to re-install the same object
+    // would only open a guaranteed reconnect gap in a working room.
+    if (identical(current, transport)) return;
     // Fire-and-forget: a failing replacement would otherwise surface as an
     // uncaught zone error, so it is logged instead.
     unawaited(replaceTransport(transport).catchError((Object error) {
@@ -263,12 +268,18 @@ final class DanmakuController {
       if (!force && (stillHealthy || _connectingKey == key)) return;
 
       final previousKey = _sessionKey ?? _connectingKey;
-      // Rendered history is only dropped when the room actually changes: a
-      // reconnect inside one room keeps what is already on screen.
-      await _disconnectInternal(
-        clearRenderer: previousKey != null && previousKey != key,
-        tearDownTransport: previousKey != null,
-      );
+      // Nothing is live when no session is owned and none is connecting — the
+      // clean first connect after an install — so the teardown (with its
+      // closed-state emission, room-change callback and stop log) is skipped
+      // entirely rather than run against an empty session. This keeps the
+      // room-open path free of spurious state churn before `connecting`.
+      if (previousKey != null) {
+        // Rendered history is only dropped when the room actually changes: a
+        // reconnect inside one room keeps what is already on screen. The
+        // transport is torn down (the default) because a session existed, and
+        // a restart requires a stop in between.
+        await _disconnectInternal(clearRenderer: previousKey != key);
+      }
       if (request != _requestEpoch || !isInstalled) return;
 
       if (_gateRoomKey != key) {
@@ -322,9 +333,13 @@ final class DanmakuController {
           _sessionReady = false;
           _sink.onRoomChanged(null);
           _emit(state.copyWith(phase: DanmakuSessionPhase.failed, clearRoom: true, generation: token));
+          // The timeout notice describes this attempt, so it is shown only
+          // while this attempt still owns the room: a handshake that was
+          // already superseded by a newer session must not push its timeout
+          // into the live room's notice feed.
+          if (timedOut) _notice(DanmakuNotice.connectionTimeout);
         }
         await _stopTransport(transport);
-        if (timedOut) _notice(DanmakuNotice.connectionTimeout);
         return;
       }
 
@@ -395,6 +410,14 @@ final class DanmakuController {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    // Invalidate the session identity immediately, before the serialized
+    // teardown gets its turn. Until that queued operation runs — it can wait
+    // behind an in-flight handshake for up to the start timeout — the
+    // callback guard (token, transport, key) would still match, letting
+    // readiness, messages and heartbeats from the dying socket reach the sink
+    // after dispose() has already returned. This mirrors the bump-first rule
+    // of [_disconnectInternal], applied at dispose entry.
+    _sessionToken++;
     final request = ++_requestEpoch;
     await _serialize(() async {
       if (request != _requestEpoch) return;
@@ -463,7 +486,12 @@ final class DanmakuController {
         // most decisive first. The gate rejects what already arrived, the
         // policy rejects what the viewer never wants to see, and only then do
         // the two content filters look at the text.
-        if (!_gate.accepts(message)) return;
+        //
+        // One clock read serves both window checks: the gate and the repeated
+        // filter measure their windows against the same instant instead of two
+        // separate `DateTime.now()` calls per message.
+        final now = DateTime.now();
+        if (!_gate.accepts(message, now: now)) return;
         final decision = policy.evaluate(message);
         if (!decision.allowed) {
           onSuppressed?.call(message, decision.reason!);
@@ -473,6 +501,7 @@ final class DanmakuController {
           message,
           enabled: _config.repeatedFilterEnabled,
           window: _config.repeatedFilterWindow,
+          now: now,
         )) {
           return;
         }

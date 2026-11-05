@@ -68,7 +68,7 @@ final class DanmakuColor {
   /// `AARRGGBB` (alpha is ignored — danmaku opacity is a per-viewer setting,
   /// never a platform one). Returns [white] when the string cannot be decoded.
   factory DanmakuColor.parse(String value) {
-    var text = value.trim().replaceFirst('#', '').replaceFirst(RegExp('^0x'), '');
+    var text = value.trim().replaceFirst('#', '').replaceFirst(_leadingHexPrefix, '');
     if (text.length == 3) {
       text = text.split('').map((char) => '$char$char').join();
     }
@@ -83,6 +83,12 @@ final class DanmakuColor {
 
   /// Default color for messages that carry none.
   static const DanmakuColor white = DanmakuColor(255, 255, 255);
+
+  /// Matches the `0x` prefix some platforms put on hex colors.
+  ///
+  /// Compiled once: color decoding runs per message, and constructing a
+  /// [RegExp] on every call would allocate the automaton each time.
+  static final RegExp _leadingHexPrefix = RegExp('^0x');
 
   /// Red channel, 0..255.
   final int r;
