@@ -44,6 +44,7 @@ final class FfmpegRecordConfig {
     this.restartBackoffMax = const Duration(minutes: 1),
     this.freshAddressBackoff = const Duration(seconds: 2),
     this.freshAddressBackoffMax = const Duration(seconds: 15),
+    this.inputRelay = false,
     this.stallTimeout = const Duration(seconds: 30),
     this.diskWatermarkBytes = 200 * 1024 * 1024,
     this.keepAlive = true,
@@ -275,6 +276,14 @@ final class FfmpegRecordConfig {
   /// Ceiling of the fast lane's backoff.
   final Duration freshAddressBackoffMax;
 
+  /// Whether a progressive capture reads through a loopback relay the
+  /// backend owns. Off, the capture reads the CDN directly and a stop kills
+  /// the process; on, the relay ends the upstream connection at a stop and
+  /// FFmpeg drains to complete segments — the clean end — while a kill
+  /// remains the fallback after the drain window. HLS captures ignore this:
+  /// a byte relay cannot stand between FFmpeg and its manifest reads.
+  final bool inputRelay;
+
   /// Ceiling of the restart backoff.
   ///
   /// A minute, because a room that is closed is not opened by retrying every
@@ -335,6 +344,7 @@ final class FfmpegRecordConfig {
     Duration? restartBackoffMax,
     Duration? freshAddressBackoff,
     Duration? freshAddressBackoffMax,
+    bool? inputRelay,
     Duration? stallTimeout,
     int? diskWatermarkBytes,
     bool? keepAlive,
@@ -368,6 +378,7 @@ final class FfmpegRecordConfig {
       restartBackoffMax: restartBackoffMax ?? this.restartBackoffMax,
       freshAddressBackoff: freshAddressBackoff ?? this.freshAddressBackoff,
       freshAddressBackoffMax: freshAddressBackoffMax ?? this.freshAddressBackoffMax,
+      inputRelay: inputRelay ?? this.inputRelay,
       stallTimeout: stallTimeout ?? this.stallTimeout,
       diskWatermarkBytes: diskWatermarkBytes ?? this.diskWatermarkBytes,
       keepAlive: keepAlive ?? this.keepAlive,

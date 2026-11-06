@@ -14,6 +14,7 @@ import 'package:media_core_recording_ffmpeg/src/journal/recording_manifest.dart'
 import 'package:media_core_recording_ffmpeg/src/journal/recording_recovery.dart';
 import 'package:media_core_recording_ffmpeg/src/journal/recording_remuxer.dart';
 import 'package:media_core_recording_ffmpeg/src/journal/recording_verification.dart';
+import 'package:media_core_recording_ffmpeg/src/relay/recording_input_relay.dart';
 
 /// Decision trail for a recording.
 ///
@@ -415,8 +416,29 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     final prefix = attemptFilePrefix(_basePrefix, attempt);
     final segmentPattern = '${prefix}_%06d${config.resolvedSegmentSuffix}';
     final journalPath = joinOutputPath(directory, '$prefix${config.journalSuffix}');
+
+    // A progressive capture reads through the relay when the config asked
+    // for it: the stop then ends the upstream connection instead of killing
+    // the process. An HLS address cannot ride a byte relay — FFmpeg's own
+    // manifest and segment reads are the capture — and a relay that cannot
+    // start loses only the clean stop.
+    await _inputRelay?.stop();
+    _inputRelay = null;
+    var captureUrl = url;
+    if (config.inputRelay && _activeSource.type == RecordingSourceType.network && !_isHlsAddress(url)) {
+      final relay = await RecordingInputRelay.start(
+        upstream: Uri.parse(url),
+        headers: _activeSource.headers,
+        proxy: config.proxy,
+      );
+      if (relay != null) {
+        _inputRelay = relay;
+        captureUrl = relay.localUrl.toString();
+      }
+    }
+
     final arguments = FfmpegRecordArguments(config: config).recordArguments(
-      url: url,
+      url: captureUrl,
       outputDirectory: directory,
       segmentPattern: segmentPattern,
       journalPath: journalPath,
@@ -629,8 +651,22 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     if (execution != null) {
       _log.info('stopping the recording', fields: <String, Object?>{'session': identityHashCode(execution)});
       _emit(_state.copyWith(status: RecordingStatus.stopping));
-      await execution.stop();
-      exitCode = await _awaitExit(execution);
+      // A relayed capture ends the upstream first: FFmpeg sees EOF, drains
+      // what it buffered and closes its own last segment. Only a process
+      // that does not finish in the drain window is killed.
+      final relay = _inputRelay;
+      if (relay != null) {
+        await relay.closeInput();
+        try {
+          exitCode = await _awaitExit(execution).timeout(const Duration(seconds: 5));
+        } on TimeoutException {
+          _log.info('the drained capture did not finish in time; ending the process');
+        }
+      }
+      if (exitCode == null) {
+        await execution.stop();
+        exitCode = await _awaitExit(execution);
+      }
     }
 
     _settleAttempt();
@@ -729,6 +765,8 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _cancelStallWatchdog();
     _cancelJournalWatcher();
     _settleAttempt();
+    await _inputRelay?.stop();
+    _inputRelay = null;
 
     if (execution != null) {
       await execution.cancel();
@@ -765,6 +803,8 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _disposed = true;
     _memory.withdraw(_memoryKey);
+    await _inputRelay?.stop();
+    _inputRelay = null;
     await _exitWatcher?.cancel();
     _exitWatcher = null;
     await _segmentController.close();
@@ -777,6 +817,13 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   // ---------------------------------------------------------------------------
 
   FfmpegExecutor _executorOf() => _executor ??= FfmpegKitExecutor();
+
+  /// Whether [url] is an HLS playlist: a byte relay cannot stand between
+  /// FFmpeg and its manifest and segment reads.
+  static bool _isHlsAddress(String url) {
+    final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+    return path.endsWith('.m3u8');
+  }
 
   /// The probe used to open a segment before claiming it is playable.
   ///
@@ -996,6 +1043,10 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
   /// Media time across every attempt, including the one still running.
   Duration get _totalMediaTime => _recordedMediaTime + _lastMediaTime;
+
+  /// The loopback relay the current attempt reads through, when the config
+  /// asked for one and the source is progressive. Null reads directly.
+  RecordingInputRelay? _inputRelay;
 
   /// The ended process's last words, most recent last, one attempt at a
   /// time: the tail is what the failure classifier reads, since the first
