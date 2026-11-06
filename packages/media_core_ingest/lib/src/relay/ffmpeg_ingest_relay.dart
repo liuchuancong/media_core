@@ -16,15 +16,41 @@ final LogModule _log = MediaCoreLog.of(LogCategory.network);
 ///
 /// The player only ever sees `http://127.0.0.1:<port>/index.m3u8`; the playlist's
 /// own segment names are relative to that URL, so nothing has to be rewritten.
+///
+/// A signed source also expires under a running FFmpeg, and FFmpeg cannot swap
+/// its input mid flight. [renewAddress] continues the relay on a fresh address
+/// with a second round in the same directory: the second round first proves the
+/// new address by publishing a join playlist, then the first round is stopped
+/// and requests for `index.m3u8` are served the join's bytes under the old
+/// name - the player's URL never changes. The join is a new encode round, so
+/// its timestamps restart; the player reads it as a fresh window, and segments
+/// of earlier rounds stay on disk until [close].
 final class FfmpegIngestRelay {
   FfmpegIngestRelay._({
+    required Uri source,
     required HttpServer server,
     required Directory directory,
     required IngestFfmpegProcess execution,
-    required this.source,
-  }) : _server = server,
+    required IngestFfmpegStarter startFfmpeg,
+    required Duration segmentDuration,
+    required int playlistSize,
+    required bool copyStreams,
+    required String? videoCodec,
+    required String? audioCodec,
+    required Duration startupTimeout,
+    required bool dashMerge,
+  }) : _source = source,
+       _server = server,
        _directory = directory,
-       _execution = execution;
+       _execution = execution,
+       _startFfmpeg = startFfmpeg,
+       _segmentDuration = segmentDuration,
+       _playlistSize = playlistSize,
+       _copyStreams = copyStreams,
+       _videoCodec = videoCodec,
+       _audioCodec = audioCodec,
+       _startupTimeout = startupTimeout,
+       _dashMerge = dashMerge;
 
   /// Starts the pipeline and waits for the first playlist.
   ///
@@ -63,30 +89,42 @@ final class FfmpegIngestRelay {
           audioCodec: audioCodec,
         ),
       );
-      final relay = FfmpegIngestRelay._(server: server, directory: directory, execution: execution, source: source);
-      // One subscription records the exit; `exitCode` is only readable once.
-      unawaited(
-        execution.exitCode.then((code) {
-          relay
-            .._exited = true
-            .._exitCode = code;
-          _log.info('ingest FFmpeg exited', fields: <String, Object?>{'source': source, 'exitCode': code});
-        }),
+      final relay = FfmpegIngestRelay._(
+        source: source,
+        server: server,
+        directory: directory,
+        execution: execution,
+        startFfmpeg: startFfmpeg,
+        segmentDuration: segmentDuration,
+        playlistSize: playlistSize,
+        copyStreams: copyStreams,
+        videoCodec: videoCodec,
+        audioCodec: audioCodec,
+        startupTimeout: startupTimeout,
+        dashMerge: false,
       );
-      server.listen(relay._handle, onError: (Object error) {
-        _log.warning('ingest loopback server error', error: error, fields: <String, Object?>{'source': source});
-      }, cancelOnError: false);
-      await relay._awaitPlaylist(File(playlistPath), startupTimeout);
-      _log.info('ingest relay started', fields: <String, Object?>{
-        'source': source,
-        'port': server.port,
-        'directory': directory.path,
-      });
+      // One subscription records the exit; `exitCode` is only readable once.
+      final exitWatch = relay._adopt(execution);
+      server.listen(
+        relay._handle,
+        onError: (Object error) {
+          _log.warning('ingest loopback server error', error: error, fields: <String, Object?>{'source': source});
+        },
+        cancelOnError: false,
+      );
+      await _awaitPublished(File(playlistPath), exitWatch, startupTimeout);
+      _log.info(
+        'ingest relay started',
+        fields: <String, Object?>{'source': source, 'port': server.port, 'directory': directory.path},
+      );
       return relay;
     } on Object catch (error) {
-      _log.error('ingest relay failed to start', error: error, stackTrace: StackTrace.current, fields: <String, Object?>{
-        'source': source,
-      });
+      _log.error(
+        'ingest relay failed to start',
+        error: error,
+        stackTrace: StackTrace.current,
+        fields: <String, Object?>{'source': source},
+      );
       await execution?.stop();
       await server.close(force: true);
       await _deleteQuietly(directory);
@@ -96,6 +134,12 @@ final class FfmpegIngestRelay {
 
   /// Name FFmpeg writes and the player reads.
   static const String ingestPlaylistName = 'index.m3u8';
+
+  /// Name the renewal round writes; served under [ingestPlaylistName] once
+  /// the relay cuts over.
+  static const String joinPlaylistName = 'join.m3u8';
+
+  static const String _joinSegmentPrefix = 'join';
 
   /// Starts a DASH merge pipeline: two separate essence URLs (video m4s +
   /// audio m4s) are muxed by FFmpeg into one rolling loopback HLS tree.
@@ -130,35 +174,50 @@ final class FfmpegIngestRelay {
         ),
       );
       final relay = FfmpegIngestRelay._(
+        source: videoSource,
         server: server,
         directory: directory,
         execution: execution,
-        source: videoSource,
+        startFfmpeg: startFfmpeg,
+        segmentDuration: segmentDuration,
+        playlistSize: playlistSize,
+        copyStreams: true,
+        videoCodec: null,
+        audioCodec: null,
+        startupTimeout: startupTimeout,
+        dashMerge: true,
       );
-      unawaited(
-        execution.exitCode.then((code) {
-          relay
-            .._exited = true
-            .._exitCode = code;
-          _log.info('ingest FFmpeg exited', fields: <String, Object?>{'videoSource': videoSource, 'exitCode': code});
-        }),
+      // One subscription records the exit; `exitCode` is only readable once.
+      final exitWatch = relay._adopt(execution);
+      server.listen(
+        relay._handle,
+        onError: (Object error) {
+          _log.warning(
+            'ingest loopback server error',
+            error: error,
+            fields: <String, Object?>{'videoSource': videoSource},
+          );
+        },
+        cancelOnError: false,
       );
-      server.listen(relay._handle, onError: (Object error) {
-        _log.warning('ingest loopback server error', error: error, fields: <String, Object?>{'videoSource': videoSource});
-      }, cancelOnError: false);
-      await relay._awaitPlaylist(File(playlistPath), startupTimeout);
-      _log.info('DASH merge relay started', fields: <String, Object?>{
-        'videoSource': videoSource,
-        'audioSource': audioSource,
-        'port': server.port,
-        'directory': directory.path,
-      });
+      await _awaitPublished(File(playlistPath), exitWatch, startupTimeout);
+      _log.info(
+        'DASH merge relay started',
+        fields: <String, Object?>{
+          'videoSource': videoSource,
+          'audioSource': audioSource,
+          'port': server.port,
+          'directory': directory.path,
+        },
+      );
       return relay;
     } on Object catch (error) {
-      _log.error('DASH merge relay failed to start', error: error, stackTrace: StackTrace.current, fields: <String, Object?>{
-        'videoSource': videoSource,
-        'audioSource': audioSource,
-      });
+      _log.error(
+        'DASH merge relay failed to start',
+        error: error,
+        stackTrace: StackTrace.current,
+        fields: <String, Object?>{'videoSource': videoSource, 'audioSource': audioSource},
+      );
       await execution?.stop();
       await server.close(force: true);
       await _deleteQuietly(directory);
@@ -267,15 +326,77 @@ final class FfmpegIngestRelay {
     ];
   }
 
+  /// Renewal-round argument list: one input on the fresh address, writing a
+  /// [joinPlaylistName] tree with its own segment prefix next to the running
+  /// round's. Exposed for tests and host logging.
+  ///
+  /// The flags drop `append_list`: the join is a list of its own, not an
+  /// extension of the running playlist - two processes must never write one
+  /// playlist file, so the relay switches which file it serves instead.
+  static List<String> buildJoinArguments({
+    required Uri source,
+    required String outputDirectory,
+    Map<String, String> headers = const <String, String>{},
+    Duration segmentDuration = const Duration(seconds: 2),
+    int playlistSize = 4,
+    bool copyStreams = true,
+    String? videoCodec,
+    String? audioCodec,
+  }) {
+    final separator = Platform.pathSeparator;
+    return <String>[
+      '-hide_banner',
+      '-loglevel',
+      'warning',
+      if (headers.isNotEmpty) ...<String>['-headers', headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join()],
+      '-i',
+      source.toString(),
+      if (copyStreams) ...<String>['-c', 'copy'] else ...<String>[
+        '-c:v',
+        videoCodec ?? 'libx264',
+        '-preset',
+        'veryfast',
+        '-tune',
+        'zerolatency',
+        '-c:a',
+        audioCodec ?? 'aac',
+      ],
+      '-f',
+      'hls',
+      '-hls_time',
+      (segmentDuration.inMilliseconds / 1000).toStringAsFixed(3),
+      '-hls_list_size',
+      playlistSize.toString(),
+      '-hls_flags',
+      'delete_segments+omit_endlist',
+      '-hls_segment_filename',
+      '$outputDirectory$separator$_joinSegmentPrefix%05d.ts',
+      '$outputDirectory$separator$joinPlaylistName',
+    ];
+  }
+
   final HttpServer _server;
   final Directory _directory;
-  final IngestFfmpegProcess _execution;
+  final IngestFfmpegStarter _startFfmpeg;
+  final Duration _segmentDuration;
+  final int _playlistSize;
+  final bool _copyStreams;
+  final String? _videoCodec;
+  final String? _audioCodec;
+  final Duration _startupTimeout;
 
-  /// The upstream this pipeline was started for.
-  final Uri source;
+  /// A DASH merge carries two inputs; only the single-input rounds renew.
+  final bool _dashMerge;
+  IngestFfmpegProcess _execution;
+
+  /// The upstream the current round was started for.
+  Uri get source => _source;
+  Uri _source;
   bool _closed = false;
   bool _exited = false;
   int? _exitCode;
+  bool _servingJoin = false;
+  Future<bool>? _renewing;
 
   /// The URL the player opens.
   Uri get inputUri =>
@@ -287,12 +408,39 @@ final class FfmpegIngestRelay {
   /// FFmpeg's exit code once it has stopped, or `null` while it runs.
   int? get exitCode => _exitCode;
 
-  Future<void> _awaitPlaylist(File playlist, Duration timeout) async {
+  /// Subscribes the one [exitCode] read of a round; the flags flip only when
+  /// the exited round is still the current one, so a dead first round cannot
+  /// mark the relay down after a renewal replaced it. The returned watch is
+  /// the spawn site's handle for waiting on a first playlist.
+  Completer<int> _adopt(IngestFfmpegProcess execution) {
+    final watch = Completer<int>();
+    unawaited(
+      execution.exitCode.then(
+        (code) {
+          if (!watch.isCompleted) watch.complete(code);
+          if (!identical(_execution, execution)) return;
+          _exited = true;
+          _exitCode = code;
+          _log.info('ingest FFmpeg exited', fields: <String, Object?>{'source': _source, 'exitCode': code});
+        },
+        onError: (Object error) {
+          if (!watch.isCompleted) watch.completeError(error);
+          if (!identical(_execution, execution)) return;
+          _exited = true;
+          _log.warning('ingest FFmpeg died', error: error, fields: <String, Object?>{'source': _source});
+        },
+      ),
+    );
+    return watch;
+  }
+
+  static Future<void> _awaitPublished(File playlist, Completer<int> exited, Duration timeout) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       if (playlist.existsSync()) return;
-      if (_exited) {
-        throw FormatException('FFmpeg ingest stopped (exit $_exitCode) before publishing a playlist');
+      if (exited.isCompleted) {
+        final code = await exited.future;
+        throw FormatException('FFmpeg ingest stopped (exit $code) before publishing a playlist');
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
@@ -308,7 +456,10 @@ final class FfmpegIngestRelay {
       await request.response.close();
       return;
     }
-    final file = File('${_directory.path}${Platform.pathSeparator}$name');
+    // After a renewal the join round's playlist is served under the name the
+    // player already knows; the old file stays frozen and unread.
+    final served = _servingJoin && name == ingestPlaylistName ? joinPlaylistName : name;
+    final file = File('${_directory.path}${Platform.pathSeparator}$served');
     if (!file.existsSync()) {
       // The player retries; a missing segment is not an error worth closing on.
       request.response.statusCode = HttpStatus.notFound;
@@ -334,6 +485,60 @@ final class FfmpegIngestRelay {
       } on Object catch (_) {
         // The player closed first; nothing left to answer.
       }
+    }
+  }
+
+  /// Continues the relay on a fresh upstream address; false when the relay is
+  /// closed, is a DASH merge, or the renewal round did not come up.
+  ///
+  /// The renewal first proves the fresh address with a second FFmpeg round in
+  /// the same directory, then stops the first round and serves the join's
+  /// playlist under the player's own `index.m3u8`. A failed renewal leaves the
+  /// first round running - it may simply not be the address's moment - so the
+  /// caller retries at its own pace. A round that died on its own can be
+  /// revived: the player's window is frozen either way, and the join restarts
+  /// it in place. Concurrent calls share one renewal; the address joined is
+  /// the first caller's.
+  Future<bool> renewAddress(Uri upstream, {Map<String, String> headers = const <String, String>{}}) {
+    if (_closed || _dashMerge) return Future<bool>.value(false);
+    return _renewing ??= _renew(upstream, headers).whenComplete(() => _renewing = null);
+  }
+
+  Future<bool> _renew(Uri upstream, Map<String, String> headers) async {
+    IngestFfmpegProcess? join;
+    try {
+      join = await _startFfmpeg(
+        buildJoinArguments(
+          source: upstream,
+          outputDirectory: _directory.path,
+          headers: headers,
+          segmentDuration: _segmentDuration,
+          playlistSize: _playlistSize,
+          copyStreams: _copyStreams,
+          videoCodec: _videoCodec,
+          audioCodec: _audioCodec,
+        ),
+      );
+      final watch = _adopt(join);
+      if (_closed) throw StateError('the relay closed under the renewal');
+      await _awaitPublished(
+        File('${_directory.path}${Platform.pathSeparator}$joinPlaylistName'),
+        watch,
+        _startupTimeout,
+      );
+      if (_closed) throw StateError('the relay closed under the renewal');
+      final previous = _execution;
+      _log.info('ingest relay renewed', fields: <String, Object?>{'from': _source, 'to': upstream});
+      _execution = join;
+      _source = upstream;
+      _servingJoin = true;
+      _exited = false;
+      _exitCode = null;
+      previous.stop().ignore();
+      return true;
+    } on Object {
+      await join?.stop();
+      return false;
     }
   }
 
