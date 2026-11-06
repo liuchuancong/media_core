@@ -30,6 +30,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 // stream handlers call the protected `PlayerAdapterBase` emit API, which
 // only the class itself may touch.
 part 'media_kit_player_adapter_engine.dart';
+part 'media_kit_player_adapter_diagnostics.dart';
 
 /// The media_kit (libmpv) engine, driven through the shared `PlayerAdapter` contract.
 final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVideo {
@@ -213,6 +214,12 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   bool _playingNow = false;
   bool _bufferingNow = false;
   bool _hasOpened = false;
+
+  late final _MpvDiagnosticGate _diagnostics = _MpvDiagnosticGate(onError: _reportDiagnostic);
+
+  void _reportDiagnostic(String message, PlayerErrorCode code) {
+    reportEngineError(message: message, code: code);
+  }
 
   /// Reduces libmpv's per-frame `time-pos` events to a UI cadence.
   ///
@@ -437,6 +444,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _liveSource = source.isLive;
     _hasDecodedVideoFrame = false;
     _lastFrameHeartbeatMs = -frameHeartbeatIntervalMs;
+    _diagnostics.beginOpen();
 
     // Whatever a previous composite source left in mpv's side channels
     // (external tracks, alignment delay, request headers) is player-global
@@ -558,6 +566,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (audioOnly) {
       await _applyAudioOnly(true);
     }
+
+    _diagnostics.finishOpen();
   }
 
   /// Routes a [CompositeMediaSource]'s extra essences through MPV's
@@ -760,6 +770,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _playingNow = false;
     _bufferingNow = false;
     _hasOpened = false;
+    _diagnostics.discardSource();
 
     // A owed position from the stopped source must not arrive after the next
     // one starts: drop the pending value along with the gap.
@@ -796,6 +807,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _hasOpened = false;
     _playingNow = false;
     _bufferingNow = false;
+    _diagnostics.discardSource();
 
     // Reset all source-scoped presentation state so the next source
     // cannot inherit the previous source's frame / geometry state.
@@ -814,6 +826,7 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     _subscriptions.clear();
 
     _positionThrottle.dispose();
+    _diagnostics.close();
 
     // Stop the frame heartbeat clock before tearing down the player.
     if (_frameHeartbeatClock.isRunning) {
@@ -997,6 +1010,10 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
   /// mismatch visible: without this, a device that cannot decode the
   /// stream in hardware just shows no frames and nothing says why.
   void _onTracks(mk.Tracks tracks) {
+    if (tracks.audio.isNotEmpty) {
+      _diagnostics.audioOutput();
+    }
+
     for (final track in tracks.video) {
       final codec = VideoCodec.tryParse(track.codec);
 
@@ -1105,6 +1122,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _hasDecodedVideoFrame = true;
 
+    _diagnostics.videoOutput();
+
     emitVideoFrameProgress();
   }
 
@@ -1202,6 +1221,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
 
     _playingNow = playing;
 
+    _diagnostics.playback(playing: playing, buffering: _bufferingNow, audioOnly: audioOnly);
+
     if (playing) {
       emitPlaying();
     } else if (_hasOpened && !state.stopped && !state.completed) {
@@ -1226,6 +1247,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     if (_bufferingNow == buffering) return;
 
     _bufferingNow = buffering;
+
+    _diagnostics.playback(playing: _playingNow, buffering: buffering, audioOnly: audioOnly);
 
     // media_kit replays buffering=false on stop(); during a reopen that
     // replay belongs to the previous generation. The latch is still updated
@@ -1253,6 +1276,8 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
     // media_kit replays zeroed position/duration on stop(); without this
     // guard the previous source's teardown leaks into the next generation.
     if (!_hasOpened) return;
+
+    _diagnostics.positionAdvanced(audioOnly: audioOnly);
 
     _positionThrottle.report(position, _emitGatedPosition);
   }
@@ -1297,54 +1322,23 @@ final class MediaKitPlayerAdapter extends PlayerAdapterBase implements PlayerVid
       return;
     }
 
+    _diagnostics.videoOutput();
+
     emitVideoSizeChangedIfChanged(w, h);
   }
 
-  /// Classifies one mpv log line at error level.
+  /// Forwards one mpv log line to the diagnostic gate.
   ///
   /// media_kit feeds its `error` stream from these very lines, text-only:
   /// it forwards prefixes `file`, `ffmpeg` (only `tcp:` text), `vd`, `ad`,
   /// `cplayer` and `stream`. Subscribing to `log` instead reproduces that
   /// exact set while keeping the prefix, which is what the classification
-  /// needs.
-  ///
-  /// `vd` / `ad` are demoted to log-only. Those prefixes name decoder
-  /// output for individual frames or packets, which mpv recovers from by
-  /// itself — and `vd` is exactly how the hardware decoder failure this
-  /// adapter configures (`hwdec-software-fallback: 1`) reports its own
-  /// fallback to software. Reporting every such line as an engine failure
-  /// condemned healthy streams: the live open verification treats any
-  /// adapter error as a failed candidate (a needless engine switch), and a
-  /// line during idle playback triggered a full recovery reopen. Real
-  /// stalls are the watchdogs' job; load-path failures (file, stream,
-  /// ffmpeg network, cplayer) still fail the engine as before.
+  /// needs. The gate (`media_kit_player_adapter_diagnostics.dart`) owns the
+  /// classification: immediately terminal failures are reported at once,
+  /// recoverable ones are held for a progress window, and a line logged
+  /// while a source opens waits for that source to get under way.
   void _onLog(mk.PlayerLog log) {
-    if (log.level != 'error') return;
-
-    switch (log.prefix) {
-      case 'vd':
-      case 'ad':
-        // A decode error on one frame or packet; mpv keeps playing.
-        MediaCoreLog.warning(
-          LogCategory.player,
-          'mpv decode error (non-fatal): ${log.text}',
-          fields: <String, Object?>{'prefix': log.prefix},
-        );
-      case 'file':
-      case 'stream':
-      case 'cplayer':
-        MediaCoreLog.warning(LogCategory.error, log.text);
-        reportEngineError(message: log.text);
-      case 'ffmpeg':
-        // The http:// error of any kind — media_kit's own selection rule.
-        if (!log.text.startsWith('tcp:')) return;
-        MediaCoreLog.warning(LogCategory.error, log.text);
-        reportEngineError(message: log.text);
-      default:
-        // Prefixes media_kit's error stream never delivered stay
-        // unreported, exactly as before.
-        break;
-    }
+    _diagnostics.log(log.prefix, log.level, log.text);
   }
 
   void _onBuffer(Duration buffered) {

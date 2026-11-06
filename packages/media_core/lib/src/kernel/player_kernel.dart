@@ -6,7 +6,10 @@ import 'package:media_core/src/adapter/select/player_adapter_registry.dart';
 import 'package:media_core/src/adapter/select/player_adapter_selector.dart';
 import 'package:media_core/src/coordinator/global_player_coordinator.dart';
 import 'package:media_core/src/core/config/player_config.dart';
+import 'package:media_core/src/core/config/player_constants.dart';
 import 'package:media_core/src/core/model/player_identity.dart';
+import 'package:media_core/src/error/player_error_code.dart';
+import 'package:media_core/src/error/player_exception.dart';
 import 'package:media_core/src/event/event_context.dart';
 import 'package:media_core/src/event/event_priority.dart';
 import 'package:media_core/src/event/event_subscription.dart';
@@ -171,6 +174,10 @@ final class PlayerKernel with WidgetsBindingObserver {
   final KernelOptions options;
 
   final Map<PlayerId, PlayerHandle> _handles = {};
+
+  static const int _maxPendingEngineReleases = 2;
+
+  final Map<PlayerId, Future<void>> _releasing = {};
 
   /// Whether this kernel is registered with the app-lifecycle broadcast.
   ///
@@ -356,6 +363,13 @@ final class PlayerKernel with WidgetsBindingObserver {
       },
     );
 
+    if (_releasing.length >= _maxPendingEngineReleases) {
+      throw PlayerException(
+        code: PlayerErrorCode.custom('engine_release_pending'),
+        message: '${_releasing.length} previous players have not finished releasing',
+      );
+    }
+
     final player = PlayerIdentity.create();
     final sessionId = SessionId.generate();
     final adapter = registration.factory.create(registration.id);
@@ -417,7 +431,7 @@ final class PlayerKernel with WidgetsBindingObserver {
 
     if (effectiveSource != null) {
       try {
-        await handle.open(effectiveSource, autoPlay: config.autoPlay);
+        await handle.open(effectiveSource, autoPlay: config.autoPlay).timeout(PlayerConstants.openTimeout);
       } catch (error) {
         // The caller never received the handle, so leaving it registered would
         // strand a live player in the pool and in every coordinator - one that
@@ -577,7 +591,31 @@ final class PlayerKernel with WidgetsBindingObserver {
     _coordinator.lifecycle.unregister(playerId);
     _pool.remove(playerId);
 
-    await handle.dispose();
+    final releasing = handle.dispose();
+    final tracked = releasing.then<void>(
+      (_) => _releasing.remove(playerId),
+      onError: (Object error, StackTrace stackTrace) {
+        MediaCoreLog.warning(
+          LogCategory.lifecycle,
+          'player release failed; the engine-release guard stays until a release is confirmed',
+          error: error,
+          stackTrace: stackTrace,
+          fields: <String, Object?>{'player': playerId.value},
+        );
+      },
+    );
+    _releasing[playerId] = tracked;
+    unawaited(tracked);
+
+    try {
+      await releasing.timeout(PlayerConstants.disposeTimeout);
+    } on TimeoutException {
+      MediaCoreLog.warning(
+        LogCategory.lifecycle,
+        'player release exceeded ${PlayerConstants.disposeTimeout.inSeconds}s; release continues in the background',
+        fields: <String, Object?>{'player': playerId.value, 'pendingReleases': _releasing.length},
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
