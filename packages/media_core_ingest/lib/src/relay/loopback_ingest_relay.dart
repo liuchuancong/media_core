@@ -517,6 +517,21 @@ final class LoopbackIngestRelay {
     }
   }
 
+  /// Serves the tree from a fresh signed address.
+  ///
+  /// A source that swaps its signed URL underneath a playing stream — the
+  /// need the ingest plan names — is answered here: the root
+  /// manifest is re-pointed, so the next playlist read (the player's own
+  /// loop, seconds away) fetches from the new origin while the loopback
+  /// address the player holds never changes. Children already rewritten to
+  /// the relay resolve through the tree as before; a child the new origin no
+  /// longer names simply stops being asked for.
+  void renewAddress(Uri upstream) {
+    if (_closed) return;
+    _children['root.m3u8'] = _Child(uri: upstream, manifest: true);
+    _log.info('loopback relay re-pointed', fields: <String, Object?>{'port': _server.port, 'upstream': upstream.host});
+  }
+
   /// Stops the relay: port, in-flight upstream sockets and the child registry.
   Future<void> close() async {
     if (_closed) return;
