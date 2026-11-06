@@ -180,7 +180,6 @@ final class FfmpegRecordingRemuxer {
     void Function(double? progress)? onProgress,
     void Function(FfmpegExecution execution)? onExecution,
   }) async {
-    final watch = Stopwatch()..start();
     final outputPath = joinOutputPath(directory, combinedName(manifest.prefix, target));
 
     final segments = _segmentsOf(manifest, directory);
@@ -201,7 +200,44 @@ final class FfmpegRecordingRemuxer {
       return FfmpegRemuxResult.alreadyThere(outputPath: outputPath, bytesWritten: existing.size);
     }
 
-    final listPath = joinOutputPath(directory, '${manifest.prefix}.concat.txt');
+    final result = await _joinSegments(
+      prefix: manifest.prefix,
+      directory: directory,
+      outputPath: outputPath,
+      target: target,
+      segments: segments,
+      onProgress: onProgress,
+      onExecution: onExecution,
+    );
+    if (result.success || segments.length <= 1) {
+      return result;
+    }
+    return await _secondPass(
+      manifest: manifest,
+      directory: directory,
+      target: target,
+      outputPath: outputPath,
+      firstFailure: result.error ?? result,
+    );
+  }
+
+  /// Joins [segments] into one file at [outputPath], the body of the run.
+  ///
+  /// A join that ends without a commitable output — the process failed, or
+  /// its log named damaged output — is retried once with the newest segment
+  /// left out: that is the one a kill cut mid packet, and the clean prefix is
+  /// worth committing on its own ([_secondPass]).
+  Future<FfmpegRemuxResult> _joinSegments({
+    required String prefix,
+    required String directory,
+    required String outputPath,
+    required FfmpegRemuxTarget target,
+    required List<FfmpegJournalledSegment> segments,
+    required void Function(double? progress)? onProgress,
+    required void Function(FfmpegExecution execution)? onExecution,
+  }) async {
+    final watch = Stopwatch()..start();
+    final listPath = joinOutputPath(directory, '$prefix.concat.txt');
     final partialPath = _partialPathOf(outputPath);
 
     try {
@@ -259,18 +295,14 @@ final class FfmpegRecordingRemuxer {
 
     _log.info(
       'joining a recording into one file',
-      fields: <String, Object?>{
-        'segments': segments.length,
-        'output': outputPath,
-        'target': target.name,
-        'container': manifest.container.name,
-      },
+      fields: <String, Object?>{'segments': segments.length, 'output': outputPath, 'target': target.name},
     );
 
     final totalInputBytes = segments.fold<int>(0, (sum, segment) => sum + segment.bytes);
     // Built once: FFmpeg reports statistics a few times a second, and the note
     // string does not change between reports.
-    final memoryNote = 'remux of ${manifest.prefix}';
+    final memoryNote = 'remux of $prefix';
+    final damage = FfmpegJoinDamage();
     var completed = false;
 
     try {
@@ -284,6 +316,7 @@ final class FfmpegRecordingRemuxer {
             onProgress(totalInputBytes > 0 ? (statistics.sizeBytes / totalInputBytes).clamp(0.0, 1.0) : null);
           }
         },
+        onLog: damage.watch,
       );
       onExecution?.call(execution);
 
@@ -297,6 +330,16 @@ final class FfmpegRecordingRemuxer {
             'FFmpeg exited with $code and left '
             '${partial.type == FileSystemEntityType.notFound ? 'no' : '${partial.size}B'} output',
           ),
+        );
+      }
+
+      // A join whose own output was damaged — a trailer it could not write, a
+      // packet the muxer refused — must not be committed under the final name:
+      // the reference's "log free of damage, or no commit".
+      if (damage.untrustworthy) {
+        return FfmpegRemuxResult.failed(
+          outputPath: outputPath,
+          error: const FfmpegRemuxException('the join reported damaged output'),
         );
       }
 
@@ -345,6 +388,36 @@ final class FfmpegRecordingRemuxer {
       }
     }
   }
+
+  /// The second pass of a join that could not commit: the newest segment —
+  /// the one a kill cut mid packet — is left out of the list and stays on
+  /// disk beside the output, and the clean prefix is what commits.
+  Future<FfmpegRemuxResult> _secondPass({
+    required FfmpegRecordingManifest manifest,
+    required String directory,
+    required FfmpegRemuxTarget target,
+    required String outputPath,
+    required Object firstFailure,
+  }) async {
+    final segments = _segmentsOf(manifest, directory);
+    if (segments.length <= 1) {
+      return FfmpegRemuxResult.failed(outputPath: outputPath, error: firstFailure);
+    }
+    _log.warning(
+      'joining the recording again without its newest segment',
+      fields: <String, Object?>{'output': outputPath, 'dropped': segments.last.path},
+    );
+    return await _joinSegments(
+      prefix: manifest.prefix,
+      directory: directory,
+      outputPath: outputPath,
+      target: target,
+      segments: segments.sublist(0, segments.length - 1),
+      onProgress: null,
+      onExecution: null,
+    );
+  }
+
 
   /// The sibling path the join writes before it is complete.
   static String _partialPathOf(String outputPath) {
@@ -408,6 +481,34 @@ final class FfmpegRecordingRemuxer {
 }
 
 /// Why a recording could not be joined.
+/// What the join's own log says about the output it wrote.
+///
+/// The reference's `FfmpegMediaIntegrity`, cut to the words that make a
+/// **joined** file untrustworthy: input packet damage alone rides through a
+/// `-c copy` join (the bytes were recorded; the copy moves them), but a
+/// trailer FFmpeg could not write or a muxer that refused a packet means the
+/// output itself is not the recording.
+final class FfmpegJoinDamage {
+  /// The words of a join whose output cannot be committed.
+  static const List<String> _untrustworthyWords = [
+    'error writing trailer',
+    'error muxing a packet',
+    'error during demuxing',
+  ];
+
+  /// Whether the join's log named output damage.
+  bool untrustworthy = false;
+
+  /// Reads one log line, remembering whether it named output damage.
+  void watch(String message) {
+    final line = message.toLowerCase();
+    if (_untrustworthyWords.any(line.contains)) {
+      untrustworthy = true;
+    }
+  }
+}
+
+/// The failure a remux reports: what went wrong, in words a caller can show.
 final class FfmpegRemuxException implements Exception {
   /// Creates the exception.
   const FfmpegRemuxException(this.message);
