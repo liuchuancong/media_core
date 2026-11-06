@@ -1587,6 +1587,70 @@ void main() {
         expect(runner.executions.first.cancelCalled, isTrue);
       });
     });
+
+    group('input relays', () {
+      test('an HLS capture reads through the retained-window relay', () async {
+        final runner = _FakeExecutor()..onStart = _writeOutput;
+        final relayed = FfmpegRecordingBackend(
+          executor: runner,
+          config: const FfmpegRecordConfig(filePrefix: 'room', restartLimit: 0, inputRelay: true),
+          outputDirectory: directory.path,
+          probe: _FakeProbe(),
+        );
+        addTearDown(relayed.dispose);
+        await relayed.initialize();
+        await relayed.start(_source(), const RecordingConfig());
+
+        final arguments = runner.executions.single.arguments;
+        final url = arguments[arguments.indexOf('-i') + 1];
+        expect(Uri.parse(url).host, '127.0.0.1', reason: 'the capture reads the relay, not the CDN');
+        expect(url, endsWith('index.m3u8'));
+
+        // The capture ends while the drain window is open, the way a relayed
+        // stop is meant to end: nothing is killed.
+        Timer(const Duration(milliseconds: 100), () => runner.executions.single.finish(0));
+        final result = await relayed.stop();
+
+        expect(result.success, isTrue);
+      });
+
+      test('a progressive capture still reads through the byte relay', () async {
+        final runner = _FakeExecutor()..onStart = _writeOutput;
+        final relayed = FfmpegRecordingBackend(
+          executor: runner,
+          config: const FfmpegRecordConfig(filePrefix: 'room', restartLimit: 0, inputRelay: true),
+          outputDirectory: directory.path,
+          probe: _FakeProbe(),
+        );
+        addTearDown(relayed.dispose);
+        await relayed.initialize();
+        await relayed.start(
+          const RecordingSource.network('https://example.com/live.flv', id: 'room-1'),
+          const RecordingConfig(),
+        );
+
+        final arguments = runner.executions.single.arguments;
+        final url = arguments[arguments.indexOf('-i') + 1];
+        expect(Uri.parse(url).host, '127.0.0.1', reason: 'the capture reads the relay, not the CDN');
+        expect(url, endsWith('/stream'));
+
+        await relayed.cancel();
+
+        expect(relayed.state.status, RecordingStatus.cancelled);
+      });
+
+      test('with the relay off an HLS address is read directly', () async {
+        await backend.initialize();
+        await backend.start(_source(), const RecordingConfig());
+
+        final arguments = executor.executions.single.arguments;
+
+        expect(arguments[arguments.indexOf('-i') + 1], 'https://example.com/live.m3u8');
+        expect(arguments, isNot(contains('127.0.0.1')));
+
+        await backend.cancel();
+      });
+    });
   });
 }
 

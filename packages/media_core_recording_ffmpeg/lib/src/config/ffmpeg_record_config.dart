@@ -276,12 +276,17 @@ final class FfmpegRecordConfig {
   /// Ceiling of the fast lane's backoff.
   final Duration freshAddressBackoffMax;
 
-  /// Whether a progressive capture reads through a loopback relay the
-  /// backend owns. Off, the capture reads the CDN directly and a stop kills
-  /// the process; on, the relay ends the upstream connection at a stop and
-  /// FFmpeg drains to complete segments — the clean end — while a kill
-  /// remains the fallback after the drain window. HLS captures ignore this:
-  /// a byte relay cannot stand between FFmpeg and its manifest reads.
+  /// Whether a capture reads through a loopback relay the backend owns.
+  ///
+  /// A progressive capture reads through a byte relay: a stop ends the
+  /// upstream connection and FFmpeg drains to complete segments — the clean
+  /// end — while a kill remains the fallback after the drain window. An HLS
+  /// capture reads through a retained-window relay on the same switch: its
+  /// playlist is re-served with the segments the upstream window would
+  /// otherwise expire under a slow capture, prefetched while the capture
+  /// runs, and a stop closes the playlist (`#EXT-X-ENDLIST`) for the same
+  /// drain. Off, both captures read the CDN directly and a stop kills the
+  /// process. A relay that cannot start loses only the clean end.
   final bool inputRelay;
 
   /// Ceiling of the restart backoff.

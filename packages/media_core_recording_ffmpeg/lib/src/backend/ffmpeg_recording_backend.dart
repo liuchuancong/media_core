@@ -14,6 +14,7 @@ import 'package:media_core_recording_ffmpeg/src/journal/recording_manifest.dart'
 import 'package:media_core_recording_ffmpeg/src/journal/recording_recovery.dart';
 import 'package:media_core_recording_ffmpeg/src/journal/recording_remuxer.dart';
 import 'package:media_core_recording_ffmpeg/src/journal/recording_verification.dart';
+import 'package:media_core_recording_ffmpeg/src/relay/hls_window_relay.dart';
 import 'package:media_core_recording_ffmpeg/src/relay/recording_input_relay.dart';
 
 /// Decision trail for a recording.
@@ -417,23 +418,36 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     final segmentPattern = '${prefix}_%06d${config.resolvedSegmentSuffix}';
     final journalPath = joinOutputPath(directory, '$prefix${config.journalSuffix}');
 
-    // A progressive capture reads through the relay when the config asked
-    // for it: the stop then ends the upstream connection instead of killing
-    // the process. An HLS address cannot ride a byte relay — FFmpeg's own
-    // manifest and segment reads are the capture — and a relay that cannot
-    // start loses only the clean stop.
-    await _inputRelay?.stop();
-    _inputRelay = null;
+    // A relayed capture reads the loopback when the config asked for it. A
+    // progressive source rides the byte relay: the stop then ends the
+    // upstream connection instead of killing the process. An HLS source rides
+    // the retained-window relay: its playlist is re-served with the segments
+    // the upstream window would otherwise expire under the capture. The two
+    // are mutually exclusive, and a relay that cannot start loses only the
+    // clean end.
+    await _stopInputRelay();
     var captureUrl = url;
-    if (config.inputRelay && _activeSource.type == RecordingSourceType.network && !_isHlsAddress(url)) {
-      final relay = await RecordingInputRelay.start(
-        upstream: Uri.parse(url),
-        headers: _activeSource.headers,
-        proxy: config.proxy,
-      );
-      if (relay != null) {
-        _inputRelay = relay;
-        captureUrl = relay.localUrl.toString();
+    if (config.inputRelay && _activeSource.type == RecordingSourceType.network) {
+      if (_isHlsAddress(url)) {
+        final relay = await RecordingHlsWindowRelay.start(
+          upstream: Uri.parse(url),
+          headers: _activeSource.headers,
+          proxy: config.proxy,
+        );
+        if (relay != null) {
+          _hlsWindowRelay = relay;
+          captureUrl = relay.localUrl.toString();
+        }
+      } else {
+        final relay = await RecordingInputRelay.start(
+          upstream: Uri.parse(url),
+          headers: _activeSource.headers,
+          proxy: config.proxy,
+        );
+        if (relay != null) {
+          _inputRelay = relay;
+          captureUrl = relay.localUrl.toString();
+        }
       }
     }
 
@@ -651,12 +665,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     if (execution != null) {
       _log.info('stopping the recording', fields: <String, Object?>{'session': identityHashCode(execution)});
       _emit(_state.copyWith(status: RecordingStatus.stopping));
-      // A relayed capture ends the upstream first: FFmpeg sees EOF, drains
-      // what it buffered and closes its own last segment. Only a process
-      // that does not finish in the drain window is killed.
-      final relay = _inputRelay;
-      if (relay != null) {
-        await relay.closeInput();
+      // A relayed capture ends its input first: the byte relay aborts the
+      // upstream connection and the window relay closes the playlist, so
+      // FFmpeg drains what it has and closes its own last segment. Only a
+      // process that does not finish in the drain window is killed.
+      if (_inputRelay != null || _hlsWindowRelay != null) {
+        await _closeInputRelay();
         try {
           exitCode = await _awaitExit(execution).timeout(const Duration(seconds: 5));
         } on TimeoutException {
@@ -765,8 +779,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     _cancelStallWatchdog();
     _cancelJournalWatcher();
     _settleAttempt();
-    await _inputRelay?.stop();
-    _inputRelay = null;
+    await _stopInputRelay();
 
     if (execution != null) {
       await execution.cancel();
@@ -803,8 +816,7 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
     _disposed = true;
     _memory.withdraw(_memoryKey);
-    await _inputRelay?.stop();
-    _inputRelay = null;
+    await _stopInputRelay();
     await _exitWatcher?.cancel();
     _exitWatcher = null;
     await _segmentController.close();
@@ -818,8 +830,9 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
   FfmpegExecutor _executorOf() => _executor ??= FfmpegKitExecutor();
 
-  /// Whether [url] is an HLS playlist: a byte relay cannot stand between
-  /// FFmpeg and its manifest and segment reads.
+  /// Whether [url] is an HLS playlist: such a capture goes through the
+  /// retained-window relay instead of the byte relay, whose single pipe
+  /// cannot stand between FFmpeg and its manifest and segment reads.
   static bool _isHlsAddress(String url) {
     final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
     return path.endsWith('.m3u8');
@@ -1044,9 +1057,29 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// Media time across every attempt, including the one still running.
   Duration get _totalMediaTime => _recordedMediaTime + _lastMediaTime;
 
-  /// The loopback relay the current attempt reads through, when the config
-  /// asked for one and the source is progressive. Null reads directly.
+  /// The loopback byte relay the current attempt reads through, when the
+  /// config asked for one and the source is progressive. Null reads directly.
   RecordingInputRelay? _inputRelay;
+
+  /// The retained-window relay the current attempt reads through for an HLS
+  /// source, when the config asked for one. Null reads directly.
+  RecordingHlsWindowRelay? _hlsWindowRelay;
+
+  /// Ends the input of whichever relay the current attempt reads through: the
+  /// byte relay aborts its upstream connection, the window relay closes its
+  /// playlist. FFmpeg then drains and ends on its own.
+  Future<void> _closeInputRelay() async {
+    await _inputRelay?.closeInput();
+    await _hlsWindowRelay?.closeInput();
+  }
+
+  /// Stops and drops whichever relay the current attempt read through.
+  Future<void> _stopInputRelay() async {
+    await _inputRelay?.stop();
+    _inputRelay = null;
+    await _hlsWindowRelay?.stop();
+    _hlsWindowRelay = null;
+  }
 
   /// The ended process's last words, most recent last, one attempt at a
   /// time: the tail is what the failure classifier reads, since the first
@@ -1158,7 +1191,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       final delay = healthyRun
           ? Duration.zero
           : shape.refreshesSignedStream
-          ? RetryUtils.backoff(_consecutiveQuickFailures, base: config.freshAddressBackoff, max: config.freshAddressBackoffMax)
+          ? RetryUtils.backoff(
+              _consecutiveQuickFailures,
+              base: config.freshAddressBackoff,
+              max: config.freshAddressBackoffMax,
+            )
           : RetryUtils.backoff(_consecutiveQuickFailures, base: config.restartBackoff, max: config.restartBackoffMax);
 
       _log.warning(
@@ -1403,9 +1440,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
       'the input stopped advancing',
       fields: <String, Object?>{'silentFor': config.stallTimeout.inSeconds, 'session': identityHashCode(execution)},
     );
-    unawaited(execution.cancel().catchError((Object error) {
-      _log.warning('ffmpeg process cancel failed', error: error);
-    }));
+    unawaited(
+      execution.cancel().catchError((Object error) {
+        _log.warning('ffmpeg process cancel failed', error: error);
+      }),
+    );
   }
 
   Future<int?> _awaitExit(FfmpegExecution execution) async {
@@ -1419,9 +1458,11 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         'the recording process did not report its exit in time',
         fields: <String, Object?>{'session': identityHashCode(execution)},
       );
-      unawaited(execution.cancel().catchError((Object error) {
-        _log.warning('ffmpeg process cancel failed', error: error);
-      }));
+      unawaited(
+        execution.cancel().catchError((Object error) {
+          _log.warning('ffmpeg process cancel failed', error: error);
+        }),
+      );
 
       return null;
     } on Object catch (error) {
