@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:media_core/media_core.dart';
 import 'package:media_core_native/media_core_native.dart';
 import 'package:media_core_recording_ffmpeg/src/backend/disk_space.dart';
+import 'package:media_core_recording_ffmpeg/src/backend/recording_failure_shape.dart';
 import 'package:media_core_recording_ffmpeg/src/config/ffmpeg_record_config.dart';
 import 'package:media_core_recording_ffmpeg/src/config/output_path.dart';
 import 'package:media_core_recording_ffmpeg/src/ffmpeg/ffmpeg_executor.dart';
@@ -460,7 +461,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
     // of the session.
     await _exitWatcher?.cancel();
 
-    final execution = await _executorOf().start(arguments: arguments, onStatistics: _handleStatistics);
+    _attemptLogTail.clear();
+    final execution = await _executorOf().start(
+      arguments: arguments,
+      onStatistics: _handleStatistics,
+      onLog: _absorbAttemptLog,
+    );
 
     // A stop/cancel/dispose that ran while the process was being built leaves
     // this execution owned by nobody: the exit watcher only reacts to exits,
@@ -991,6 +997,27 @@ final class FfmpegRecordingBackend implements RecordingBackend {
   /// Media time across every attempt, including the one still running.
   Duration get _totalMediaTime => _recordedMediaTime + _lastMediaTime;
 
+  /// The ended process's last words, most recent last, one attempt at a
+  /// time: the tail is what the failure classifier reads, since the first
+  /// lines of a two-hour capture describe a start that succeeded.
+  final List<String> _attemptLogTail = [];
+
+  /// The tail's line cap: enough to cover the failure, small enough that a
+  /// chatty encoder cannot grow it without bound.
+  static const int _attemptLogTailLines = 40;
+
+  /// Absorbs one process log line into the tail the classifier reads.
+  void _absorbAttemptLog(String message) {
+    for (final line in message.split('\n')) {
+      final text = line.trim();
+      if (text.isEmpty) continue;
+      _attemptLogTail.add(text);
+    }
+    if (_attemptLogTail.length > _attemptLogTailLines) {
+      _attemptLogTail.removeRange(0, _attemptLogTail.length - _attemptLogTailLines);
+    }
+  }
+
   /// Reacts to a process that ended.
   ///
   /// [stop] and [cancel] set the intent before ending the process and await the
@@ -1042,6 +1069,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
         : 'the source ended (exit code $code)';
 
     while (!_disposed && _intent == _StopIntent.none) {
+      // What the process's own words blame decides the retry's shape: an
+      // address that was refused (or ran out under the stream) is a room
+      // that is likely still live and only needs a fresh signed URL, so it
+      // retries on the fast lane with twice the budget; a network that is
+      // down is nobody's answer and refunds the attempt.
+      final shape = RecordingFailureShape.classify(exitCode: code, logTail: _attemptLogTail);
       if (code == 0 && !stalled) {
         // The input ran out on its own terms - a playlist that reached its end.
         // Nothing is broken, so nothing is re-opened.
@@ -1060,11 +1093,12 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
       if (healthyRun) {
         _consecutiveQuickFailures = 0;
-      } else {
+      } else if (shape != RecordingFailureShape.networkUnreachable) {
         _consecutiveQuickFailures++;
       }
 
-      if (config.restartLimit <= 0 || _consecutiveQuickFailures > config.restartLimit) {
+      final budget = shape.refreshesSignedStream ? config.restartLimit * 2 : config.restartLimit;
+      if (budget <= 0 || _consecutiveQuickFailures > budget) {
         await _finish(cause: cause, exitCode: code);
 
         return;
@@ -1072,6 +1106,8 @@ final class FfmpegRecordingBackend implements RecordingBackend {
 
       final delay = healthyRun
           ? Duration.zero
+          : shape.refreshesSignedStream
+          ? RetryUtils.backoff(_consecutiveQuickFailures, base: config.freshAddressBackoff, max: config.freshAddressBackoffMax)
           : RetryUtils.backoff(_consecutiveQuickFailures, base: config.restartBackoff, max: config.restartBackoffMax);
 
       _log.warning(

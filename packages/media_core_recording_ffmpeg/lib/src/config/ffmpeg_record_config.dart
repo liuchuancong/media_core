@@ -42,6 +42,8 @@ final class FfmpegRecordConfig {
     this.healthyAfter = const Duration(minutes: 1),
     this.restartBackoff = const Duration(seconds: 3),
     this.restartBackoffMax = const Duration(minutes: 1),
+    this.freshAddressBackoff = const Duration(seconds: 2),
+    this.freshAddressBackoffMax = const Duration(seconds: 15),
     this.stallTimeout = const Duration(seconds: 30),
     this.diskWatermarkBytes = 200 * 1024 * 1024,
     this.keepAlive = true,
@@ -264,6 +266,15 @@ final class FfmpegRecordConfig {
   /// [restartBackoffMax].
   final Duration restartBackoff;
 
+  /// Base delay of the fast lane: an end the process's own words blame on
+  /// the address (a refused grant, an input that ran out) is a room that is
+  /// likely still live and only needs a fresh signed URL, so the retry
+  /// waits this long — not the plain [restartBackoff].
+  final Duration freshAddressBackoff;
+
+  /// Ceiling of the fast lane's backoff.
+  final Duration freshAddressBackoffMax;
+
   /// Ceiling of the restart backoff.
   ///
   /// A minute, because a room that is closed is not opened by retrying every
@@ -322,6 +333,8 @@ final class FfmpegRecordConfig {
     Duration? healthyAfter,
     Duration? restartBackoff,
     Duration? restartBackoffMax,
+    Duration? freshAddressBackoff,
+    Duration? freshAddressBackoffMax,
     Duration? stallTimeout,
     int? diskWatermarkBytes,
     bool? keepAlive,
@@ -353,6 +366,8 @@ final class FfmpegRecordConfig {
       healthyAfter: healthyAfter ?? this.healthyAfter,
       restartBackoff: restartBackoff ?? this.restartBackoff,
       restartBackoffMax: restartBackoffMax ?? this.restartBackoffMax,
+      freshAddressBackoff: freshAddressBackoff ?? this.freshAddressBackoff,
+      freshAddressBackoffMax: freshAddressBackoffMax ?? this.freshAddressBackoffMax,
       stallTimeout: stallTimeout ?? this.stallTimeout,
       diskWatermarkBytes: diskWatermarkBytes ?? this.diskWatermarkBytes,
       keepAlive: keepAlive ?? this.keepAlive,
