@@ -196,7 +196,7 @@ final class MpvAudioPlayerAdapter extends PlayerAdapterBase {
 
   @override
   Future<void> onSetVolume(double volume) async {
-    await _player?.setVolume(volume);
+    await _player?.setVolume(volume.clamp(0.0, 1.0) * 100.0);
   }
 
   @override
