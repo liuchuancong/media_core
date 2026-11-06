@@ -16,10 +16,13 @@ extension _LivePlaybackSweep on LivePlaybackController {
     // double-tap, or the app re-entering its play flow while the first
     // sweep is still verifying - must not supersede and tear down what it
     // just asked for. Full-URI comparison: refreshed signatures share the
-    // path but differ in query, so a legitimate re-play still runs.
+    // path but differ in query, so a legitimate re-play still runs. A play
+    // of a playback that published its failure is not a duplicate: the
+    // viewer is asking the sweep to run again.
     if (handle != null &&
         !handle.disposed &&
         _playbackRequested &&
+        state.playback != PlayerPlaybackState.error &&
         primary != null &&
         _currentSource?.uri == primary.uri &&
         (engines.isEmpty || handle.backendId == engines.first)) {
@@ -65,6 +68,9 @@ extension _LivePlaybackSweep on LivePlaybackController {
     final generation = _playGeneration;
     var first = true;
 
+    _sweepFailure = null;
+    _sweepSawNonNetwork = false;
+
     MediaCoreLog.info(
       LogCategory.fallback,
       'sweep started',
@@ -76,7 +82,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
       },
     );
 
-    while (!_disposed && _playbackRequested && generation == _playGeneration) {
+    while (!_disposed && !_offline && _playbackRequested && generation == _playGeneration) {
       final source = _sources[_sourceIndex];
       final engine = _engines[_engineIndex];
 
@@ -94,6 +100,11 @@ extension _LivePlaybackSweep on LivePlaybackController {
         );
 
         first = false;
+        _sweepFailure = error;
+        if (!_isNetworkFailure(error)) _sweepSawNonNetwork = true;
+
+        final address = _lineAddress(source);
+        if (address != null) _failedLines.add(address);
 
         // A candidate that failed because the playback it belonged to was
         // superseded or stopped is not a candidate failure: it has no
@@ -262,54 +273,104 @@ extension _LivePlaybackSweep on LivePlaybackController {
       return;
     }
 
+    if (_refreshAttempts >= _refreshBudget) {
+      MediaCoreLog.debug(
+        LogCategory.recovery,
+        'recovery refresh budget spent — reusing the current lines',
+        fields: <String, Object?>{'attempts': _refreshAttempts},
+      );
+
+      return;
+    }
+
+    _refreshAttempts++;
+
     final generation = _playGeneration;
+    final List<PlayerSource> refreshed;
 
     try {
-      final refreshed = await resolver(_sources);
-
-      // play, switchLine, retry, pause, close and dispose all bump the
-      // generation before they queue their own task; a refresh that lands
-      // after one of them belongs to a playback that no longer exists, and
-      // adopting it would swap the lines out from under the newer command.
-      if (generation != _playGeneration || refreshed.isEmpty) {
+      refreshed = await resolver(_sources);
+    } on Object catch (error) {
+      if (generation != _playGeneration || _disposed) {
         return;
       }
 
-      // The line the viewer is on, in the list that replaced it. A refresh is
-      // a new answer from the platform, not a re-sort of the old one: its own
-      // preference order can put another CDN at index 0, and a signed query
-      // changes every round-trip, so host and path are what names a line
-      // across the two. Without this a stall moves the viewer to the platform's
-      // first line — and the host's line mirror follows `sourceIndex`, so the
-      // picker starts reporting a line nobody chose.
-      final watched = _lineAddress(_currentSource ?? (_sources.isEmpty ? null : _sources[_sourceIndex]));
-      _sources = List<PlayerSource>.unmodifiable(refreshed);
-      final resumed = watched == null ? -1 : refreshed.indexWhere((source) => _lineAddress(source) == watched);
-      final resume = resumed < 0 ? 0 : resumed;
+      if (_isNetworkFailure(error)) {
+        MediaCoreLog.warning(
+          LogCategory.recovery,
+          'recovery source refresh failed — the network stopped answering',
+          error: error,
+          fields: <String, Object?>{'lines': _sources.length},
+        );
 
-      _sourceIndex = resume;
-      _sweepStart = resume;
+        _enterOffline(error);
 
-      _reportMemory();
+        return;
+      }
 
-      MediaCoreLog.info(
-        LogCategory.recovery,
-        'recovery sources refreshed by the caller',
-        fields: <String, Object?>{
-          'lines': _sources.length,
-          'first': _lineAddress(_sources.first),
-          'resumeAtLine': resume,
-          'keptLine': resumed >= 0,
-        },
-      );
-    } on Object catch (error) {
       MediaCoreLog.warning(
         LogCategory.recovery,
         'recovery source refresh failed — reusing the current lines',
         error: error,
         fields: <String, Object?>{'lines': _sources.length},
       );
+
+      return;
     }
+
+    // play, switchLine, retry, pause, close and dispose all bump the
+    // generation before they queue their own task; a refresh that lands
+    // after one of them belongs to a playback that no longer exists, and
+    // adopting it would swap the lines out from under the newer command.
+    if (generation != _playGeneration || refreshed.isEmpty || _disposed) {
+      return;
+    }
+
+    await _adoptRefreshedSources(refreshed);
+  }
+
+  /// Swaps the sweep's lines for [refreshed] and re-locates the watched one.
+  Future<void> _adoptRefreshedSources(List<PlayerSource> refreshed) async {
+    // The line the viewer is on, in the list that replaced it. A refresh is
+    // a new answer from the platform, not a re-sort of the old one: its own
+    // preference order can put another CDN at index 0, and a signed query
+    // changes every round-trip, so host and path are what names a line
+    // across the two. Without this a stall moves the viewer to the platform's
+    // first line — and the host's line mirror follows `sourceIndex`, so the
+    // picker starts reporting a line nobody chose.
+    final watched = _lineAddress(_currentSource ?? (_sources.isEmpty ? null : _sources[_sourceIndex]));
+    _sources = List<PlayerSource>.unmodifiable(refreshed);
+    var resume = watched == null ? -1 : refreshed.indexWhere((source) => _lineAddress(source) == watched);
+
+    // A line the current window already watched fail is not reopened first:
+    // the walk continues at the next line the window has not condemned.
+    if (resume >= 0 && watched != null && _failedLines.contains(watched)) {
+      for (var step = 1; step < refreshed.length; step++) {
+        final candidate = _lineAddress(refreshed[(resume + step) % refreshed.length]);
+        if (candidate == null || !_failedLines.contains(candidate)) {
+          resume = (resume + step) % refreshed.length;
+          break;
+        }
+      }
+    }
+
+    if (resume < 0) resume = 0;
+
+    _sourceIndex = resume;
+    _sweepStart = resume;
+
+    _reportMemory();
+
+    MediaCoreLog.info(
+      LogCategory.recovery,
+      'recovery sources refreshed by the caller',
+      fields: <String, Object?>{
+        'lines': _sources.length,
+        'first': _lineAddress(_sources.first),
+        'resumeAtLine': resume,
+        'keptLine': watched != null && _lineAddress(refreshed[resume]) == watched,
+      },
+    );
   }
 
   /// Opens [source] on [engine], starts playback and verifies it.
@@ -401,11 +462,14 @@ extension _LivePlaybackSweep on LivePlaybackController {
   void _setVerifiedState(PlayerHandle handle) {
     _setState(_liveState(PlayerPlaybackState.buffering));
     _adoptPlaybackTruth(handle);
+    _resetBufferingProgress();
 
     // The deadline stays for the one case verification cannot rule out: an engine
     // that produced a single position advance and then went silent altogether. When
     // the truth adopted above already says playing, it answers itself.
     watchdogs.armSourceReady();
+
+    _armBudgetReset();
   }
 
   /// Builds the replacement player for [engine], proves it plays, then
@@ -734,6 +798,18 @@ extension _LivePlaybackSweep on LivePlaybackController {
   Future<void> _reportExhausted(PlayerSource source, String engine) async {
     final room = _request?.title;
 
+    // Every candidate died at the transport level: neither the stream nor
+    // the platform answers through these lines, and other lines and
+    // decoders would go through the same network. The offline machine takes
+    // over from the sweep.
+    if (!_sweepSawNonNetwork && _isNetworkFailure(_sweepFailure) && _enterOffline(_sweepFailure!)) {
+      return;
+    }
+
+    if (_scheduleRetryRound()) {
+      return;
+    }
+
     MediaCoreLog.error(
       LogCategory.recovery,
       'live sweep exhausted — reporting to the caller',
@@ -743,6 +819,7 @@ extension _LivePlaybackSweep on LivePlaybackController {
         'enginesTried': _engineFallbackAllowed ? _engineIndex + 1 : 1,
         'lastEngine': engine,
         'lastLine': _lineAddress(source),
+        'retryRounds': _retryRounds,
       },
     );
 
@@ -755,11 +832,381 @@ extension _LivePlaybackSweep on LivePlaybackController {
           message:
               '${room == null ? '' : '$room: '}'
               'Live playback failed after trying ${_sources.length} source(s)'
-              '${_engineFallbackAllowed ? ' across ${_engineIndex + 1} engine(s)' : ''}. '
+              '${_engineFallbackAllowed ? ' across ${_engineIndex + 1} engine(s)' : ''}'
+              '${_retryRounds > 0 ? ' across $_retryRounds retry round(s)' : ''}. '
               'Last attempt: ${_lineAddress(source)} on $engine.',
         ),
       );
     }
+  }
+
+  /// One more bounded round for a sweep that just exhausted: after the
+  /// round's delay the refresh, line and counter budgets are fresh while
+  /// the round budget itself only resets on sustained playback.
+  ///
+  /// Bound to the recovery resolver, like the offline machine: without the
+  /// platform seam a round re-opens the same signatures the sweep just
+  /// consumed, and the failure reports to the caller instead.
+  bool _scheduleRetryRound() {
+    if (_disposed || !_playbackRequested || _offline || onRecoverySources == null) {
+      return false;
+    }
+
+    if (_retryRounds >= watchdogs.liveRetryDelays.length) {
+      return false;
+    }
+
+    final generation = _playGeneration;
+    final delay = watchdogs.liveRetryDelays[_retryRounds++];
+    final current = _currentSource;
+    final at = current == null ? -1 : _sources.indexOf(current);
+
+    _retryTimer?.cancel();
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+
+      if (_disposed || !_playbackRequested || generation != _playGeneration || _offline) {
+        return;
+      }
+
+      _resetRecoveryBudgets();
+      _sourceIndex = at < 0 ? 0 : at;
+      _sweepStart = _sourceIndex;
+
+      MediaCoreLog.info(
+        LogCategory.recovery,
+        'retry round $_retryRounds after ${delay.inMilliseconds}ms',
+        fields: <String, Object?>{'rounds': _retryRounds, 'recoveries': _recoveries, 'line': _sourceIndex},
+      );
+
+      _setState(_liveState(PlayerPlaybackState.buffering));
+      _emitRecoveryState();
+
+      unawaited(_enqueue(TaskType.recover, _runRecoverTask));
+    });
+
+    return true;
+  }
+
+  /// Sustained playback restores the refresh, round and attempt budgets.
+  void _armBudgetReset() {
+    _budgetTimer?.cancel();
+    final generation = _playGeneration;
+    _budgetTimer = Timer(watchdogs.recoveryBudgetReset, () {
+      _budgetTimer = null;
+
+      if (_disposed || generation != _playGeneration || _offline || _draining) {
+        return;
+      }
+
+      if (state.playback != PlayerPlaybackState.playing) {
+        return;
+      }
+
+      _refreshAttempts = 0;
+      _retryRounds = 0;
+      _recoveries = 0;
+      _recoveryCause = null;
+      _attemptCounted = false;
+      _failedLines.clear();
+
+      MediaCoreLog.debug(
+        LogCategory.recovery,
+        'recovery budgets restored after sustained playback',
+        fields: <String, Object?>{'resetAfterMs': watchdogs.recoveryBudgetReset.inMilliseconds},
+      );
+
+      _emitRecoveryState();
+    });
+  }
+
+  /// Enters the offline state: the network stopped answering, so the sweep
+  /// hands the stream over to the probe loop instead of burning candidates
+  /// on a connection nothing can use. False when there is no way to look at
+  /// the network (no resolver) — the caller reports its failure as before.
+  bool _enterOffline(Object error) {
+    if (_offline || _disposed || onRecoverySources == null) {
+      return false;
+    }
+
+    _offline = true;
+    _offlineSince = DateTime.now();
+    _offlinePublished = false;
+    _offlineError = error;
+
+    _cancelRecoveryTimers();
+    _supersedeQueued('superseded by offline');
+
+    watchdogs.cancelAll();
+
+    MediaCoreLog.warning(
+      LogCategory.recovery,
+      'network lost — probing every ${watchdogs.networkProbeInterval.inMilliseconds}ms, '
+          'publishing after ${watchdogs.offlineGrace.inSeconds}s',
+      error: error,
+      fields: <String, Object?>{'line': _lineAddress(_currentSource), 'backend': backendId},
+    );
+
+    _setState(_liveState(PlayerPlaybackState.buffering));
+    _emitRecoveryState();
+
+    _scheduleProbe();
+
+    return true;
+  }
+
+  void _scheduleProbe() {
+    _probeTimer?.cancel();
+    _probeTimer = Timer(watchdogs.networkProbeInterval, () {
+      _probeTimer = null;
+
+      unawaited(_probeNetwork());
+    });
+  }
+
+  /// One look at the network: the recovery resolver, which asks the
+  /// platform. Nothing answering again is another probe (after
+  /// [LiveWatchdogs.offlineGrace] the offline failure is published); a
+  /// non-empty answer reopens the stream as the next attempt with fresh
+  /// budgets.
+  Future<void> _probeNetwork() async {
+    if (_disposed || !_offline || !_playbackRequested) {
+      return;
+    }
+
+    final resolver = onRecoverySources;
+    if (resolver == null) {
+      return;
+    }
+
+    final generation = _playGeneration;
+    List<PlayerSource> fresh;
+
+    try {
+      fresh = await resolver(_sources).timeout(watchdogs.networkProbeTimeout);
+    } on Object catch (error) {
+      if (_disposed || !_offline || generation != _playGeneration) {
+        return;
+      }
+
+      if (_isNetworkFailure(error)) {
+        _offlineError = error;
+        _maybePublishOffline();
+        _scheduleProbe();
+
+        return;
+      }
+
+      // Something answered (a refusal is an answer): the network is back,
+      // the sweep reopens from the lines it already holds.
+      await _backOnline(const <PlayerSource>[]);
+
+      return;
+    }
+
+    if (_disposed || !_offline || generation != _playGeneration) {
+      return;
+    }
+
+    // An empty answer is inconclusive — a resolver that folds its failures
+    // into an empty list looks exactly like a platform with nothing new —
+    // so only lines count as the network being back.
+    if (fresh.isEmpty) {
+      _maybePublishOffline();
+      _scheduleProbe();
+
+      return;
+    }
+
+    await _backOnline(fresh);
+  }
+
+  void _maybePublishOffline() {
+    if (_offlinePublished || _offlineSince == null) {
+      return;
+    }
+
+    if (DateTime.now().difference(_offlineSince!) < watchdogs.offlineGrace) {
+      return;
+    }
+
+    _offlinePublished = true;
+
+    final room = _request?.title;
+
+    MediaCoreLog.error(
+      LogCategory.recovery,
+      'network still gone — publishing the offline failure',
+      fields: <String, Object?>{'title': ?room, 'offlineForMs': DateTime.now().difference(_offlineSince!).inMilliseconds},
+    );
+
+    _setState(_liveState(PlayerPlaybackState.error));
+
+    if (!_failureController.isClosed) {
+      _failureController.add(
+        PlayerFailure.of(
+          code: PlayerErrorCode.networkUnavailable,
+          cause: _offlineError,
+          message:
+              '${room == null ? '' : '$room: '}'
+              'The network is gone; playback resumes by itself once it answers.',
+        ),
+      );
+    }
+  }
+
+  /// The network answered: fresh budgets, one more counted attempt when the
+  /// failure was already on screen, and the sweep reopens the watched line.
+  Future<void> _backOnline(List<PlayerSource> fresh) async {
+    final published = _offlinePublished;
+
+    _leaveOffline();
+    _resetRecoveryBudgets();
+
+    if (published) {
+      _recoveries++;
+    }
+
+    _recoveryCause = PlayerErrorCode.networkUnavailable.value;
+    _attemptCounted = false;
+
+    MediaCoreLog.info(
+      LogCategory.recovery,
+      'network answered — reopening after $_recoveries attempt(s)',
+      fields: <String, Object?>{'lines': fresh.isEmpty ? _sources.length : fresh.length},
+    );
+
+    if (fresh.isNotEmpty) {
+      await _adoptRefreshedSources(fresh);
+    }
+
+    _setState(_liveState(PlayerPlaybackState.buffering));
+    _emitRecoveryState();
+
+    unawaited(_enqueue(TaskType.recover, _runRecoverTask));
+  }
+
+  /// The recovery attempt is announced ahead of the stall verdict: a live
+  /// source that was advancing and stopped shows the reconnect counter now.
+  void _noticeStall() {
+    if (_disposed || _offline || _draining || !_playbackRequested) {
+      return;
+    }
+
+    _recoveries++;
+    _recoveryCause = LiveStallKind.positionStallNotice.name;
+    _attemptCounted = true;
+
+    MediaCoreLog.info(
+      LogCategory.recovery,
+      'reconnect announced ahead of the stall verdict',
+      fields: <String, Object?>{'attempt': _recoveries, 'line': _lineAddress(_currentSource)},
+    );
+
+    _setState(_liveState(PlayerPlaybackState.buffering));
+    _emitRecoveryState();
+  }
+
+  /// A position during a buffering the engine never ended: only
+  /// comparisons, until the progress proves the stream lives.
+  void _observeBufferingProgress(Duration position) {
+    if (_disposed || _offline || !_playbackRequested) {
+      return;
+    }
+
+    if (state.playback != PlayerPlaybackState.buffering) {
+      return;
+    }
+
+    final from = _bufferingProgressFrom;
+
+    if (from == null || position < from) {
+      _bufferingProgressFrom = position;
+      _bufferingProgressAt = DateTime.now();
+      _bufferingProgressTo = position;
+
+      return;
+    }
+
+    _bufferingProgressTo = position;
+
+    if (position - from < _bufferingProgress) {
+      return;
+    }
+
+    final to = _bufferingProgressTo;
+    final at = _bufferingProgressAt;
+
+    if (at == null || to == null) {
+      return;
+    }
+
+    final moved = to - from;
+
+    if (moved > DateTime.now().difference(at) + _bufferingProgressSlack) {
+      // Further than the clock allows: a timestamp jump; the next progress
+      // counts from here.
+      _bufferingProgressFrom = position;
+      _bufferingProgressAt = DateTime.now();
+
+      return;
+    }
+
+    _reconcileBuffering();
+  }
+
+  void _observeBufferingFrame() {
+    if (_disposed || _offline || !_playbackRequested) {
+      return;
+    }
+
+    if (state.playback != PlayerPlaybackState.buffering) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final since = _bufferingFramesAt;
+
+    if (since == null || now.difference(since) > const Duration(seconds: 1)) {
+      _bufferingFramesAt = now;
+      _bufferingFrames = 1;
+
+      return;
+    }
+
+    if (++_bufferingFrames >= _bufferingProgressFrames) {
+      _reconcileBuffering();
+    }
+  }
+
+  /// Ends the buffering the engine did not end, the way its own
+  /// notification would.
+  void _reconcileBuffering() {
+    _resetBufferingProgress();
+
+    watchdogs.onBufferingChanged(buffering: false);
+
+    final handle = _handle;
+
+    if (handle == null || handle.disposed) {
+      return;
+    }
+
+    MediaCoreLog.info(
+      LogCategory.recovery,
+      'buffering ended by position progress, not by the engine',
+      fields: <String, Object?>{'line': _lineAddress(_currentSource), 'backend': handle.backendId},
+    );
+
+    _setState(_liveState(PlayerPlaybackState.playing));
+  }
+
+  void _resetBufferingProgress() {
+    _bufferingProgressFrom = null;
+    _bufferingProgressTo = null;
+    _bufferingProgressAt = null;
+    _bufferingFrames = 0;
+    _bufferingFramesAt = null;
   }
 }
 
@@ -780,3 +1227,43 @@ String? _lineAddress(PlayerSource? source) {
 /// conditions while no transport update arrives. Only a fully silent engine
 /// ever waits this long: any transport update ends the wait at once.
 const Duration _verifyCheckEvery = Duration(milliseconds: 100);
+
+/// Refreshes the recovery window may spend on the platform before it
+/// reuses the lines it already holds.
+const int _refreshBudget = 2;
+
+/// Position progress that ends an engine's stuck buffering.
+const Duration _bufferingProgress = Duration(seconds: 1);
+
+/// How much further than the wall clock a position may jump and still
+/// count as progress rather than a seek or a timestamp leap.
+const Duration _bufferingProgressSlack = Duration(seconds: 2);
+
+/// Decoded frames within one second that end an engine's stuck buffering.
+const int _bufferingProgressFrames = 10;
+
+/// Whether [error] says nothing answered at all: no connection, TLS, a
+/// timeout, or an engine failure of the network kind. A cancelled request,
+/// a malformed answer and every refusal of the platform are answers, not a
+/// missing network.
+bool _isNetworkFailure(Object? error) {
+  if (error == null) {
+    return false;
+  }
+
+  if (error is PlayerException) {
+    return error.code.isNetworkRelated;
+  }
+
+  if (error is PlayerFailure) {
+    return error.isNetworkRelated;
+  }
+
+  if (error is TimeoutException) {
+    return true;
+  }
+
+  final reason = RecoveryReason.classify('$error', error);
+
+  return reason.isNetwork || reason.isTimeout;
+}

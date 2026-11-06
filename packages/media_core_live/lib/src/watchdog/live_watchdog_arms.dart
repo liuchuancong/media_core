@@ -217,6 +217,8 @@ extension _LiveWatchdogArms on LiveWatchdogs {
         );
       }
 
+      _cancelPositionNotice();
+
       return;
     }
 
@@ -249,6 +251,55 @@ extension _LiveWatchdogArms on LiveWatchdogs {
           _cancelPositionStall();
 
           onStall?.call(LiveStallKind.positionStallTimeout);
+        });
+
+    _armPositionNotice(via: via);
+  }
+
+  /// Arms the early tier of the position judgment: a source that was
+  /// advancing and stands still for [stallNoticeTimeout] announces the
+  /// recovery attempt now instead of at the [positionStallTimeout] verdict.
+  void _armPositionNotice({String via = 'unknown'}) {
+    _cancelPositionNotice();
+
+    if (!_moved || _stallNoticed) return;
+    if (stallNoticeTimeout <= Duration.zero || stallNoticeTimeout >= positionStallTimeout) return;
+
+    MediaCoreLog.debug(
+      LogCategory.recovery,
+      'position-stall notice armed (${stallNoticeTimeout.inMilliseconds}ms)',
+      fields: <String, Object?>{'via': via, 'positionMs': _lastPositionMs},
+    );
+
+    final generation = _watchdogGeneration;
+
+    _positionNoticeSubscription = _positionProgress
+        .startWith(null)
+        .switchMap<void>((_) => TimerStream<void>(null, stallNoticeTimeout))
+        .listen((_) {
+          if (!_isWatchdogGenerationCurrent(generation)) {
+            return;
+          }
+
+          if (_positionStallSkipReason() != null) {
+            return;
+          }
+
+          if (!_moved || _stallNoticed) {
+            return;
+          }
+
+          _cancelPositionNotice();
+
+          _stallNoticed = true;
+
+          MediaCoreLog.info(
+            LogCategory.recovery,
+            'position-stall notice: the source stopped advancing',
+            fields: <String, Object?>{'positionMs': _lastPositionMs},
+          );
+
+          onStall?.call(LiveStallKind.positionStallNotice);
         });
   }
 

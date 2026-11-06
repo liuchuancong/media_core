@@ -146,6 +146,21 @@ extension _LivePlaybackPipeline on LivePlaybackController {
 
   void _wireWatchdogs() {
     watchdogs.onStall = (kind) {
+      // The early tier of the position judgment announces the recovery
+      // attempt; the verdict itself stays with the position-stall deadline
+      // that fires later.
+      if (kind == LiveStallKind.positionStallNotice) {
+        _noticeStall();
+
+        return;
+      }
+
+      // While the network is gone, the dead source's failures say nothing
+      // new; the probe loop owns the recovery.
+      if (_offline) {
+        return;
+      }
+
       // A task already running owns the player: a sweep handles its own
       // failures, and pause/close supersede recovery. Only a stall with
       // the queue idle — normal playback — enqueues a recover task.
@@ -158,6 +173,8 @@ extension _LivePlaybackPipeline on LivePlaybackController {
         'watchdog stall: ${kind.name}',
         fields: <String, Object?>{'line': _lineAddress(_currentSource), 'backend': backendId},
       );
+
+      _recoveryCause = kind.name;
 
       // A stall is a failure like any other: reopen the playing line
       // first, then let the sweep decide. Queued behind whatever is in
@@ -205,7 +222,19 @@ extension _LivePlaybackPipeline on LivePlaybackController {
   /// Re-opens a line that just died — after offering the caller a chance to
   /// replace it. See [_refreshSourcesForRecovery].
   Future<void> _runRecoverTask(TaskCancelToken token) async {
+    if (_attemptCounted) {
+      _attemptCounted = false;
+    } else {
+      _recoveries++;
+    }
+
+    _emitRecoveryState();
+
     await _refreshSourcesForRecovery();
+
+    if (_offline) {
+      return;
+    }
 
     await _sweep(startAtCurrent: true);
   }
@@ -303,6 +332,7 @@ extension _LivePlaybackPipeline on LivePlaybackController {
 
     switch (event) {
       case PlayerAdapterPlaying():
+        _attemptCounted = false;
         _setState(_liveState(PlayerPlaybackState.playing));
         watchdogs.onPlayingChanged(playing: true, fromUserIntent: false);
 
@@ -314,14 +344,34 @@ extension _LivePlaybackPipeline on LivePlaybackController {
         }
 
       case PlayerAdapterBuffering(:final buffering):
+        if (buffering) {
+          _resetBufferingProgress();
+        }
+
         _setState(_liveState(buffering ? PlayerPlaybackState.buffering : PlayerPlaybackState.playing));
         watchdogs.onBufferingChanged(buffering: buffering);
 
       case PlayerAdapterPositionChanged(:final position):
+        // The stream came back by itself (a demuxer that kept asking): the
+        // probe loop has no more business here.
+        if (_offline) {
+          _leaveOffline();
+          _resetRecoveryBudgets();
+        }
+
+        _observeBufferingProgress(position);
+
         watchdogs.onPositionProgress(position);
         _reconcileMirroredPlayback();
 
+        // The announced attempt ended with the stream moving again: the
+        // next recovery counts its own.
+        if (state.playback == PlayerPlaybackState.playing) {
+          _attemptCounted = false;
+        }
+
       case PlayerAdapterVideoFrameProgress():
+        _observeBufferingFrame();
         watchdogs.onFrameProgress();
 
       case PlayerAdapterErrorEvent(:final message):
@@ -331,6 +381,12 @@ extension _LivePlaybackPipeline on LivePlaybackController {
           fields: <String, Object?>{'backend': backendId, 'line': _lineAddress(_currentSource)},
         );
 
+        // While the network is gone, the dead source's failures say
+        // nothing new; the probe loop owns the recovery.
+        if (_offline) {
+          return;
+        }
+
         // The queue is the serialization authority. A task already
         // running (a sweep, a pause, a close) owns this failure: the
         // sweep's catch advances to the next candidate, and pause/close
@@ -339,6 +395,7 @@ extension _LivePlaybackPipeline on LivePlaybackController {
         if (_draining) {
           _sweepAdapterError = message;
         } else if (_playbackRequested) {
+          _recoveryCause = message;
           _supersedeQueued('superseded by adapter error');
           _sweepStart = _sourceIndex;
 

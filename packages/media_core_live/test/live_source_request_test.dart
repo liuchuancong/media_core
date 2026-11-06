@@ -153,7 +153,7 @@ void main() {
       // The controller maps each kind onto a PlayerFailure; keeping the two
       // apart is what lets a watchdog add a detector without inventing an
       // error code the rest of the framework has to learn.
-      expect(LiveStallKind.values, hasLength(7));
+      expect(LiveStallKind.values, hasLength(8));
       expect(
         LiveStallKind.values,
         containsAll(<LiveStallKind>[

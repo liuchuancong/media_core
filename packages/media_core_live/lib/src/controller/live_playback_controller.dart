@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:media_core/media_core.dart';
 
+import 'package:media_core_live/src/model/live_playback_models.dart';
 import 'package:media_core_live/src/model/live_source_request.dart';
 import 'package:media_core_live/src/watchdog/live_watchdogs.dart';
 
@@ -135,6 +136,12 @@ final class LivePlaybackController {
   /// sweep that re-opened line 0 behind the first one's back.
   String? _sweepAdapterError;
 
+  /// The last candidate failure of the running sweep, and whether any of
+  /// them was not a transport failure: a sweep that exhausted on transport
+  /// failures alone is the offline machine's evidence.
+  Object? _sweepFailure;
+  bool _sweepSawNonNetwork = false;
+
   /// The player created for the sweep's next engine while the engine-fallback
   /// source refresh was still in flight.
   ///
@@ -189,6 +196,37 @@ final class LivePlaybackController {
   bool _playbackRequested = false;
   bool _audioOnly = false;
 
+  /// Recovery bookkeeping shared by the sweep, the watchdogs and the
+  /// offline machine: how many refreshes the current window still owns,
+  /// which lines already failed in it, how many bounded retry rounds are
+  /// left, and the attempt count published to consumers.
+  int _refreshAttempts = 0;
+  int _retryRounds = 0;
+  int _recoveries = 0;
+  String? _recoveryCause;
+  bool _attemptCounted = false;
+  final Set<String> _failedLines = <String>{};
+  Timer? _retryTimer;
+  Timer? _budgetTimer;
+
+  /// The network stopped answering: stream and platform alike. Nothing is
+  /// torn down and no candidate is tried while it lasts — the controller
+  /// asks the platform every [LiveWatchdogs.networkProbeInterval] and
+  /// reopens the watched line with fresh budgets when it answers.
+  bool _offline = false;
+  DateTime? _offlineSince;
+  bool _offlinePublished = false;
+  Object? _offlineError;
+  Timer? _probeTimer;
+
+  /// The buffering the engine never ended, judged by position: from/to/at
+  /// of the progress observation plus the frame window.
+  Duration? _bufferingProgressFrom;
+  Duration? _bufferingProgressTo;
+  DateTime? _bufferingProgressAt;
+  int _bufferingFrames = 0;
+  DateTime? _bufferingFramesAt;
+
   /// The playback state the controller mirrors for its consumers.
   ///
   /// Written on every transition the controller observes — the sweep's own
@@ -205,11 +243,33 @@ final class LivePlaybackController {
   final StreamController<PlayerCoreState> _stateController = StreamController<PlayerCoreState>.broadcast();
   final StreamController<PlayerHandle> _handleController = StreamController<PlayerHandle>.broadcast();
   final StreamController<PlayerFailure> _failureController = StreamController<PlayerFailure>.broadcast();
+  final StreamController<LiveRecoveryState> _recoveryController = StreamController<LiveRecoveryState>.broadcast();
   StreamSubscription<PlayerAdapterEvent>? _adapterSub;
   StreamSubscription<PlayerBackendChange>? _backendSub;
 
   /// Playback state stream.
   Stream<PlayerCoreState> get onStateChanged => _stateController.stream;
+
+  /// Recovery attempt stream: emits whenever the attempt counter, its
+  /// cause or the offline flag moves.
+  Stream<LiveRecoveryState> get onRecoveryChanged => _recoveryController.stream;
+
+  /// The recovery attempt currently being made, counting from 1; 0 while
+  /// nothing is being recovered. Runs on across consecutive recoveries and
+  /// drops to zero once the stream has played long enough to restore the
+  /// recovery budgets.
+  int get recovery => _recoveries;
+
+  /// The failure behind the current recovery attempt; null while
+  /// [recovery] is 0.
+  String? get recoveryCause => _recoveryCause;
+
+  /// Whether a recovery attempt is being made.
+  bool get isRecovering => _recoveries > 0;
+
+  /// Whether the network stopped answering and the controller is probing
+  /// it instead of sweeping candidates.
+  bool get isOffline => _offline;
 
   /// Emitted whenever the attached handle changes - an engine switch
   /// committed a staged player, or the player was released. Consumers that
@@ -272,6 +332,9 @@ final class LivePlaybackController {
     _playGeneration++;
     _sweepStart = 0;
 
+    _leaveOffline();
+    _resetRecoveryWindow();
+
     _supersedeQueued('superseded by play');
 
     return _enqueue(TaskType.open, (_) => _startPlayback());
@@ -306,6 +369,9 @@ final class LivePlaybackController {
     _playbackRequested = true;
     _playGeneration++;
 
+    _leaveOffline();
+    _resetRecoveryWindow();
+
     _supersedeQueued('superseded by line switch');
 
     return _enqueue(TaskType.load, (_) => _openCurrentSource());
@@ -320,6 +386,9 @@ final class LivePlaybackController {
     _playbackRequested = true;
     _playGeneration++;
 
+    _leaveOffline();
+    _resetRecoveryWindow();
+
     _supersedeQueued('superseded by retry');
 
     return _enqueue(TaskType.retry, (_) => _openCurrentSource());
@@ -330,6 +399,11 @@ final class LivePlaybackController {
   Future<void> pause() async {
     _playbackRequested = false;
     _playGeneration++;
+
+    _leaveOffline();
+
+    _cancelRecoveryTimers();
+    _resetBufferingProgress();
 
     _supersedeQueued('superseded by pause');
 
@@ -427,6 +501,10 @@ final class LivePlaybackController {
   void noteBackgrounded() {
     _playbackRequested = false;
 
+    _leaveOffline();
+
+    _cancelRecoveryTimers();
+
     watchdogs.cancelAll();
   }
 
@@ -434,6 +512,11 @@ final class LivePlaybackController {
   Future<void> close() async {
     _playbackRequested = false;
     _playGeneration++;
+
+    _leaveOffline();
+
+    _cancelRecoveryTimers();
+    _resetBufferingProgress();
 
     _supersedeQueued('superseded by close');
 
@@ -456,6 +539,10 @@ final class LivePlaybackController {
     _playbackRequested = false;
     _playGeneration++;
 
+    _leaveOffline();
+
+    _cancelRecoveryTimers();
+
     _supersedeQueued('superseded by dispose');
     watchdogs.cancelAll();
 
@@ -474,6 +561,7 @@ final class LivePlaybackController {
     await _stateController.close();
     await _handleController.close();
     await _failureController.close();
+    await _recoveryController.close();
   }
   // ---------------------------------------------------------------------------
   // State mirroring
@@ -513,5 +601,55 @@ final class LivePlaybackController {
       // Live streams do not seek; treat as an in-flight transition.
       PlayerPlaybackState.seeking => const SessionState.buffering(),
     };
+  }
+
+  void _emitRecoveryState() {
+    if (_recoveryController.isClosed) {
+      return;
+    }
+
+    _recoveryController.add(
+      LiveRecoveryState(attempt: _recoveries, cause: _recoveryCause, offline: _offline),
+    );
+  }
+
+  void _resetRecoveryWindow() {
+    _refreshAttempts = 0;
+    _retryRounds = 0;
+    _recoveries = 0;
+    _recoveryCause = null;
+    _attemptCounted = false;
+    _failedLines.clear();
+
+    _emitRecoveryState();
+  }
+
+  void _resetRecoveryBudgets() {
+    _refreshAttempts = 0;
+    _failedLines.clear();
+  }
+
+  void _cancelRecoveryTimers() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _budgetTimer?.cancel();
+    _budgetTimer = null;
+    _probeTimer?.cancel();
+    _probeTimer = null;
+  }
+
+  void _leaveOffline() {
+    if (!_offline) {
+      return;
+    }
+
+    _offline = false;
+    _offlineSince = null;
+    _offlinePublished = false;
+    _offlineError = null;
+    _probeTimer?.cancel();
+    _probeTimer = null;
+
+    _emitRecoveryState();
   }
 }

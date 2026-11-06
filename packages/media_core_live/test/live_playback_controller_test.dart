@@ -451,7 +451,7 @@ void main() {
       final kernel = _kernel(adapters);
       final controller = _controller(
         kernel,
-        onRecoverySources: (_) async => throw StateError('the platform is unreachable'),
+        onRecoverySources: (_) async => throw StateError('the platform refused the request'),
       );
 
       final failures = <PlayerFailure>[];

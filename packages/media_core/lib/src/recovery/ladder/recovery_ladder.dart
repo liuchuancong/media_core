@@ -74,7 +74,13 @@ final class RecoveryLadder {
   /// rungs back to back, so an engine that just refused an open is asked again in
   /// the same millisecond, and a dead source is hammered for as long as the sweep
   /// has rungs left. Null keeps the old immediate escalation.
-  RecoveryLadder({required this.target, required this.candidates, this.retryDelay}) {
+  RecoveryLadder({
+    required this.target,
+    required this.candidates,
+    this.retryDelay,
+    this.retryRoundDelays = const <Duration>[Duration(milliseconds: 750), Duration(seconds: 2)],
+    this.recoveryBudgetReset = const Duration(seconds: 30),
+  }) {
     _targetEvents = target.executionEvents.listen(_onTargetEvent, onError: (Object _) {});
   }
 
@@ -87,6 +93,14 @@ final class RecoveryLadder {
   /// How long to wait before each attempt of a sweep, by attempt number.
   final Duration Function(int attempt)? retryDelay;
 
+  /// Delays of the bounded retry rounds after a sweep exhausted. Each round
+  /// runs a fresh sweep with fresh candidate budgets; the rounds themselves
+  /// only reset after [recoveryBudgetReset] of no failure.
+  final List<Duration> retryRoundDelays;
+
+  /// Sustained recovery-free time that restores the round budget.
+  final Duration recoveryBudgetReset;
+
   final StreamController<RecoveryLadderEvent> _events = StreamController<RecoveryLadderEvent>.broadcast();
 
   StreamSubscription<RecoveryTargetEvent>? _targetEvents;
@@ -97,6 +111,10 @@ final class RecoveryLadder {
   RecoverySession? _session;
   int _attempts = 0;
   int _generation = 0;
+  int _rounds = 0;
+  int _recoveries = 0;
+  Timer? _roundTimer;
+  Timer? _stabilityTimer;
 
   bool _disposed = false;
 
@@ -117,6 +135,11 @@ final class RecoveryLadder {
 
   /// Steps executed in the current (or last) run.
   int get attempt => _attempts;
+
+  /// Attempts across the runs of the current budget window: it runs on
+  /// over consecutive runs and resets with the round budget after
+  /// [recoveryBudgetReset] without a failure.
+  int get recoveries => _recoveries;
 
   /// Completes when the current run settles.
   Future<void> get settled => _run ?? Future<void>.value();
@@ -212,6 +235,10 @@ final class RecoveryLadder {
 
     _abort('Recovery sweep was reset.');
     _status = RecoveryLadderStatus.idle;
+    _rounds = 0;
+    _recoveries = 0;
+    _cancelRoundTimer();
+    _cancelStabilityTimer();
   }
 
   /// Stops the current run and refuses new ones until [resume].
@@ -248,6 +275,9 @@ final class RecoveryLadder {
 
     _abort('Recovery sweep was disposed.');
     _status = RecoveryLadderStatus.disposed;
+
+    _cancelRoundTimer();
+    _cancelStabilityTimer();
 
     await _targetEvents?.cancel();
     _targetEvents = null;
@@ -527,6 +557,8 @@ final class RecoveryLadder {
     );
 
     _emit(RecoveryLadderCompleted(step: step, attempt: _attempts, failure: failure));
+
+    _armStabilityReset();
   }
 
   void _finishExhausted(int generation, RecoveryFailure failure, String message) {
@@ -536,13 +568,92 @@ final class RecoveryLadder {
 
     _status = RecoveryLadderStatus.exhausted;
 
+    // A transient failure gets bounded retry rounds before the run is
+    // called terminal: each round waits its delay, then sweeps again with
+    // fresh candidate budgets. The exhausted status stands while a round is
+    // pending, so a newer report, a reset or a suspend supersedes it.
+    if (_scheduleRetryRound(failure)) {
+      MediaCoreLog.warning(
+        LogCategory.recovery,
+        'sweep exhausted after $_attempts attempt(s): $message — retry round $_rounds scheduled',
+        fields: <String, Object?>{'code': failure.code.value, 'rounds': _rounds, 'recoveries': _recoveries},
+      );
+
+      return;
+    }
+
     MediaCoreLog.error(
       LogCategory.recovery,
       'sweep exhausted after $_attempts attempt(s): $message',
-      fields: <String, Object?>{'code': failure.code.value, 'message': failure.message, 'backend': failure.backendId},
+      fields: <String, Object?>{
+        'code': failure.code.value,
+        'message': failure.message,
+        'backend': failure.backendId,
+        'rounds': _rounds,
+        'recoveries': _recoveries,
+      },
     );
 
     _emit(RecoveryLadderExhausted(attempt: _attempts, message: message, failure: failure));
+  }
+
+  bool _scheduleRetryRound(RecoveryFailure failure) {
+    if (_disposed || retryRoundDelays.isEmpty || _rounds >= retryRoundDelays.length) {
+      return false;
+    }
+
+    final delay = retryRoundDelays[_rounds++];
+
+    _roundTimer?.cancel();
+    _roundTimer = Timer(delay, () {
+      _roundTimer = null;
+
+      if (_disposed || _status != RecoveryLadderStatus.exhausted) {
+        return;
+      }
+
+      final generation = ++_generation;
+
+      _status = RecoveryLadderStatus.running;
+      _attempts = 0;
+      _lastStepFailure = null;
+      _recoveries++;
+
+      MediaCoreLog.info(
+        LogCategory.recovery,
+        'retry round $_rounds after ${delay.inMilliseconds}ms',
+        fields: <String, Object?>{'code': failure.code.value, 'rounds': _rounds, 'recoveries': _recoveries},
+      );
+
+      _run = _sweep(failure, generation);
+    });
+
+    return true;
+  }
+
+  /// Sustained recovery-free time restores the round and attempt budgets.
+  void _armStabilityReset() {
+    _stabilityTimer?.cancel();
+    _stabilityTimer = Timer(recoveryBudgetReset, () {
+      _stabilityTimer = null;
+
+      if (_disposed || _status == RecoveryLadderStatus.running) {
+        return;
+      }
+
+      _rounds = 0;
+      _recoveries = 0;
+    });
+  }
+
+  void _cancelRoundTimer() {
+    _roundTimer?.cancel();
+    _roundTimer = null;
+  }
+
+  void _cancelStabilityTimer() {
+    _stabilityTimer?.cancel();
+    _stabilityTimer = null;
   }
 
   /// Stops the current run without deciding anything.

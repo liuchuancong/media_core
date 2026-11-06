@@ -108,6 +108,12 @@ final class LiveWatchdogs {
     this.bufferingStallTimeout = const Duration(seconds: 12),
     this.videoFrameStallTimeout = const Duration(seconds: 10),
     this.positionStallTimeout = const Duration(seconds: 15),
+    this.stallNoticeTimeout = const Duration(seconds: 4),
+    this.offlineGrace = const Duration(seconds: 20),
+    this.networkProbeInterval = const Duration(seconds: 2),
+    this.networkProbeTimeout = const Duration(seconds: 5),
+    this.liveRetryDelays = const <Duration>[Duration(milliseconds: 750), Duration(seconds: 2)],
+    this.recoveryBudgetReset = const Duration(seconds: 30),
     this.enabled = true,
   }) : _capabilities = capabilities;
 
@@ -155,6 +161,28 @@ final class LiveWatchdogs {
   /// only arms after the engine has proven it reports position at all, so
   /// this timeout never judges an engine that does not.
   final Duration positionStallTimeout;
+
+  /// How long a source that had been advancing may stand still before the
+  /// [LiveStallKind.positionStallNotice] fires, ahead of the
+  /// [positionStallTimeout] verdict.
+  final Duration stallNoticeTimeout;
+
+  /// How long the controller keeps saying it is reconnecting after the
+  /// network stopped answering, before the offline failure is published
+  /// (and the probing continues).
+  final Duration offlineGrace;
+
+  /// The pause between two looks at the network while it is gone.
+  final Duration networkProbeInterval;
+
+  /// Longest wait for one look at the network.
+  final Duration networkProbeTimeout;
+
+  /// Delays of the bounded retry rounds after a sweep exhausted.
+  final List<Duration> liveRetryDelays;
+
+  /// Sustained playback that restores the recovery budgets and counters.
+  final Duration recoveryBudgetReset;
 
   /// Master switch.
   ///
@@ -293,6 +321,16 @@ final class LiveWatchdogs {
   /// looking stalled from the first second.
   bool _hasPositionSignal = false;
 
+  /// Whether the position of this source has actually advanced.
+  ///
+  /// A sample alone proves the engine reports position; only an advance
+  /// proves the stream lives. The stall notice judges sources that were
+  /// alive and stopped, so it waits for this.
+  bool _moved = false;
+
+  /// Whether the current stillness already fired its stall notice.
+  bool _stallNoticed = false;
+
   /// Last position sample, reported alongside the arm log so the two arms
   /// of one session are distinguishable by their value.
   int? _lastPositionMs;
@@ -306,6 +344,7 @@ final class LiveWatchdogs {
   StreamSubscription<void>? _bufferingSubscription;
   StreamSubscription<void>? _videoFrameSubscription;
   StreamSubscription<void>? _positionStallSubscription;
+  StreamSubscription<void>? _positionNoticeSubscription;
 
   /// The last "not armed" reason each watchdog reported.
   ///
@@ -523,7 +562,21 @@ final class LiveWatchdogs {
       return;
     }
 
-    _lastPositionMs = position.inMilliseconds;
+    final ms = position.inMilliseconds;
+    final last = _lastPositionMs;
+    final advanced = last != null && ms > last;
+
+    if (advanced) {
+      _moved = true;
+
+      if (_stallNoticed) {
+        _stallNoticed = false;
+
+        _armPositionNotice(via: 'resumed');
+      }
+    }
+
+    _lastPositionMs = ms;
 
     if (!_hasPositionSignal) {
       // First position of this source: the engine reports position, so the
@@ -725,6 +778,11 @@ final class LiveWatchdogs {
     _positionStallSubscription = null;
   }
 
+  void _cancelPositionNotice() {
+    unawaited(_positionNoticeSubscription?.cancel());
+    _positionNoticeSubscription = null;
+  }
+
   /// Cancels every watchdog and clears the observations behind them.
   ///
   /// The observed playback flags are dropped together with the timers so
@@ -756,11 +814,14 @@ final class LiveWatchdogs {
     _buffering = false;
     _recoveryPending = false;
     _recoveryGeneration = null;
+    _moved = false;
+    _stallNoticed = false;
 
     _cancelSourceReady();
     _cancelContinuity();
     _cancelBufferingStall();
     _cancelVideoFrameStall();
+    _cancelPositionNotice();
   }
 
   /// Releases the watchdog bundle.
@@ -779,6 +840,8 @@ final class LiveWatchdogs {
     _buffering = false;
     _recoveryPending = false;
     _recoveryGeneration = null;
+    _moved = false;
+    _stallNoticed = false;
 
     _cancelSourceReady();
     _cancelContinuity();
@@ -791,6 +854,7 @@ final class LiveWatchdogs {
     // guard says so), but a controller created and thrown away per room accumulates
     // timers nobody owns.
     _cancelPositionStall();
+    _cancelPositionNotice();
 
     onStall = null;
     onRecoveryRequested = null;
@@ -814,7 +878,10 @@ final class LiveWatchdogs {
     }
 
     _hasPositionSignal = false;
+    _moved = false;
+    _stallNoticed = false;
 
     _cancelPositionStall();
+    _cancelPositionNotice();
   }
 }

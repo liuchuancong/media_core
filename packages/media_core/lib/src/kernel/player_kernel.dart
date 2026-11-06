@@ -592,9 +592,12 @@ final class PlayerKernel with WidgetsBindingObserver {
     _pool.remove(playerId);
 
     final releasing = handle.dispose();
-    final tracked = releasing.then<void>(
-      (_) => _releasing.remove(playerId),
-      onError: (Object error, StackTrace stackTrace) {
+    final tracked = Completer<void>();
+    unawaited(
+      releasing.whenComplete(() {
+        _releasing.remove(playerId)?.ignore();
+        if (!tracked.isCompleted) tracked.complete();
+      }).catchError((Object error, StackTrace stackTrace) {
         MediaCoreLog.warning(
           LogCategory.lifecycle,
           'player release failed; the engine-release guard stays until a release is confirmed',
@@ -602,10 +605,10 @@ final class PlayerKernel with WidgetsBindingObserver {
           stackTrace: stackTrace,
           fields: <String, Object?>{'player': playerId.value},
         );
-      },
+        if (!tracked.isCompleted) tracked.complete();
+      }),
     );
-    _releasing[playerId] = tracked;
-    unawaited(tracked);
+    _releasing[playerId] = tracked.future;
 
     try {
       await releasing.timeout(PlayerConstants.disposeTimeout);
