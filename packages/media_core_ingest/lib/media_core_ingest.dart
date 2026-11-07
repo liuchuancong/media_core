@@ -32,6 +32,7 @@ export 'src/hls/hls_manifest_kind.dart';
 export 'src/hls/hls_session_cookies.dart';
 export 'src/hls/hls_source_query_policy.dart';
 export 'src/relay/ffmpeg_ingest_relay.dart';
+export 'src/relay/flv_loopback_relay.dart';
 export 'src/relay/flv_splice.dart';
 export 'src/relay/ingest_ffmpeg.dart';
 export 'src/relay/ingest_plan.dart';
