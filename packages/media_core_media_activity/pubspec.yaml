@@ -24,7 +24,7 @@ dev_dependencies:
     sdk: flutter
   # Type-safe Flutter <-> Swift protocol for the activity bridge; the
   # generated pair lands in lib/src/platform/ and ios/Classes/.
-  pigeon: ^29.0.8
+  pigeon: ^30.0.0
 
 flutter:
   plugin:

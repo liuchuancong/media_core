@@ -23,7 +23,7 @@ dependencies:
   # behind one API. It posts the lines and the results; the Android *foreground
   # service* that keeps a job alive, and the notification that belongs to it, are
   # media_core_native's per-feature services, not this plugin's.
-  flutter_local_notifications: ^22.3.2
+  flutter_local_notifications: ^23.0.0
 
   # The job-outcome contract this package registers itself into, so the download
   # and recording packages can report without depending on a notification plugin.

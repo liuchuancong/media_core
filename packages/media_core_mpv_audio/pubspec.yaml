@@ -21,7 +21,7 @@ dependencies:
     path: ../media_core
 
   # The engine this adapter drives.
-  mpv_audio_kit: ^0.5.3
+  mpv_audio_kit: ^0.7.0
 
 dev_dependencies:
   flutter_test:

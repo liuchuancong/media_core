@@ -21,7 +21,7 @@ dependencies:
   # plugin platforms only) to keep libmdk off desktop; that copy is not used
   # here, so desktop builds resolve the published plugin and its native
   # dependency themselves.
-  fvp: ^0.38.1
+  fvp: ^0.40.0
 
   media_core:
     path: ../media_core
